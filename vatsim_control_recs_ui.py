@@ -525,8 +525,8 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze VATSIM flight data and controller staffing")
     parser.add_argument("--max-eta-hours", type=float, default=1.0,
                         help="Maximum ETA in hours for arrival filter (default: 1.0)")
-    parser.add_argument("--refresh-interval", type=int, default=5,
-                        help="Auto-refresh interval in seconds (default: 5)")
+    parser.add_argument("--refresh-interval", type=int, default=15,
+                        help="Auto-refresh interval in seconds (default: 15)")
     parser.add_argument("--airports", nargs="+",
                         help="List of airport ICAO codes to include in analysis (default: all)")
     parser.add_argument("--groupings", nargs="+",

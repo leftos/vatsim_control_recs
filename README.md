@@ -10,7 +10,7 @@ options:
   --max-eta-hours MAX_ETA_HOURS
                         Maximum ETA in hours for arrival filter (default: 1.0)
   --refresh-interval REFRESH_INTERVAL
-                        Auto-refresh interval in seconds (default: 5)
+                        Auto-refresh interval in seconds (default: 15)
   --airports AIRPORTS [AIRPORTS ...]
                         List of airport ICAO codes to include in analysis (default: all)
   --groupings GROUPINGS [GROUPINGS ...]
