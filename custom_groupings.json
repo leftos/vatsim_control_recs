@@ -1,0 +1,10 @@
+{
+  "NCT Combined": ["KSJC", "KMRY", "KSNS", "KRHV", "KPAO", "KSQL", "KNUQ", "KSFO", "KOAK", "KHWD", "KLVK", "KMOD", "KSCK", "KMER", "KSMF", "KSAC", "KMHR", "KBAB", "KRNO"],
+  "NCT Area A": ["KSJC", "KMRY", "KSNS", "KRHV", "KPAO", "KSQL", "KNUQ"],
+  "NCT Area B": ["KSFO", "KSQL"],
+  "NCT Area C": ["KOAK", "KHWD", "KLVK", "KMOD", "KSCK", "KMER"],
+  "NCT Area D": ["KSFO", "KOAK"],
+  "NCT E CA": ["KSMF", "KSAC", "KMHR", "KBAB"],
+  "NCT E NV (R)": ["KRNO"],
+  "ZOA Combined": ["KAPC", "KBAB", "KCCR", "KCIC", "KFAT", "KHWD", "KKWA", "KLVK", "KMCC", "KMER", "KMHR", "KMOD", "KMRY", "KNLC", "KNFL", "KNUQ", "KOAK", "KPAO", "KRDD", "KRHV", "KRNO", "KSAC", "KSCK", "KSFO", "KSJC", "KSMF", "KSNS", "KSQL", "KSTS", "KSUU", "KTRK"]
+}

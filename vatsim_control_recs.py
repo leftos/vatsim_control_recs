@@ -39,6 +39,18 @@ def load_airport_data(filename):
                 }
     return airports
 
+def load_custom_groupings(filename):
+    """Load custom airport groupings from JSON file"""
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Error: Custom groupings file '{filename}' not found.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from '{filename}'. Check file format.")
+        return None
+
 def download_vatsim_data():
     """Download VATSIM data from the API"""
     try:
@@ -198,18 +210,88 @@ def find_nearest_airport(flight, airports):
     
     return nearest_airport
 
-def analyze_flights(max_eta_hours=1, airport_allowlist=None):
+def analyze_flights(max_eta_hours=1, airport_allowlist=None, groupings_allowlist=None, supergrouping_names=None):
     """Main function to analyze VATSIM flights"""
     # Load airport data
     print("Loading airport data...")
-    airports = load_airport_data('iata-icao.csv')
+    all_airports_data = load_airport_data('iata-icao.csv')
     
-    # If an allowlist is provided, filter the airports
-    if airport_allowlist:
-        airports = {icao: data for icao, data in airports.items() if icao in airport_allowlist}
-        print(f"Using {len(airports)} airports from allowlist")
+    # Load all custom groupings
+    print("Loading custom groupings...")
+    all_custom_groupings = load_custom_groupings('custom_groupings.json')
+    
+    # Determine which groupings to display and which to use for filtering
+    display_custom_groupings = {}
+    active_groupings_for_filter = {}
+    
+    if all_custom_groupings:
+        if supergrouping_names:
+            supergroup_airports_set = set()
+            included_group_names = set()
+            
+            for supergroup_name in supergrouping_names:
+                if supergroup_name in all_custom_groupings:
+                    # Add airports from the supergrouping itself
+                    current_supergroup_airports = set(all_custom_groupings[supergroup_name])
+                    supergroup_airports_set.update(current_supergroup_airports)
+                    included_group_names.add(supergroup_name)
+                    
+                    # Find all sub-groupings
+                    for other_group_name, other_group_airports in all_custom_groupings.items():
+                        if other_group_name != supergroup_name:
+                            other_group_airports_set = set(other_group_airports)
+                            # If the other grouping is a subset of the current supergroup, include it
+                            if other_group_airports_set.issubset(current_supergroup_airports):
+                                included_group_names.add(other_group_name)
+                                supergroup_airports_set.update(other_group_airports_set)
+                else:
+                    print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json.")
+            
+            # Populate display and active groupings based on supergrouping logic
+            for name in included_group_names:
+                display_custom_groupings[name] = all_custom_groupings[name]
+                active_groupings_for_filter[name] = all_custom_groupings[name]
+                
+            print(f"Selected {len(included_group_names)} groupings based on supergrouping(s).")
+
+        elif groupings_allowlist:
+            # Existing logic for groupings_allowlist
+            for group_name in groupings_allowlist:
+                if group_name in all_custom_groupings:
+                    display_custom_groupings[group_name] = all_custom_groupings[group_name]
+                    active_groupings_for_filter[group_name] = all_custom_groupings[group_name]
+                else:
+                    print(f"Warning: Custom grouping '{group_name}' not found in custom_groupings.json.")
+            print(f"Selected {len(active_groupings_for_filter)} custom groupings for analysis and display.")
+        else:
+            # If no groupings_allowlist and no supergrouping, display all groupings
+            display_custom_groupings = all_custom_groupings
+            print(f"Loaded {len(all_custom_groupings)} custom groupings for display (not used as allowlist unless specified).")
+
+        # Prepare main airport_allowlist based on provided --airports and/or active groupings
+        final_airport_allowlist = set()
+        if airport_allowlist:
+            final_airport_allowlist.update(airport_allowlist)
+        
+        # Add airports from groupings to the filter if --groupings or --supergrouping was explicitly used
+        if groupings_allowlist or supergrouping_names:
+            for group_name, airports_in_group in active_groupings_for_filter.items():
+                final_airport_allowlist.update(airports_in_group)
+            
+        airport_allowlist = list(final_airport_allowlist) # Convert back to list
+
     else:
-        print(f"Loaded {len(airports)} airports")
+        print("No custom groupings loaded from custom_groupings.json.")
+        display_custom_groupings = {}
+        active_groupings_for_filter = {}
+
+
+    if airport_allowlist: # If there's an explicit airport_allowlist (from --airports or active groupings)
+        airports = {icao: data for icao, data in all_airports_data.items() if icao in airport_allowlist}
+        print(f"Filtering flights based on {len(airports)} unique airports from allowlist.")
+    else: # If no explicit airport_allowlist, use all airports
+        airports = all_airports_data
+        print(f"Analyzing all {len(airports)} airports globally.")
     
     # Download VATSIM data
     print("Downloading VATSIM data...")
@@ -251,13 +333,37 @@ def analyze_flights(max_eta_hours=1, airport_allowlist=None):
     # Sort by total count descending
     airport_data.sort(key=lambda x: x[1], reverse=True)
     
-    # Print table header
-    print("\n{:<8} {:<6} {:<12} {:<12}".format("ICAO", "TOTAL", "DEPARTING", "ARRIVING"))
+    # Print table header for individual airports
+    print("\nIndividual Airport Summary:")
+    print("{:<8} {:<6} {:<12} {:<12}".format("ICAO", "TOTAL", "DEPARTING", "ARRIVING"))
     print("-" * 42)
     
-    # Print table rows
+    # Print table rows for individual airports
     for icao, total, departing, arriving in airport_data:
         print(f"{icao:<8} {total:<6} {departing:<12} {arriving:<12}")
+
+    # Print table for custom groupings
+    # Print table for custom groupings
+    if display_custom_groupings: # Use display_custom_groupings here
+        print("\nCustom Groupings Summary:")
+        print("{:<20} {:<6} {:<12} {:<12}".format("GROUPING", "TOTAL", "DEPARTING", "ARRIVING"))
+        print("-" * 50)
+        
+        grouped_data = []
+        for group_name, group_airports in display_custom_groupings.items():
+            group_departing = sum(departure_counts.get(ap_icao, 0) for ap_icao in group_airports)
+            group_arriving = sum(arrival_counts.get(ap_icao, 0) for ap_icao in group_airports)
+            group_total = group_departing + group_arriving
+            if group_total > 0: # Only include groupings with activity
+                grouped_data.append((group_name, group_total, group_departing, group_arriving))
+        
+        if grouped_data: # Only print header if there's data to show
+            grouped_data.sort(key=lambda x: x[1], reverse=True)
+            
+            for group_name, group_total, group_departing, group_arriving in grouped_data:
+                print(f"{group_name:<20} {group_total:<6} {group_departing:<12} {group_arriving:<12}")
+        else:
+            print("No custom groupings with flight activity to display.")
 
 if __name__ == "__main__":
     # Set up argument parser
@@ -265,10 +371,15 @@ if __name__ == "__main__":
     parser.add_argument("--max-eta-hours", type=float, default=1.0,
                         help="Maximum ETA in hours for arrival filter (default: 1.0)")
     parser.add_argument("--airports", nargs="+",
-                        help="List of airport ICAO codes to include in analysis (default: all)")
+                        help="List of airport ICAO codes to include in analysis (default: all). Custom groupings are always included.")
+    parser.add_argument("--groupings", nargs="+",
+                        help="List of custom grouping names to include in analysis (default: all custom groupings).")
+    parser.add_argument("--supergroupings", nargs="+",
+                        help="List of custom grouping names to use as supergroupings. This will include all airports in these supergroupings and any detected sub-groupings.")
     
     # Parse arguments
     args = parser.parse_args()
     
     # Run analysis with provided arguments
-    analyze_flights(max_eta_hours=args.max_eta_hours, airport_allowlist=args.airports)
+    analyze_flights(max_eta_hours=args.max_eta_hours, airport_allowlist=args.airports,
+                    groupings_allowlist=args.groupings, supergrouping_names=args.supergroupings)
