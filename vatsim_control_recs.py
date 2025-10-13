@@ -35,7 +35,8 @@ def load_airport_data(filename):
             if icao:  # Only include airports with ICAO codes
                 airports[icao] = {
                     'latitude': float(row['latitude']),
-                    'longitude': float(row['longitude'])
+                    'longitude': float(row['longitude']),
+                    'country_code': row['country_code']
                 }
     return airports
 
@@ -60,6 +61,54 @@ def download_vatsim_data():
     except requests.RequestException as e:
         print(f"Error downloading VATSIM data: {e}")
         return None
+
+def _get_valid_icao_from_callsign(icao_candidate, airports_data):
+    """
+    Attempts to resolve an ICAO candidate from a callsign, considering implied 'K' for US airports.
+    Returns a valid ICAO or None if not found in airports_data.
+    """
+    # 1. Check if the icao_candidate itself is a valid ICAO in our data
+    if icao_candidate in airports_data:
+        return icao_candidate
+
+    # 2. If not found, try prepending 'K' for 3-letter US airport candidates
+    if len(icao_candidate) == 3 and icao_candidate.isalpha():
+        k_prefixed_icao = 'K' + icao_candidate
+        if k_prefixed_icao in airports_data and airports_data[k_prefixed_icao]['country_code'] == 'US':
+            return k_prefixed_icao
+            
+    return None
+
+def get_staffed_positions(data, airports_data, excluded_frequency="199.998"):
+    """
+    Extracts staffed positions at each airport from VATSIM data.
+    Excludes positions with a specific frequency.
+    """
+    staffed_positions = defaultdict(set)
+    controllers = data.get('controllers', [])
+
+    for controller in controllers:
+        callsign = controller.get('callsign', '')
+        frequency = controller.get('frequency', '')
+
+        # Exclude specific frequency
+        if frequency == excluded_frequency:
+            continue
+
+        parts = callsign.split('_')
+        if len(parts) > 0:
+            icao_candidate_prefix = parts[0]
+            position_suffix = parts[-1]
+
+            allowed_positions = {"DEL", "GND", "TWR", "DEP", "APP"}
+
+            if position_suffix in allowed_positions:
+                valid_icao = _get_valid_icao_from_callsign(icao_candidate_prefix, airports_data)
+                
+                if valid_icao:
+                    staffed_positions[valid_icao].add(position_suffix)
+    
+    return {icao: sorted(list(positions)) for icao, positions in staffed_positions.items()}
 
 def filter_flights_by_airports(data, airports, airport_allowlist=None):
     """Filter flights by departure and arrival airports"""
@@ -211,7 +260,7 @@ def find_nearest_airport(flight, airports):
     return nearest_airport
 
 def analyze_flights(max_eta_hours=1, airport_allowlist=None, groupings_allowlist=None, supergrouping_names=None):
-    """Main function to analyze VATSIM flights"""
+    """Main function to analyze VATSIM flights and controller staffing"""
     # Load airport data
     print("Loading airport data...")
     all_airports_data = load_airport_data('iata-icao.csv')
@@ -300,6 +349,10 @@ def analyze_flights(max_eta_hours=1, airport_allowlist=None, groupings_allowlist
         print("Failed to download VATSIM data")
         return
     
+    # Extract staffed positions
+    staffed_positions = get_staffed_positions(data, all_airports_data)
+
+
     # Filter flights
     print("Filtering flights...")
     flights = filter_flights_by_airports(data, airports, airport_allowlist)
@@ -313,36 +366,37 @@ def analyze_flights(max_eta_hours=1, airport_allowlist=None, groupings_allowlist
     for flight in flights:
         # Check if flight is on ground at departure airport
         if is_flight_on_ground(flight, airports):
-            departure_counts[flight['departure']] += 1        
+            departure_counts[flight['departure']] += 1
         # Check if flight is near arrival airport
         elif is_flight_near_arrival(flight, airports, max_eta_hours):
             arrival_counts[flight['arrival']] += 1
     
     # Display results in a combined table
-    # Get all unique airports
-    all_airports = set(departure_counts.keys()) | set(arrival_counts.keys())
+    # Get all unique airports that have flights (departing or arriving)
+    all_airports_with_flights = set(departure_counts.keys()) | set(arrival_counts.keys())
     
-    # Create a list of airports with their counts
+    # Create a list of airports with their counts and staffed positions
     airport_data = []
-    for airport in all_airports:
+    for airport in all_airports_with_flights:
         departing = departure_counts.get(airport, 0)
         arriving = arrival_counts.get(airport, 0)
-        total = departing + arriving
-        airport_data.append((airport, total, departing, arriving))
+        staffed_pos = ", ".join(staffed_positions.get(airport, [])) if staffed_positions.get(airport, []) else "N/A"
+        total_flights = departing + arriving
+        if total_flights > 0 or staffed_pos != "N/A": # Only include if there's flight activity or staffing
+            airport_data.append((airport, total_flights, departing, arriving, staffed_pos))
     
     # Sort by total count descending
     airport_data.sort(key=lambda x: x[1], reverse=True)
     
     # Print table header for individual airports
     print("\nIndividual Airport Summary:")
-    print("{:<8} {:<6} {:<12} {:<12}".format("ICAO", "TOTAL", "DEPARTING", "ARRIVING"))
-    print("-" * 42)
+    print("{:<8} {:<10} {:<10} {:<10} {:<20}".format("ICAO", "TOTAL", "DEPARTING", "ARRIVING", "STAFFED POSITIONS"))
+    print("-" * 65)
     
     # Print table rows for individual airports
-    for icao, total, departing, arriving in airport_data:
-        print(f"{icao:<8} {total:<6} {departing:<12} {arriving:<12}")
+    for icao, total_flights, departing, arriving, staffed_pos in airport_data:
+        print(f"{icao:<8} {total_flights:<10} {departing:<10} {arriving:<10} {staffed_pos:<20}")
 
-    # Print table for custom groupings
     # Print table for custom groupings
     if display_custom_groupings: # Use display_custom_groupings here
         print("\nCustom Groupings Summary:")
@@ -367,7 +421,7 @@ def analyze_flights(max_eta_hours=1, airport_allowlist=None, groupings_allowlist
 
 if __name__ == "__main__":
     # Set up argument parser
-    parser = argparse.ArgumentParser(description="Analyze VATSIM flight data")
+    parser = argparse.ArgumentParser(description="Analyze VATSIM flight data and controller staffing")
     parser.add_argument("--max-eta-hours", type=float, default=1.0,
                         help="Maximum ETA in hours for arrival filter (default: 1.0)")
     parser.add_argument("--airports", nargs="+",
