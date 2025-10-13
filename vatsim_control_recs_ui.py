@@ -10,7 +10,7 @@ from textual.worker import Worker, WorkerState
 from textual.timer import Timer
 
 # Import backend functionality
-from vatsim_control_recs import analyze_flights_data
+from vatsim_control_recs import analyze_flights_data # pyright: ignore[reportAttributeAccessIssue]
 
 
 class VATSIMControlApp(App):
@@ -90,6 +90,7 @@ class VATSIMControlApp(App):
     
     def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None):
         super().__init__()
+        self.console.set_window_title("VATSIM Control Recommendations")
         self.original_airport_data = airport_data or []
         self.airport_data = airport_data or []
         self.groupings_data = groupings_data or []

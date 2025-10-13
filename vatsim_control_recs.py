@@ -191,35 +191,19 @@ def filter_flights_by_airports(data, airports, airport_allowlist=None):
     
     return filtered_flights
 
-def is_flight_on_ground(flight, airports, max_distance_nm=6, max_groundspeed=40):
+def get_nearest_airport_if_on_ground(flight, airports, max_distance_nm=6, max_groundspeed=40):
     """
     Determine if a flight is on the ground at the departure airport
     Based on distance from airport and groundspeed
     """
     if flight['groundspeed'] > max_groundspeed:
-        return False
-    
-    # For flights with departure airport in flight plan
-    if flight['departure'] and flight['departure'] in airports:
-        departure_airport = airports.get(flight['departure'])
-        if not departure_airport:
-            return False
-        
-        # Calculate distance from departure airport
-        distance = haversine_distance_nm(
-            flight['latitude'],
-            flight['longitude'],
-            departure_airport['latitude'],
-            departure_airport['longitude']
-        )
-        
-        # Check if within distance threshold and low groundspeed
-        if distance <= max_distance_nm:
-            return True
+        return None
     
     # For flights with flight plans but not near departure or arrival
-    # or flights without flight plans, check all airports
+    # or flights without flight plans, find the nearest airport
     if flight['latitude'] is not None and flight['longitude'] is not None:
+        nearest_icao = None
+        min_distance = float('inf')
         for icao, airport_data in airports.items():
             # Calculate distance from airport
             distance = haversine_distance_nm(
@@ -228,14 +212,17 @@ def is_flight_on_ground(flight, airports, max_distance_nm=6, max_groundspeed=40)
                 airport_data['latitude'],
                 airport_data['longitude']
             )
-            
-            # Check if within distance threshold and low groundspeed
-            if distance <= max_distance_nm:
-                # Update the flight with the found airport
-                flight['departure'] = icao
-                return True
+
+            # Keep the minimum distance/airport
+            if distance < min_distance:
+                min_distance = distance
+                nearest_icao = icao
+
+        # If the nearest airport is within the threshold, consider the flight on ground there
+        if nearest_icao is not None and min_distance <= max_distance_nm:
+            return nearest_icao
     
-    return False
+    return None
 
 def is_flight_near_arrival(flight, airports, max_eta_hours=1.0):
     """
@@ -384,11 +371,14 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     arrival_counts = defaultdict(int)
     
     for flight in flights:
-        # Check if flight is on ground at departure airport
-        if is_flight_on_ground(flight, airports):
+        # Check if flight is on ground at the departure or arrival airport
+        nearest_airport_if_on_ground = get_nearest_airport_if_on_ground(flight, airports)
+        if flight['departure'] and nearest_airport_if_on_ground == flight['departure']:
             departure_counts[flight['departure']] += 1
+        elif flight['arrival'] and nearest_airport_if_on_ground == flight['arrival']:
+            arrival_counts[flight['arrival']] += 1
         # Check if flight is near arrival airport
-        if is_flight_near_arrival(flight, airports, max_eta_hours):
+        elif is_flight_near_arrival(flight, airports, max_eta_hours):
             arrival_counts[flight['arrival']] += 1
     
     # Get all unique airports that have flights (departing or arriving)
