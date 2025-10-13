@@ -1,0 +1,5 @@
+# HTTP library for VATSIM API requests
+requests>=2.31.0
+
+# Terminal UI framework
+textual>=0.47.0

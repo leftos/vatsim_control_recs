@@ -2,9 +2,6 @@ import requests
 import json
 import csv
 import math
-import argparse
-import time
-import os
 from collections import defaultdict
 
 # Define the preferred order for control positions
@@ -33,16 +30,19 @@ def haversine_distance_nm(lat1, lon1, lat2, lon2):
 def load_airport_data(filename):
     """Load airport data from CSV file"""
     airports = {}
-    with open(filename, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            icao = row['icao']
-            if icao:  # Only include airports with ICAO codes
-                airports[icao] = {
-                    'latitude': float(row['latitude']),
-                    'longitude': float(row['longitude']),
-                    'country_code': row['country_code']
-                }
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                icao = row['icao']
+                if icao:  # Only include airports with ICAO codes
+                    airports[icao] = {
+                        'latitude': float(row['latitude']),
+                        'longitude': float(row['longitude']),
+                        'country_code': row['country_code']
+                    }
+    except FileNotFoundError:
+        print(f"Error: Airport data file '{filename}' not found.")
     return airports
 
 def load_custom_groupings(filename):
@@ -236,7 +236,7 @@ def is_flight_on_ground(flight, airports, max_distance_nm=6, max_groundspeed=40)
     
     return False
 
-def is_flight_near_arrival(flight, airports, max_eta_hours=1):
+def is_flight_near_arrival(flight, airports, max_eta_hours=1.0):
     """
     Determine if a flight is within an hour of arriving at the arrival airport
     Based on distance and groundspeed
@@ -258,10 +258,10 @@ def is_flight_near_arrival(flight, airports, max_eta_hours=1):
         # Calculate estimated time of arrival (in hours)
         if flight['groundspeed'] > 0:
             eta_hours = distance / flight['groundspeed']
-            return eta_hours <= max_eta_hours
+            return eta_hours <= max_eta_hours if max_eta_hours > 0 else True
         else:
             # If groundspeed is 0, we can't calculate ETA
-            return False
+            return max_eta_hours == 0 # If we don't care about ETA, consider stationary aircraft at departure airport as well
     
     return False
 
@@ -290,38 +290,24 @@ def find_nearest_airport(flight, airports):
     
     return nearest_airport
 
-def analyze_flights(max_eta_hours=1, airport_allowlist=None, groupings_allowlist=None, supergrouping_names=None):
-    """Main function to analyze VATSIM flights and controller staffing, handling static data loading."""
+def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_allowlist=None, supergroupings_allowlist=None):
+    """Main function to analyze VATSIM flights and controller staffing - returns data structures"""
     # Load airport data
-    airports = load_airport_data('iata-icao.csv')
+    all_airports_data = load_airport_data('iata-icao.csv')
+    
+    # Load all custom groupings
     all_custom_groupings = load_custom_groupings('custom_groupings.json')
-    return _analyze_flights_logic(max_eta_hours, airport_allowlist, groupings_allowlist, supergrouping_names, airports, all_custom_groupings)
-
-def _analyze_flights_logic(max_eta_hours, airport_allowlist, groupings_allowlist, supergrouping_names, all_airports_data, all_custom_groupings, buffer_mode=False):
-    """Encapsulates the core logic for analyzing VATSIM flights and controller staffing."""
     
-    if not buffer_mode:
-        print("Loading data for analysis...")
-    
-    # For buffer mode, we'll collect all output and return it
-    output_buffer = []
-    
-    def add_to_output(text=""):
-        if buffer_mode:
-            output_buffer.append(text)
-        else:
-            print(text)
-
     # Determine which groupings to display and which to use for filtering
     display_custom_groupings = {}
     active_groupings_for_filter = {}
     
     if all_custom_groupings:
-        if supergrouping_names:
+        if supergroupings_allowlist:
             supergroup_airports_set = set()
             included_group_names = set()
             
-            for supergroup_name in supergrouping_names:
+            for supergroup_name in supergroupings_allowlist:
                 if supergroup_name in all_custom_groupings:
                     # Add airports from the supergrouping itself
                     current_supergroup_airports = set(all_custom_groupings[supergroup_name])
@@ -343,8 +329,6 @@ def _analyze_flights_logic(max_eta_hours, airport_allowlist, groupings_allowlist
             for name in included_group_names:
                 display_custom_groupings[name] = all_custom_groupings[name]
                 active_groupings_for_filter[name] = all_custom_groupings[name]
-                
-            add_to_output(f"Selected {len(included_group_names)} groupings based on supergrouping(s).")
 
         elif groupings_allowlist:
             # Existing logic for groupings_allowlist
@@ -354,11 +338,9 @@ def _analyze_flights_logic(max_eta_hours, airport_allowlist, groupings_allowlist
                     active_groupings_for_filter[group_name] = all_custom_groupings[group_name]
                 else:
                     print(f"Warning: Custom grouping '{group_name}' not found in custom_groupings.json.")
-            add_to_output(f"Selected {len(active_groupings_for_filter)} custom groupings for analysis and display.")
         else:
             # If no groupings_allowlist and no supergrouping, display all groupings
             display_custom_groupings = all_custom_groupings
-            add_to_output(f"Loaded {len(all_custom_groupings)} custom groupings for display (not used as allowlist unless specified).")
 
         # Prepare main airport_allowlist based on provided --airports and/or active groupings
         final_airport_allowlist = set()
@@ -366,54 +348,45 @@ def _analyze_flights_logic(max_eta_hours, airport_allowlist, groupings_allowlist
             final_airport_allowlist.update(airport_allowlist)
         
         # Add airports from groupings to the filter if --groupings or --supergrouping was explicitly used
-        if groupings_allowlist or supergrouping_names:
+        if groupings_allowlist or supergroupings_allowlist:
             for group_name, airports_in_group in active_groupings_for_filter.items():
                 final_airport_allowlist.update(airports_in_group)
             
         airport_allowlist = list(final_airport_allowlist) # Convert back to list
 
     else:
-        add_to_output("No custom groupings loaded from custom_groupings.json.")
         display_custom_groupings = {}
         active_groupings_for_filter = {}
 
 
     if airport_allowlist: # If there's an explicit airport_allowlist (from --airports or active groupings)
         airports = {icao: data for icao, data in all_airports_data.items() if icao in airport_allowlist}
-        add_to_output(f"Filtering flights based on {len(airports)} unique airports from allowlist.")
     else: # If no explicit airport_allowlist, use all airports
         airports = all_airports_data
-        add_to_output(f"Analyzing all {len(airports)} airports globally.")
     
     # Download VATSIM data
-    add_to_output("Downloading VATSIM data...")
     data = download_vatsim_data()
     if not data:
-        add_to_output("Failed to download VATSIM data")
-        return output_buffer if buffer_mode else None
+        return None, None, None
     
     # Extract staffed positions
     staffed_positions = get_staffed_positions(data, all_airports_data)
 
     # Filter flights
-    add_to_output("Filtering flights...")
     flights = filter_flights_by_airports(data, airports, airport_allowlist)
-    add_to_output(f"Found {len(flights)} flights with valid departure/arrival airports")
     
     # Count flights on ground at departure and near arrival
     departure_counts = defaultdict(int)
     arrival_counts = defaultdict(int)
     
-    add_to_output("Analyzing flights...")
     for flight in flights:
         # Check if flight is on ground at departure airport
         if is_flight_on_ground(flight, airports):
             departure_counts[flight['departure']] += 1
         # Check if flight is near arrival airport
-        elif is_flight_near_arrival(flight, airports, max_eta_hours):
+        if is_flight_near_arrival(flight, airports, max_eta_hours):
             arrival_counts[flight['arrival']] += 1
     
-    # Display results in a combined table
     # Get all unique airports that have flights (departing or arriving)
     all_airports_with_flights = set(departure_counts.keys()) | set(arrival_counts.keys())
     
@@ -437,152 +410,21 @@ def _analyze_flights_logic(max_eta_hours, airport_allowlist, groupings_allowlist
         
         total_flights = departing + arriving
         if total_flights > 0 or staffed_pos_display: # Only include if there's flight activity or staffing
-            airport_data.append((airport, total_flights, departing, arriving, staffed_pos_display))
+            airport_data.append((airport, str(total_flights), str(departing), str(arriving), staffed_pos_display))
     
     # Sort by total count descending
-    airport_data.sort(key=lambda x: x[1], reverse=True)
+    airport_data.sort(key=lambda x: int(x[1]), reverse=True)
     
-    # Print table header for individual airports
-    add_to_output("\nIndividual Airport Summary:")
-    add_to_output("{:<8} {:<10} {:<10} {:<10} {:<20}".format("ICAO", "TOTAL", "DEPARTING", "ARRIVING", "STAFFED POSITIONS"))
-    add_to_output("-" * 65)
-    
-    # Print table rows for individual airports
-    for icao, total_flights, departing, arriving, staffed_pos in airport_data:
-        add_to_output(f"{icao:<8} {total_flights:<10} {departing:<10} {arriving:<10} {staffed_pos:<20}")
-
-    # Print table for custom groupings
-    if display_custom_groupings: # Use display_custom_groupings here
-        add_to_output("\nCustom Groupings Summary:")
-        add_to_output("{:<20} {:<6} {:<12} {:<12}".format("GROUPING", "TOTAL", "DEPARTING", "ARRIVING"))
-        add_to_output("-" * 50)
-        
-        grouped_data = []
+    # Process custom groupings data
+    grouped_data = []
+    if display_custom_groupings:
         for group_name, group_airports in display_custom_groupings.items():
             group_departing = sum(departure_counts.get(ap_icao, 0) for ap_icao in group_airports)
             group_arriving = sum(arrival_counts.get(ap_icao, 0) for ap_icao in group_airports)
             group_total = group_departing + group_arriving
             if group_total > 0: # Only include groupings with activity
-                grouped_data.append((group_name, group_total, group_departing, group_arriving))
+                grouped_data.append((group_name, str(group_total), str(group_departing), str(group_arriving)))
         
-        if grouped_data: # Only print header if there's data to show
-            grouped_data.sort(key=lambda x: x[1], reverse=True)
-            
-            for group_name, group_total, group_departing, group_arriving in grouped_data:
-                add_to_output(f"{group_name:<20} {group_total:<6} {group_departing:<12} {group_arriving:<12}")
-        else:
-            add_to_output("No custom groupings with flight activity to display.")
+        grouped_data.sort(key=lambda x: int(x[1]), reverse=True)
     
-    return output_buffer if buffer_mode else None
-
-def clear_terminal():
-    """Clear terminal screen"""
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-def move_cursor_to_top():
-    """Move cursor to top of terminal without clearing"""
-    print('\033[H', end='')
-
-def clear_from_cursor():
-    """Clear from cursor to end of screen"""
-    print('\033[J', end='')
-
-def build_display_buffer(max_eta_hours, airport_allowlist, groupings_allowlist, supergrouping_names, all_airports_data, all_custom_groupings, update_time=None, refresh_interval=5):
-    """Build the complete display output in a buffer for smooth updates"""
-    from datetime import datetime
-    
-    buffer = []
-    
-    # Header with timestamp and refresh info
-    if update_time:
-        buffer.append(f"--- Live VATSIM Monitoring (Last updated: {update_time.strftime('%H:%M:%S')}) ---")
-        buffer.append(f"Refreshing every {refresh_interval} seconds... Press Ctrl+C to exit")
-    else:
-        buffer.append("--- VATSIM Flight Analysis ---")
-    buffer.append("")
-    
-    # Get the analysis output
-    analysis_output = _analyze_flights_logic(
-        max_eta_hours=max_eta_hours,
-        airport_allowlist=airport_allowlist,
-        groupings_allowlist=groupings_allowlist,
-        supergrouping_names=supergrouping_names,
-        all_airports_data=all_airports_data,
-        all_custom_groupings=all_custom_groupings,
-        buffer_mode=True
-    )
-    
-    if analysis_output:
-        buffer.extend(analysis_output)
-    
-    return buffer
-
-def display_buffer_smoothly(buffer):
-    """Display the buffer content smoothly without jarring screen clears"""
-    # Move cursor to top and clear from there
-    move_cursor_to_top()
-    clear_from_cursor()
-    
-    # Print all content at once
-    for line in buffer:
-        print(line)
-    
-    # Ensure we flush the output
-    import sys
-    sys.stdout.flush()
-
-if __name__ == "__main__":
-    # Set up argument parser
-    parser = argparse.ArgumentParser(description="Analyze VATSIM flight data and controller staffing")
-    parser.add_argument("--max-eta-hours", type=float, default=1.0,
-                        help="Maximum ETA in hours for arrival filter (default: 1.0)")
-    parser.add_argument("--airports", nargs="+",
-                        help="List of airport ICAO codes to include in analysis (default: all). Custom groupings are always included.")
-    parser.add_argument("--groupings", nargs="+",
-                        help="List of custom grouping names to include in analysis (default: all custom groupings).")
-    parser.add_argument("--supergroupings", nargs="+",
-                        help="List of custom grouping names to use as supergroupings. This will include all airports in these supergroupings and any detected sub-groupings.")
-    parser.add_argument("--live", action="store_true",
-                        help="Run in live monitoring mode, updating display every few seconds.")
-    parser.add_argument("--interval", type=int, default=5,
-                        help="Refresh interval in seconds for live monitoring mode (default: 5).")
-    
-    # Parse arguments
-    args = parser.parse_args()
-
-    if args.live:
-        from datetime import datetime
-        airports_data = load_airport_data('iata-icao.csv')
-        custom_groupings = load_custom_groupings('custom_groupings.json')
-        
-        # Clear screen once at the start
-        clear_terminal()
-        
-        try:
-            while True:
-                current_time = datetime.now()
-                
-                # Build the complete display buffer
-                display_buffer = build_display_buffer(
-                    max_eta_hours=args.max_eta_hours,
-                    airport_allowlist=args.airports,
-                    groupings_allowlist=args.groupings,
-                    supergrouping_names=args.supergroupings,
-                    all_airports_data=airports_data,
-                    all_custom_groupings=custom_groupings,
-                    update_time=current_time,
-                    refresh_interval=args.interval
-                )
-                
-                # Display the buffer smoothly
-                display_buffer_smoothly(display_buffer)
-                
-                time.sleep(args.interval)
-                
-        except KeyboardInterrupt:
-            print("\n\nLive monitoring stopped by user.")
-            print("Thank you for using VATSIM Control Recommendations!")
-    else:
-        # Run analysis with provided arguments
-        analyze_flights(max_eta_hours=args.max_eta_hours, airport_allowlist=args.airports,
-                        groupings_allowlist=args.groupings, supergrouping_names=args.supergroupings)
+    return airport_data, grouped_data, len(flights)
