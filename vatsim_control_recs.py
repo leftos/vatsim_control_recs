@@ -2,6 +2,7 @@ import requests
 import json
 import csv
 import math
+import os
 from collections import defaultdict
 
 # Define the preferred order for control positions
@@ -292,11 +293,14 @@ def find_nearest_airport(flight, airports):
 
 def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_allowlist=None, supergroupings_allowlist=None):
     """Main function to analyze VATSIM flights and controller staffing - returns data structures"""
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
     # Load airport data
-    all_airports_data = load_airport_data('iata-icao.csv')
+    all_airports_data = load_airport_data(os.path.join(script_dir, 'iata-icao.csv'))
     
     # Load all custom groupings
-    all_custom_groupings = load_custom_groupings('custom_groupings.json')
+    all_custom_groupings = load_custom_groupings(os.path.join(script_dir, 'custom_groupings.json'))
     
     # Determine which groupings to display and which to use for filtering
     display_custom_groupings = {}
