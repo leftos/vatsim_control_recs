@@ -528,9 +528,9 @@ def main():
     parser.add_argument("--refresh-interval", type=int, default=5,
                         help="Auto-refresh interval in seconds (default: 5)")
     parser.add_argument("--airports", nargs="+",
-                        help="List of airport ICAO codes to include in analysis (default: all). Custom groupings are always included.")
+                        help="List of airport ICAO codes to include in analysis (default: all)")
     parser.add_argument("--groupings", nargs="+",
-                        help="List of custom grouping names to include in analysis (default: all custom groupings).")
+                        help="List of custom grouping names to include in analysis (default: all)")
     parser.add_argument("--supergroupings", nargs="+",
                         help="List of custom grouping names to use as supergroupings. This will include all airports in these supergroupings and any detected sub-groupings.")
     
