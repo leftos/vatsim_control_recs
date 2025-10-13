@@ -5,6 +5,9 @@ import math
 import argparse
 from collections import defaultdict
 
+# Define the preferred order for control positions
+CONTROL_POSITION_ORDER = ["TWR", "GND", "DEL"] # ATIS is handled specially in display logic
+
 # VATSIM data endpoint
 VATSIM_DATA_URL = "https://data.vatsim.net/v3/vatsim-data.json"
 
@@ -86,7 +89,6 @@ def get_staffed_positions(data, airports_data, excluded_frequency="199.998"):
     """
     staffed_positions = defaultdict(set)
     controllers = data.get('controllers', [])
-
     for controller in controllers:
         callsign = controller.get('callsign', '')
         frequency = controller.get('frequency', '')
@@ -100,15 +102,42 @@ def get_staffed_positions(data, airports_data, excluded_frequency="199.998"):
             icao_candidate_prefix = parts[0]
             position_suffix = parts[-1]
 
-            allowed_positions = {"DEL", "GND", "TWR", "DEP", "APP"}
+            # Only consider non-ATIS positions for the 'controllers' array
+            allowed_positions = {"DEL", "GND", "TWR"}
 
             if position_suffix in allowed_positions:
                 valid_icao = _get_valid_icao_from_callsign(icao_candidate_prefix, airports_data)
                 
                 if valid_icao:
                     staffed_positions[valid_icao].add(position_suffix)
+
+    # Process ATIS
+    atis_list = data.get('atis', [])
+    for atis_station in atis_list:
+        callsign = atis_station.get('callsign', '')
+        
+        parts = callsign.split('_')
+        if len(parts) > 0:
+            icao_candidate_prefix = parts[0]
+            # The position suffix for ATIS is generally "ATIS"
+            position_suffix = parts[-1]
+
+            if position_suffix == "ATIS":
+                valid_icao = _get_valid_icao_from_callsign(icao_candidate_prefix, airports_data)
+                
+                if valid_icao:
+                    staffed_positions[valid_icao].add("ATIS")
     
-    return {icao: sorted(list(positions)) for icao, positions in staffed_positions.items()}
+    # Sort non-ATIS positions based on CONTROL_POSITION_ORDER for consistent display.
+    # ATIS is handled separately in the display logic for TOP-DOWN.
+    ordered_staffed_positions = {}
+    for icao, positions in staffed_positions.items():
+        sorted_positions = [pos for pos in CONTROL_POSITION_ORDER if pos in positions]
+        if "ATIS" in positions:
+            sorted_positions.append("ATIS") # Always append ATIS at the end if present
+        ordered_staffed_positions[icao] = sorted_positions
+    
+    return ordered_staffed_positions
 
 def filter_flights_by_airports(data, airports, airport_allowlist=None):
     """Filter flights by departure and arrival airports"""
@@ -352,7 +381,6 @@ def analyze_flights(max_eta_hours=1, airport_allowlist=None, groupings_allowlist
     # Extract staffed positions
     staffed_positions = get_staffed_positions(data, all_airports_data)
 
-
     # Filter flights
     print("Filtering flights...")
     flights = filter_flights_by_airports(data, airports, airport_allowlist)
@@ -380,10 +408,22 @@ def analyze_flights(max_eta_hours=1, airport_allowlist=None, groupings_allowlist
     for airport in all_airports_with_flights:
         departing = departure_counts.get(airport, 0)
         arriving = arrival_counts.get(airport, 0)
-        staffed_pos = ", ".join(staffed_positions.get(airport, [])) if staffed_positions.get(airport, []) else "N/A"
+        
+        current_staffed_positions = staffed_positions.get(airport, [])
+        staffed_pos_display = ""
+
+        if "ATIS" in current_staffed_positions and len(current_staffed_positions) == 1:
+            staffed_pos_display = "TOP-DOWN"
+        elif current_staffed_positions:
+            # Remove ATIS from display if other positions are present
+            if "ATIS" in current_staffed_positions:
+                current_staffed_positions.remove("ATIS")
+            # Join the already sorted list of positions
+            staffed_pos_display = ", ".join(current_staffed_positions)
+        
         total_flights = departing + arriving
-        if total_flights > 0 or staffed_pos != "N/A": # Only include if there's flight activity or staffing
-            airport_data.append((airport, total_flights, departing, arriving, staffed_pos))
+        if total_flights > 0 or staffed_pos_display: # Only include if there's flight activity or staffing
+            airport_data.append((airport, total_flights, departing, arriving, staffed_pos_display))
     
     # Sort by total count descending
     airport_data.sort(key=lambda x: x[1], reverse=True)
