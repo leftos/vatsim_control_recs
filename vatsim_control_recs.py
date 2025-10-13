@@ -224,11 +224,14 @@ def get_nearest_airport_if_on_ground(flight, airports, max_distance_nm=6, max_gr
     
     return None
 
-def is_flight_near_arrival(flight, airports, max_eta_hours=1.0):
+def is_flight_flying_near_arrival(flight, airports, max_eta_hours=1.0, min_groundspeed=40):
     """
     Determine if a flight is within an hour of arriving at the arrival airport
     Based on distance and groundspeed
     """
+    if flight['groundspeed'] < min_groundspeed:
+        return False
+    
     # For flights with arrival airport in flight plan
     if flight['arrival'] and flight['arrival'] in airports:
         arrival_airport = airports.get(flight['arrival'])
@@ -371,14 +374,18 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     arrival_counts = defaultdict(int)
     
     for flight in flights:
-        # Check if flight is on ground at the departure or arrival airport
         nearest_airport_if_on_ground = get_nearest_airport_if_on_ground(flight, airports)
         if flight['departure'] and nearest_airport_if_on_ground == flight['departure']:
+            # Count as departure if on ground at departure airport
             departure_counts[flight['departure']] += 1
         elif flight['arrival'] and nearest_airport_if_on_ground == flight['arrival']:
+            # Count as arrival if on ground at arrival airport
             arrival_counts[flight['arrival']] += 1
-        # Check if flight is near arrival airport
-        elif is_flight_near_arrival(flight, airports, max_eta_hours):
+        elif not flight['departure'] and not flight['arrival'] and nearest_airport_if_on_ground:
+            # For flights on ground without flight plans, count them as a departure at the nearest airport
+            departure_counts[nearest_airport_if_on_ground] += 1
+        elif is_flight_flying_near_arrival(flight, airports, max_eta_hours):
+            # Count as arrival if within the specified ETA hours of arrival airport
             arrival_counts[flight['arrival']] += 1
     
     # Get all unique airports that have flights (departing or arriving)
