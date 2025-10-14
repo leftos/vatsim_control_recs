@@ -147,19 +147,21 @@ class VATSIMControlApp(App):
     def populate_tables(self) -> None:
         """Populate or refresh the datatable contents."""
         self.watch_for_user_activity = False  # Temporarily disable user activity tracking
-        
+
+        arr_suffix = f"(<{self.args.max_eta_hours:,.1g}h)" if self.args.max_eta_hours != 0 else "(all)"
+
         # Set up airports table
         airports_table = self.query_one("#airports-table", DataTable)
         airports_table.clear(columns=True)
-        airports_table.add_columns("ICAO", "TOTAL", "DEPARTING", "ARRIVING", "STAFFED POSITIONS")
-        
+        airports_table.add_columns("ICAO", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "STAFFED POSITIONS")
+
         for row_data in self.airport_data:
             self.airports_row_keys.append(airports_table.add_row(*row_data))
         
         # Set up groupings table
         groupings_table = self.query_one("#groupings-table", DataTable)
         groupings_table.clear(columns=True)
-        groupings_table.add_columns("GROUPING", "TOTAL", "DEPARTING", "ARRIVING")
+        groupings_table.add_columns("GROUPING", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}")
         
         if self.groupings_data:
             for row_data in self.groupings_data:
