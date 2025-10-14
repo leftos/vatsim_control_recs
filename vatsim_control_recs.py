@@ -28,6 +28,21 @@ def haversine_distance_nm(lat1, lon1, lat2, lon2):
     r = 3440.065 # Radius of earth in nautical miles
     return c * r
 
+def format_eta_display(eta_hours):
+    """Format ETA hours into a readable string"""
+    if eta_hours == float('inf'):
+        return ""  # No arrivals
+    elif eta_hours < 1.0:
+        minutes = int(eta_hours * 60)
+        return f"{minutes}m"
+    else:
+        hours = int(eta_hours)
+        minutes = int((eta_hours - hours) * 60)
+        if minutes == 0:
+            return f"{hours}h"
+        else:
+            return f"{hours}h{minutes}m"
+
 def load_airport_data(filename):
     """Load airport data from CSV file"""
     airports = {}
@@ -372,6 +387,7 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     # Count flights on ground at departure and near arrival
     departure_counts = defaultdict(int)
     arrival_counts = defaultdict(int)
+    earliest_arrival_eta = defaultdict(lambda: float('inf'))  # Track earliest ETA per airport
     
     for flight in flights:
         nearest_airport_if_on_ground = get_nearest_airport_if_on_ground(flight, airports)
@@ -387,6 +403,19 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         elif is_flight_flying_near_arrival(flight, airports, max_eta_hours):
             # Count as arrival if within the specified ETA hours of arrival airport
             arrival_counts[flight['arrival']] += 1
+            
+            # Calculate ETA for this flight and track the earliest one per airport
+            if flight['arrival'] in airports and flight['groundspeed'] > 0:
+                arrival_airport = airports[flight['arrival']]
+                distance = haversine_distance_nm(
+                    flight['latitude'],
+                    flight['longitude'],
+                    arrival_airport['latitude'],
+                    arrival_airport['longitude']
+                )
+                eta_hours = distance / flight['groundspeed']
+                if eta_hours < earliest_arrival_eta[flight['arrival']]:
+                    earliest_arrival_eta[flight['arrival']] = eta_hours
     
     # Create a list of airports with their counts and staffed positions
     airport_data = []
@@ -407,9 +436,11 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             staffed_pos_display = ", ".join(current_staffed_positions)
         
         total_flights = departing + arriving
+        eta_display = format_eta_display(earliest_arrival_eta.get(airport, float('inf')))
+        
         # Include airport if it has flights, or if it's staffed and we want to include staffed zero-plane airports
         if total_flights > 0 or (staffed_pos_display and include_all_staffed):
-            airport_data.append((airport, str(total_flights), str(departing), str(arriving), staffed_pos_display))
+            airport_data.append((airport, str(total_flights), str(departing), str(arriving), eta_display, staffed_pos_display))
     
     # Sort by total count descending
     airport_data.sort(key=lambda x: int(x[1]), reverse=True)
@@ -421,8 +452,18 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             group_departing = sum(departure_counts.get(ap_icao, 0) for ap_icao in group_airports)
             group_arriving = sum(arrival_counts.get(ap_icao, 0) for ap_icao in group_airports)
             group_total = group_departing + group_arriving
+            
+            # Find the earliest ETA among all airports in this grouping
+            group_earliest_eta = float('inf')
+            for ap_icao in group_airports:
+                if ap_icao in earliest_arrival_eta:
+                    if earliest_arrival_eta[ap_icao] < group_earliest_eta:
+                        group_earliest_eta = earliest_arrival_eta[ap_icao]
+            
+            group_eta_display = format_eta_display(group_earliest_eta)
+            
             if group_total > 0: # Only include groupings with activity
-                grouped_data.append((group_name, str(group_total), str(group_departing), str(group_arriving)))
+                grouped_data.append((group_name, str(group_total), str(group_departing), str(group_arriving), group_eta_display))
         
         grouped_data.sort(key=lambda x: int(x[1]), reverse=True)
     

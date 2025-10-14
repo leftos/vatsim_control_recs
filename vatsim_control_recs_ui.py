@@ -83,7 +83,7 @@ class VATSIMControlApp(App):
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit", priority=True),
         Binding("ctrl+r", "refresh", "Refresh", priority=True),
-        Binding("ctrl+p", "toggle_pause", "Pause/Resume", priority=True),
+        Binding("ctrl+space", "toggle_pause", "Pause/Resume", priority=True),
         Binding("ctrl+f", "toggle_search", "Find", priority=True),
         Binding("escape", "cancel_search", "Cancel Search", show=False),
     ]
@@ -154,7 +154,7 @@ class VATSIMControlApp(App):
         # Set up airports table
         airports_table = self.query_one("#airports-table", DataTable)
         airports_table.clear(columns=True)
-        airports_table.add_columns("ICAO", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "STAFFED POSITIONS")
+        airports_table.add_columns("ICAO", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "NEXT ETA", "STAFFED POSITIONS")
 
         for row_data in self.airport_data:
             self.airports_row_keys.append(airports_table.add_row(*row_data))
@@ -162,7 +162,7 @@ class VATSIMControlApp(App):
         # Set up groupings table
         groupings_table = self.query_one("#groupings-table", DataTable)
         groupings_table.clear(columns=True)
-        groupings_table.add_columns("GROUPING", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}")
+        groupings_table.add_columns("GROUPING", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "NEXT ETA")
         
         if self.groupings_data:
             for row_data in self.groupings_data:
@@ -519,7 +519,7 @@ class VATSIMControlApp(App):
             self.airport_data = [
                 row for row in self.original_airport_data
                 if search_text in row[0].upper() or  # ICAO
-                   search_text in row[4].upper()      # Staffed positions
+                   search_text in row[5].upper()      # Staffed positions (now at index 5)
             ]
         
         self.populate_tables()
