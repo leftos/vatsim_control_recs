@@ -281,7 +281,7 @@ def find_nearest_airport(flight, airports):
     
     return nearest_airport
 
-def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_allowlist=None, supergroupings_allowlist=None):
+def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_allowlist=None, supergroupings_allowlist=None, include_all_staffed=True):
     """Main function to analyze VATSIM flights and controller staffing - returns data structures"""
     # Get the directory where this script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -388,12 +388,9 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             # Count as arrival if within the specified ETA hours of arrival airport
             arrival_counts[flight['arrival']] += 1
     
-    # Get all unique airports that have flights (departing or arriving)
-    all_airports_with_flights = set(departure_counts.keys()) | set(arrival_counts.keys())
-    
     # Create a list of airports with their counts and staffed positions
     airport_data = []
-    for airport in all_airports_with_flights:
+    for airport in airports:
         departing = departure_counts.get(airport, 0)
         arriving = arrival_counts.get(airport, 0)
         
@@ -410,7 +407,8 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             staffed_pos_display = ", ".join(current_staffed_positions)
         
         total_flights = departing + arriving
-        if total_flights > 0 or staffed_pos_display: # Only include if there's flight activity or staffing
+        # Include airport if it has flights, or if it's staffed and we want to include staffed zero-plane airports
+        if total_flights > 0 or (staffed_pos_display and include_all_staffed):
             airport_data.append((airport, str(total_flights), str(departing), str(arriving), staffed_pos_display))
     
     # Sort by total count descending

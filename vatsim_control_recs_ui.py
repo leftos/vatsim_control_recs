@@ -96,6 +96,7 @@ class VATSIMControlApp(App):
         self.groupings_data = groupings_data or []
         self.total_flights = total_flights
         self.args = args
+        self.include_all_staffed = args.include_all_staffed
         self.search_active = False
         self.refresh_paused = False
         self.refresh_interval = args.refresh_interval if args else 5
@@ -300,7 +301,8 @@ class VATSIMControlApp(App):
             self.args.max_eta_hours if self.args else 1.0,
             self.args.airports if self.args else None,
             self.args.groupings if self.args else None,
-            self.args.supergroupings if self.args else None
+            self.args.supergroupings if self.args else None,
+            self.include_all_staffed
         )
         return result
     
@@ -536,6 +538,8 @@ def main():
                         help="List of custom grouping names to include in analysis (default: all)")
     parser.add_argument("--supergroupings", nargs="+",
                         help="List of custom grouping names to use as supergroupings. This will include all airports in these supergroupings and any detected sub-groupings.")
+    parser.add_argument("--include-all-staffed", action="store_true", default=True,
+                        help="Include airports with zero planes if they are staffed (default: True)")
     
     # Parse arguments
     args = parser.parse_args()
@@ -547,7 +551,8 @@ def main():
         max_eta_hours=args.max_eta_hours,
         airport_allowlist=args.airports,
         groupings_allowlist=args.groupings,
-        supergroupings_allowlist=args.supergroupings
+        supergroupings_allowlist=args.supergroupings,
+        include_all_staffed=args.include_all_staffed
     )
     
     if airport_data is None:
