@@ -28,13 +28,16 @@ def haversine_distance_nm(lat1, lon1, lat2, lon2):
     r = 3440.065 # Radius of earth in nautical miles
     return c * r
 
-def format_eta_display(eta_hours):
+def format_eta_display(eta_hours, arrivals_in_flight_count, arrivals_on_ground_count):
     """Format ETA hours into a readable string"""
-    if eta_hours == float('inf'):
-        return ""  # No arrivals
+    # If there are no in-flight arrivals but there are arrivals on ground
+    if eta_hours == float('inf') and arrivals_on_ground_count > 0 and arrivals_in_flight_count == 0:
+        return "Arrived"
+    elif eta_hours == float('inf'):
+        return ""  # No arrivals at all
     elif eta_hours < 1.0:
         minutes = int(eta_hours * 60)
-        return f"{minutes}m"
+        return f"{minutes}m" if minutes > 0 else "<1m"
     else:
         hours = int(eta_hours)
         minutes = int((eta_hours - hours) * 60)
@@ -388,6 +391,8 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     departure_counts = defaultdict(int)
     arrival_counts = defaultdict(int)
     earliest_arrival_eta = defaultdict(lambda: float('inf'))  # Track earliest ETA per airport
+    arrivals_on_ground = defaultdict(int)  # Track arrivals already on ground
+    arrivals_in_flight = defaultdict(int)  # Track arrivals still in flight
     
     for flight in flights:
         nearest_airport_if_on_ground = get_nearest_airport_if_on_ground(flight, airports)
@@ -397,14 +402,16 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         elif flight['arrival'] and nearest_airport_if_on_ground == flight['arrival']:
             # Count as arrival if on ground at arrival airport
             arrival_counts[flight['arrival']] += 1
+            arrivals_on_ground[flight['arrival']] += 1
         elif not flight['departure'] and not flight['arrival'] and nearest_airport_if_on_ground:
             # For flights on ground without flight plans, count them as a departure at the nearest airport
             departure_counts[nearest_airport_if_on_ground] += 1
         elif is_flight_flying_near_arrival(flight, airports, max_eta_hours):
             # Count as arrival if within the specified ETA hours of arrival airport
             arrival_counts[flight['arrival']] += 1
+            arrivals_in_flight[flight['arrival']] += 1
             
-            # Calculate ETA for this flight and track the earliest one per airport
+            # Calculate ETA for this flight and track the earliest one per airport (only for in-flight arrivals)
             if flight['arrival'] in airports and flight['groundspeed'] > 0:
                 arrival_airport = airports[flight['arrival']]
                 distance = haversine_distance_nm(
@@ -436,7 +443,11 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             staffed_pos_display = ", ".join(current_staffed_positions)
         
         total_flights = departing + arriving
-        eta_display = format_eta_display(earliest_arrival_eta.get(airport, float('inf')))
+        eta_display = format_eta_display(
+            earliest_arrival_eta.get(airport, float('inf')),
+            arrivals_in_flight.get(airport, 0),
+            arrivals_on_ground.get(airport, 0)
+        )
         
         # Include airport if it has flights, or if it's staffed and we want to include staffed zero-plane airports
         if total_flights > 0 or (staffed_pos_display and include_all_staffed):
@@ -455,12 +466,15 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             
             # Find the earliest ETA among all airports in this grouping
             group_earliest_eta = float('inf')
+            group_arrivals_in_flight = sum(arrivals_in_flight.get(ap_icao, 0) for ap_icao in group_airports)
+            group_arrivals_on_ground = sum(arrivals_on_ground.get(ap_icao, 0) for ap_icao in group_airports)
+            
             for ap_icao in group_airports:
                 if ap_icao in earliest_arrival_eta:
                     if earliest_arrival_eta[ap_icao] < group_earliest_eta:
                         group_earliest_eta = earliest_arrival_eta[ap_icao]
             
-            group_eta_display = format_eta_display(group_earliest_eta)
+            group_eta_display = format_eta_display(group_earliest_eta, group_arrivals_in_flight, group_arrivals_on_ground)
             
             if group_total > 0: # Only include groupings with activity
                 grouped_data.append((group_name, str(group_total), str(group_departing), str(group_arriving), group_eta_display))
