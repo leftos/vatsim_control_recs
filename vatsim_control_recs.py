@@ -4,6 +4,7 @@ import csv
 import math
 import os
 from collections import defaultdict
+from datetime import datetime, timezone, timedelta
 
 # Define the preferred order for control positions
 CONTROL_POSITION_ORDER = ["TWR", "GND", "DEL"] # ATIS is handled specially in display logic
@@ -498,7 +499,7 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0):
     Returns:
         (departures_list, arrivals_list) where each is a list of tuples:
         - departures: (callsign, destination_icao)
-        - arrivals: (callsign, origin_icao, eta_display)
+        - arrivals: (callsign, origin_icao, eta_display, eta_local_time)
     """
     # Get the directory where this script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -542,7 +543,7 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0):
             if nearest_airport_if_on_ground == flight['arrival']:
                 # Flight is on ground at arrival airport
                 origin = flight['departure'] if flight['departure'] else "----"
-                arrivals_list.append((callsign, origin, "Arrived"))
+                arrivals_list.append((callsign, origin, "Arrived", "----"))
             elif is_flight_flying_near_arrival(flight, all_airports_data, max_eta_hours):
                 # Flight is in the air approaching arrival airport
                 origin = flight['departure'] if flight['departure'] else "----"
@@ -559,10 +560,17 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0):
                     eta_hours = distance / flight['groundspeed']
                     # Use the same formatting as the main table
                     eta_display = format_eta_display(eta_hours, 1, 0)
+                    
+                    # Calculate local time ETA
+                    current_time_utc = datetime.now(timezone.utc)
+                    arrival_time_utc = current_time_utc + timedelta(hours=eta_hours)
+                    arrival_time_local = arrival_time_utc.astimezone()
+                    eta_local_time = arrival_time_local.strftime("%H:%M")
                 else:
                     eta_display = "----"
+                    eta_local_time = "----"
                 
-                arrivals_list.append((callsign, origin, eta_display))
+                arrivals_list.append((callsign, origin, eta_display, eta_local_time))
         
         # Handle flights on ground without flight plans
         if not flight['departure'] and not flight['arrival'] and nearest_airport_if_on_ground:

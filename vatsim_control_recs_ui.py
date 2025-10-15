@@ -121,7 +121,7 @@ class FlightBoardScreen(ModalScreen):
         # Set up arrivals table
         arrivals_table = self.query_one("#arrivals-table", DataTable)
         arrivals_table.clear(columns=True)
-        arrivals_table.add_columns("FLIGHT", "ORIGIN", "ETA")
+        arrivals_table.add_columns("FLIGHT", "ORIGIN", "ETA", "ETA (Local)")
         
         for arrival in self.arrivals_data:
             arrivals_table.add_row(*arrival)
