@@ -250,6 +250,7 @@ class VATSIMControlApp(App):
         self.groupings_row_keys = []
         self.watch_for_user_activity = True  # Control whether to track user activity
         self.last_activity_source = ""  # Track what triggered the last activity
+        self.initial_setup_complete = False  # Prevent timer resets during initial setup
         
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -277,21 +278,18 @@ class VATSIMControlApp(App):
     
     def on_mount(self) -> None:
         """Set up the datatables when the app starts."""
-        # Disable activity tracking during initial setup to prevent timer reset
-        self.watch_for_user_activity = False
-        
         self.populate_tables()
         self.update_status_bar()
-        # Start auto-refresh timer
-        self.refresh_timer = self.set_interval(self.refresh_interval, self.auto_refresh_callback)
+        # Start auto-refresh timer - check every second
+        self.refresh_timer = self.set_interval(1, self.auto_refresh_callback)
         # Start UTC clock and status bar update timer (update every second)
         self.status_update_timer = self.set_interval(1, self.update_time_displays)
         # Initial update
         self.update_time_displays()
         
-        # Re-enable activity tracking after initial setup is complete
-        # Use call_after to ensure all initial events have been processed
-        self.call_after_refresh(lambda: setattr(self, 'watch_for_user_activity', True))
+        # Mark initial setup as complete after all initialization events have settled
+        # This prevents automatic events (tab activation, row highlights) from resetting the timer
+        self.call_after_refresh(lambda: setattr(self, 'initial_setup_complete', True))
     
     def populate_tables(self) -> None:
         """Populate or refresh the datatable contents."""
@@ -361,17 +359,24 @@ class VATSIMControlApp(App):
         self.exit()
     
     def auto_refresh_callback(self) -> None:
-        """Callback for auto-refresh timer."""
+        """Callback for auto-refresh timer (called every second)."""
+        # Check if at least refresh_interval seconds have passed since last refresh
+        time_since_refresh = (datetime.now(timezone.utc) - self.last_refresh_time).total_seconds()
+        if time_since_refresh < self.refresh_interval:
+            return
+        
         # Don't refresh if manually paused
         if self.refresh_paused:
             return
         
-        # Check if user has been idle long enough
+        # Check if user has been idle long enough (not auto-paused)
         idle_time = (datetime.now(timezone.utc) - self.last_activity_time).total_seconds()
-        if idle_time >= self.idle_timeout:
-            self.user_is_active = False
-            self.action_refresh()
-        # If user is still active, we'll try again on the next timer tick
+        if idle_time < self.idle_timeout:
+            return
+        
+        # All conditions met - perform refresh
+        self.user_is_active = False
+        self.action_refresh()
     
     def action_toggle_pause(self) -> None:
         """Toggle pause/resume auto-refresh."""
@@ -407,14 +412,13 @@ class VATSIMControlApp(App):
     
     def record_user_activity(self, source: str = "unknown") -> None:
         """Record user activity to pause auto-refresh temporarily."""
-        if not self.watch_for_user_activity:
+        # Ignore activity during initial setup to prevent automatic events from resetting timer
+        if not self.watch_for_user_activity or not self.initial_setup_complete:
             return
         
         self.last_activity_time = datetime.now(timezone.utc)
         self.last_activity_source = source
         self.user_is_active = True
-        if isinstance(self.refresh_timer, Timer):
-            self.refresh_timer.reset()
     
     def update_status_bar(self) -> None:
         """Update the status bar with current state."""
@@ -652,9 +656,9 @@ class VATSIMControlApp(App):
     
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Handle row navigation in tables."""
-        # Only track activity for main app tables, not modal tables
-        if event.data_table.id in ["airports-table", "groupings-table"]:
-            self.record_user_activity(f"row_highlight:{event.data_table.id}")
+        # Don't record activity for automatic row highlights (e.g., on app init)
+        # Only key presses (handled by on_key) will record user activity
+        pass
     
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes."""
