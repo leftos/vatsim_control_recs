@@ -85,6 +85,9 @@ def download_vatsim_data():
     except requests.RequestException as e:
         print(f"Error downloading VATSIM data: {e}")
         return None
+    except json.JSONDecodeError as e:
+        print(f"Error decoding VATSIM data JSON: {e}")
+        return None
 
 def _get_valid_icao_from_callsign(icao_candidate, airports_data):
     """
