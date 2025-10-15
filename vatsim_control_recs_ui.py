@@ -148,6 +148,12 @@ class FlightBoardScreen(ModalScreen):
         """Close the modal and stop refresh timer"""
         if self.refresh_timer:
             self.refresh_timer.stop()
+        
+        # Reset the flight board open flag in the parent app
+        app = self.app
+        if isinstance(app, VATSIMControlApp):
+            app.flight_board_open = False
+            
         self.dismiss()
 
 
@@ -251,6 +257,7 @@ class VATSIMControlApp(App):
         self.watch_for_user_activity = True  # Control whether to track user activity
         self.last_activity_source = ""  # Track what triggered the last activity
         self.initial_setup_complete = False  # Prevent timer resets during initial setup
+        self.flight_board_open = False # Is a flight board currently open?
         
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -682,8 +689,8 @@ class VATSIMControlApp(App):
     
     def action_open_flight_board(self) -> None:
         """Open the flight board for the selected airport or grouping"""
-        # Don't allow opening flight board during search
-        if self.search_active:
+        # Don't allow opening flight board during search, or if a flight board is already open
+        if self.search_active or self.flight_board_open:
             return
         
         tabs = self.query_one("#tabs", TabbedContent)
@@ -697,6 +704,7 @@ class VATSIMControlApp(App):
                 title = icao
                 
                 # Open the flight board
+                self.flight_board_open = True
                 self.push_screen(FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval))
         
         elif current_tab == "groupings":
@@ -718,6 +726,7 @@ class VATSIMControlApp(App):
                             title = grouping_name
                             
                             # Open the flight board
+                            self.flight_board_open = True
                             self.push_screen(FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval))
                 except (FileNotFoundError, json.JSONDecodeError):
                     pass
