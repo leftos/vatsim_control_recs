@@ -2,11 +2,10 @@ import argparse
 import asyncio
 from datetime import datetime, timezone
 from textual.app import App, ComposeResult
-from textual.widgets import DataTable, TabbedContent, TabPane, Footer, Header, Input, Static
+from textual.widgets import DataTable, TabbedContent, TabPane, Footer, Input, Static
 from textual.binding import Binding
-from textual.containers import Container, Horizontal
+from textual.containers import Container
 from textual.events import Key
-from textual.worker import Worker, WorkerState
 from textual.timer import Timer
 
 # Import backend functionality
@@ -178,9 +177,9 @@ class VATSIMControlApp(App):
         
         Args:
             table: The DataTable widget to update
-            old_data: The previous data (list of tuples) - not used but kept for signature compatibility
+            row_keys: List of row keys for tracking table rows
             new_data: The new data (list of tuples)
-        """        
+        """
         current_row_count = table.row_count
         new_row_count = len(new_data)
         
