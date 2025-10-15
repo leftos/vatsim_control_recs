@@ -437,10 +437,10 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             staffed_pos_display = "TOP-DOWN"
         elif current_staffed_positions:
             # Remove ATIS from display if other positions are present
-            if "ATIS" in current_staffed_positions:
-                current_staffed_positions.remove("ATIS")
+            # Make a copy to avoid mutating the original list
+            display_positions = [pos for pos in current_staffed_positions if pos != "ATIS"]
             # Join the already sorted list of positions
-            staffed_pos_display = ", ".join(current_staffed_positions)
+            staffed_pos_display = ", ".join(display_positions)
         
         total_flights = departing + arriving
         eta_display = format_eta_display(
