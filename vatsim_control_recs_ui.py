@@ -103,7 +103,7 @@ class VATSIMControlApp(App):
         self.refresh_timer = None
         self.last_refresh_time = datetime.now(timezone.utc)
         self.status_update_timer = None
-        self.last_activity_time = datetime.now()
+        self.last_activity_time = datetime.now(timezone.utc)
         self.idle_timeout = 3  # seconds of idle time before auto-refresh resumes
         self.user_is_active = False
         self.airports_row_keys = []
@@ -219,7 +219,7 @@ class VATSIMControlApp(App):
             return
         
         # Check if user has been idle long enough
-        idle_time = (datetime.now() - self.last_activity_time).total_seconds()
+        idle_time = (datetime.now(timezone.utc) - self.last_activity_time).total_seconds()
         if idle_time >= self.idle_timeout:
             self.user_is_active = False
             self.action_refresh()
@@ -262,7 +262,7 @@ class VATSIMControlApp(App):
         if not self.watch_for_user_activity:
             return
         
-        self.last_activity_time = datetime.now()
+        self.last_activity_time = datetime.now(timezone.utc)
         self.user_is_active = True
         if isinstance(self.refresh_timer, Timer):
             self.refresh_timer.reset()
@@ -272,7 +272,7 @@ class VATSIMControlApp(App):
         status_bar = self.query_one("#status-bar", Static)
         
         # Check if user has been idle long enough
-        idle_time = (datetime.now() - self.last_activity_time).total_seconds()
+        idle_time = (datetime.now(timezone.utc) - self.last_activity_time).total_seconds()
         if idle_time >= self.idle_timeout:
             self.user_is_active = False
         
