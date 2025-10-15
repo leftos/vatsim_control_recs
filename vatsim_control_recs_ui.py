@@ -251,7 +251,7 @@ class VATSIMControlApp(App):
             current_utc = datetime.now(timezone.utc)
             current_local = datetime.now()
             clocks.update(f"Local {current_local.strftime('%H:%M:%S')} | UTC {current_utc.strftime('%H:%M:%S')}")
-        except:
+        except Exception:
             pass
         
         # Update status bar with time since last refresh
@@ -456,7 +456,7 @@ class VATSIMControlApp(App):
                 status_bar = self.query_one("#status-bar", Static)
                 refresh_status = "PAUSED - " if self.refresh_paused else ""
                 status_bar.update(f"{refresh_status}Failed to refresh data from VATSIM")
-            except:
+            except Exception:
                 pass
     
     def action_toggle_search(self) -> None:
