@@ -263,7 +263,7 @@ class VATSIMControlApp(App):
         
         self.last_activity_time = datetime.now()
         self.user_is_active = True
-        if self.refresh_timer is Timer:
+        if isinstance(self.refresh_timer, Timer):
             self.refresh_timer.reset()
     
     def update_status_bar(self) -> None:
