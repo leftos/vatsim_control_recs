@@ -277,6 +277,9 @@ class VATSIMControlApp(App):
     
     def on_mount(self) -> None:
         """Set up the datatables when the app starts."""
+        # Disable activity tracking during initial setup to prevent timer reset
+        self.watch_for_user_activity = False
+        
         self.populate_tables()
         self.update_status_bar()
         # Start auto-refresh timer
@@ -285,6 +288,10 @@ class VATSIMControlApp(App):
         self.status_update_timer = self.set_interval(1, self.update_time_displays)
         # Initial update
         self.update_time_displays()
+        
+        # Re-enable activity tracking after initial setup is complete
+        # Use call_after to ensure all initial events have been processed
+        self.call_after_refresh(lambda: setattr(self, 'watch_for_user_activity', True))
     
     def populate_tables(self) -> None:
         """Populate or refresh the datatable contents."""
