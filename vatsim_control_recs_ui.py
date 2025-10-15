@@ -66,13 +66,15 @@ class FlightBoardScreen(ModalScreen):
         Binding("q", "close_board", "Close"),
     ]
     
-    def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float):
+    def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float, refresh_interval: int = 15):
         super().__init__()
         self.title = title
         self.airport_icao_or_list = airport_icao_or_list
         self.max_eta_hours = max_eta_hours
         self.departures_data = []
         self.arrivals_data = []
+        self.refresh_interval = refresh_interval
+        self.refresh_timer = None
     
     def compose(self) -> ComposeResult:
         with Container(id="board-container"):
@@ -92,21 +94,37 @@ class FlightBoardScreen(ModalScreen):
     async def on_mount(self) -> None:
         """Load and display flight data when the screen is mounted"""
         await self.load_flight_data()
+        # Start auto-refresh timer
+        self.refresh_timer = self.set_interval(self.refresh_interval, self.refresh_flight_data)
     
     async def load_flight_data(self) -> None:
         """Load flight data from backend"""
-        # Run the blocking call in a thread pool
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            get_airport_flight_details,
-            self.airport_icao_or_list,
-            self.max_eta_hours
-        )
+        # Disable parent app activity tracking for the entire operation
+        app = self.app
+        if isinstance(app, VATSIMControlApp):
+            app.watch_for_user_activity = False
         
-        if result:
-            self.departures_data, self.arrivals_data = result
-            self.populate_tables()
+        try:
+            # Run the blocking call in a thread pool
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                get_airport_flight_details,
+                self.airport_icao_or_list,
+                self.max_eta_hours
+            )
+            
+            if result:
+                self.departures_data, self.arrivals_data = result
+                self.populate_tables()
+        finally:
+            # Re-enable activity tracking
+            if isinstance(app, VATSIMControlApp):
+                app.watch_for_user_activity = True
+    
+    def refresh_flight_data(self) -> None:
+        """Refresh flight data (called by timer)"""
+        self.run_worker(self.load_flight_data(), exclusive=True)
     
     def populate_tables(self) -> None:
         """Populate the departure and arrivals tables"""
@@ -127,7 +145,9 @@ class FlightBoardScreen(ModalScreen):
             arrivals_table.add_row(*arrival)
     
     def action_close_board(self) -> None:
-        """Close the modal"""
+        """Close the modal and stop refresh timer"""
+        if self.refresh_timer:
+            self.refresh_timer.stop()
         self.dismiss()
 
 
@@ -229,6 +249,7 @@ class VATSIMControlApp(App):
         self.airports_row_keys = []
         self.groupings_row_keys = []
         self.watch_for_user_activity = True  # Control whether to track user activity
+        self.last_activity_source = ""  # Track what triggered the last activity
         
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -377,12 +398,13 @@ class VATSIMControlApp(App):
         # Update status bar with time since last refresh
         self.update_status_bar()
     
-    def record_user_activity(self) -> None:
+    def record_user_activity(self, source: str = "unknown") -> None:
         """Record user activity to pause auto-refresh temporarily."""
         if not self.watch_for_user_activity:
             return
         
         self.last_activity_time = datetime.now(timezone.utc)
+        self.last_activity_source = source
         self.user_is_active = True
         if isinstance(self.refresh_timer, Timer):
             self.refresh_timer.reset()
@@ -400,7 +422,7 @@ class VATSIMControlApp(App):
         if self.refresh_paused:
             pause_status = "Paused"
         elif self.user_is_active:
-            pause_status = "Auto-paused (not idle)"
+            pause_status = f"Auto-paused (not idle) - triggered by: {self.last_activity_source}"
         else:
             pause_status = f"Active ({self.refresh_interval}s)"
         
@@ -615,21 +637,23 @@ class VATSIMControlApp(App):
         """Handle key events to detect user activity."""
         # Record activity for navigation keys
         if event.key in ["up", "down", "left", "right", "pageup", "pagedown", "home", "end"]:
-            self.record_user_activity()
+            self.record_user_activity(f"key:{event.key}")
     
     def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
         """Handle tab changes."""
-        self.record_user_activity()
+        self.record_user_activity(f"tab_change:{event.tab.id}")
     
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Handle row navigation in tables."""
-        self.record_user_activity()
+        # Only track activity for main app tables, not modal tables
+        if event.data_table.id in ["airports-table", "groupings-table"]:
+            self.record_user_activity(f"row_highlight:{event.data_table.id}")
     
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes."""
         if event.input.id == "search-input":
             self.filter_airports(event.value)
-            self.record_user_activity()
+            self.record_user_activity("search_input")
     
     def filter_airports(self, search_text: str) -> None:
         """Filter airports table based on search text."""
@@ -662,7 +686,7 @@ class VATSIMControlApp(App):
                 title = icao
                 
                 # Open the flight board
-                self.push_screen(FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0))
+                self.push_screen(FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval))
         
         elif current_tab == "groupings":
             groupings_table = self.query_one("#groupings-table", DataTable)
@@ -683,7 +707,7 @@ class VATSIMControlApp(App):
                             title = grouping_name
                             
                             # Open the flight board
-                            self.push_screen(FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0))
+                            self.push_screen(FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval))
                 except (FileNotFoundError, json.JSONDecodeError):
                     pass
 
