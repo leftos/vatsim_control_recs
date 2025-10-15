@@ -4,12 +4,132 @@ from datetime import datetime, timezone
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, TabbedContent, TabPane, Footer, Input, Static
 from textual.binding import Binding
-from textual.containers import Container
+from textual.containers import Container, Vertical, Horizontal
 from textual.events import Key
 from textual.timer import Timer
+from textual.screen import ModalScreen
 
 # Import backend functionality
-from vatsim_control_recs import analyze_flights_data # pyright: ignore[reportAttributeAccessIssue]
+from vatsim_control_recs import analyze_flights_data, get_airport_flight_details # pyright: ignore[reportAttributeAccessIssue]
+
+class FlightBoardScreen(ModalScreen):
+    """Modal screen showing departure and arrivals board for an airport or grouping"""
+    
+    CSS = """
+    FlightBoardScreen {
+        align: center middle;
+    }
+    
+    #board-container {
+        width: 90%;
+        height: 85%;
+        background: $surface;
+        border: thick $primary;
+    }
+    
+    #board-header {
+        height: 3;
+        background: $boost;
+        color: $text;
+        content-align: center middle;
+        text-align: center;
+        border-bottom: solid $primary;
+    }
+    
+    #board-tables {
+        height: 1fr;
+        layout: horizontal;
+    }
+    
+    .board-section {
+        width: 1fr;
+        height: 100%;
+    }
+    
+    .section-title {
+        height: 1;
+        background: $panel;
+        content-align: center middle;
+        text-align: center;
+        color: $text;
+        text-style: bold;
+    }
+    
+    .board-table {
+        height: 1fr;
+        width: 100%;
+    }
+    """
+    
+    BINDINGS = [
+        Binding("escape", "close_board", "Close", priority=True),
+        Binding("q", "close_board", "Close"),
+    ]
+    
+    def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float):
+        super().__init__()
+        self.title = title
+        self.airport_icao_or_list = airport_icao_or_list
+        self.max_eta_hours = max_eta_hours
+        self.departures_data = []
+        self.arrivals_data = []
+    
+    def compose(self) -> ComposeResult:
+        with Container(id="board-container"):
+            yield Static(f"Flight Board - {self.title}", id="board-header")
+            with Horizontal(id="board-tables"):
+                with Vertical(classes="board-section"):
+                    yield Static("DEPARTURES", classes="section-title")
+                    departures_table = DataTable(classes="board-table", id="departures-table")
+                    departures_table.cursor_type = "row"
+                    yield departures_table
+                with Vertical(classes="board-section"):
+                    yield Static("ARRIVALS", classes="section-title")
+                    arrivals_table = DataTable(classes="board-table", id="arrivals-table")
+                    arrivals_table.cursor_type = "row"
+                    yield arrivals_table
+    
+    async def on_mount(self) -> None:
+        """Load and display flight data when the screen is mounted"""
+        await self.load_flight_data()
+    
+    async def load_flight_data(self) -> None:
+        """Load flight data from backend"""
+        # Run the blocking call in a thread pool
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            get_airport_flight_details,
+            self.airport_icao_or_list,
+            self.max_eta_hours
+        )
+        
+        if result:
+            self.departures_data, self.arrivals_data = result
+            self.populate_tables()
+    
+    def populate_tables(self) -> None:
+        """Populate the departure and arrivals tables"""
+        # Set up departures table
+        departures_table = self.query_one("#departures-table", DataTable)
+        departures_table.clear(columns=True)
+        departures_table.add_columns("FLIGHT", "DESTINATION")
+        
+        for departure in self.departures_data:
+            departures_table.add_row(*departure)
+        
+        # Set up arrivals table
+        arrivals_table = self.query_one("#arrivals-table", DataTable)
+        arrivals_table.clear(columns=True)
+        arrivals_table.add_columns("FLIGHT", "ORIGIN", "ETA")
+        
+        for arrival in self.arrivals_data:
+            arrivals_table.add_row(*arrival)
+    
+    def action_close_board(self) -> None:
+        """Close the modal"""
+        self.dismiss()
+
 
 
 class VATSIMControlApp(App):
@@ -85,6 +205,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+space", "toggle_pause", "Pause/Resume", priority=True),
         Binding("ctrl+f", "toggle_search", "Find", priority=True),
         Binding("escape", "cancel_search", "Cancel Search", show=False),
+        Binding("enter", "open_flight_board", "Flight Board", priority=True),
     ]
     
     def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None):
@@ -523,6 +644,48 @@ class VATSIMControlApp(App):
             ]
         
         self.populate_tables()
+    
+    def action_open_flight_board(self) -> None:
+        """Open the flight board for the selected airport or grouping"""
+        # Don't allow opening flight board during search
+        if self.search_active:
+            return
+        
+        tabs = self.query_one("#tabs", TabbedContent)
+        current_tab = tabs.active
+        
+        if current_tab == "airports":
+            airports_table = self.query_one("#airports-table", DataTable)
+            if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
+                # Get the ICAO code from the selected row
+                icao = self.airport_data[airports_table.cursor_row][0]
+                title = icao
+                
+                # Open the flight board
+                self.push_screen(FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0))
+        
+        elif current_tab == "groupings":
+            groupings_table = self.query_one("#groupings-table", DataTable)
+            if self.groupings_data and groupings_table.cursor_row is not None and groupings_table.cursor_row < len(self.groupings_data):
+                # Get the grouping name from the selected row
+                grouping_name = self.groupings_data[groupings_table.cursor_row][0]
+                
+                # Get the list of airports in this grouping
+                # We need to load the custom groupings file again to get the airport list
+                import json
+                import os
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                try:
+                    with open(os.path.join(script_dir, 'custom_groupings.json'), 'r', encoding='utf-8') as f:
+                        all_groupings = json.load(f)
+                        if grouping_name in all_groupings:
+                            airport_list = all_groupings[grouping_name]
+                            title = grouping_name
+                            
+                            # Open the flight board
+                            self.push_screen(FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0))
+                except (FileNotFoundError, json.JSONDecodeError):
+                    pass
 
 
 def main():
