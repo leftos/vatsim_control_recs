@@ -96,7 +96,7 @@ class VATSIMControlApp(App):
         self.groupings_data = groupings_data or []
         self.total_flights = total_flights
         self.args = args
-        self.include_all_staffed = args.include_all_staffed
+        self.include_all_staffed = args.include_all_staffed if args else True
         self.search_active = False
         self.refresh_paused = False
         self.refresh_interval = args.refresh_interval if args else 5
@@ -149,7 +149,8 @@ class VATSIMControlApp(App):
         """Populate or refresh the datatable contents."""
         self.watch_for_user_activity = False  # Temporarily disable user activity tracking
 
-        arr_suffix = f"(<{self.args.max_eta_hours:,.1g}h)" if self.args.max_eta_hours != 0 else "(all)"
+        max_eta = self.args.max_eta_hours if self.args else 1.0
+        arr_suffix = f"(<{max_eta:,.1g}h)" if max_eta != 0 else "(all)"
 
         # Set up airports table
         airports_table = self.query_one("#airports-table", DataTable)
