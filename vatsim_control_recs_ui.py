@@ -188,7 +188,7 @@ class VATSIMControlApp(App):
         column_keys = list(table.columns.keys())
         
         # Update existing rows in place (up to the minimum of current and new row counts)
-        rows_to_update = min(current_row_count, new_row_count)
+        rows_to_update = min(current_row_count, new_row_count, len(row_keys))
         for row_index in range(rows_to_update):
             new_row_data = new_data[row_index]
             # Update each cell in the row
