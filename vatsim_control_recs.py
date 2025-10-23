@@ -271,10 +271,7 @@ def is_flight_flying_near_arrival(flight, airports, max_eta_hours=1.0, min_groun
         # Calculate estimated time of arrival (in hours)
         if flight['groundspeed'] > 0:
             eta_hours = distance / flight['groundspeed']
-            return eta_hours <= max_eta_hours if max_eta_hours > 0 else True
-        else:
-            # If groundspeed is 0, we can't calculate ETA
-            return max_eta_hours == 0 # If we don't care about ETA, consider stationary aircraft at departure airport as well
+            return max_eta_hours == 0 or eta_hours <= max_eta_hours
     
     return False
 
@@ -399,6 +396,12 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     arrivals_in_flight = defaultdict(int)  # Track arrivals still in flight
     
     for flight in flights:
+        # First, calculate the true earliest ETA for all in-flight arrivals
+        if flight['arrival'] in airports and flight.get('groundspeed', 0) > 40:
+            _, _, eta_hours = _calculate_eta(flight, airports)
+            if eta_hours < earliest_arrival_eta[flight['arrival']]:
+                earliest_arrival_eta[flight['arrival']] = eta_hours
+
         nearest_airport_if_on_ground = get_nearest_airport_if_on_ground(flight, airports)
         if flight['departure'] and nearest_airport_if_on_ground == flight['departure']:
             # Count as departure if on ground at departure airport
@@ -414,20 +417,7 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             # Count as arrival if within the specified ETA hours of arrival airport
             arrival_counts[flight['arrival']] += 1
             arrivals_in_flight[flight['arrival']] += 1
-            
-            # Calculate ETA for this flight and track the earliest one per airport (only for in-flight arrivals)
-            if flight['arrival'] in airports and flight['groundspeed'] > 0:
-                arrival_airport = airports[flight['arrival']]
-                distance = haversine_distance_nm(
-                    flight['latitude'],
-                    flight['longitude'],
-                    arrival_airport['latitude'],
-                    arrival_airport['longitude']
-                )
-                eta_hours = distance / flight['groundspeed']
-                if eta_hours < earliest_arrival_eta[flight['arrival']]:
-                    earliest_arrival_eta[flight['arrival']] = eta_hours
-    
+
     # Create a list of airports with their counts and staffed positions
     airport_data = []
     for airport in airports:
@@ -487,6 +477,28 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     
     return airport_data, grouped_data, len(flights)
 
+def _calculate_eta(flight, airports_data):
+    """Calculate ETA for a flight and return display strings."""
+    if flight['arrival'] in airports_data and flight.get('groundspeed', 0) > 0:
+        arrival_airport = airports_data[flight['arrival']]
+        distance = haversine_distance_nm(
+            flight['latitude'],
+            flight['longitude'],
+            arrival_airport['latitude'],
+            arrival_airport['longitude']
+        )
+        eta_hours = distance / flight['groundspeed']
+        eta_display = format_eta_display(eta_hours, 1, 0)
+        
+        current_time_utc = datetime.now(timezone.utc)
+        arrival_time_utc = current_time_utc + timedelta(hours=eta_hours)
+        arrival_time_local = arrival_time_utc.astimezone()
+        eta_local_time = arrival_time_local.strftime("%H:%M")
+        
+        return eta_display, eta_local_time, eta_hours
+    return "----", "----", float('inf')
+
+
 def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0):
     """
     Get detailed flight information for a specific airport or list of airports.
@@ -544,33 +556,15 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0):
                 # Flight is on ground at arrival airport
                 origin = flight['departure'] if flight['departure'] else "----"
                 arrivals_list.append((callsign, origin, "Arrived", "----"))
-            elif is_flight_flying_near_arrival(flight, all_airports_data, max_eta_hours):
-                # Flight is in the air approaching arrival airport
+            # For in-flight arrivals, check if it's an arrival first, then calculate ETA
+            # is_flight_flying_near_arrival uses max_eta_hours=0 to check ALL arrivals
+            elif is_flight_flying_near_arrival(flight, all_airports_data, max_eta_hours=0):
                 origin = flight['departure'] if flight['departure'] else "----"
+                eta_display, eta_local_time, _ = _calculate_eta(flight, all_airports_data)
                 
-                # Calculate ETA
-                if flight['arrival'] in all_airports_data and flight['groundspeed'] > 0:
-                    arrival_airport = all_airports_data[flight['arrival']]
-                    distance = haversine_distance_nm(
-                        flight['latitude'],
-                        flight['longitude'],
-                        arrival_airport['latitude'],
-                        arrival_airport['longitude']
-                    )
-                    eta_hours = distance / flight['groundspeed']
-                    # Use the same formatting as the main table
-                    eta_display = format_eta_display(eta_hours, 1, 0)
-                    
-                    # Calculate local time ETA
-                    current_time_utc = datetime.now(timezone.utc)
-                    arrival_time_utc = current_time_utc + timedelta(hours=eta_hours)
-                    arrival_time_local = arrival_time_utc.astimezone()
-                    eta_local_time = arrival_time_local.strftime("%H:%M")
-                else:
-                    eta_display = "----"
-                    eta_local_time = "----"
-                
-                arrivals_list.append((callsign, origin, eta_display, eta_local_time))
+                # Add to list if it meets the original max_eta_hours criteria
+                if max_eta_hours == 0 or _ <= max_eta_hours:
+                    arrivals_list.append((callsign, origin, eta_display, eta_local_time))
         
         # Handle flights on ground without flight plans
         if not flight['departure'] and not flight['arrival'] and nearest_airport_if_on_ground:

@@ -111,7 +111,7 @@ class FlightBoardScreen(ModalScreen):
                 None,
                 get_airport_flight_details,
                 self.airport_icao_or_list,
-                self.max_eta_hours
+                0  # Always show all arrivals on the flight board
             )
             
             if result:
