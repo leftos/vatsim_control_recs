@@ -9,7 +9,7 @@ class AirportDisambiguator:
         'Executive', 'Metropolitan', 'National', 'Memorial', 'Central',
         'East', 'West', 'North', 'South', 'Downtown', 'City', 'Base',
         'Airfield', 'Airpark', 'General', 'Private', 'Public',
-        'Commercial', 'Domestic', 'Civil', 'Military'
+        'Commercial', 'Domestic', 'Civil', 'Military', 'Boeing'
     }
     
     # Shortening replacements - both keys and values will be considered high-priority
@@ -76,11 +76,54 @@ class AirportDisambiguator:
                 icao_to_pretty_name[icaos[0]] = location
                 continue
 
-            # This location has multiple airports, so all names must start with the location.
+            # Multiple airports in this location - need to disambiguate them.
+            # Split into two groups: those that start with location vs those that don't
             airport_names = {icao: self._shorten_name(airports_data[icao].get('name', icao)) for icao in icaos}
             
+            icaos_start_with_location = []
+            icaos_dont_start_with_location = []
+            
+            for icao in icaos:
+                full_name = airports_data[icao].get('name', icao)
+                if full_name.lower().startswith(location.lower()):
+                    icaos_start_with_location.append(icao)
+                else:
+                    icaos_dont_start_with_location.append(icao)
+            
+            # Process airports that DON'T start with location
+            # They get location + their most distinguishing high-priority word
+            for icao in icaos_dont_start_with_location:
+                name = airport_names[icao]
+                location_words = {word.lower() for word in location.split()}
+                distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
+                
+                # Find the first high-priority word, or just use the first word
+                high_priority_word = None
+                for word in distinguishing_parts:
+                    if word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS:
+                        high_priority_word = word
+                        break
+                
+                if high_priority_word:
+                    icao_to_pretty_name[icao] = f"{location} {high_priority_word}"
+                elif distinguishing_parts:
+                    icao_to_pretty_name[icao] = f"{location} {distinguishing_parts[0]}"
+                else:
+                    icao_to_pretty_name[icao] = location
+            
+            # If only one airport starts with location, it just gets the location name
+            if len(icaos_start_with_location) == 1:
+                icao_to_pretty_name[icaos_start_with_location[0]] = location
+                continue
+            
+            # If no airports start with location, we're done (already handled above)
+            if len(icaos_start_with_location) == 0:
+                continue
+            
+            # Multiple airports start with location - need to disambiguate them
+            # Only compare against each other, not against the ones that don't start with location
             resolved_names = {}
-            for icao_to_resolve in icaos:
+            for icao_to_resolve in icaos_start_with_location:
                 # 1. Get the distinguishing parts of the name (remove location words from anywhere), preserving casing
                 name = airport_names[icao_to_resolve]
                 # Remove all words from the location name (e.g., both "San" and "Carlos" from "San Carlos")
@@ -106,7 +149,7 @@ class AirportDisambiguator:
                         candidate_suffix = word
                         candidate_full_name = f"{location} {candidate_suffix}".strip()
                         
-                        if self._is_unique_name(candidate_full_name, icao_to_resolve, icaos, location, airport_names):
+                        if self._is_unique_name(candidate_full_name, icao_to_resolve, icaos_start_with_location, location, airport_names):
                             resolved_names[icao_to_resolve] = candidate_full_name
                             found = True
                             break
@@ -130,7 +173,7 @@ class AirportDisambiguator:
                                 candidate_suffix = " ".join(candidate_words)
                                 candidate_full_name = f"{location} {candidate_suffix}".strip()
                                 
-                                if self._is_unique_name(candidate_full_name, icao_to_resolve, icaos, location, airport_names):
+                                if self._is_unique_name(candidate_full_name, icao_to_resolve, icaos_start_with_location, location, airport_names):
                                     resolved_names[icao_to_resolve] = candidate_full_name
                                     found = True
                                     break
@@ -144,7 +187,7 @@ class AirportDisambiguator:
                         candidate_suffix = " ".join(distinguishing_parts[:i])
                         candidate_full_name = f"{location} {candidate_suffix}".strip()
                         
-                        if self._is_unique_name(candidate_full_name, icao_to_resolve, icaos, location, airport_names):
+                        if self._is_unique_name(candidate_full_name, icao_to_resolve, icaos_start_with_location, location, airport_names):
                             resolved_names[icao_to_resolve] = candidate_full_name
                             found = True
                             break
