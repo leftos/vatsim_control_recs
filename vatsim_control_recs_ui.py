@@ -8,9 +8,23 @@ from textual.containers import Container, Vertical, Horizontal
 from textual.events import Key
 from textual.timer import Timer
 from textual.screen import ModalScreen
+import os
 
 # Import backend functionality
 from vatsim_control_recs import analyze_flights_data, get_airport_flight_details, DISAMBIGUATOR # pyright: ignore[reportAttributeAccessIssue]
+
+# Set up debug logging to file
+DEBUG_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug.log")
+
+def debug_log(message: str):
+    """Write a debug message to the log file."""
+    with open(DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        f.write(f"[{timestamp}] {message}\n")
+
+# Clear debug log on startup
+with open(DEBUG_LOG_FILE, "w", encoding="utf-8") as f:
+    f.write(f"=== Debug log started at {datetime.now()} ===\n")
 
 class FlightBoardScreen(ModalScreen):
     """Modal screen showing departure and arrivals board for an airport or grouping"""
@@ -336,20 +350,34 @@ class VATSIMControlApp(App):
 
         # Set up airports table
         airports_table = self.query_one("#airports-table", DataTable)
+        
+        # DIAGNOSTIC LOG
+        debug_log(f"populate_tables BEFORE clear - airports_table.row_count={airports_table.row_count}, len(airports_row_keys)={len(self.airports_row_keys)}")
+        
         airports_table.clear(columns=True)
         airports_table.add_columns("ICAO", "NAME", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "NEXT ETA", "STAFFED POSITIONS")
 
         for row_data in self.airport_data:
             self.airports_row_keys.append(airports_table.add_row(*row_data))
         
+        # DIAGNOSTIC LOG
+        debug_log(f"populate_tables AFTER populate - airports_table.row_count={airports_table.row_count}, len(airports_row_keys)={len(self.airports_row_keys)}")
+        
         # Set up groupings table
         groupings_table = self.query_one("#groupings-table", DataTable)
+        
+        # DIAGNOSTIC LOG
+        debug_log(f"populate_tables BEFORE clear - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
+        
         groupings_table.clear(columns=True)
         groupings_table.add_columns("GROUPING", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "NEXT ETA")
         
         if self.groupings_data:
             for row_data in self.groupings_data:
                 self.groupings_row_keys.append(groupings_table.add_row(*row_data))
+        
+        # DIAGNOSTIC LOG
+        debug_log(f"populate_tables AFTER populate - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
                 
         self.watch_for_user_activity = True  # Re-enable user activity tracking
     
@@ -366,16 +394,24 @@ class VATSIMControlApp(App):
         current_row_count = table.row_count
         new_row_count = len(new_data)
         
+        # DIAGNOSTIC LOG
+        debug_log(f"update_table_efficiently current_row_count={current_row_count}, new_row_count={new_row_count}, len(row_keys)={len(row_keys)}")
+        debug_log(f"update_table_efficiently table.columns={list(table.columns.keys())}")
+        debug_log(f"update_table_efficiently table row_keys in table: {[key in table.rows for key in row_keys[:5]]}")
+        
         # Get column keys list once
         column_keys = list(table.columns.keys())
         
         # Update existing rows in place (up to the minimum of current and new row counts)
         rows_to_update = min(current_row_count, new_row_count, len(row_keys))
+        debug_log(f"update_table_efficiently rows_to_update={rows_to_update}")
+        
         for row_index in range(rows_to_update):
             new_row_data = new_data[row_index]
             # Update each cell in the row
             for col_index, col_key in enumerate(column_keys):
                 if col_index < len(new_row_data):
+                    debug_log(f"update_table_efficiently Updating row {row_index}, col {col_index}: row_key={row_keys[row_index]}, col_key={col_key}, value={new_row_data[col_index]}")
                     table.update_cell(row_keys[row_index], col_key, new_row_data[col_index])
         
         # If we have more new data than current rows, add the additional rows
@@ -583,11 +619,20 @@ class VATSIMControlApp(App):
                 # Update groupings table efficiently
                 if self.groupings_data and len(self.groupings_data) > 0:
                     if old_groupings_data and len(old_groupings_data) > 0:
+                        # DIAGNOSTIC LOG
+                        debug_log(f"refresh_worker BEFORE efficient update - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}, len(groupings_data)={len(self.groupings_data)}")
+                        
                         self.update_table_efficiently(groupings_table, self.groupings_row_keys, self.groupings_data)
                     else:
+                        # DIAGNOSTIC LOG
+                        debug_log(f"refresh_worker BEFORE rebuild - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
+                        
                         groupings_table.clear()
                         for row_data in self.groupings_data:
                             self.groupings_row_keys.append(groupings_table.add_row(*row_data))
+                        
+                        # DIAGNOSTIC LOG
+                        debug_log(f"refresh_worker AFTER rebuild - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
             
             # Restore cursor position and scroll offset
             if current_tab == "airports":
