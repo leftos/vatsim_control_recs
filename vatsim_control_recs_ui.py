@@ -252,7 +252,7 @@ class FlightBoardScreen(ModalScreen):
                 self.departures_row_keys.append(row_key)
                 departures_table.update_cell_animated(row_key, column_keys_dep[0], flight)
                 departures_table.update_cell_animated(row_key, column_keys_dep[1], dest_icao)
-                departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name)
+                departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name, update_width=True)
         else:
             # For subsequent updates, efficiently update existing rows
             current_row_count = len(self.departures_row_keys)
@@ -266,7 +266,7 @@ class FlightBoardScreen(ModalScreen):
                 if i < len(self.departures_row_keys):
                     departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[0], flight)
                     departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[1], dest_icao)
-                    departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[2], dest_name)
+                    departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[2], dest_name, update_width=True)
             
             # Add new rows if needed
             if new_row_count > current_row_count:
@@ -278,7 +278,7 @@ class FlightBoardScreen(ModalScreen):
                     self.departures_row_keys.append(row_key)
                     departures_table.update_cell_animated(row_key, column_keys_dep[0], flight)
                     departures_table.update_cell_animated(row_key, column_keys_dep[1], dest_icao)
-                    departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name)
+                    departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name, update_width=True)
             # Remove extra rows if needed
             elif new_row_count < current_row_count:
                 for _ in range(current_row_count - new_row_count):
@@ -308,7 +308,7 @@ class FlightBoardScreen(ModalScreen):
                 self.arrivals_row_keys.append(row_key)
                 arrivals_table.update_cell_animated(row_key, column_keys_arr[0], flight)
                 arrivals_table.update_cell_animated(row_key, column_keys_arr[1], origin_icao)
-                arrivals_table.update_cell_animated(row_key, column_keys_arr[2], origin_name)
+                arrivals_table.update_cell_animated(row_key, column_keys_arr[2], origin_name, update_width=True)
                 arrivals_table.update_cell_animated(row_key, column_keys_arr[3], eta)
                 arrivals_table.update_cell_animated(row_key, column_keys_arr[4], eta_local)
             
@@ -326,7 +326,7 @@ class FlightBoardScreen(ModalScreen):
                 if i < len(self.arrivals_row_keys):
                     arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[0], flight)
                     arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[1], origin_icao)
-                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[2], origin_name)
+                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[2], origin_name, update_width=True)
                     arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[3], eta)
                     arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[4], eta_local)
             
@@ -340,7 +340,7 @@ class FlightBoardScreen(ModalScreen):
                     self.arrivals_row_keys.append(row_key)
                     arrivals_table.update_cell_animated(row_key, column_keys_arr[0], flight)
                     arrivals_table.update_cell_animated(row_key, column_keys_arr[1], origin_icao)
-                    arrivals_table.update_cell_animated(row_key, column_keys_arr[2], origin_name)
+                    arrivals_table.update_cell_animated(row_key, column_keys_arr[2], origin_name, update_width=True)
                     arrivals_table.update_cell_animated(row_key, column_keys_arr[3], eta)
                     arrivals_table.update_cell_animated(row_key, column_keys_arr[4], eta_local)
             # Remove extra rows if needed
