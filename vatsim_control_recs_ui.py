@@ -17,10 +17,10 @@ from vatsim_control_recs import analyze_flights_data, get_airport_flight_details
 from split_flap_datatable import SplitFlapDataTable, TIME_FLAP_CHARS, NUMERIC_FLAP_CHARS
 
 # Custom flap character sets for specific column types
-ETA_FLAP_CHARS = "0123456789<hm:ADELN -"  # For NEXT ETA columns: numbers, <, h, m, colon, LANDED letters, space, dash
+ETA_FLAP_CHARS = "9876543210<hm:ADELN -"  # For NEXT ETA columns: numbers in descending order for countdown effect, <, h, m, colon, LANDED letters, space, dash
 ICAO_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"  # For ICAO codes
 CALLSIGN_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- "  # For flight callsigns
-POSITION_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- "  # For controller positions
+POSITION_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ- "  # For controller positions
 
 # Set up debug logging to file
 DEBUG_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug.log")
@@ -96,7 +96,7 @@ class FlightBoardScreen(ModalScreen):
         Binding("q", "close_board", "Close"),
     ]
     
-    def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float, refresh_interval: int = 15, disambiguator=None):
+    def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float, refresh_interval: int = 15, disambiguator=None, enable_animations: bool = True):
         super().__init__()
         self.title = title
         self.airport_icao_or_list = airport_icao_or_list
@@ -108,6 +108,7 @@ class FlightBoardScreen(ModalScreen):
         self.departures_row_keys = []
         self.arrivals_row_keys = []
         self.is_first_load = True
+        self.enable_animations = enable_animations
     
     def compose(self) -> ComposeResult:
         # Determine the window title based on whether we have a disambiguator
@@ -127,12 +128,12 @@ class FlightBoardScreen(ModalScreen):
             with Horizontal(id="board-tables"):
                 with Vertical(classes="board-section", id="departures-section"):
                     yield Static("DEPARTURES", classes="section-title")
-                    departures_table = SplitFlapDataTable(classes="board-table", id="departures-table")
+                    departures_table = SplitFlapDataTable(classes="board-table", id="departures-table", enable_animations=self.enable_animations)
                     departures_table.cursor_type = "row"
                     yield departures_table
                 with Vertical(classes="board-section", id="arrivals-section"):
                     yield Static("ARRIVALS", classes="section-title")
-                    arrivals_table = SplitFlapDataTable(classes="board-table", id="arrivals-table")
+                    arrivals_table = SplitFlapDataTable(classes="board-table", id="arrivals-table", enable_animations=self.enable_animations)
                     arrivals_table.cursor_type = "row"
                     yield arrivals_table
     
@@ -474,12 +475,14 @@ class VATSIMControlApp(App):
         
         with TabbedContent(initial="airports", id="tabs"):
             with TabPane("Individual Airports", id="airports"):
-                airports_table = SplitFlapDataTable(id="airports-table")
+                enable_anims = not self.args.disable_animations if self.args else True
+                airports_table = SplitFlapDataTable(id="airports-table", enable_animations=enable_anims)
                 airports_table.cursor_type = "row"
                 yield airports_table
                 
             with TabPane("Custom Groupings", id="groupings"):
-                groupings_table = SplitFlapDataTable(id="groupings-table")
+                enable_anims = not self.args.disable_animations if self.args else True
+                groupings_table = SplitFlapDataTable(id="groupings-table", enable_animations=enable_anims)
                 groupings_table.cursor_type = "row"
                 yield groupings_table
         
@@ -1001,7 +1004,8 @@ class VATSIMControlApp(App):
                  
                 # Open the flight board and store reference
                 self.flight_board_open = True
-                flight_board = FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR)
+                enable_anims = not self.args.disable_animations if self.args else True
+                flight_board = FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR, enable_anims)
                 self.active_flight_board = flight_board
                 self.push_screen(flight_board)
         
@@ -1025,7 +1029,8 @@ class VATSIMControlApp(App):
                              
                             # Open the flight board and store reference
                             self.flight_board_open = True
-                            flight_board = FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR)
+                            enable_anims = not self.args.disable_animations if self.args else True
+                            flight_board = FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR, enable_anims)
                             self.active_flight_board = flight_board
                             self.push_screen(flight_board)
                 except (FileNotFoundError, json.JSONDecodeError):
@@ -1047,6 +1052,8 @@ def main():
                         help="List of custom grouping names to use as supergroupings. This will include all airports in these supergroupings and any detected sub-groupings.")
     parser.add_argument("--include-all-staffed", action="store_true",
                         help="Include airports with zero planes if they are staffed (default: False)")
+    parser.add_argument("--disable-animations", action="store_true",
+                        help="Disable split-flap animations for instant text updates (default: False)")
     
     # Parse arguments
     args = parser.parse_args()

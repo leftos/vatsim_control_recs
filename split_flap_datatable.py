@@ -177,6 +177,7 @@ class SplitFlapDataTable(DataTable):
         animation_speed: float = 0.05,
         default_flap_chars: str = DEFAULT_FLAP_CHARS,
         stagger_delay: int = 1,
+        enable_animations: bool = True,
         **kwargs
     ):
         """
@@ -186,12 +187,15 @@ class SplitFlapDataTable(DataTable):
             animation_speed: Time in seconds between animation frames (default: 0.05)
             default_flap_chars: Default character set for animations
             stagger_delay: Number of frames to stagger between cell animations (default: 1)
+            enable_animations: Whether to enable split-flap animations (default: True).
+                             If False, all updates will be instant.
             **kwargs: Additional arguments passed to DataTable
         """
         super().__init__(**kwargs)
         self.animation_speed = animation_speed
         self.default_flap_chars = default_flap_chars
         self.stagger_delay = stagger_delay
+        self.enable_animations = enable_animations
         self.animated_cells: dict[tuple[int, int], AnimatedCell] = {}
         self.column_flap_chars: dict[int, str] = {}  # Map column index to flap chars
         self._animation_timer = None
@@ -268,7 +272,7 @@ class SplitFlapDataTable(DataTable):
         update_width: bool = False
     ) -> None:
         """
-        Update a cell with split-flap animation.
+        Update a cell with split-flap animation (or instantly if animations are disabled).
         
         Args:
             row_key: The key or label identifying the row
@@ -276,6 +280,11 @@ class SplitFlapDataTable(DataTable):
             value: The new value for the cell
             update_width: Whether to update column width to fit new content
         """
+        # If animations are disabled, update instantly
+        if not self.enable_animations:
+            self.update_cell(row_key, column_key, value, update_width=update_width)
+            return
+        
         # Find row and column indices
         try:
             if isinstance(row_key, str):
