@@ -66,11 +66,12 @@ class FlightBoardScreen(ModalScreen):
         Binding("q", "close_board", "Close"),
     ]
     
-    def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float, refresh_interval: int = 15):
+    def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float, refresh_interval: int = 15, disambiguator=None):
         super().__init__()
         self.title = title
         self.airport_icao_or_list = airport_icao_or_list
         self.max_eta_hours = max_eta_hours
+        self.disambiguator = disambiguator
         self.departures_data = []
         self.arrivals_data = []
         self.refresh_interval = refresh_interval
@@ -79,8 +80,20 @@ class FlightBoardScreen(ModalScreen):
         self.show_icao = False
     
     def compose(self) -> ComposeResult:
+        # Determine the window title based on whether we have a disambiguator
+        if self.disambiguator and isinstance(self.airport_icao_or_list, str):
+            # For individual airports, get the full name
+            full_name = self.disambiguator.get_pretty_name(self.airport_icao_or_list)
+            window_title = f"Flight Board - {full_name} ({self.airport_icao_or_list})"
+        else:
+            # For groupings or when no disambiguator is available, use the original title
+            window_title = f"Flight Board - {self.title}"
+            
+        # Set the window title
+        self.app.console.set_window_title(window_title)
+        
         with Container(id="board-container"):
-            yield Static(f"Flight Board - {self.title}", id="board-header")
+            yield Static(window_title, id="board-header")
             with Horizontal(id="board-tables"):
                 with Vertical(classes="board-section"):
                     yield Static("DEPARTURES", classes="section-title")
@@ -718,10 +731,11 @@ class VATSIMControlApp(App):
                 # Get the ICAO code from the selected row
                 icao = self.airport_data[airports_table.cursor_row][0]
                 title = icao
-                
+                full_name = DISAMBIGUATOR.get_pretty_name(icao) if DISAMBIGUATOR else icao
+                 
                 # Open the flight board
                 self.flight_board_open = True
-                self.push_screen(FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval))
+                self.push_screen(FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR))
         
         elif current_tab == "groupings":
             groupings_table = self.query_one("#groupings-table", DataTable)
@@ -740,10 +754,10 @@ class VATSIMControlApp(App):
                         if grouping_name in all_groupings:
                             airport_list = all_groupings[grouping_name]
                             title = grouping_name
-                            
+                             
                             # Open the flight board
                             self.flight_board_open = True
-                            self.push_screen(FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval))
+                            self.push_screen(FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR))
                 except (FileNotFoundError, json.JSONDecodeError):
                     pass
 
