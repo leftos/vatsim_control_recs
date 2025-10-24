@@ -337,7 +337,7 @@ class VATSIMControlApp(App):
         # Set up airports table
         airports_table = self.query_one("#airports-table", DataTable)
         airports_table.clear(columns=True)
-        airports_table.add_columns("ICAO", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "NEXT ETA", "STAFFED POSITIONS")
+        airports_table.add_columns("ICAO", "NAME", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "NEXT ETA", "STAFFED POSITIONS")
 
         for row_data in self.airport_data:
             self.airports_row_keys.append(airports_table.add_row(*row_data))
@@ -711,7 +711,8 @@ class VATSIMControlApp(App):
             self.airport_data = [
                 row for row in self.original_airport_data
                 if search_text in row[0].upper() or  # ICAO
-                   search_text in row[5].upper()      # Staffed positions (now at index 5)
+                   search_text in row[1].upper() or  # Airport name (now at index 1)
+                   search_text in row[6].upper()      # Staffed positions (now at index 6)
             ]
         
         self.populate_tables()

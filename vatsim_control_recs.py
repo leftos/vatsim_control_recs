@@ -449,10 +449,12 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         
         # Include airport if it has flights, or if it's staffed and we want to include staffed zero-plane airports
         if total_flights > 0 or (staffed_pos_display and include_all_staffed):
-            airport_data.append((airport, str(total_flights), str(departing), str(arriving), eta_display, staffed_pos_display))
+            # Get the pretty name for the airport
+            pretty_name = DISAMBIGUATOR.get_pretty_name(airport) if DISAMBIGUATOR else airport
+            airport_data.append((airport, pretty_name, str(total_flights), str(departing), str(arriving), eta_display, staffed_pos_display))
     
     # Sort by total count descending
-    airport_data.sort(key=lambda x: int(x[1]), reverse=True)
+    airport_data.sort(key=lambda x: int(x[2]), reverse=True)
     
     # Process custom groupings data
     grouped_data = []
