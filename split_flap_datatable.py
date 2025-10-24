@@ -289,9 +289,20 @@ class SplitFlapDataTable(DataTable):
             value: The new value for the cell
             update_width: Whether to update column width to fit new content
         """
-        # If animations are disabled, update instantly
+        # If animations are disabled, update instantly with alignment
         if not self.enable_animations:
-            self.update_cell(row_key, column_key, value, update_width=update_width)
+            # Find column index for alignment
+            try:
+                if isinstance(column_key, str):
+                    col_idx = self._get_column_index(column_key)
+                else:
+                    col_idx = list(self.columns.keys()).index(column_key)
+                # Apply alignment
+                aligned_value = self._apply_alignment(value, col_idx)
+                self.update_cell(row_key, column_key, aligned_value, update_width=update_width)
+            except (ValueError, KeyError):
+                # If we can't find the column, just update normally
+                self.update_cell(row_key, column_key, value, update_width=update_width)
             return
         
         # Find row and column indices

@@ -604,10 +604,18 @@ class VATSIMControlApp(App):
                     debug_log(f"update_table_efficiently Updating row {row_index}, col {col_index}: row_key={row_keys[row_index]}, col_key={col_key}, value={new_row_data[col_index]}")
                     table.update_cell_animated(row_keys[row_index], col_key, new_row_data[col_index])
         
-        # If we have more new data than current rows, add the additional rows
+        # If we have more new data than current rows, add the additional rows with animation
         if new_row_count > current_row_count:
             for row_index in range(current_row_count, new_row_count):
-                row_keys.append(table.add_row(*new_data[row_index]))        
+                row_data = new_data[row_index]
+                # Add row with blank values first
+                blank_row = tuple(" " * len(str(cell)) for cell in row_data)
+                row_key = table.add_row(*blank_row)
+                row_keys.append(row_key)
+                # Then animate each cell to its target value
+                for col_index, col_key in enumerate(column_keys):
+                    if col_index < len(row_data):
+                        table.update_cell_animated(row_key, col_key, row_data[col_index])
         # If we have fewer new data than current rows, remove the extra rows from the end
         elif new_row_count < current_row_count:
             for _ in range(current_row_count - new_row_count):
