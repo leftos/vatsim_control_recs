@@ -4,9 +4,10 @@ Split-Flap DataTable Widget for Textual
 A reusable DataTable widget with split-flap animation effects
 """
 
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 from textual.widgets import DataTable
 from textual.widgets._data_table import RowKey, ColumnKey
+from rich.text import Text
 
 # Default character sets for the split-flap effect
 DEFAULT_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :-"
@@ -198,6 +199,7 @@ class SplitFlapDataTable(DataTable):
         self.enable_animations = enable_animations
         self.animated_cells: dict[tuple[int, int], AnimatedCell] = {}
         self.column_flap_chars: dict[int, str] = {}  # Map column index to flap chars
+        self.column_alignment: dict[int, Literal["left", "center", "right"]] = {}  # Map column index to alignment
         self._animation_timer = None
         self._update_counter = 0  # Counter for staggering animations
     
@@ -206,14 +208,16 @@ class SplitFlapDataTable(DataTable):
         label: Any,
         *,
         flap_chars: Optional[str] = None,
+        content_align: Literal["left", "center", "right"] = "left",
         **kwargs
     ) -> ColumnKey:
         """
-        Add a column with optional custom flap characters.
+        Add a column with optional custom flap characters and alignment.
         
         Args:
             label: The column label
             flap_chars: Custom character set for this column (optional)
+            content_align: Text alignment for cells in this column ("left", "center", or "right")
             **kwargs: Additional arguments passed to DataTable.add_column
             
         Returns:
@@ -221,10 +225,15 @@ class SplitFlapDataTable(DataTable):
         """
         column_key = super().add_column(label, **kwargs)
         
+        col_idx = len(self.columns) - 1
+        
         # Store custom flap chars for this column if provided
         if flap_chars is not None:
-            col_idx = len(self.columns) - 1
             self.column_flap_chars[col_idx] = flap_chars
+        
+        # Store alignment for this column
+        if content_align != "left":
+            self.column_alignment[col_idx] = content_align
         
         return column_key
     
@@ -374,14 +383,32 @@ class SplitFlapDataTable(DataTable):
         for row_idx, col_idx, display_value in cells_to_update + cells_to_instant_update:
             try:
                 if row_idx < len(row_keys) and col_idx < len(col_keys):
+                    # Apply alignment if specified for this column
+                    cell_value = self._apply_alignment(display_value, col_idx)
                     self.update_cell(
                         row_keys[row_idx],
                         col_keys[col_idx],
-                        display_value,
+                        cell_value,
                         update_width=False
                     )
             except Exception:
                 pass  # Cell might not exist anymore
+    
+    def _apply_alignment(self, value: Any, col_idx: int) -> Any:
+        """
+        Apply alignment to a cell value if specified for the column.
+        
+        Args:
+            value: The cell value (typically a string)
+            col_idx: The column index
+            
+        Returns:
+            A Text object with alignment if specified, otherwise the original value
+        """
+        alignment = self.column_alignment.get(col_idx)
+        if alignment and isinstance(value, str):
+            return Text(value, justify=alignment)
+        return value
     
     def clear(self, columns: bool = False):
         """
@@ -397,4 +424,5 @@ class SplitFlapDataTable(DataTable):
         self.animated_cells.clear()
         if columns:
             self.column_flap_chars.clear()
+            self.column_alignment.clear()
         return result

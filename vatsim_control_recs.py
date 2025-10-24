@@ -43,10 +43,7 @@ def format_eta_display(eta_hours, arrivals_in_flight_count, arrivals_on_ground_c
     else:
         hours = int(eta_hours)
         minutes = int((eta_hours - hours) * 60)
-        if minutes == 0:
-            return f"{hours}h"
-        else:
-            return f"{hours}h{minutes}m"
+        return f"{hours}h{minutes:02d}m"
 
 def load_airport_data(filename):
     """Load airport data from CSV file"""

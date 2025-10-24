@@ -291,8 +291,8 @@ class FlightBoardScreen(ModalScreen):
             arrivals_table.add_column("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS)
             arrivals_table.add_column("ORIG", flap_chars=ICAO_FLAP_CHARS)
             arrivals_table.add_column("NAME")
-            arrivals_table.add_column("ETA", flap_chars=ETA_FLAP_CHARS)
-            arrivals_table.add_column("ETA (LT)", flap_chars=ETA_FLAP_CHARS)
+            arrivals_table.add_column("ETA", flap_chars=ETA_FLAP_CHARS, content_align="right")
+            arrivals_table.add_column("ETA (LT)", flap_chars=ETA_FLAP_CHARS, content_align="right")
         
         column_keys_arr = list(arrivals_table.columns.keys())
         
@@ -524,7 +524,7 @@ class VATSIMControlApp(App):
         airports_table.add_column("TOTAL", flap_chars=NUMERIC_FLAP_CHARS)
         airports_table.add_column("DEPARTING", flap_chars=NUMERIC_FLAP_CHARS)
         airports_table.add_column(f"ARRIVING {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS)
-        airports_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS)
+        airports_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right")
         airports_table.add_column("STAFFED POSITIONS", flap_chars=POSITION_FLAP_CHARS)
 
         column_keys = list(airports_table.columns.keys())
@@ -552,7 +552,7 @@ class VATSIMControlApp(App):
         groupings_table.add_column("TOTAL", flap_chars=NUMERIC_FLAP_CHARS)
         groupings_table.add_column("DEPARTING", flap_chars=NUMERIC_FLAP_CHARS)
         groupings_table.add_column(f"ARRIVING {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS)
-        groupings_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS)
+        groupings_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right")
         
         if self.groupings_data:
             column_keys = list(groupings_table.columns.keys())
