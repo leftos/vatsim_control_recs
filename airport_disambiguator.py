@@ -81,10 +81,11 @@ class AirportDisambiguator:
             
             resolved_names = {}
             for icao_to_resolve in icaos:
-                # 1. Get the distinguishing parts of the name (remove location from anywhere), preserving casing
+                # 1. Get the distinguishing parts of the name (remove location words from anywhere), preserving casing
                 name = airport_names[icao_to_resolve]
-                # Remove the location name from anywhere in the string, not just the beginning
-                distinguishing_parts = [word for word in name.split() if word.lower() != location.lower()]
+                # Remove all words from the location name (e.g., both "San" and "Carlos" from "San Carlos")
+                location_words = {word.lower() for word in location.split()}
+                distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
 
                 # 2. Score and sort words by priority (high-priority descriptors first)
                 scored_words = []
@@ -158,8 +159,9 @@ class AirportDisambiguator:
     
     def _is_unique_name(self, candidate_name, current_icao, all_icaos, location, airport_names):
         """Check if a candidate name is unique among all airports in the location."""
-        # Extract just the distinguishing part from the candidate (remove location)
-        candidate_words = [word for word in candidate_name.split() if word.lower() != location.lower()]
+        # Extract just the distinguishing part from the candidate (remove all location words)
+        location_words = {word.lower() for word in location.split()}
+        candidate_words = [word for word in candidate_name.split() if word.lower() not in location_words]
         candidate_suffix = " ".join(candidate_words).lower()
         
         for other_icao in all_icaos:
@@ -168,7 +170,7 @@ class AirportDisambiguator:
             
             # Get the other airport's distinguishing words
             other_name = airport_names[other_icao]
-            other_dist_words = [word for word in other_name.split() if word.lower() != location.lower()]
+            other_dist_words = [word for word in other_name.split() if word.lower() not in location_words]
             other_dist_suffix = " ".join(other_dist_words).lower()
             
             # Check if the other airport's distinguishing parts start with our candidate
