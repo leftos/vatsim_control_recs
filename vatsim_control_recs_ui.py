@@ -10,7 +10,7 @@ from textual.timer import Timer
 from textual.screen import ModalScreen
 
 # Import backend functionality
-from vatsim_control_recs import analyze_flights_data, get_airport_flight_details # pyright: ignore[reportAttributeAccessIssue]
+from vatsim_control_recs import analyze_flights_data, get_airport_flight_details, DISAMBIGUATOR # pyright: ignore[reportAttributeAccessIssue]
 
 class FlightBoardScreen(ModalScreen):
     """Modal screen showing departure and arrivals board for an airport or grouping"""
@@ -75,6 +75,8 @@ class FlightBoardScreen(ModalScreen):
         self.arrivals_data = []
         self.refresh_interval = refresh_interval
         self.refresh_timer = None
+        self.display_toggle_timer = None
+        self.show_icao = False
     
     def compose(self) -> ComposeResult:
         with Container(id="board-container"):
@@ -96,6 +98,8 @@ class FlightBoardScreen(ModalScreen):
         await self.load_flight_data()
         # Start auto-refresh timer
         self.refresh_timer = self.set_interval(self.refresh_interval, self.refresh_flight_data)
+        # Start the 3-second display toggle timer
+        self.display_toggle_timer = self.set_interval(3, self.toggle_display)
     
     async def load_flight_data(self) -> None:
         """Load flight data from backend"""
@@ -111,7 +115,8 @@ class FlightBoardScreen(ModalScreen):
                 None,
                 get_airport_flight_details,
                 self.airport_icao_or_list,
-                0  # Always show all arrivals on the flight board
+                0,  # Always show all arrivals on the flight board
+                DISAMBIGUATOR
             )
             
             if result:
@@ -126,28 +131,39 @@ class FlightBoardScreen(ModalScreen):
         """Refresh flight data (called by timer)"""
         self.run_worker(self.load_flight_data(), exclusive=True)
     
+    def toggle_display(self) -> None:
+        """Toggle the display between ICAO and pretty name."""
+        self.show_icao = not self.show_icao
+        self.populate_tables() # Re-populate tables with the new display style
+
     def populate_tables(self) -> None:
-        """Populate the departure and arrivals tables"""
+        """Populate the departure and arrivals tables based on the current display toggle."""
         # Set up departures table
         departures_table = self.query_one("#departures-table", DataTable)
-        departures_table.clear(columns=True)
-        departures_table.add_columns("FLIGHT", "DESTINATION")
+        if not departures_table.columns: # Only add columns if they don't exist
+            departures_table.add_columns("FLIGHT", "DESTINATION")
         
-        for departure in self.departures_data:
-            departures_table.add_row(*departure)
+        departures_table.clear()
+        for flight, destination_tuple in self.departures_data:
+            display_name = destination_tuple[1] if self.show_icao else destination_tuple[0]
+            departures_table.add_row(flight, display_name)
         
         # Set up arrivals table
         arrivals_table = self.query_one("#arrivals-table", DataTable)
-        arrivals_table.clear(columns=True)
-        arrivals_table.add_columns("FLIGHT", "ORIGIN", "ETA", "ETA (Local)")
+        if not arrivals_table.columns: # Only add columns if they don't exist
+            arrivals_table.add_columns("FLIGHT", "ORIGIN", "ETA", "ETA (Local)")
         
-        for arrival in self.arrivals_data:
-            arrivals_table.add_row(*arrival)
+        arrivals_table.clear()
+        for flight, origin_tuple, eta, eta_local in self.arrivals_data:
+            display_name = origin_tuple[1] if self.show_icao else origin_tuple[0]
+            arrivals_table.add_row(flight, display_name, eta, eta_local)
     
     def action_close_board(self) -> None:
         """Close the modal and stop refresh timer"""
         if self.refresh_timer:
             self.refresh_timer.stop()
+            if self.display_toggle_timer:
+                self.display_toggle_timer.stop()
         
         # Reset the flight board open flag in the parent app
         app = self.app

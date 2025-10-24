@@ -5,6 +5,7 @@ import math
 import os
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+from airport_disambiguator import AirportDisambiguator # pyright: ignore[reportAttributeAccessIssue]
 
 # Define the preferred order for control positions
 CONTROL_POSITION_ORDER = ["TWR", "GND", "DEL"] # ATIS is handled specially in display logic
@@ -89,6 +90,9 @@ def download_vatsim_data():
     except json.JSONDecodeError as e:
         print(f"Error decoding VATSIM data JSON: {e}")
         return None
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+DISAMBIGUATOR = AirportDisambiguator(os.path.join(script_dir, 'airports.json'))
 
 def _get_valid_icao_from_callsign(icao_candidate, airports_data):
     """
@@ -499,7 +503,7 @@ def _calculate_eta(flight, airports_data):
     return "----", "----", float('inf')
 
 
-def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0):
+def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0, disambiguator=None):
     """
     Get detailed flight information for a specific airport or list of airports.
     Returns separate lists for departures and arrivals with full details.
@@ -507,11 +511,12 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0):
     Args:
         airport_icao_or_list: Either a single ICAO code (str) or a list of ICAO codes
         max_eta_hours: Maximum ETA in hours for arrival filter
+        disambiguator: An AirportDisambiguator instance
     
     Returns:
         (departures_list, arrivals_list) where each is a list of tuples:
-        - departures: (callsign, destination_icao)
-        - arrivals: (callsign, origin_icao, eta_display, eta_local_time)
+        - departures: (callsign, (destination_pretty_name, destination_icao))
+        - arrivals: (callsign, (origin_pretty_name, origin_icao), eta_display, eta_local_time)
     """
     # Get the directory where this script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -548,29 +553,32 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0):
             if nearest_airport_if_on_ground == flight['departure']:
                 # Flight is on ground at one of our airports, preparing to depart
                 destination = flight['arrival'] if flight['arrival'] else "----"
-                departures_list.append((callsign, destination))
+                pretty_destination = disambiguator.get_pretty_name(destination) if disambiguator else destination
+                departures_list.append((callsign, (pretty_destination, destination)))
         
         # Check if this is an arrival (either on ground at arrival or flying nearby)
         if flight['arrival'] and flight['arrival'] in airport_icao_list:
             if nearest_airport_if_on_ground == flight['arrival']:
                 # Flight is on ground at arrival airport
                 origin = flight['departure'] if flight['departure'] else "----"
-                arrivals_list.append((callsign, origin, "Arrived", "----"))
+                pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
+                arrivals_list.append((callsign, (pretty_origin, origin), "Arrived", "----"))
             # For in-flight arrivals, check if it's an arrival first, then calculate ETA
             # is_flight_flying_near_arrival uses max_eta_hours=0 to check ALL arrivals
             elif is_flight_flying_near_arrival(flight, all_airports_data, max_eta_hours=0):
                 origin = flight['departure'] if flight['departure'] else "----"
+                pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
                 eta_display, eta_local_time, _ = _calculate_eta(flight, all_airports_data)
                 
                 # Add to list if it meets the original max_eta_hours criteria
                 if max_eta_hours == 0 or _ <= max_eta_hours:
-                    arrivals_list.append((callsign, origin, eta_display, eta_local_time))
+                    arrivals_list.append((callsign, (pretty_origin, origin), eta_display, eta_local_time))
         
         # Handle flights on ground without flight plans
         if not flight['departure'] and not flight['arrival'] and nearest_airport_if_on_ground:
             if nearest_airport_if_on_ground in airport_icao_list:
                 # Count as departure with unknown destination
-                departures_list.append((callsign, "----"))
+                departures_list.append((callsign, ("----", "----")))
     
     # Sort departures by callsign
     departures_list.sort(key=lambda x: x[0])
