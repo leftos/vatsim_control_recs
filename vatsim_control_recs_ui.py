@@ -13,6 +13,15 @@ import os
 # Import backend functionality
 from vatsim_control_recs import analyze_flights_data, get_airport_flight_details, DISAMBIGUATOR # pyright: ignore[reportAttributeAccessIssue]
 
+# Import custom split-flap datatable
+from split_flap_datatable import SplitFlapDataTable, TIME_FLAP_CHARS, NUMERIC_FLAP_CHARS
+
+# Custom flap character sets for specific column types
+ETA_FLAP_CHARS = "0123456789<hm:ADELN -"  # For NEXT ETA columns: numbers, <, h, m, colon, LANDED letters, space, dash
+ICAO_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"  # For ICAO codes
+CALLSIGN_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- "  # For flight callsigns
+POSITION_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- "  # For controller positions
+
 # Set up debug logging to file
 DEBUG_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug.log")
 
@@ -56,8 +65,15 @@ class FlightBoardScreen(ModalScreen):
     }
     
     .board-section {
-        width: 1fr;
         height: 100%;
+    }
+    
+    #departures-section {
+        width: 40%;
+    }
+    
+    #arrivals-section {
+        width: 60%;
     }
     
     .section-title {
@@ -89,9 +105,9 @@ class FlightBoardScreen(ModalScreen):
         self.departures_data = []
         self.arrivals_data = []
         self.refresh_interval = refresh_interval
-        self.refresh_timer = None
-        self.display_toggle_timer = None
-        self.show_icao = False
+        self.departures_row_keys = []
+        self.arrivals_row_keys = []
+        self.is_first_load = True
     
     def compose(self) -> ComposeResult:
         # Determine the window title based on whether we have a disambiguator
@@ -109,24 +125,21 @@ class FlightBoardScreen(ModalScreen):
         with Container(id="board-container"):
             yield Static(window_title, id="board-header")
             with Horizontal(id="board-tables"):
-                with Vertical(classes="board-section"):
+                with Vertical(classes="board-section", id="departures-section"):
                     yield Static("DEPARTURES", classes="section-title")
-                    departures_table = DataTable(classes="board-table", id="departures-table")
+                    departures_table = SplitFlapDataTable(classes="board-table", id="departures-table")
                     departures_table.cursor_type = "row"
                     yield departures_table
-                with Vertical(classes="board-section"):
+                with Vertical(classes="board-section", id="arrivals-section"):
                     yield Static("ARRIVALS", classes="section-title")
-                    arrivals_table = DataTable(classes="board-table", id="arrivals-table")
+                    arrivals_table = SplitFlapDataTable(classes="board-table", id="arrivals-table")
                     arrivals_table.cursor_type = "row"
                     yield arrivals_table
     
     async def on_mount(self) -> None:
         """Load and display flight data when the screen is mounted"""
         await self.load_flight_data()
-        # Start auto-refresh timer
-        self.refresh_timer = self.set_interval(self.refresh_interval, self.refresh_flight_data)
-        # Start the 3-second display toggle timer
-        self.display_toggle_timer = self.set_interval(3, self.toggle_display)
+        # Note: Refresh is now triggered by parent app, not independent timer
     
     async def load_flight_data(self) -> None:
         """Load flight data from backend"""
@@ -155,47 +168,193 @@ class FlightBoardScreen(ModalScreen):
                 app.watch_for_user_activity = True
     
     def refresh_flight_data(self) -> None:
-        """Refresh flight data (called by timer)"""
+        """Refresh flight data (called by parent app)"""
         self.run_worker(self.load_flight_data(), exclusive=True)
-    
-    def toggle_display(self) -> None:
-        """Toggle the display between ICAO and pretty name."""
-        self.show_icao = not self.show_icao
-        self.populate_tables() # Re-populate tables with the new display style
 
     def populate_tables(self) -> None:
-        """Populate the departure and arrivals tables based on the current display toggle."""
-        # Set up departures table
-        departures_table = self.query_one("#departures-table", DataTable)
-        if not departures_table.columns: # Only add columns if they don't exist
-            departures_table.add_columns("FLIGHT", "DESTINATION")
+        """Populate the departure and arrivals tables with separate ICAO and NAME columns."""
+        # Sort arrivals by ETA before displaying
+        def eta_sort_key(arrival_row):
+            """Sort key for arrivals: LANDED at top, then by ETA (soonest first), then by flight callsign for stability"""
+            flight, origin_tuple, eta, eta_local = arrival_row
+            eta_str = str(eta).upper()
+            flight_str = str(flight)
+            
+            # Put LANDED flights at the top
+            if "LANDED" in eta_str:
+                return (0, 0, flight_str)
+            
+            # Handle relative time formats with hours and/or minutes like "1H", "1H30M", "2H", "45M", "<1M"
+            if "H" in eta_str or "M" in eta_str:
+                try:
+                    total_minutes = 0
+                    
+                    # Check if it starts with '<' for "less than" times
+                    if eta_str.startswith("<"):
+                        # <1M means less than 1 minute, treat as 0.5 minutes for sorting
+                        minutes_str = eta_str.replace("<", "").replace("M", "").strip()
+                        total_minutes = float(minutes_str) - 0.5  # Subtract 0.5 to sort before the actual minute
+                    elif "H" in eta_str and "M" in eta_str:
+                        # Format like "1H30M" or "2H15M"
+                        parts = eta_str.replace("H", " ").replace("M", "").split()
+                        hours = int(parts[0])
+                        minutes = int(parts[1])
+                        total_minutes = hours * 60 + minutes
+                    elif "H" in eta_str:
+                        # Format like "1H" or "2H"
+                        hours = int(eta_str.replace("H", "").strip())
+                        total_minutes = hours * 60
+                    elif "M" in eta_str:
+                        # Format like "45M" or "30M"
+                        total_minutes = float(eta_str.replace("M", "").strip())
+                    
+                    return (1, total_minutes, flight_str)
+                except (ValueError, IndexError):
+                    return (2, 0, flight_str)
+            
+            # Handle absolute time formats like "13:04"
+            if ":" in eta_str:
+                try:
+                    # Parse HH:MM format
+                    parts = eta_str.split(":")
+                    hours = int(parts[0])
+                    minutes = int(parts[1])
+                    total_minutes = hours * 60 + minutes
+                    return (2, total_minutes, flight_str)
+                except ValueError:
+                    return (2, 0, flight_str)
+            
+            # Default: treat as lowest priority
+            return (3, 0, flight_str)
         
-        departures_table.clear()
-        for flight, destination_tuple in self.departures_data:
-            display_name = destination_tuple[1] if self.show_icao else destination_tuple[0]
-            departures_table.add_row(flight, display_name)
+        # Sort the arrivals data (Python's sort is stable by default)
+        self.arrivals_data = sorted(self.arrivals_data, key=eta_sort_key)
+        
+        # Set up departures table
+        departures_table = self.query_one("#departures-table", SplitFlapDataTable)
+        if not departures_table.columns: # Only add columns if they don't exist
+            departures_table.add_column("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS)
+            departures_table.add_column("DEST", flap_chars=ICAO_FLAP_CHARS)
+            departures_table.add_column("NAME")
+        
+        column_keys_dep = list(departures_table.columns.keys())
+        
+        # For first load, create rows with blank values and animate
+        if self.is_first_load:
+            departures_table.clear()
+            self.departures_row_keys.clear()
+            for flight, destination_tuple in self.departures_data:
+                dest_name = destination_tuple[0]
+                dest_icao = destination_tuple[1]
+                # Add row with blank values, then animate to actual values
+                row_key = departures_table.add_row(" " * 7, " " * 4, " " * len(str(dest_name)))
+                self.departures_row_keys.append(row_key)
+                departures_table.update_cell_animated(row_key, column_keys_dep[0], flight)
+                departures_table.update_cell_animated(row_key, column_keys_dep[1], dest_icao)
+                departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name)
+        else:
+            # For subsequent updates, efficiently update existing rows
+            current_row_count = len(self.departures_row_keys)
+            new_row_count = len(self.departures_data)
+            
+            # Update existing rows
+            for i in range(min(current_row_count, new_row_count)):
+                flight, destination_tuple = self.departures_data[i]
+                dest_name = destination_tuple[0]
+                dest_icao = destination_tuple[1]
+                if i < len(self.departures_row_keys):
+                    departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[0], flight)
+                    departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[1], dest_icao)
+                    departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[2], dest_name)
+            
+            # Add new rows if needed
+            if new_row_count > current_row_count:
+                for i in range(current_row_count, new_row_count):
+                    flight, destination_tuple = self.departures_data[i]
+                    dest_name = destination_tuple[0]
+                    dest_icao = destination_tuple[1]
+                    row_key = departures_table.add_row(" " * 7, " " * 4, " " * len(str(dest_name)))
+                    self.departures_row_keys.append(row_key)
+                    departures_table.update_cell_animated(row_key, column_keys_dep[0], flight)
+                    departures_table.update_cell_animated(row_key, column_keys_dep[1], dest_icao)
+                    departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name)
+            # Remove extra rows if needed
+            elif new_row_count < current_row_count:
+                for _ in range(current_row_count - new_row_count):
+                    if self.departures_row_keys:
+                        departures_table.remove_row(self.departures_row_keys.pop())
         
         # Set up arrivals table
-        arrivals_table = self.query_one("#arrivals-table", DataTable)
+        arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
         if not arrivals_table.columns: # Only add columns if they don't exist
-            arrivals_table.add_columns("FLIGHT", "ORIGIN", "ETA", "ETA (Local)")
+            arrivals_table.add_column("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS)
+            arrivals_table.add_column("ORIG", flap_chars=ICAO_FLAP_CHARS)
+            arrivals_table.add_column("NAME")
+            arrivals_table.add_column("ETA", flap_chars=ETA_FLAP_CHARS)
+            arrivals_table.add_column("ETA (LT)", flap_chars=ETA_FLAP_CHARS)
         
-        arrivals_table.clear()
-        for flight, origin_tuple, eta, eta_local in self.arrivals_data:
-            display_name = origin_tuple[1] if self.show_icao else origin_tuple[0]
-            arrivals_table.add_row(flight, display_name, eta, eta_local)
+        column_keys_arr = list(arrivals_table.columns.keys())
+        
+        # For first load, create rows with blank values and animate
+        if self.is_first_load:
+            arrivals_table.clear()
+            self.arrivals_row_keys.clear()
+            for flight, origin_tuple, eta, eta_local in self.arrivals_data:
+                origin_name = origin_tuple[0]
+                origin_icao = origin_tuple[1]
+                # Add row with blank values, then animate to actual values
+                row_key = arrivals_table.add_row(" " * 7, " " * 4, " " * len(str(origin_name)), " " * 6, " " * 5)
+                self.arrivals_row_keys.append(row_key)
+                arrivals_table.update_cell_animated(row_key, column_keys_arr[0], flight)
+                arrivals_table.update_cell_animated(row_key, column_keys_arr[1], origin_icao)
+                arrivals_table.update_cell_animated(row_key, column_keys_arr[2], origin_name)
+                arrivals_table.update_cell_animated(row_key, column_keys_arr[3], eta)
+                arrivals_table.update_cell_animated(row_key, column_keys_arr[4], eta_local)
+            
+            self.is_first_load = False
+        else:
+            # For subsequent updates, efficiently update existing rows
+            current_row_count = len(self.arrivals_row_keys)
+            new_row_count = len(self.arrivals_data)
+            
+            # Update existing rows
+            for i in range(min(current_row_count, new_row_count)):
+                flight, origin_tuple, eta, eta_local = self.arrivals_data[i]
+                origin_name = origin_tuple[0]
+                origin_icao = origin_tuple[1]
+                if i < len(self.arrivals_row_keys):
+                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[0], flight)
+                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[1], origin_icao)
+                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[2], origin_name)
+                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[3], eta)
+                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[4], eta_local)
+            
+            # Add new rows if needed
+            if new_row_count > current_row_count:
+                for i in range(current_row_count, new_row_count):
+                    flight, origin_tuple, eta, eta_local = self.arrivals_data[i]
+                    origin_name = origin_tuple[0]
+                    origin_icao = origin_tuple[1]
+                    row_key = arrivals_table.add_row(" " * 7, " " * 4, " " * len(str(origin_name)), " " * 6, " " * 5)
+                    self.arrivals_row_keys.append(row_key)
+                    arrivals_table.update_cell_animated(row_key, column_keys_arr[0], flight)
+                    arrivals_table.update_cell_animated(row_key, column_keys_arr[1], origin_icao)
+                    arrivals_table.update_cell_animated(row_key, column_keys_arr[2], origin_name)
+                    arrivals_table.update_cell_animated(row_key, column_keys_arr[3], eta)
+                    arrivals_table.update_cell_animated(row_key, column_keys_arr[4], eta_local)
+            # Remove extra rows if needed
+            elif new_row_count < current_row_count:
+                for _ in range(current_row_count - new_row_count):
+                    if self.arrivals_row_keys:
+                        arrivals_table.remove_row(self.arrivals_row_keys.pop())
     
     def action_close_board(self) -> None:
-        """Close the modal and stop refresh timer"""
-        if self.refresh_timer:
-            self.refresh_timer.stop()
-            if self.display_toggle_timer:
-                self.display_toggle_timer.stop()
-        
-        # Reset the flight board open flag in the parent app
+        """Close the modal"""
+        # Reset the flight board open flag and reference in the parent app
         app = self.app
         if isinstance(app, VATSIMControlApp):
             app.flight_board_open = False
+            app.active_flight_board = None
             
         self.dismiss()
 
@@ -301,6 +460,7 @@ class VATSIMControlApp(App):
         self.last_activity_source = ""  # Track what triggered the last activity
         self.initial_setup_complete = False  # Prevent timer resets during initial setup
         self.flight_board_open = False # Is a flight board currently open?
+        self.active_flight_board = None  # Reference to the active flight board screen
         
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -314,12 +474,12 @@ class VATSIMControlApp(App):
         
         with TabbedContent(initial="airports", id="tabs"):
             with TabPane("Individual Airports", id="airports"):
-                airports_table = DataTable(id="airports-table")
+                airports_table = SplitFlapDataTable(id="airports-table")
                 airports_table.cursor_type = "row"
                 yield airports_table
                 
             with TabPane("Custom Groupings", id="groupings"):
-                groupings_table = DataTable(id="groupings-table")
+                groupings_table = SplitFlapDataTable(id="groupings-table")
                 groupings_table.cursor_type = "row"
                 yield groupings_table
         
@@ -349,45 +509,72 @@ class VATSIMControlApp(App):
         arr_suffix = f"(<{max_eta:,.1g}h)" if max_eta != 0 else "(all)"
 
         # Set up airports table
-        airports_table = self.query_one("#airports-table", DataTable)
+        airports_table = self.query_one("#airports-table", SplitFlapDataTable)
         
         # DIAGNOSTIC LOG
         debug_log(f"populate_tables BEFORE clear - airports_table.row_count={airports_table.row_count}, len(airports_row_keys)={len(self.airports_row_keys)}")
         
         airports_table.clear(columns=True)
-        airports_table.add_columns("ICAO", "NAME", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "NEXT ETA", "STAFFED POSITIONS")
+        self.airports_row_keys.clear()  # Clear stale row keys when clearing table
+        airports_table.add_column("ICAO", flap_chars=ICAO_FLAP_CHARS)
+        airports_table.add_column("NAME")
+        airports_table.add_column("TOTAL", flap_chars=NUMERIC_FLAP_CHARS)
+        airports_table.add_column("DEPARTING", flap_chars=NUMERIC_FLAP_CHARS)
+        airports_table.add_column(f"ARRIVING {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS)
+        airports_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS)
+        airports_table.add_column("STAFFED POSITIONS", flap_chars=POSITION_FLAP_CHARS)
 
+        column_keys = list(airports_table.columns.keys())
         for row_data in self.airport_data:
-            self.airports_row_keys.append(airports_table.add_row(*row_data))
+            # Add row with blank values, then animate to actual values
+            blank_row = tuple(" " * len(str(cell)) for cell in row_data)
+            row_key = airports_table.add_row(*blank_row)
+            self.airports_row_keys.append(row_key)
+            # Animate each cell to its target value
+            for col_idx, cell_value in enumerate(row_data):
+                airports_table.update_cell_animated(row_key, column_keys[col_idx], cell_value)
         
         # DIAGNOSTIC LOG
         debug_log(f"populate_tables AFTER populate - airports_table.row_count={airports_table.row_count}, len(airports_row_keys)={len(self.airports_row_keys)}")
         
         # Set up groupings table
-        groupings_table = self.query_one("#groupings-table", DataTable)
+        groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
         
         # DIAGNOSTIC LOG
         debug_log(f"populate_tables BEFORE clear - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
         
         groupings_table.clear(columns=True)
-        groupings_table.add_columns("GROUPING", "TOTAL", "DEPARTING", f"ARRIVING {arr_suffix}", "NEXT ETA")
+        self.groupings_row_keys.clear()  # Clear stale row keys when clearing table
+        groupings_table.add_column("GROUPING")
+        groupings_table.add_column("TOTAL", flap_chars=NUMERIC_FLAP_CHARS)
+        groupings_table.add_column("DEPARTING", flap_chars=NUMERIC_FLAP_CHARS)
+        groupings_table.add_column(f"ARRIVING {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS)
+        groupings_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS)
         
         if self.groupings_data:
+            column_keys = list(groupings_table.columns.keys())
             for row_data in self.groupings_data:
-                self.groupings_row_keys.append(groupings_table.add_row(*row_data))
+                # Add row with blank values, then animate to actual values
+                blank_row = tuple(" " * len(str(cell)) for cell in row_data)
+                row_key = groupings_table.add_row(*blank_row)
+                self.groupings_row_keys.append(row_key)
+                # Animate each cell to its target value
+                for col_idx, cell_value in enumerate(row_data):
+                    groupings_table.update_cell_animated(row_key, column_keys[col_idx], cell_value)
         
         # DIAGNOSTIC LOG
         debug_log(f"populate_tables AFTER populate - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
                 
         self.watch_for_user_activity = True  # Re-enable user activity tracking
     
-    def update_table_efficiently(self, table: DataTable, row_keys: list, new_data: list) -> None:
+    def update_table_efficiently(self, table: SplitFlapDataTable, row_keys: list, new_data: list) -> None:
         """
         Efficiently update a table by updating cells in existing rows, then adding/removing rows as needed.
         This is much faster than clearing and rebuilding the entire table.
+        Uses animated cell updates for smooth transitions.
         
         Args:
-            table: The DataTable widget to update
+            table: The SplitFlapDataTable widget to update
             row_keys: List of row keys for tracking table rows
             new_data: The new data (list of tuples)
         """
@@ -412,7 +599,7 @@ class VATSIMControlApp(App):
             for col_index, col_key in enumerate(column_keys):
                 if col_index < len(new_row_data):
                     debug_log(f"update_table_efficiently Updating row {row_index}, col {col_index}: row_key={row_keys[row_index]}, col_key={col_key}, value={new_row_data[col_index]}")
-                    table.update_cell(row_keys[row_index], col_key, new_row_data[col_index])
+                    table.update_cell_animated(row_keys[row_index], col_key, new_row_data[col_index])
         
         # If we have more new data than current rows, add the additional rows
         if new_row_count > current_row_count:
@@ -536,10 +723,15 @@ class VATSIMControlApp(App):
         """Refresh the data from VATSIM asynchronously."""
         # Update last refresh time
         self.last_refresh_time = datetime.now(timezone.utc)
+        
+        # Also trigger refresh on the flight board if it's open
+        if self.flight_board_open and self.active_flight_board:
+            self.active_flight_board.refresh_flight_data()
                 
-        # Store old data for efficient updates
+        # Store old data and search state for efficient updates
         old_airport_data = self.airport_data.copy()
         old_groupings_data = self.groupings_data.copy()
+        old_search_active = self.search_active
         
         # Get current tab and cursor position
         tabs = self.query_one("#tabs", TabbedContent)
@@ -552,14 +744,14 @@ class VATSIMControlApp(App):
         saved_scroll_offset = 0
         
         if current_tab == "airports":
-            airports_table = self.query_one("#airports-table", DataTable)
+            airports_table = self.query_one("#airports-table", SplitFlapDataTable)
             if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
                 saved_row_index = airports_table.cursor_row
                 saved_airport_icao = self.airport_data[airports_table.cursor_row][0]  # ICAO is first column
                 # Save current scroll offset
                 saved_scroll_offset = airports_table.scroll_offset.y
         elif current_tab == "groupings":
-            groupings_table = self.query_one("#groupings-table", DataTable)
+            groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
             if self.groupings_data and groupings_table.cursor_row is not None and groupings_table.cursor_row < len(self.groupings_data):
                 saved_row_index = groupings_table.cursor_row
                 saved_grouping_name = self.groupings_data[groupings_table.cursor_row][0]  # Name is first column
@@ -569,6 +761,7 @@ class VATSIMControlApp(App):
         self.run_worker(self.refresh_worker(
             old_airport_data,
             old_groupings_data,
+            old_search_active,
             saved_airport_icao,
             saved_grouping_name,
             saved_row_index,
@@ -580,6 +773,7 @@ class VATSIMControlApp(App):
         self,
         old_airport_data,
         old_groupings_data,
+        old_search_active,
         saved_airport_icao,
         saved_grouping_name,
         saved_row_index,
@@ -598,45 +792,71 @@ class VATSIMControlApp(App):
             self.groupings_data = groupings_data or []
             self.total_flights = total_flights or 0
             
-            # If search is active, reapply filter
+            # Efficiently update tables instead of rebuilding
+            airports_table = self.query_one("#airports-table", SplitFlapDataTable)
+            groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
+            
+            # If search is active, reapply the filter to the new data before updating table
             if self.search_active:
                 search_input = self.query_one("#search-input", Input)
-                self.filter_airports(search_input.value)
-            else:
-                # Efficiently update tables instead of rebuilding
-                airports_table = self.query_one("#airports-table", DataTable)
-                groupings_table = self.query_one("#groupings-table", DataTable)
-                
-                # Update airports table efficiently
-                if old_airport_data and len(old_airport_data) > 0:
-                    self.update_table_efficiently(airports_table, self.airports_row_keys, self.airport_data)
+                search_text = search_input.value
+                if search_text:
+                    search_text = search_text.upper()
+                    self.airport_data = [
+                        row for row in self.original_airport_data
+                        if search_text in row[0].upper() or  # ICAO
+                           search_text in row[1].upper() or  # Airport name
+                           search_text in row[6].upper()      # Staffed positions
+                    ]
                 else:
-                    # First time or empty, just populate normally
-                    airports_table.clear()
-                    for row_data in self.airport_data:
-                        self.airports_row_keys.append(airports_table.add_row(*row_data))
+                    self.airport_data = self.original_airport_data
+            
+            # Update airports table efficiently
+            if old_airport_data and len(old_airport_data) > 0:
+                self.update_table_efficiently(airports_table, self.airports_row_keys, self.airport_data)
+            else:
+                # First time or empty, populate with animation
+                airports_table.clear()
+                self.airports_row_keys.clear()  # Clear stale row keys when clearing table
+                column_keys = list(airports_table.columns.keys())
+                for row_data in self.airport_data:
+                    # Add row with blank values, then animate to actual values
+                    blank_row = tuple(" " * len(str(cell)) for cell in row_data)
+                    row_key = airports_table.add_row(*blank_row)
+                    self.airports_row_keys.append(row_key)
+                    # Animate each cell to its target value
+                    for col_idx, cell_value in enumerate(row_data):
+                        airports_table.update_cell_animated(row_key, column_keys[col_idx], cell_value)
                 
-                # Update groupings table efficiently
-                if self.groupings_data and len(self.groupings_data) > 0:
-                    if old_groupings_data and len(old_groupings_data) > 0:
-                        # DIAGNOSTIC LOG
-                        debug_log(f"refresh_worker BEFORE efficient update - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}, len(groupings_data)={len(self.groupings_data)}")
-                        
-                        self.update_table_efficiently(groupings_table, self.groupings_row_keys, self.groupings_data)
-                    else:
-                        # DIAGNOSTIC LOG
-                        debug_log(f"refresh_worker BEFORE rebuild - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
-                        
-                        groupings_table.clear()
-                        for row_data in self.groupings_data:
-                            self.groupings_row_keys.append(groupings_table.add_row(*row_data))
-                        
-                        # DIAGNOSTIC LOG
-                        debug_log(f"refresh_worker AFTER rebuild - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
+            # Update groupings table efficiently
+            if self.groupings_data and len(self.groupings_data) > 0:
+                if old_groupings_data and len(old_groupings_data) > 0:
+                    # DIAGNOSTIC LOG
+                    debug_log(f"refresh_worker BEFORE efficient update - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}, len(groupings_data)={len(self.groupings_data)}")
+                    
+                    self.update_table_efficiently(groupings_table, self.groupings_row_keys, self.groupings_data)
+                else:
+                    # DIAGNOSTIC LOG
+                    debug_log(f"refresh_worker BEFORE rebuild - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
+                    
+                    groupings_table.clear()
+                    self.groupings_row_keys.clear()  # Clear stale row keys when clearing table
+                    column_keys = list(groupings_table.columns.keys())
+                    for row_data in self.groupings_data:
+                        # Add row with blank values, then animate to actual values
+                        blank_row = tuple(" " * len(str(cell)) for cell in row_data)
+                        row_key = groupings_table.add_row(*blank_row)
+                        self.groupings_row_keys.append(row_key)
+                        # Animate each cell to its target value
+                        for col_idx, cell_value in enumerate(row_data):
+                            groupings_table.update_cell_animated(row_key, column_keys[col_idx], cell_value)
+                    
+                    # DIAGNOSTIC LOG
+                    debug_log(f"refresh_worker AFTER rebuild - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
             
             # Restore cursor position and scroll offset
             if current_tab == "airports":
-                airports_table = self.query_one("#airports-table", DataTable)
+                airports_table = self.query_one("#airports-table", SplitFlapDataTable)
                 old_row_index = saved_row_index
                 # Try to find the same airport by ICAO
                 new_row_index = saved_row_index
@@ -659,7 +879,7 @@ class VATSIMControlApp(App):
                     self.watch_for_user_activity = True  # Re-enable user activity tracking
                     
             elif current_tab == "groupings" and self.groupings_data:
-                groupings_table = self.query_one("#groupings-table", DataTable)
+                groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
                 old_row_index = saved_row_index
                 # Try to find the same grouping by name
                 new_row_index = saved_row_index
@@ -712,7 +932,7 @@ class VATSIMControlApp(App):
             self.populate_tables()
             
             # Return focus to table
-            airports_table = self.query_one("#airports-table", DataTable)
+            airports_table = self.query_one("#airports-table", SplitFlapDataTable)
             airports_table.focus()
         else:
             # Show search and focus input
@@ -743,7 +963,7 @@ class VATSIMControlApp(App):
     
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes."""
-        if event.input.id == "search-input":
+        if event.input.id == "search-input" and self.search_active:
             self.filter_airports(event.value)
             self.record_user_activity("search_input")
     
@@ -772,19 +992,21 @@ class VATSIMControlApp(App):
         current_tab = tabs.active
         
         if current_tab == "airports":
-            airports_table = self.query_one("#airports-table", DataTable)
+            airports_table = self.query_one("#airports-table", SplitFlapDataTable)
             if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
                 # Get the ICAO code from the selected row
                 icao = self.airport_data[airports_table.cursor_row][0]
                 title = icao
                 full_name = DISAMBIGUATOR.get_pretty_name(icao) if DISAMBIGUATOR else icao
                  
-                # Open the flight board
+                # Open the flight board and store reference
                 self.flight_board_open = True
-                self.push_screen(FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR))
+                flight_board = FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR)
+                self.active_flight_board = flight_board
+                self.push_screen(flight_board)
         
         elif current_tab == "groupings":
-            groupings_table = self.query_one("#groupings-table", DataTable)
+            groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
             if self.groupings_data and groupings_table.cursor_row is not None and groupings_table.cursor_row < len(self.groupings_data):
                 # Get the grouping name from the selected row
                 grouping_name = self.groupings_data[groupings_table.cursor_row][0]
@@ -801,9 +1023,11 @@ class VATSIMControlApp(App):
                             airport_list = all_groupings[grouping_name]
                             title = grouping_name
                              
-                            # Open the flight board
+                            # Open the flight board and store reference
                             self.flight_board_open = True
-                            self.push_screen(FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR))
+                            flight_board = FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR)
+                            self.active_flight_board = flight_board
+                            self.push_screen(flight_board)
                 except (FileNotFoundError, json.JSONDecodeError):
                     pass
 

@@ -34,7 +34,7 @@ def format_eta_display(eta_hours, arrivals_in_flight_count, arrivals_on_ground_c
     """Format ETA hours into a readable string"""
     # If there are no in-flight arrivals but there are arrivals on ground
     if eta_hours == float('inf') and arrivals_on_ground_count > 0 and arrivals_in_flight_count == 0:
-        return "Arrived"
+        return "LANDED"
     elif eta_hours == float('inf'):
         return ""  # No arrivals at all
     elif eta_hours < 1.0:
@@ -485,7 +485,7 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
 
 def _calculate_eta(flight, airports_data):
     """Calculate ETA for a flight and return display strings."""
-    if flight['arrival'] in airports_data and flight.get('groundspeed', 0) > 0:
+    if flight['arrival'] in airports_data and flight.get('groundspeed', 0) > 40:
         arrival_airport = airports_data[flight['arrival']]
         distance = haversine_distance_nm(
             flight['latitude'],
@@ -564,7 +564,7 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0, disambig
                 # Flight is on ground at arrival airport
                 origin = flight['departure'] if flight['departure'] else "----"
                 pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
-                arrivals_list.append((callsign, (pretty_origin, origin), "Arrived", "----"))
+                arrivals_list.append((callsign, (pretty_origin, origin), "LANDED", "----"))
             # For in-flight arrivals, check if it's an arrival first, then calculate ETA
             # is_flight_flying_near_arrival uses max_eta_hours=0 to check ALL arrivals
             elif is_flight_flying_near_arrival(flight, all_airports_data, max_eta_hours=0):
@@ -588,8 +588,8 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0, disambig
     # Sort arrivals by ETA (convert eta_display to sortable value)
     def eta_sort_key(arrival):
         eta_str = arrival[2]
-        if eta_str == "Arrived":
-            return -1  # Already arrived flights first
+        if eta_str == "LANDED":
+            return -1  # Already landed flights first
         elif eta_str == "----" or eta_str == "":
             return float('inf')  # Unknown ETA last
         else:
