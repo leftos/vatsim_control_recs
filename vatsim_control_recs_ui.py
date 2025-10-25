@@ -17,7 +17,7 @@ from vatsim_control_recs import analyze_flights_data, get_airport_flight_details
 from split_flap_datatable import SplitFlapDataTable, TIME_FLAP_CHARS, NUMERIC_FLAP_CHARS
 
 # Custom flap character sets for specific column types
-ETA_FLAP_CHARS = "9876543210<hm:ADELN -"  # For NEXT ETA columns: numbers in descending order for countdown effect, <, h, m, colon, LANDED letters, space, dash
+ETA_FLAP_CHARS = "9876543210hm:ADELN <-"  # For NEXT ETA columns: numbers in descending order for countdown effect, <, h, m, colon, LANDED letters, space, dash
 ICAO_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"  # For ICAO codes
 CALLSIGN_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- "  # For flight callsigns
 POSITION_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ- "  # For controller positions
