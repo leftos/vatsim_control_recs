@@ -231,6 +231,9 @@ class FlightBoardScreen(ModalScreen):
         # Sort the arrivals data (Python's sort is stable by default)
         self.arrivals_data = sorted(self.arrivals_data, key=eta_sort_key)
         
+        # Sort departures by callsign alphabetically
+        self.departures_data = sorted(self.departures_data, key=lambda x: str(x[0]))
+        
         # Set up departures table
         departures_table = self.query_one("#departures-table", SplitFlapDataTable)
         if not departures_table.columns: # Only add columns if they don't exist

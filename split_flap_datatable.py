@@ -200,6 +200,7 @@ class SplitFlapDataTable(DataTable):
         self.animated_cells: dict[tuple[int, int], AnimatedCell] = {}
         self.column_flap_chars: dict[int, str] = {}  # Map column index to flap chars
         self.column_alignment: dict[int, Literal["left", "center", "right"]] = {}  # Map column index to alignment
+        self.cells_need_width_update: dict[tuple[int, int], bool] = {}  # Track which cells need width updates
         self._animation_timer = None
         self._update_counter = 0  # Counter for staggering animations
     
@@ -327,6 +328,10 @@ class SplitFlapDataTable(DataTable):
             flap_chars = self.column_flap_chars.get(col_idx, self.default_flap_chars)
             self.animated_cells[cell_key] = AnimatedCell(str(value), flap_chars=flap_chars)
         
+        # Track if this cell needs width update
+        if update_width:
+            self.cells_need_width_update[cell_key] = True
+        
         # Set new target value with staggered delay
         delay = self._update_counter * self.stagger_delay
         self._update_counter = (self._update_counter + 1) % 20  # Reset after 20 updates to prevent excessive delays
@@ -394,14 +399,22 @@ class SplitFlapDataTable(DataTable):
         for row_idx, col_idx, display_value in cells_to_update + cells_to_instant_update:
             try:
                 if row_idx < len(row_keys) and col_idx < len(col_keys):
+                    # Check if this cell needs width update
+                    cell_key = (row_idx, col_idx)
+                    needs_width_update = self.cells_need_width_update.get(cell_key, False)
+                    
                     # Apply alignment if specified for this column
                     cell_value = self._apply_alignment(display_value, col_idx)
                     self.update_cell(
                         row_keys[row_idx],
                         col_keys[col_idx],
                         cell_value,
-                        update_width=False
+                        update_width=needs_width_update
                     )
+                    
+                    # Clear the width update flag after applying
+                    if needs_width_update and cell_key in self.cells_need_width_update:
+                        del self.cells_need_width_update[cell_key]
             except Exception:
                 pass  # Cell might not exist anymore
     
@@ -433,6 +446,7 @@ class SplitFlapDataTable(DataTable):
         """
         result = super().clear(columns=columns)
         self.animated_cells.clear()
+        self.cells_need_width_update.clear()
         if columns:
             self.column_flap_chars.clear()
             self.column_alignment.clear()
