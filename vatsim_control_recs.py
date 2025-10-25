@@ -172,14 +172,29 @@ def filter_flights_by_airports(data, airports, airport_allowlist=None):
     
     for flight in flights:
         # For flights with flight plans
+        # Check if flight has a valid flight plan with non-empty departure or arrival
+        departure = None
+        arrival = None
+        has_valid_flight_plan = False
+        
         if flight.get('flight_plan'):
             departure = flight['flight_plan'].get('departure')
             arrival = flight['flight_plan'].get('arrival')
             
+            # Treat empty strings as None/null for departure and arrival
+            if not departure:
+                departure = None
+            if not arrival:
+                arrival = None
+            
+            # Only consider it a valid flight plan if at least one field is non-empty
+            has_valid_flight_plan = departure is not None or arrival is not None
+        
+        if has_valid_flight_plan:
             # If allowlist is provided, check if either departure or arrival is in the allowlist
             # Otherwise, check if both departure and arrival airports are in our airport data
             if airport_allowlist:
-                if departure in airports or arrival in airports:
+                if (departure and departure in airports) or (arrival and arrival in airports):
                     filtered_flights.append({
                         'callsign': flight.get('callsign'),
                         'departure': departure,
@@ -189,7 +204,7 @@ def filter_flights_by_airports(data, airports, airport_allowlist=None):
                         'groundspeed': flight.get('groundspeed'),
                         'altitude': flight.get('altitude')
                     })
-            elif departure in airports and arrival in airports:
+            elif departure and arrival and departure in airports and arrival in airports:
                 filtered_flights.append({
                     'callsign': flight.get('callsign'),
                     'departure': departure,
@@ -199,7 +214,7 @@ def filter_flights_by_airports(data, airports, airport_allowlist=None):
                     'groundspeed': flight.get('groundspeed'),
                     'altitude': flight.get('altitude')
                 })
-        # For flights without flight plans, we'll still include them for ground analysis
+        # For flights without valid flight plans, we'll still include them for ground analysis
         # but with None for departure/arrival
         elif flight.get('latitude') is not None and flight.get('longitude') is not None:
             filtered_flights.append({
@@ -552,6 +567,14 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0, disambig
             if nearest_airport_if_on_ground == flight['departure']:
                 # Flight is on ground at one of our airports, preparing to depart
                 destination = flight['arrival'] if flight['arrival'] else "----"
+                pretty_destination = disambiguator.get_pretty_name(destination) if disambiguator else destination
+                departures_list.append((callsign, (pretty_destination, destination)))
+        # Also handle flights with only arrival filed, on ground at one of our airports
+        # But NOT if they're already at the arrival airport (those are arrivals, not departures)
+        elif not flight['departure'] and flight['arrival'] and nearest_airport_if_on_ground:
+            if nearest_airport_if_on_ground in airport_icao_list and nearest_airport_if_on_ground != flight['arrival']:
+                # Flight is on ground at one of our airports (not the arrival) with only arrival in flight plan
+                destination = flight['arrival']
                 pretty_destination = disambiguator.get_pretty_name(destination) if disambiguator else destination
                 departures_list.append((callsign, (pretty_destination, destination)))
         
