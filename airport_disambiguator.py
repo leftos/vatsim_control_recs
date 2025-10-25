@@ -3,9 +3,19 @@ import re
 from collections import defaultdict
 
 class AirportDisambiguator:
+    # Multi-word phrases that should always be included (check these first)
+    ALWAYS_INCLUDE_PHRASES = {
+        'Coast Guard'
+    }
+    
+    # Words that should always be included in the airport name (military terms)
+    ALWAYS_INCLUDE_WORDS = {
+        'AFB', 'Navy', 'Naval', 'Army', 'Marine', 'Marines'
+    }
+    
     # Base high-priority descriptor words
     BASE_HIGH_PRIORITY_WORDS = {
-        'International', 'Intercontinental', 'Regional', 'Municipal', 'County',
+        'AFB', 'International', 'Intercontinental', 'Regional', 'Municipal', 'County',
         'Executive', 'Metropolitan', 'National', 'Memorial', 'Central',
         'East', 'West', 'North', 'South', 'Downtown', 'City', 'Base',
         'Airfield', 'Airpark', 'General', 'Private', 'Public',
@@ -26,6 +36,8 @@ class AirportDisambiguator:
         "Field": "Fld",
         "Airpark": "Apk",
         "Station": "Sta",
+        "Air Force Base": "AFB",
+        "Naval": "Navy",
     }
     def __init__(self, airports_file_path):
         self.airports_file_path = airports_file_path
@@ -50,6 +62,108 @@ class AirportDisambiguator:
         if state and name.lower().startswith(state.lower()):
             return state
         return city
+    
+    def _name_contains_location(self, airport_name, city, state):
+        """Check if the airport name contains the city or state name."""
+        airport_name_lower = airport_name.lower()
+        
+        # Check if any word from the city name appears in the airport name
+        if city:
+            city_words = city.lower().split()
+            for word in city_words:
+                if word in airport_name_lower:
+                    return True
+        
+        # Check if state name appears in the airport name
+        if state and state.lower() in airport_name_lower:
+            return True
+        
+        return False
+    
+    def _get_military_name(self, airport_name, location):
+        """Get the military airport name.
+        Returns the base name + military term (e.g., "Beale AFB", "North Island Navy").
+        Returns None if no military term is found."""
+        name = self._shorten_name(airport_name)
+        
+        # First, check for multi-word phrases
+        military_phrase = None
+        for phrase in self.ALWAYS_INCLUDE_PHRASES:
+            if phrase in name:
+                military_phrase = phrase
+                break
+        
+        # Then check for single-word military terms
+        military_word = None
+        if not military_phrase:
+            for word in name.split():
+                if word in self.ALWAYS_INCLUDE_WORDS or word.lower().capitalize() in self.ALWAYS_INCLUDE_WORDS:
+                    military_word = word
+                    break
+        
+        military_term = military_phrase or military_word
+        if not military_term:
+            return None
+        
+        # Build the military name: get all non-location, non-generic words + military term
+        location_words = {word.lower() for word in location.split()}
+        
+        # Generic words to skip (including shortened forms)
+        generic_words_set = {
+            'air', 'apt', 'airport', 'station', 'sta', 'fld', 'field', 'airfield',
+            'apk', 'airpark', 'base', 'force', 'nas', 'trapnell', 'aiport', 'halsey'
+        }
+        
+        name_parts = []
+        words = name.split()
+        
+        for word in words:
+            # Clean word for comparison (remove special chars)
+            clean_word = word.replace('-', '').replace('/', '').replace('(', '').replace(')', '').lower()
+            
+            # Skip location words (but only if they're short - keep meaningful location names in military bases)
+            if word.lower() in location_words and len(word) <= 4:
+                continue
+            
+            # Skip generic words or compound words containing generic words
+            if clean_word in generic_words_set:
+                continue
+            
+            # Check if it's a compound word (contains - or /) and any part is generic
+            if '-' in word or '/' in word:
+                parts = word.replace('-', '/').split('/')
+                if any(part.lower() in generic_words_set for part in parts):
+                    continue
+            
+            # Skip the military term itself (we'll add it at the end)
+            if word == military_term or (military_phrase and word in military_phrase.split()):
+                continue
+                
+            name_parts.append(word)
+        
+        # Add the military term at the end
+        if military_phrase:
+            result = ' '.join(name_parts + [military_phrase])
+        else:
+            result = ' '.join(name_parts + [military_term])
+        
+        return result if result else None
+    
+    def _get_non_high_priority_word(self, airport_name, location):
+        """Get the first non-high priority word from the airport name.
+        Returns None if no such word is found."""
+        name = self._shorten_name(airport_name)
+        location_words = {word.lower() for word in location.split()}
+        distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
+        
+        # Find the first non-high-priority word
+        for word in distinguishing_parts:
+            is_high_priority = word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS
+            if not is_high_priority:
+                return word
+        
+        # If no non-high priority word found, return the first word
+        return distinguishing_parts[0] if distinguishing_parts else None
 
     def _generate_pretty_names(self):
         location_to_airports = defaultdict(list)
@@ -73,7 +187,28 @@ class AirportDisambiguator:
                 continue
             
             if len(icaos) == 1:
-                icao_to_pretty_name[icaos[0]] = location
+                icao = icaos[0]
+                airport_details = airports_data[icao]
+                airport_name = airport_details.get('name', '')
+                city = airport_details.get('city', '')
+                state = airport_details.get('state', '')
+                
+                # Check for military airports first - they get special formatting
+                military_name = self._get_military_name(airport_name, location)
+                
+                # If it's a military airport, use the military name format (e.g., "Beale AFB")
+                if military_name:
+                    icao_to_pretty_name[icao] = military_name
+                # Otherwise, check if the airport name contains the city or state
+                elif self._name_contains_location(airport_name, city, state):
+                    icao_to_pretty_name[icao] = location
+                else:
+                    # Name doesn't contain location - add a non-high priority word with hyphen
+                    non_high_priority_word = self._get_non_high_priority_word(airport_name, location)
+                    if non_high_priority_word:
+                        icao_to_pretty_name[icao] = f"{location} - {non_high_priority_word}"
+                    else:
+                        icao_to_pretty_name[icao] = location
                 continue
 
             # Multiple airports in this location - need to disambiguate them.
@@ -91,25 +226,41 @@ class AirportDisambiguator:
                     icaos_dont_start_with_location.append(icao)
             
             # Process airports that DON'T start with location
-            # They get location + their most distinguishing high-priority word
             for icao in icaos_dont_start_with_location:
-                name = airport_names[icao]
-                location_words = {word.lower() for word in location.split()}
-                distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
+                full_name = airports_data[icao].get('name', '')
+                city = airports_data[icao].get('city', '')
+                state = airports_data[icao].get('state', '')
                 
-                # Find the first high-priority word, or just use the first word
-                high_priority_word = None
-                for word in distinguishing_parts:
-                    if word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS:
-                        high_priority_word = word
-                        break
-                
-                if high_priority_word:
-                    icao_to_pretty_name[icao] = f"{location} {high_priority_word}"
-                elif distinguishing_parts:
-                    icao_to_pretty_name[icao] = f"{location} {distinguishing_parts[0]}"
+                # Check if it's a military airport - use special formatting
+                military_name = self._get_military_name(full_name, location)
+                if military_name:
+                    icao_to_pretty_name[icao] = military_name
+                # Check if name contains location - if not, use hyphen format
+                elif not self._name_contains_location(full_name, city, state):
+                    non_high_priority_word = self._get_non_high_priority_word(full_name, location)
+                    if non_high_priority_word:
+                        icao_to_pretty_name[icao] = f"{location} - {non_high_priority_word}"
+                    else:
+                        icao_to_pretty_name[icao] = location
                 else:
-                    icao_to_pretty_name[icao] = location
+                    # Regular logic: location + distinguishing word (no hyphen)
+                    name = airport_names[icao]
+                    location_words = {word.lower() for word in location.split()}
+                    distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
+                    
+                    # Find the first high-priority word, or just use the first word
+                    high_priority_word = None
+                    for word in distinguishing_parts:
+                        if word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS:
+                            high_priority_word = word
+                            break
+                    
+                    if high_priority_word:
+                        icao_to_pretty_name[icao] = f"{location} {high_priority_word}"
+                    elif distinguishing_parts:
+                        icao_to_pretty_name[icao] = f"{location} {distinguishing_parts[0]}"
+                    else:
+                        icao_to_pretty_name[icao] = location
             
             # If only one airport starts with location, it just gets the location name
             if len(icaos_start_with_location) == 1:
@@ -230,3 +381,33 @@ class AirportDisambiguator:
 
     def get_pretty_name(self, icao):
         return self.icao_to_pretty_name.get(icao, icao)
+
+
+if __name__ == "__main__":
+    import sys
+    
+    if len(sys.argv) < 3:
+        print("Usage: python airport_disambiguator.py <airports.json> <ICAO1> [ICAO2] [ICAO3] ...")
+        print("\nExample: python airport_disambiguator.py airports.json KMER KBAB KNZY")
+        sys.exit(1)
+    
+    airports_file = sys.argv[1]
+    icaos = sys.argv[2:]
+    
+    try:
+        disambiguator = AirportDisambiguator(airports_file)
+        
+        print(f"\nAirport Pretty Names from {airports_file}:")
+        print("=" * 80)
+        
+        for icao in icaos:
+            pretty_name = disambiguator.get_pretty_name(icao)
+            print(f"{icao}: {pretty_name}")
+        
+        print()
+    except FileNotFoundError:
+        print(f"Error: File '{airports_file}' not found.")
+        sys.exit(1)
+    except json.JSONDecodeError:
+        print(f"Error: File '{airports_file}' is not valid JSON.")
+        sys.exit(1)
