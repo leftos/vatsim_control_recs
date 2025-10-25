@@ -580,7 +580,10 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0, disambig
         
         # Check if this is an arrival (either on ground at arrival or flying nearby)
         if flight['arrival'] and flight['arrival'] in airport_icao_list:
-            if nearest_airport_if_on_ground == flight['arrival']:
+            # Skip if departure == arrival and aircraft is on ground (already added as departure)
+            if flight['departure'] == flight['arrival'] and nearest_airport_if_on_ground == flight['arrival']:
+                pass  # Already handled as departure above
+            elif nearest_airport_if_on_ground == flight['arrival']:
                 # Flight is on ground at arrival airport
                 origin = flight['departure'] if flight['departure'] else "----"
                 pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
