@@ -284,9 +284,10 @@ class FlightBoardScreen(ModalScreen):
                     departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name, update_width=True)
             # Remove extra rows if needed
             elif new_row_count < current_row_count:
-                for _ in range(current_row_count - new_row_count):
-                    if self.departures_row_keys:
-                        departures_table.remove_row(self.departures_row_keys.pop())
+                for i in range(new_row_count, current_row_count):
+                    if i < len(self.departures_row_keys):
+                        # Clear the row at this index (it stays in table as empty)
+                        departures_table.remove_row(self.departures_row_keys[i])
         
         # Set up arrivals table
         arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
@@ -348,9 +349,10 @@ class FlightBoardScreen(ModalScreen):
                     arrivals_table.update_cell_animated(row_key, column_keys_arr[4], eta_local)
             # Remove extra rows if needed
             elif new_row_count < current_row_count:
-                for _ in range(current_row_count - new_row_count):
-                    if self.arrivals_row_keys:
-                        arrivals_table.remove_row(self.arrivals_row_keys.pop())
+                for i in range(new_row_count, current_row_count):
+                    if i < len(self.arrivals_row_keys):
+                        # Clear the row at this index (it stays in table as empty)
+                        arrivals_table.remove_row(self.arrivals_row_keys[i])
     
     def action_close_board(self) -> None:
         """Close the modal"""
@@ -498,8 +500,8 @@ class VATSIMControlApp(App):
         self.update_status_bar()
         # Start auto-refresh timer - check every second
         self.refresh_timer = self.set_interval(1, self.auto_refresh_callback)
-        # Start UTC clock and status bar update timer (update every second)
-        self.status_update_timer = self.set_interval(1, self.update_time_displays)
+        # Start UTC clock and status bar update timer (update every 0.2 seconds)
+        self.status_update_timer = self.set_interval(0.2, self.update_time_displays)
         # Initial update
         self.update_time_displays()
         
@@ -621,11 +623,10 @@ class VATSIMControlApp(App):
                         table.update_cell_animated(row_key, col_key, row_data[col_index])
         # If we have fewer new data than current rows, remove the extra rows from the end
         elif new_row_count < current_row_count:
-            for _ in range(current_row_count - new_row_count):
-                # Remove the last row
-                last_row_index = table.row_count - 1
-                if last_row_index >= 0:
-                    table.remove_row(row_keys.pop())
+            for i in range(new_row_count, current_row_count):
+                if i < len(row_keys):
+                    # Clear the row at this index (it stays in table as empty)
+                    table.remove_row(row_keys[i])
     
     async def action_quit(self) -> None:
         """Quit the application."""

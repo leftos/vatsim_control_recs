@@ -204,6 +204,8 @@ class SplitFlapDataTable(DataTable):
         self.cells_need_width_update: dict[tuple[int, int], bool] = {}  # Track which cells need width updates
         self._animation_timer = None
         self._update_counter = 0  # Counter for staggering animations
+        self._empty_rows: set[RowKey] = set()  # Track rows that are cleared to empty
+        self._empty_row_widths: dict[RowKey, dict[int, int]] = {}  # Store cell widths for empty rows
     
     def add_column(
         self,
@@ -242,6 +244,7 @@ class SplitFlapDataTable(DataTable):
     def add_row(self, *cells: Any, **kwargs) -> RowKey:
         """
         Add a row and initialize animated cells.
+        Reuses empty rows if available.
         
         Args:
             *cells: Cell values for the row
@@ -250,6 +253,28 @@ class SplitFlapDataTable(DataTable):
         Returns:
             The RowKey for the new row
         """
+        # Check if we have any empty rows to reuse
+        if self._empty_rows:
+            # Reuse the first empty row
+            row_key = self._empty_rows.pop()
+            
+            # Get the row index
+            row_idx = list(self.rows.keys()).index(row_key)
+            
+            # Update cells with animation from empty to new content
+            col_keys = list(self.columns.keys())
+            for col_idx, (cell_value, col_key) in enumerate(zip(cells, col_keys)):
+                if col_idx < len(col_keys):
+                    # Animate from current (empty) to new value
+                    self.update_cell_animated(row_key, col_key, cell_value, update_width=True)
+            
+            # Clear the stored widths for this row
+            if row_key in self._empty_row_widths:
+                del self._empty_row_widths[row_key]
+            
+            return row_key
+        
+        # No empty rows, create a new one
         row_key = super().add_row(*cells, **kwargs)
         
         # Initialize animated cells for this row
@@ -274,6 +299,50 @@ class SplitFlapDataTable(DataTable):
         
         return row_key
     
+    def remove_row(self, row_key: RowKey | str) -> None:
+        """
+        Remove a row by clearing it to empty spaces with animation.
+        The empty row is kept and can be reused for future additions.
+        
+        Args:
+            row_key: The key or label identifying the row to remove
+        """
+        try:
+            # Find row index
+            if isinstance(row_key, str):
+                row_idx = self._get_row_index(row_key)
+                # Get the actual row key
+                row_key = list(self.rows.keys())[row_idx]
+            else:
+                row_idx = list(self.rows.keys()).index(row_key)
+        except (ValueError, KeyError):
+            # Row not found, nothing to do
+            return
+        
+        # Store the widths of each cell before clearing
+        col_keys = list(self.columns.keys())
+        widths: dict[int, int] = {}
+        
+        for col_idx, col_key in enumerate(col_keys):
+            cell_key = (row_idx, col_idx)
+            if cell_key in self.animated_cells:
+                # Get current value length (without trailing spaces for accurate width)
+                current_value = self.animated_cells[cell_key].current_value.rstrip()
+                widths[col_idx] = len(current_value) if current_value else 1
+        
+        # Store widths for this row
+        self._empty_row_widths[row_key] = widths
+        
+        # Animate each cell to empty spaces matching the stored width
+        for col_idx, col_key in enumerate(col_keys):
+            if col_idx in widths:
+                # Create empty string with same width as last content
+                empty_value = " " * widths[col_idx]
+                self.update_cell_animated(row_key, col_key, empty_value, update_width=False)
+        
+        # Mark this row as empty (hidden)
+        self._empty_rows.add(row_key)
+    
     def update_cell_animated(
         self,
         row_key: RowKey | str,
@@ -291,6 +360,24 @@ class SplitFlapDataTable(DataTable):
             value: The new value for the cell
             update_width: Whether to update column width to fit new content
         """
+        # Convert string keys to actual keys and unmark if empty
+        actual_row_key: RowKey | None = None
+        if isinstance(row_key, str):
+            try:
+                row_idx = self._get_row_index(row_key)
+                actual_row_key = list(self.rows.keys())[row_idx]
+            except (ValueError, KeyError):
+                pass
+        else:
+            actual_row_key = row_key
+        
+        # If this row is marked as empty, unmark it since we're adding content
+        if actual_row_key is not None and actual_row_key in self._empty_rows:
+            self._empty_rows.remove(actual_row_key)
+            # Also clear the stored widths
+            if actual_row_key in self._empty_row_widths:
+                del self._empty_row_widths[actual_row_key]
+        
         # If animations are disabled, update instantly with alignment
         if not self.enable_animations:
             # Find column index for alignment
@@ -435,6 +522,106 @@ class SplitFlapDataTable(DataTable):
             return Text(value, justify=alignment)
         return value
     
+    def _is_row_empty(self, row_key: RowKey) -> bool:
+        """Check if a row is marked as empty/hidden"""
+        return row_key in self._empty_rows
+    
+    def _get_next_visible_row(self, start_idx: int, direction: int = 1) -> int | None:
+        """
+        Get the next visible (non-empty) row index from start_idx.
+        
+        Args:
+            start_idx: Starting row index
+            direction: 1 for down, -1 for up
+            
+        Returns:
+            Next visible row index or None if no visible rows found
+        """
+        row_keys = list(self.rows.keys())
+        idx = start_idx + direction
+        
+        while 0 <= idx < len(row_keys):
+            if not self._is_row_empty(row_keys[idx]):
+                return idx
+            idx += direction
+        
+        return None
+    
+    def move_cursor(
+        self,
+        *,
+        row: int | None = None,
+        column: int | None = None,
+        animate: bool = False,
+        scroll: bool = True,
+    ) -> None:
+        """
+        Move cursor, skipping empty rows.
+        
+        Args:
+            row: Target row index
+            column: Target column index
+            animate: Whether to animate the movement
+            scroll: Whether to scroll to keep cursor in view
+        """
+        row_keys = list(self.rows.keys())
+        
+        # If moving to a specific row, check if it's empty
+        if row is not None and 0 <= row < len(row_keys):
+            row_key = row_keys[row]
+            if self._is_row_empty(row_key):
+                # Find nearest non-empty row
+                # Try down first
+                next_row = self._get_next_visible_row(row - 1, direction=1)
+                if next_row is None:
+                    # Try up
+                    next_row = self._get_next_visible_row(row, direction=-1)
+                
+                if next_row is not None:
+                    row = next_row
+                else:
+                    # No visible rows available
+                    return
+        
+        super().move_cursor(row=row, column=column, animate=animate, scroll=scroll)
+    
+    def action_cursor_down(self) -> None:
+        """Move cursor down, skipping empty rows"""
+        if self.cursor_row is None:
+            return super().action_cursor_down()
+        
+        next_row = self._get_next_visible_row(self.cursor_row, direction=1)
+        if next_row is not None:
+            self.move_cursor(row=next_row)
+    
+    def action_cursor_up(self) -> None:
+        """Move cursor up, skipping empty rows"""
+        if self.cursor_row is None:
+            return super().action_cursor_up()
+        
+        next_row = self._get_next_visible_row(self.cursor_row, direction=-1)
+        if next_row is not None:
+            self.move_cursor(row=next_row)
+    
+    async def _on_click(self, event):
+        """Handle click events, preventing clicks on empty rows"""
+        # Let parent handle the click first
+        await super()._on_click(event)
+        
+        # After click, if cursor landed on empty row, move to nearest visible
+        if self.cursor_row is not None:
+            row_keys = list(self.rows.keys())
+            if self.cursor_row < len(row_keys):
+                row_key = row_keys[self.cursor_row]
+                if self._is_row_empty(row_key):
+                    # Move to nearest non-empty row
+                    next_row = self._get_next_visible_row(self.cursor_row - 1, direction=1)
+                    if next_row is None:
+                        next_row = self._get_next_visible_row(self.cursor_row, direction=-1)
+                    
+                    if next_row is not None:
+                        self.move_cursor(row=next_row)
+    
     def clear(self, columns: bool = False):
         """
         Clear the table and reset animated cells.
@@ -448,6 +635,8 @@ class SplitFlapDataTable(DataTable):
         result = super().clear(columns=columns)
         self.animated_cells.clear()
         self.cells_need_width_update.clear()
+        self._empty_rows.clear()
+        self._empty_row_widths.clear()
         if columns:
             self.column_flap_chars.clear()
             self.column_alignment.clear()
