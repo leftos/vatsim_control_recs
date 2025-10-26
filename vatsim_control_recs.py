@@ -598,6 +598,12 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0, disambig
                 # Add to list if it meets the original max_eta_hours criteria
                 if max_eta_hours == 0 or _ <= max_eta_hours:
                     arrivals_list.append((callsign, (pretty_origin, origin), eta_display, eta_local_time))
+            else:
+                # Flight has arrival filed but is on ground (not at arrival airport, likely at departure)
+                # Show with ETA="----" to indicate they haven't departed yet
+                origin = flight['departure'] if flight['departure'] else "----"
+                pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
+                arrivals_list.append((callsign, (pretty_origin, origin), "----", "----"))
         
         # Handle flights on ground without flight plans
         if not flight['departure'] and not flight['arrival'] and nearest_airport_if_on_ground:
