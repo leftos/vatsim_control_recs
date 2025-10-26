@@ -436,8 +436,9 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             arrival_counts[flight['arrival']] += 1
             arrival_counts_all[flight['arrival']] += 1
             arrivals_in_flight[flight['arrival']] += 1
-        elif is_flight_flying_near_arrival(flight, airports, max_eta_hours=0):
-            # Count all arrivals (beyond max_eta_hours filter) for the "all arrivals" column
+        elif flight['arrival'] and flight['arrival'] in airports:
+            # Flight has arrival filed but isn't on ground at arrival and isn't flying nearby
+            # This catches flights on ground at departure that haven't departed yet, or in-flight beyond max_eta_hours
             arrival_counts_all[flight['arrival']] += 1
 
     # Create a list of airports with their counts and staffed positions
