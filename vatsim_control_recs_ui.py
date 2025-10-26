@@ -162,7 +162,8 @@ class FlightBoardScreen(ModalScreen):
             
             if result:
                 self.departures_data, self.arrivals_data = result
-                self.populate_tables()
+                # Defer populate_tables until after the widget tree is fully mounted
+                self.call_after_refresh(self.populate_tables)
         finally:
             # Re-enable activity tracking
             if isinstance(app, VATSIMControlApp):
@@ -526,9 +527,12 @@ class VATSIMControlApp(App):
         self.airports_row_keys.clear()  # Clear stale row keys when clearing table
         airports_table.add_column("ICAO", flap_chars=ICAO_FLAP_CHARS)
         airports_table.add_column("NAME")
-        airports_table.add_column("TOTAL", flap_chars=NUMERIC_FLAP_CHARS)
-        airports_table.add_column("DEP", flap_chars=NUMERIC_FLAP_CHARS)
-        airports_table.add_column(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS)
+        airports_table.add_column("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right")
+        airports_table.add_column("DEP    ", flap_chars=NUMERIC_FLAP_CHARS, content_align="right")
+        airports_table.add_column(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right")
+        # Add ARR (all) column when max_eta_hours is specified
+        if max_eta != 0:
+            airports_table.add_column("ARR (all)", flap_chars=NUMERIC_FLAP_CHARS, content_align="right")
         airports_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right")
         airports_table.add_column("STAFFED", flap_chars=POSITION_FLAP_CHARS)
 
@@ -817,11 +821,13 @@ class VATSIMControlApp(App):
                 search_text = search_input.value
                 if search_text:
                     search_text = search_text.upper()
+                    # Determine staffed position index based on row length
+                    staffed_idx = -1  # Last element is always staffed positions
                     self.airport_data = [
                         row for row in self.original_airport_data
                         if search_text in row[0].upper() or  # ICAO
                            search_text in row[1].upper() or  # Airport name
-                           search_text in row[6].upper()      # Staffed positions
+                           search_text in row[staffed_idx].upper()      # Staffed positions
                     ]
                 else:
                     self.airport_data = self.original_airport_data
@@ -988,11 +994,13 @@ class VATSIMControlApp(App):
             self.airport_data = self.original_airport_data
         else:
             search_text = search_text.upper()
+            # Determine staffed position index based on row length
+            staffed_idx = -1  # Last element is always staffed positions
             self.airport_data = [
                 row for row in self.original_airport_data
                 if search_text in row[0].upper() or  # ICAO
-                   search_text in row[1].upper() or  # Airport name (now at index 1)
-                   search_text in row[6].upper()      # Staffed positions (now at index 6)
+                   search_text in row[1].upper() or  # Airport name
+                   search_text in row[staffed_idx].upper()      # Staffed positions
             ]
         
         self.populate_tables()

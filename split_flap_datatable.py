@@ -227,7 +227,13 @@ class SplitFlapDataTable(DataTable):
         Returns:
             The ColumnKey for the new column
         """
-        column_key = super().add_column(label, **kwargs)
+        # Convert label to Text with alignment if content_align is specified
+        if content_align != "left" and not isinstance(label, Text):
+            aligned_label = Text(str(label), justify=content_align)
+        else:
+            aligned_label = label
+        
+        column_key = super().add_column(aligned_label, **kwargs)
         
         col_idx = len(self.columns) - 1
         

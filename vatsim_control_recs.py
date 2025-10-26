@@ -407,6 +407,7 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     # Count flights on ground at departure and near arrival
     departure_counts = defaultdict(int)
     arrival_counts = defaultdict(int)
+    arrival_counts_all = defaultdict(int)  # Track all arrivals regardless of max_eta_hours
     earliest_arrival_eta = defaultdict(lambda: float('inf'))  # Track earliest ETA per airport
     arrivals_on_ground = defaultdict(int)  # Track arrivals already on ground
     arrivals_in_flight = defaultdict(int)  # Track arrivals still in flight
@@ -425,6 +426,7 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         elif flight['arrival'] and nearest_airport_if_on_ground == flight['arrival']:
             # Count as arrival if on ground at arrival airport
             arrival_counts[flight['arrival']] += 1
+            arrival_counts_all[flight['arrival']] += 1
             arrivals_on_ground[flight['arrival']] += 1
         elif not flight['departure'] and not flight['arrival'] and nearest_airport_if_on_ground:
             # For flights on ground without flight plans, count them as a departure at the nearest airport
@@ -432,13 +434,18 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         elif is_flight_flying_near_arrival(flight, airports, max_eta_hours):
             # Count as arrival if within the specified ETA hours of arrival airport
             arrival_counts[flight['arrival']] += 1
+            arrival_counts_all[flight['arrival']] += 1
             arrivals_in_flight[flight['arrival']] += 1
+        elif is_flight_flying_near_arrival(flight, airports, max_eta_hours=0):
+            # Count all arrivals (beyond max_eta_hours filter) for the "all arrivals" column
+            arrival_counts_all[flight['arrival']] += 1
 
     # Create a list of airports with their counts and staffed positions
     airport_data = []
     for airport in airports:
         departing = departure_counts.get(airport, 0)
         arriving = arrival_counts.get(airport, 0)
+        arriving_all = arrival_counts_all.get(airport, 0)
         
         current_staffed_positions = staffed_positions.get(airport, [])
         staffed_pos_display = ""
@@ -463,7 +470,15 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         if total_flights > 0 or (staffed_pos_display and include_all_staffed):
             # Get the pretty name for the airport
             pretty_name = DISAMBIGUATOR.get_pretty_name(airport) if DISAMBIGUATOR else airport
-            airport_data.append((airport, pretty_name, str(total_flights), str(departing), str(arriving), eta_display, staffed_pos_display))
+            # Pad numeric columns to consistent width (3 characters, right-aligned)
+            dep_str = str(departing).rjust(3)
+            arr_str = str(arriving).rjust(3)
+            arr_all_str = str(arriving_all).rjust(3)
+            # Include arriving_all in the tuple when max_eta_hours is specified
+            if max_eta_hours != 0:
+                airport_data.append((airport, pretty_name, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
+            else:
+                airport_data.append((airport, pretty_name, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
     
     # Sort by total count descending
     airport_data.sort(key=lambda x: int(x[2]), reverse=True)
