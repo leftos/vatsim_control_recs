@@ -525,10 +525,10 @@ class VATSIMControlApp(App):
         airports_table.add_column("ICAO", flap_chars=ICAO_FLAP_CHARS)
         airports_table.add_column("NAME")
         airports_table.add_column("TOTAL", flap_chars=NUMERIC_FLAP_CHARS)
-        airports_table.add_column("DEPARTING", flap_chars=NUMERIC_FLAP_CHARS)
-        airports_table.add_column(f"ARRIVING {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS)
+        airports_table.add_column("DEP", flap_chars=NUMERIC_FLAP_CHARS)
+        airports_table.add_column(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS)
         airports_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right")
-        airports_table.add_column("STAFFED POSITIONS", flap_chars=POSITION_FLAP_CHARS)
+        airports_table.add_column("STAFFED", flap_chars=POSITION_FLAP_CHARS)
 
         column_keys = list(airports_table.columns.keys())
         for row_data in self.airport_data:

@@ -179,6 +179,7 @@ class SplitFlapDataTable(DataTable):
         default_flap_chars: str = DEFAULT_FLAP_CHARS,
         stagger_delay: int = 1,
         enable_animations: bool = True,
+        zebra_stripes: bool = True,
         **kwargs
     ):
         """
@@ -192,7 +193,7 @@ class SplitFlapDataTable(DataTable):
                              If False, all updates will be instant.
             **kwargs: Additional arguments passed to DataTable
         """
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, zebra_stripes=zebra_stripes)
         self.animation_speed = animation_speed
         self.default_flap_chars = default_flap_chars
         self.stagger_delay = stagger_delay
