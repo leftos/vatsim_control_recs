@@ -18,8 +18,7 @@ class AirportDisambiguator:
         'AFB', 'International', 'Intercontinental', 'Regional', 'Municipal', 'County',
         'Executive', 'Metropolitan', 'National', 'Memorial', 'Central',
         'East', 'West', 'North', 'South', 'Downtown', 'City', 'Base',
-        'Airfield', 'Airpark', 'General', 'Private', 'Public',
-        'Commercial', 'Domestic', 'Civil', 'Military', 'Boeing'
+        'Airfield', 'Airpark', 'Commercial', 'Domestic', 'Civil', 'Military', 'Boeing'
     }
     
     # Shortening replacements - both keys and values will be considered high-priority
@@ -68,10 +67,11 @@ class AirportDisambiguator:
         airport_name_lower = airport_name.lower()
         
         # Check if any word from the city name appears in the airport name
+        # Split on spaces, hyphens, and slashes to handle cities like "Frankfurt-am-Main"
         if city:
-            city_words = city.lower().split()
+            city_words = re.split(r'[\s\-/]+', city.lower())
             for word in city_words:
-                if word in airport_name_lower:
+                if word and word in airport_name_lower:  # Skip empty strings
                     return True
         
         # Check if state name appears in the airport name
@@ -149,20 +149,42 @@ class AirportDisambiguator:
         
         return result if result else None
     
-    def _get_non_high_priority_word(self, airport_name, location):
-        """Get the first non-high priority word from the airport name.
-        Returns None if no such word is found."""
+    def _get_non_high_priority_words(self, airport_name, location):
+        """Get all consecutive non-high priority words from the start of the airport name
+        until a high-priority word is encountered.
+        If 4+ words are collected, only return the last one. If 3 or fewer, return all.
+        Returns None if no such words are found."""
         name = self._shorten_name(airport_name)
         location_words = {word.lower() for word in location.split()}
         distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
         
-        # Find the first non-high-priority word
+        # Collect all non-high-priority words from the start until we hit a high-priority word
+        non_high_priority_words = []
         for word in distinguishing_parts:
-            is_high_priority = word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS
-            if not is_high_priority:
-                return word
+            # For hyphenated/compound words, check if ANY part is high-priority
+            is_high_priority = False
+            if '-' in word or '/' in word:
+                # Split on hyphens and slashes to check each part
+                parts = word.replace('-', '/').split('/')
+                for part in parts:
+                    if part in self.HIGH_PRIORITY_WORDS or part.lower().capitalize() in self.HIGH_PRIORITY_WORDS:
+                        is_high_priority = True
+                        break
+            else:
+                is_high_priority = word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS
+            
+            if is_high_priority:
+                break  # Stop at the first high-priority word or compound containing one
+            non_high_priority_words.append(word)
         
-        # If no non-high priority word found, return the first word
+        # If we have 4 or more words, only keep the last one
+        # If 3 or fewer, keep all of them
+        if len(non_high_priority_words) >= 4:
+            return non_high_priority_words[-1]
+        elif non_high_priority_words:
+            return ' '.join(non_high_priority_words)
+        
+        # If no non-high priority words found, return the first word
         return distinguishing_parts[0] if distinguishing_parts else None
 
     def _generate_pretty_names(self):
@@ -203,10 +225,10 @@ class AirportDisambiguator:
                 elif self._name_contains_location(airport_name, city, state):
                     icao_to_pretty_name[icao] = location
                 else:
-                    # Name doesn't contain location - add a non-high priority word with hyphen
-                    non_high_priority_word = self._get_non_high_priority_word(airport_name, location)
-                    if non_high_priority_word:
-                        icao_to_pretty_name[icao] = f"{location} - {non_high_priority_word}"
+                    # Name doesn't contain location - add non-high priority words with hyphen
+                    non_high_priority_words = self._get_non_high_priority_words(airport_name, location)
+                    if non_high_priority_words:
+                        icao_to_pretty_name[icao] = f"{location} - {non_high_priority_words}"
                     else:
                         icao_to_pretty_name[icao] = location
                 continue
@@ -237,9 +259,9 @@ class AirportDisambiguator:
                     icao_to_pretty_name[icao] = military_name
                 # Check if name contains location - if not, use hyphen format
                 elif not self._name_contains_location(full_name, city, state):
-                    non_high_priority_word = self._get_non_high_priority_word(full_name, location)
-                    if non_high_priority_word:
-                        icao_to_pretty_name[icao] = f"{location} - {non_high_priority_word}"
+                    non_high_priority_words = self._get_non_high_priority_words(full_name, location)
+                    if non_high_priority_words:
+                        icao_to_pretty_name[icao] = f"{location} - {non_high_priority_words}"
                     else:
                         icao_to_pretty_name[icao] = location
                 else:
