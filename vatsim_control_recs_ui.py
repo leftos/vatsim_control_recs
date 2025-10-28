@@ -544,7 +544,9 @@ class VATSIMControlApp(App):
             self.airports_row_keys.append(row_key)
             # Animate each cell to its target value
             for col_idx, cell_value in enumerate(row_data):
-                airports_table.update_cell_animated(row_key, column_keys[col_idx], cell_value)
+                # Use update_width=True for NAME (col 1) and STAFFED (last column) to handle variable-length content
+                update_width = col_idx == 1 or col_idx == len(row_data) - 1
+                airports_table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
         
         # DIAGNOSTIC LOG
         debug_log(f"populate_tables AFTER populate - airports_table.row_count={airports_table.row_count}, len(airports_row_keys)={len(self.airports_row_keys)}")
@@ -611,7 +613,9 @@ class VATSIMControlApp(App):
             for col_index, col_key in enumerate(column_keys):
                 if col_index < len(new_row_data):
                     debug_log(f"update_table_efficiently Updating row {row_index}, col {col_index}: row_key={row_keys[row_index]}, col_key={col_key}, value={new_row_data[col_index]}")
-                    table.update_cell_animated(row_keys[row_index], col_key, new_row_data[col_index])
+                    # Use update_width=True for NAME (col 1) and STAFFED (last column) to handle variable-length content
+                    update_width = col_index == 1 or col_index == len(new_row_data) - 1
+                    table.update_cell_animated(row_keys[row_index], col_key, new_row_data[col_index], update_width=update_width)
         
         # If we have more new data than current rows, add the additional rows with animation
         if new_row_count > current_row_count:
@@ -624,7 +628,9 @@ class VATSIMControlApp(App):
                 # Then animate each cell to its target value
                 for col_index, col_key in enumerate(column_keys):
                     if col_index < len(row_data):
-                        table.update_cell_animated(row_key, col_key, row_data[col_index])
+                        # Use update_width=True for NAME (col 1) and STAFFED (last column) to handle variable-length content
+                        update_width = col_index == 1 or col_index == len(row_data) - 1
+                        table.update_cell_animated(row_key, col_key, row_data[col_index], update_width=update_width)
         # If we have fewer new data than current rows, remove the extra rows from the end
         elif new_row_count < current_row_count:
             for i in range(new_row_count, current_row_count):
@@ -847,7 +853,9 @@ class VATSIMControlApp(App):
                     self.airports_row_keys.append(row_key)
                     # Animate each cell to its target value
                     for col_idx, cell_value in enumerate(row_data):
-                        airports_table.update_cell_animated(row_key, column_keys[col_idx], cell_value)
+                        # Use update_width=True for NAME (col 1) and STAFFED (last column) to handle variable-length content
+                        update_width = col_idx == 1 or col_idx == len(row_data) - 1
+                        airports_table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
                 
             # Update groupings table efficiently
             if self.groupings_data and len(self.groupings_data) > 0:

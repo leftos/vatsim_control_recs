@@ -3,3 +3,6 @@ requests>=2.31.0
 
 # Terminal UI framework
 textual>=0.47.0
+
+# Natural Language Processing for airport name entity recognition
+spacy>=3.0.0

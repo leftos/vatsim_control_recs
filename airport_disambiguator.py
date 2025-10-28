@@ -1,6 +1,14 @@
+# Auto-install dependencies if missing
+try:
+    import auto_setup
+except ImportError:
+    pass  # auto_setup.py not available, dependencies should be pre-installed
+
 import json
 import re
 from collections import defaultdict
+from typing import List, Tuple, Optional
+import spacy
 
 class AirportDisambiguator:
     # Multi-word phrases that should always be included (check these first)
@@ -15,7 +23,7 @@ class AirportDisambiguator:
     
     # Base high-priority descriptor words
     BASE_HIGH_PRIORITY_WORDS = {
-        'AFB', 'International', 'Intercontinental', 'Regional', 'Municipal', 'County',
+        'AFB', 'International', 'Intercontinental', 'Regional', 'Municipal',
         'Executive', 'Metropolitan', 'National', 'Memorial', 'Central',
         'East', 'West', 'North', 'South', 'Downtown', 'City', 'Base',
         'Airfield', 'Airpark', 'Commercial', 'Domestic', 'Civil', 'Military', 'Boeing'
@@ -38,8 +46,10 @@ class AirportDisambiguator:
         "Air Force Base": "AFB",
         "Naval": "Navy",
     }
-    def __init__(self, airports_file_path):
+    
+    def __init__(self, airports_file_path, lazy_load=True):
         self.airports_file_path = airports_file_path
+        self.lazy_load = lazy_load
         
         # Build complete HIGH_PRIORITY_WORDS set from base words + all shortening terms
         self.HIGH_PRIORITY_WORDS = self.BASE_HIGH_PRIORITY_WORDS.copy()
@@ -48,7 +58,199 @@ class AirportDisambiguator:
             self.HIGH_PRIORITY_WORDS.add(original)
             self.HIGH_PRIORITY_WORDS.add(shortened)
         
-        self.icao_to_pretty_name = self._generate_pretty_names()
+        # Initialize spaCy model (lazy loading)
+        self._nlp = None
+        
+        # Cache for processed entities to avoid reprocessing
+        self._entity_cache = {}
+        
+        # Load all airports data
+        try:
+            with open(self.airports_file_path, 'r', encoding='utf-8') as f:
+                self.airports_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.airports_data = {}
+        
+        # Build location mapping
+        self.location_to_airports = defaultdict(list)
+        self.icao_to_location = {}
+        for icao, details in self.airports_data.items():
+            base_location = self._get_base_location(details)
+            if base_location:
+                self.location_to_airports[base_location].append(icao)
+                self.icao_to_location[icao] = base_location
+        
+        if lazy_load:
+            # Lazy loading mode: process locations on-demand
+            self.icao_to_pretty_name = {}
+            self._processed_locations = set()
+        else:
+            # Eager loading mode: process all airports upfront
+            import time
+            import sys
+            
+            start_time = time.time()
+            print("Generating airport disambiguation mappings...")
+            sys.stdout.flush()
+            
+            gen_start = time.time()
+            self.icao_to_pretty_name = self._generate_all_pretty_names()
+            gen_time = time.time() - gen_start
+            
+            total_time = time.time() - start_time
+            print(f"✓ Processed {len(self.icao_to_pretty_name)} airports in {gen_time:.2f}s")
+            print(f"✓ Disambiguator ready! (total: {total_time:.2f}s)\n")
+            sys.stdout.flush()
+
+    @property
+    def nlp(self):
+        """Lazy load spaCy model, downloading it if necessary."""
+        if self._nlp is None:
+            import sys
+            import subprocess
+            
+            try:
+                self._nlp = spacy.load("en_core_web_sm")
+                sys.stdout.flush()
+            except OSError:
+                # Model not found, download it
+                print("\n" + "=" * 80)
+                print("FIRST-TIME SETUP: Downloading spaCy Language Model")
+                print("=" * 80)
+                print("Model: en_core_web_sm (~12 MB)")
+                print("This is a one-time download and will only take a moment...")
+                print("=" * 80 + "\n")
+                subprocess.check_call([
+                    sys.executable, "-m", "spacy", "download", "en_core_web_sm"
+                ])
+                print("\n" + "=" * 80)
+                print("✓ Model downloaded successfully!")
+                print("=" * 80 + "\n")
+                # Try loading again after download
+                print("Loading model...")
+                self._nlp = spacy.load("en_core_web_sm")
+                print("✓ Ready!\n")
+                sys.stdout.flush()
+        return self._nlp
+
+    def _extract_entities_from_name(self, airport_name: str, city: str = "", state: str = "") -> Tuple[List[str], List[str]]:
+        """
+        Extract person and location entities from airport name using spaCy NER.
+        
+        Returns:
+            Tuple of (person_entities, location_entities)
+        """
+        # Check cache first
+        cache_key = f"{airport_name}|{city}|{state}"
+        if cache_key in self._entity_cache:
+            return self._entity_cache[cache_key]
+        
+        # Clean the airport name for better NER
+        clean_name = airport_name
+        for suffix in ["Airport", "Field", "Airfield", "Airpark", "Station"]:
+            clean_name = clean_name.replace(suffix, "").strip()
+        
+        # Process with spaCy
+        doc = self.nlp(clean_name)
+        
+        persons = []
+        locations = []
+        
+        # Generic airport descriptors that shouldn't be part of entities
+        generic_descriptors = {"International", "Regional", "Municipal", "Executive",
+                              "Metropolitan", "National", "Memorial", "Central"}
+        
+        for ent in doc.ents:
+            entity_text = ent.text.strip()
+            
+            # Skip if entity is the city or state itself
+            if entity_text.lower() == city.lower() or entity_text.lower() == state.lower():
+                continue
+            
+            # Skip if entity is just a generic descriptor
+            if entity_text in generic_descriptors:
+                continue
+                
+            if ent.label_ == "PERSON":
+                # Clean person names by removing trailing generic descriptors
+                person_words = entity_text.split()
+                cleaned_words = [w for w in person_words if w not in generic_descriptors]
+                if cleaned_words:
+                    persons.append(" ".join(cleaned_words))
+            elif ent.label_ in ["GPE", "LOC", "FAC"]:
+                # Clean location names by removing trailing generic descriptors
+                location_words = entity_text.split()
+                cleaned_words = [w for w in location_words if w not in generic_descriptors]
+                if cleaned_words:
+                    locations.append(" ".join(cleaned_words))
+        
+        # Also check for pattern-based location detection (County, City, etc.)
+        location_patterns = ["County", "City", "Township", "Parish", "Borough"]
+        words = clean_name.split()
+        
+        for i, word in enumerate(words):
+            if word in location_patterns and i > 0:
+                # Get preceding word(s) that might be part of the location name
+                potential_location = []
+                j = i - 1
+                while j >= 0 and words[j] not in generic_descriptors:
+                    potential_location.insert(0, words[j])
+                    j -= 1
+                if potential_location:
+                    location_name = " ".join(potential_location + [word])
+                    if location_name not in locations:
+                        locations.append(location_name)
+        
+        # Cache the results
+        self._entity_cache[cache_key] = (persons, locations)
+        
+        return persons, locations
+
+    def _get_first_occurring_entity(self, airport_name: str, persons: List[str], locations: List[str]) -> Optional[str]:
+        """
+        Determine which entity appears first in the airport name.
+        Prioritizes the first complete entity found.
+        """
+        if not persons and not locations:
+            return None
+        
+        # Clean name for searching
+        clean_name = airport_name.lower()
+        
+        # Find positions of all entities
+        entity_positions = []
+        
+        for person in persons:
+            pos = clean_name.find(person.lower())
+            if pos != -1:
+                entity_positions.append((pos, person, "person"))
+        
+        for location in locations:
+            pos = clean_name.find(location.lower())
+            if pos != -1:
+                entity_positions.append((pos, location, "location"))
+        
+        if not entity_positions:
+            return None
+        
+        # Sort by position (first occurrence)
+        entity_positions.sort(key=lambda x: x[0])
+        
+        # Return the first entity
+        return entity_positions[0][1]
+
+    def _extract_distinguishing_entity(self, airport_name: str, city: str, state: str) -> Optional[str]:
+        """
+        Extract the most relevant distinguishing entity using NER.
+        This is the main method that will be called to get the entity for disambiguation.
+        """
+        # Get entities from the name
+        persons, locations = self._extract_entities_from_name(airport_name, city, state)
+        
+        # Get the first occurring entity
+        entity = self._get_first_occurring_entity(airport_name, persons, locations)
+        
+        return entity
 
     def _get_base_location(self, airport_details):
         """Determine whether to use state or city as the base location name.
@@ -187,30 +389,30 @@ class AirportDisambiguator:
         # If no non-high priority words found, return the first word
         return distinguishing_parts[0] if distinguishing_parts else None
 
-    def _generate_pretty_names(self):
-        location_to_airports = defaultdict(list)
-        try:
-            with open(self.airports_file_path, 'r', encoding='utf-8') as f:
-                airports_data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
-
-        # Map each airport to its base location (state or city)
-        icao_to_location = {}
-        for icao, details in airports_data.items():
-            base_location = self._get_base_location(details)
-            if base_location:
-                location_to_airports[base_location].append(icao)
-                icao_to_location[icao] = base_location
-
+    def _generate_all_pretty_names(self):
+        """Generate pretty names for all airports (eager loading)."""
+        import sys
+        
         icao_to_pretty_name = {}
-        for location, icaos in location_to_airports.items():
+        total_locations = len(self.location_to_airports)
+        processed = 0
+        last_progress = 0
+        print(f"  Processing airports... 0% ({processed}/{total_locations} locations)")
+        
+        for location, icaos in self.location_to_airports.items():
+            processed += 1
+            # Update progress every 10%
+            progress_pct = int((processed / total_locations) * 100)
+            if progress_pct >= last_progress + 10:
+                print(f"  Processing airports... {progress_pct}% ({processed}/{total_locations} locations)")
+                sys.stdout.flush()
+                last_progress = progress_pct
             if not icaos:
                 continue
             
             if len(icaos) == 1:
                 icao = icaos[0]
-                airport_details = airports_data[icao]
+                airport_details = self.airports_data[icao]
                 airport_name = airport_details.get('name', '')
                 city = airport_details.get('city', '')
                 state = airport_details.get('state', '')
@@ -225,23 +427,28 @@ class AirportDisambiguator:
                 elif self._name_contains_location(airport_name, city, state):
                     icao_to_pretty_name[icao] = location
                 else:
-                    # Name doesn't contain location - add non-high priority words with hyphen
-                    non_high_priority_words = self._get_non_high_priority_words(airport_name, location)
-                    if non_high_priority_words:
-                        icao_to_pretty_name[icao] = f"{location} - {non_high_priority_words}"
+                    # Name doesn't contain location - try NER first, then fall back
+                    entity = self._extract_distinguishing_entity(airport_name, city, state)
+                    if entity:
+                        icao_to_pretty_name[icao] = f"{location} - {entity}"
                     else:
-                        icao_to_pretty_name[icao] = location
+                        # Fall back to old method
+                        non_high_priority_words = self._get_non_high_priority_words(airport_name, location)
+                        if non_high_priority_words:
+                            icao_to_pretty_name[icao] = f"{location} - {non_high_priority_words}"
+                        else:
+                            icao_to_pretty_name[icao] = location
                 continue
 
             # Multiple airports in this location - need to disambiguate them.
             # Split into two groups: those that start with location vs those that don't
-            airport_names = {icao: self._shorten_name(airports_data[icao].get('name', icao)) for icao in icaos}
+            airport_names = {icao: self._shorten_name(self.airports_data[icao].get('name', icao)) for icao in icaos}
             
             icaos_start_with_location = []
             icaos_dont_start_with_location = []
             
             for icao in icaos:
-                full_name = airports_data[icao].get('name', icao)
+                full_name = self.airports_data[icao].get('name', icao)
                 if full_name.lower().startswith(location.lower()):
                     icaos_start_with_location.append(icao)
                 else:
@@ -249,21 +456,26 @@ class AirportDisambiguator:
             
             # Process airports that DON'T start with location
             for icao in icaos_dont_start_with_location:
-                full_name = airports_data[icao].get('name', '')
-                city = airports_data[icao].get('city', '')
-                state = airports_data[icao].get('state', '')
+                full_name = self.airports_data[icao].get('name', '')
+                city = self.airports_data[icao].get('city', '')
+                state = self.airports_data[icao].get('state', '')
                 
                 # Check if it's a military airport - use special formatting
                 military_name = self._get_military_name(full_name, location)
                 if military_name:
                     icao_to_pretty_name[icao] = military_name
-                # Check if name contains location - if not, use hyphen format
+                # Check if name contains location - if not, use hyphen format with NER
                 elif not self._name_contains_location(full_name, city, state):
-                    non_high_priority_words = self._get_non_high_priority_words(full_name, location)
-                    if non_high_priority_words:
-                        icao_to_pretty_name[icao] = f"{location} - {non_high_priority_words}"
+                    entity = self._extract_distinguishing_entity(full_name, city, state)
+                    if entity:
+                        icao_to_pretty_name[icao] = f"{location} - {entity}"
                     else:
-                        icao_to_pretty_name[icao] = location
+                        # Fall back to old method
+                        non_high_priority_words = self._get_non_high_priority_words(full_name, location)
+                        if non_high_priority_words:
+                            icao_to_pretty_name[icao] = f"{location} - {non_high_priority_words}"
+                        else:
+                            icao_to_pretty_name[icao] = location
                 else:
                     # Regular logic: location + distinguishing word (no hyphen)
                     name = airport_names[icao]
@@ -401,7 +613,169 @@ class AirportDisambiguator:
             name = name.replace(long, short)
         return name
 
+    def _process_location(self, location):
+        """Process all airports in a specific location on-demand."""
+        if location in self._processed_locations:
+            return  # Already processed
+        
+        self._processed_locations.add(location)
+        icaos = self.location_to_airports.get(location, [])
+        
+        if not icaos:
+            return
+        
+        # Process this location using the same logic as _generate_all_pretty_names
+        # but only for this specific location
+        if len(icaos) == 1:
+            icao = icaos[0]
+            airport_details = self.airports_data[icao]
+            airport_name = airport_details.get('name', '')
+            city = airport_details.get('city', '')
+            state = airport_details.get('state', '')
+            
+            # Check for military airports first
+            military_name = self._get_military_name(airport_name, location)
+            
+            if military_name:
+                self.icao_to_pretty_name[icao] = military_name
+            elif self._name_contains_location(airport_name, city, state):
+                self.icao_to_pretty_name[icao] = location
+            else:
+                entity = self._extract_distinguishing_entity(airport_name, city, state)
+                if entity:
+                    self.icao_to_pretty_name[icao] = f"{location} - {entity}"
+                else:
+                    non_high_priority_words = self._get_non_high_priority_words(airport_name, location)
+                    if non_high_priority_words:
+                        self.icao_to_pretty_name[icao] = f"{location} - {non_high_priority_words}"
+                    else:
+                        self.icao_to_pretty_name[icao] = location
+            return
+        
+        # Multiple airports - use the full disambiguation logic
+        airport_names = {icao: self._shorten_name(self.airports_data[icao].get('name', icao)) for icao in icaos}
+        
+        icaos_start_with_location = []
+        icaos_dont_start_with_location = []
+        
+        for icao in icaos:
+            full_name = self.airports_data[icao].get('name', icao)
+            if full_name.lower().startswith(location.lower()):
+                icaos_start_with_location.append(icao)
+            else:
+                icaos_dont_start_with_location.append(icao)
+        
+        # Process airports that DON'T start with location
+        for icao in icaos_dont_start_with_location:
+            full_name = self.airports_data[icao].get('name', '')
+            city = self.airports_data[icao].get('city', '')
+            state = self.airports_data[icao].get('state', '')
+            
+            military_name = self._get_military_name(full_name, location)
+            if military_name:
+                self.icao_to_pretty_name[icao] = military_name
+            elif not self._name_contains_location(full_name, city, state):
+                entity = self._extract_distinguishing_entity(full_name, city, state)
+                if entity:
+                    self.icao_to_pretty_name[icao] = f"{location} - {entity}"
+                else:
+                    non_high_priority_words = self._get_non_high_priority_words(full_name, location)
+                    if non_high_priority_words:
+                        self.icao_to_pretty_name[icao] = f"{location} - {non_high_priority_words}"
+                    else:
+                        self.icao_to_pretty_name[icao] = location
+            else:
+                name = airport_names[icao]
+                location_words = {word.lower() for word in location.split()}
+                distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
+                
+                high_priority_word = None
+                for word in distinguishing_parts:
+                    if word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS:
+                        high_priority_word = word
+                        break
+                
+                if high_priority_word:
+                    self.icao_to_pretty_name[icao] = f"{location} {high_priority_word}"
+                elif distinguishing_parts:
+                    self.icao_to_pretty_name[icao] = f"{location} {distinguishing_parts[0]}"
+                else:
+                    self.icao_to_pretty_name[icao] = location
+        
+        # Handle airports that start with location
+        if len(icaos_start_with_location) == 1:
+            self.icao_to_pretty_name[icaos_start_with_location[0]] = location
+        elif len(icaos_start_with_location) > 1:
+            # Full disambiguation logic for multiple airports starting with location
+            resolved_names = {}
+            for icao_to_resolve in icaos_start_with_location:
+                name = airport_names[icao_to_resolve]
+                location_words = {word.lower() for word in location.split()}
+                distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
+                
+                scored_words = []
+                for word in distinguishing_parts:
+                    is_high_priority = word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS
+                    priority = 0 if is_high_priority else 1
+                    scored_words.append((priority, word))
+                
+                scored_words.sort(key=lambda x: (x[0], distinguishing_parts.index(x[1])))
+                
+                found = False
+                for priority, word in scored_words:
+                    if priority == 0:
+                        candidate_suffix = word
+                        candidate_full_name = f"{location} {candidate_suffix}".strip()
+                        
+                        if self._is_unique_name(candidate_full_name, icao_to_resolve, icaos_start_with_location, location, airport_names):
+                            resolved_names[icao_to_resolve] = candidate_full_name
+                            found = True
+                            break
+                
+                if not found:
+                    for num_words in range(2, len(distinguishing_parts) + 1):
+                        for start_idx in range(len(distinguishing_parts) - num_words + 1):
+                            candidate_words = distinguishing_parts[start_idx:start_idx + num_words]
+                            
+                            has_high_priority = any(
+                                (word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS)
+                                for word in candidate_words
+                            )
+                            
+                            if has_high_priority:
+                                candidate_suffix = " ".join(candidate_words)
+                                candidate_full_name = f"{location} {candidate_suffix}".strip()
+                                
+                                if self._is_unique_name(candidate_full_name, icao_to_resolve, icaos_start_with_location, location, airport_names):
+                                    resolved_names[icao_to_resolve] = candidate_full_name
+                                    found = True
+                                    break
+                        
+                        if found:
+                            break
+                
+                if not found:
+                    for i in range(1, len(distinguishing_parts) + 1):
+                        candidate_suffix = " ".join(distinguishing_parts[:i])
+                        candidate_full_name = f"{location} {candidate_suffix}".strip()
+                        
+                        if self._is_unique_name(candidate_full_name, icao_to_resolve, icaos_start_with_location, location, airport_names):
+                            resolved_names[icao_to_resolve] = candidate_full_name
+                            found = True
+                            break
+                
+                if not found:
+                    resolved_names[icao_to_resolve] = airport_names[icao_to_resolve]
+            
+            self.icao_to_pretty_name.update(resolved_names)
+
     def get_pretty_name(self, icao):
+        # If lazy loading is enabled and this location hasn't been processed yet
+        if self.lazy_load and icao in self.icao_to_location:
+            location = self.icao_to_location[icao]
+            if location not in self._processed_locations:
+                self._process_location(location)
+        
         return self.icao_to_pretty_name.get(icao, icao)
 
 
