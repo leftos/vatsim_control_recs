@@ -175,17 +175,6 @@ class FlightBoardScreen(ModalScreen):
 
     def populate_tables(self) -> None:
         """Populate the departure and arrivals tables with separate ICAO and NAME columns."""
-        # Flush any rows that completed their delete animation
-        departures_table = self.query_one("#departures-table", SplitFlapDataTable)
-        arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
-        
-        deleted_dep = departures_table.flush_deleted_rows()
-        deleted_arr = arrivals_table.flush_deleted_rows()
-        
-        # Update cached row keys
-        self.departures_row_keys = [k for k in self.departures_row_keys if k not in deleted_dep]
-        self.arrivals_row_keys = [k for k in self.arrivals_row_keys if k not in deleted_arr]
-        
         # Sort arrivals by ETA before displaying
         def eta_sort_key(arrival_row):
             """Sort key for arrivals: LANDED at top, then by ETA (soonest first), then by flight callsign for stability"""
@@ -296,11 +285,10 @@ class FlightBoardScreen(ModalScreen):
                     departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name, update_width=True)
             # Remove extra rows if needed
             elif new_row_count < current_row_count:
-                # Mark rows for deletion (starts animation) - deletion happens on next cycle
-                for i in range(current_row_count - 1, new_row_count - 1, -1):
+                for i in range(new_row_count, current_row_count):
                     if i < len(self.departures_row_keys):
+                        # Clear the row at this index (it stays in table as empty)
                         departures_table.remove_row(self.departures_row_keys[i])
-                # Note: Row keys will be cleaned up on next populate_tables() call
         
         # Set up arrivals table
         arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
@@ -362,11 +350,10 @@ class FlightBoardScreen(ModalScreen):
                     arrivals_table.update_cell_animated(row_key, column_keys_arr[4], eta_local)
             # Remove extra rows if needed
             elif new_row_count < current_row_count:
-                # Mark rows for deletion (starts animation) - deletion happens on next cycle
-                for i in range(current_row_count - 1, new_row_count - 1, -1):
+                for i in range(new_row_count, current_row_count):
                     if i < len(self.arrivals_row_keys):
+                        # Clear the row at this index (it stays in table as empty)
                         arrivals_table.remove_row(self.arrivals_row_keys[i])
-                # Note: Row keys will be cleaned up on next populate_tables() call
     
     def action_close_board(self) -> None:
         """Close the modal"""
@@ -605,13 +592,6 @@ class VATSIMControlApp(App):
             row_keys: List of row keys for tracking table rows
             new_data: The new data (list of tuples)
         """
-        # Flush any rows that completed their delete animation since last update
-        deleted_keys = table.flush_deleted_rows()
-        # Remove deleted keys from the cache
-        for key in deleted_keys:
-            if key in row_keys:
-                row_keys.remove(key)
-        
         current_row_count = table.row_count
         new_row_count = len(new_data)
         
@@ -653,11 +633,10 @@ class VATSIMControlApp(App):
                         table.update_cell_animated(row_key, col_key, row_data[col_index], update_width=update_width)
         # If we have fewer new data than current rows, remove the extra rows from the end
         elif new_row_count < current_row_count:
-            # Mark rows for deletion (starts animation) - deletion happens on next cycle
-            for i in range(current_row_count - 1, new_row_count - 1, -1):
+            for i in range(new_row_count, current_row_count):
                 if i < len(row_keys):
+                    # Clear the row at this index (it stays in table as empty)
                     table.remove_row(row_keys[i])
-            # Note: Row keys will be cleaned up on next update_table_efficiently() call
     
     async def action_quit(self) -> None:
         """Quit the application."""
