@@ -113,6 +113,60 @@ class TableManager:
         self.row_keys = row_keys
         self.is_first_load = True
     
+    async def _wait_and_remove_row(self, row_key) -> None:
+        """Wait for the clearing animation to complete, then actually remove the row"""
+        # Wait for animations to complete
+        while True:
+            await asyncio.sleep(0.1)
+            
+            # Check if row still exists
+            if row_key not in self.table.rows:
+                break
+            
+            row_keys = list(self.table.rows.keys())
+            if row_key not in row_keys:
+                break
+            
+            row_idx = row_keys.index(row_key)
+            
+            # Check all cells in this row to see if any are still animating
+            still_animating = False
+            for col_idx in range(len(self.table.columns)):
+                cell_key = (row_idx, col_idx)
+                if cell_key in self.table.animated_cells:
+                    if self.table.animated_cells[cell_key].animating:
+                        still_animating = True
+                        break
+            
+            if not still_animating:
+                break
+        
+        # Animation complete - now actually remove the row from the datatable
+        if row_key in self.table.rows:
+            # Remove from the _empty_rows set if present
+            if row_key in self.table._empty_rows:
+                self.table._empty_rows.remove(row_key)
+            
+            # Get row index for cleaning up animated cells
+            row_keys = list(self.table.rows.keys())
+            if row_key in row_keys:
+                row_idx = row_keys.index(row_key)
+                
+                # Clean up animated cells for this row
+                cells_to_remove = [
+                    (r, c) for (r, c) in self.table.animated_cells.keys()
+                    if r == row_idx
+                ]
+                for cell_key in cells_to_remove:
+                    del self.table.animated_cells[cell_key]
+            
+            # Actually remove the row using parent's method
+            super(SplitFlapDataTable, self.table).remove_row(row_key)
+            
+            # Remove from row_keys list
+            if row_key in self.row_keys:
+                self.row_keys.remove(row_key)
+    
     def setup_columns(self) -> None:
         """Set up table columns if they don't exist"""
         if not self.table.columns:
@@ -188,7 +242,11 @@ class TableManager:
         elif new_row_count < current_row_count:
             for i in range(new_row_count, current_row_count):
                 if i < len(self.row_keys):
-                    self.table.remove_row(self.row_keys[i])
+                    row_key = self.row_keys[i]
+                    # Start clearing animation
+                    self.table.remove_row(row_key)
+                    # Schedule actual removal after animation completes
+                    asyncio.create_task(self._wait_and_remove_row(row_key))
 
 # Table configuration constants
 DEPARTURES_TABLE_CONFIG = TableConfig(
