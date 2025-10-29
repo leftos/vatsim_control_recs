@@ -976,6 +976,20 @@ class VATSIMControlApp(App):
     
     def on_key(self, event: Key) -> None:
         """Handle key events to detect user activity."""
+        # Handle Enter key for opening flight board when a DataTable has focus
+        # and no modal screen is active (to allow command palette and other modals to work)
+        if event.key == "enter":
+            # Check if any modal screen is active (command palette, flight board, etc.)
+            if len(self.screen_stack) == 1:  # Only main app screen is active
+                # Check if focused widget is one of our DataTables
+                focused = self.focused
+                if focused and isinstance(focused, SplitFlapDataTable):
+                    # Let the action handle the rest of the logic
+                    self.action_open_flight_board()
+                    event.prevent_default()
+                    event.stop()
+                    return
+        
         # Record activity for navigation keys
         if event.key in ["up", "down", "left", "right", "pageup", "pagedown", "home", "end"]:
             self.record_user_activity(f"key:{event.key}")
@@ -1015,9 +1029,8 @@ class VATSIMControlApp(App):
     
     def action_open_flight_board(self) -> None:
         """Open the flight board for the selected airport or grouping"""
-        # Don't allow opening flight board during search, if a flight board is already open,
-        # or if any modal screen (like command palette) is currently active
-        if self.search_active or self.flight_board_open or len(self.screen_stack) > 1:
+        # Don't allow opening flight board during search or if a flight board is already open
+        if self.search_active or self.flight_board_open:
             return
         
         tabs = self.query_one("#tabs", TabbedContent)
