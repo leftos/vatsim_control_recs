@@ -204,7 +204,8 @@ class SplitFlapDataTable(DataTable):
         self.cells_need_width_update: dict[tuple[int, int], bool] = {}  # Track which cells need width updates
         self._animation_timer = None
         self._update_counter = 0  # Counter for staggering animations
-        self._empty_rows: set[RowKey] = set()  # Track rows that are cleared to empty
+        self._empty_rows: set[RowKey] = set()  # Track rows that are cleared to empty (reusable)
+        self._clearing_rows: set[RowKey] = set()  # Track rows currently animating to empty
         self._empty_row_widths: dict[RowKey, dict[int, int]] = {}  # Store cell widths for empty rows
     
     def add_column(
@@ -308,7 +309,7 @@ class SplitFlapDataTable(DataTable):
     def remove_row(self, row_key: RowKey | str) -> None:
         """
         Remove a row by clearing it to empty spaces with animation.
-        The empty row is kept and can be reused for future additions.
+        The row will be deleted from the table when the animation finishes.
         
         Args:
             row_key: The key or label identifying the row to remove
@@ -346,8 +347,8 @@ class SplitFlapDataTable(DataTable):
                 empty_value = " " * widths[col_idx]
                 self.update_cell_animated(row_key, col_key, empty_value, update_width=False)
         
-        # Mark this row as empty (hidden)
-        self._empty_rows.add(row_key)
+        # Mark this row as currently clearing (will be deleted when animation finishes)
+        self._clearing_rows.add(row_key)
     
     def update_cell_animated(
         self,
@@ -511,6 +512,9 @@ class SplitFlapDataTable(DataTable):
                         del self.cells_need_width_update[cell_key]
             except Exception:
                 pass  # Cell might not exist anymore
+        
+        # Check for completed clear animations and delete rows
+        self._check_and_delete_completed_clearing_rows()
     
     def _apply_alignment(self, value: Any, col_idx: int) -> Any:
         """
@@ -527,6 +531,65 @@ class SplitFlapDataTable(DataTable):
         if alignment and isinstance(value, str):
             return Text(value, justify=alignment)
         return value
+    
+    def _check_and_delete_completed_clearing_rows(self) -> None:
+        """
+        Check if any rows being cleared have completed their animation.
+        If so, delete them from the table.
+        """
+        if not self._clearing_rows:
+            return
+        
+        rows_to_delete = []
+        
+        for row_key in list(self._clearing_rows):
+            try:
+                # Find row index
+                row_idx = list(self.rows.keys()).index(row_key)
+                
+                # Check if all cells in this row are done animating
+                row_complete = True
+                col_keys = list(self.columns.keys())
+                
+                for col_idx in range(len(col_keys)):
+                    cell_key = (row_idx, col_idx)
+                    if cell_key in self.animated_cells:
+                        if self.animated_cells[cell_key].animating:
+                            row_complete = False
+                            break
+                
+                # If animation is complete, mark row for deletion
+                if row_complete:
+                    rows_to_delete.append(row_key)
+                    
+            except (ValueError, KeyError):
+                # Row doesn't exist anymore, remove from clearing list
+                self._clearing_rows.discard(row_key)
+        
+        # Delete completed rows
+        for row_key in rows_to_delete:
+            try:
+                # Call the parent DataTable remove_row to actually delete it
+                super().remove_row(row_key)
+                
+                # Clean up tracking data
+                self._clearing_rows.discard(row_key)
+                
+                # Clean up animated cells for this row
+                if row_key in self._empty_row_widths:
+                    del self._empty_row_widths[row_key]
+                    
+                # Find and remove any animated cells for this row
+                cells_to_remove = [cell_key for cell_key in self.animated_cells.keys() if cell_key[0] == list(self.rows.keys()).index(row_key)]
+                for cell_key in cells_to_remove:
+                    if cell_key in self.animated_cells:
+                        del self.animated_cells[cell_key]
+                    if cell_key in self.cells_need_width_update:
+                        del self.cells_need_width_update[cell_key]
+                        
+            except (ValueError, KeyError):
+                # Row might have been deleted already
+                self._clearing_rows.discard(row_key)
     
     def _is_row_empty(self, row_key: RowKey) -> bool:
         """Check if a row is marked as empty/hidden"""
@@ -642,6 +705,7 @@ class SplitFlapDataTable(DataTable):
         self.animated_cells.clear()
         self.cells_need_width_update.clear()
         self._empty_rows.clear()
+        self._clearing_rows.clear()
         self._empty_row_widths.clear()
         if columns:
             self.column_flap_chars.clear()
