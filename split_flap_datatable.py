@@ -144,6 +144,9 @@ class AnimatedCell:
         
         # Only update if something changed
         if not changed:
+            # If nothing changed and we're at target, mark animation as complete
+            if all_complete:
+                self.animating = False
             return all_complete, None
         
         # Update current value
@@ -247,13 +250,14 @@ class SplitFlapDataTable(DataTable):
         
         return column_key
     
-    def add_row(self, *cells: Any, **kwargs) -> RowKey:
+    def add_row(self, *cells: Any, animate: bool = False, **kwargs) -> RowKey:
         """
         Add a row and initialize animated cells.
         Reuses empty rows if available.
         
         Args:
             *cells: Cell values for the row
+            animate: If True, animate the row in from empty. If False, show instantly (default: False)
             **kwargs: Additional arguments passed to DataTable.add_row
             
         Returns:
@@ -281,20 +285,41 @@ class SplitFlapDataTable(DataTable):
             return row_key
         
         # No empty rows, create a new one
-        row_key = super().add_row(*cells, **kwargs)
-        
-        # Initialize animated cells for this row
-        row_idx = len(self.rows) - 1
-        for col_idx, cell_value in enumerate(cells):
-            # Get flap chars for this column
-            flap_chars = self.column_flap_chars.get(col_idx, self.default_flap_chars)
+        if animate:
+            # Add row with empty values first, then animate to target values
+            empty_cells = [""] * len(cells)
+            row_key = super().add_row(*empty_cells, **kwargs)
             
-            # Create animated cell
-            cell_str = str(cell_value)
-            self.animated_cells[(row_idx, col_idx)] = AnimatedCell(
-                cell_str,
-                flap_chars=flap_chars
-            )
+            # Initialize animated cells with empty values
+            row_idx = len(self.rows) - 1
+            for col_idx, cell_value in enumerate(empty_cells):
+                flap_chars = self.column_flap_chars.get(col_idx, self.default_flap_chars)
+                self.animated_cells[(row_idx, col_idx)] = AnimatedCell(
+                    cell_value,
+                    flap_chars=flap_chars
+                )
+            
+            # Now animate to the target values
+            col_keys = list(self.columns.keys())
+            for col_idx, cell_value in enumerate(cells):
+                if col_idx < len(col_keys):
+                    self.update_cell_animated(row_key, col_keys[col_idx], cell_value, update_width=True)
+        else:
+            # Add row normally without animation
+            row_key = super().add_row(*cells, **kwargs)
+            
+            # Initialize animated cells for this row
+            row_idx = len(self.rows) - 1
+            for col_idx, cell_value in enumerate(cells):
+                # Get flap chars for this column
+                flap_chars = self.column_flap_chars.get(col_idx, self.default_flap_chars)
+                
+                # Create animated cell
+                cell_str = str(cell_value)
+                self.animated_cells[(row_idx, col_idx)] = AnimatedCell(
+                    cell_str,
+                    flap_chars=flap_chars
+                )
         
         # Start animation timer if not already running
         if self._animation_timer is None:
