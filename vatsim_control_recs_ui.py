@@ -440,7 +440,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+space", "toggle_pause", "Pause/Resume", priority=True),
         Binding("ctrl+f", "toggle_search", "Find", priority=True),
         Binding("escape", "cancel_search", "Cancel Search", show=False),
-        Binding("enter", "open_flight_board", "Flight Board", priority=True),
+        Binding("enter", "open_flight_board", "Flight Board"),
     ]
     
     def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None):
@@ -1015,8 +1015,9 @@ class VATSIMControlApp(App):
     
     def action_open_flight_board(self) -> None:
         """Open the flight board for the selected airport or grouping"""
-        # Don't allow opening flight board during search, or if a flight board is already open
-        if self.search_active or self.flight_board_open:
+        # Don't allow opening flight board during search, if a flight board is already open,
+        # or if any modal screen (like command palette) is currently active
+        if self.search_active or self.flight_board_open or len(self.screen_stack) > 1:
             return
         
         tabs = self.query_one("#tabs", TabbedContent)
