@@ -34,6 +34,220 @@ def debug_log(message: str):
 # Clear debug log on startup
 with open(DEBUG_LOG_FILE, "w", encoding="utf-8") as f:
     f.write(f"=== Debug log started at {datetime.now()} ===\n")
+from dataclasses import dataclass
+from typing import Optional, Callable, Any, Literal
+
+@dataclass
+class ColumnConfig:
+    """Configuration for a single table column"""
+    name: str
+    flap_chars: Optional[str] = None
+    content_align: Literal["left", "center", "right"] = "left"
+    update_width: bool = False
+
+@dataclass
+class TableConfig:
+    """Configuration for a complete table"""
+    columns: list[ColumnConfig]
+    sort_function: Optional[Callable] = None
+    
+def eta_sort_key(arrival_row):
+    """Sort key for arrivals: LANDED at top, then by ETA (soonest first), then by flight callsign for stability"""
+    flight, origin_icao, origin_name, eta, eta_local = arrival_row
+    eta_str = str(eta).upper()
+    flight_str = str(flight)
+    
+    # Put LANDED flights at the top
+    if "LANDED" in eta_str:
+        return (0, 0, flight_str)
+    
+    # Handle relative time formats with hours and/or minutes like "1H", "1H30M", "2H", "45M", "<1M"
+    if "H" in eta_str or "M" in eta_str:
+        try:
+            total_minutes = 0
+            
+            # Check if it starts with '<' for "less than" times
+            if eta_str.startswith("<"):
+                # <1M means less than 1 minute, treat as 0.5 minutes for sorting
+                minutes_str = eta_str.replace("<", "").replace("M", "").strip()
+                total_minutes = float(minutes_str) - 0.5  # Subtract 0.5 to sort before the actual minute
+            elif "H" in eta_str and "M" in eta_str:
+                # Format like "1H30M" or "2H15M"
+                parts = eta_str.replace("H", " ").replace("M", "").split()
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                total_minutes = hours * 60 + minutes
+            elif "H" in eta_str:
+                # Format like "1H" or "2H"
+                hours = int(eta_str.replace("H", "").strip())
+                total_minutes = hours * 60
+            elif "M" in eta_str:
+                # Format like "45M" or "30M"
+                total_minutes = float(eta_str.replace("M", "").strip())
+            
+            return (1, total_minutes, flight_str)
+        except (ValueError, IndexError):
+            return (2, 0, flight_str)
+    
+    # Handle absolute time formats like "13:04"
+    if ":" in eta_str:
+        try:
+            # Parse HH:MM format
+            parts = eta_str.split(":")
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            total_minutes = hours * 60 + minutes
+            return (2, total_minutes, flight_str)
+        except ValueError:
+            return (2, 0, flight_str)
+    
+    # Default: treat as lowest priority
+    return (3, 0, flight_str)
+
+class TableManager:
+    """Manages table population and updates with split-flap animations"""
+    
+    def __init__(self, table: SplitFlapDataTable, config: TableConfig, row_keys: list):
+        self.table = table
+        self.config = config
+        self.row_keys = row_keys
+        self.is_first_load = True
+    
+    def setup_columns(self) -> None:
+        """Set up table columns if they don't exist"""
+        if not self.table.columns:
+            for col_config in self.config.columns:
+                self.table.add_column(
+                    col_config.name,
+                    flap_chars=col_config.flap_chars,
+                    content_align=col_config.content_align
+                )
+    
+    def populate(self, data: list) -> None:
+        """Populate table with data, applying sorting and animations"""
+        # Apply sorting if configured
+        if self.config.sort_function:
+            data = sorted(data, key=self.config.sort_function)
+        
+        # Set up columns
+        self.setup_columns()
+        column_keys = list(self.table.columns.keys())
+        
+        if self.is_first_load:
+            # First load: clear table and animate from blank
+            self.table.clear()
+            self.row_keys.clear()
+            
+            for row_data in data:
+                # Add row with blank values, then animate to actual values
+                blank_row = tuple(" " * len(str(cell)) for cell in row_data)
+                row_key = self.table.add_row(*blank_row)
+                self.row_keys.append(row_key)
+                
+                # Animate each cell to its target value
+                for col_idx, cell_value in enumerate(row_data):
+                    col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
+                    update_width = col_config.update_width if col_config else False
+                    self.table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
+            
+            self.is_first_load = False
+        else:
+            # Subsequent updates: efficiently update existing rows
+            self._update_efficiently(data, column_keys)
+    
+    def _update_efficiently(self, new_data: list, column_keys: list) -> None:
+        """Efficiently update table by modifying existing rows and adding/removing as needed"""
+        current_row_count = len(self.row_keys)
+        new_row_count = len(new_data)
+        
+        # Update existing rows
+        for i in range(min(current_row_count, new_row_count)):
+            row_data = new_data[i]
+            if i < len(self.row_keys):
+                for col_idx, cell_value in enumerate(row_data):
+                    if col_idx < len(column_keys):
+                        col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
+                        update_width = col_config.update_width if col_config else False
+                        self.table.update_cell_animated(self.row_keys[i], column_keys[col_idx], cell_value, update_width=update_width)
+        
+        # Add new rows if needed
+        if new_row_count > current_row_count:
+            for i in range(current_row_count, new_row_count):
+                row_data = new_data[i]
+                blank_row = tuple(" " * len(str(cell)) for cell in row_data)
+                row_key = self.table.add_row(*blank_row)
+                self.row_keys.append(row_key)
+                
+                for col_idx, cell_value in enumerate(row_data):
+                    if col_idx < len(column_keys):
+                        col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
+                        update_width = col_config.update_width if col_config else False
+                        self.table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
+        
+        # Remove extra rows if needed
+        elif new_row_count < current_row_count:
+            for i in range(new_row_count, current_row_count):
+                if i < len(self.row_keys):
+                    self.table.remove_row(self.row_keys[i])
+
+# Table configuration constants
+DEPARTURES_TABLE_CONFIG = TableConfig(
+    columns=[
+        ColumnConfig("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS),
+        ColumnConfig("DEST", flap_chars=ICAO_FLAP_CHARS),
+        ColumnConfig("NAME", update_width=True),
+    ],
+    sort_function=lambda x: str(x[0])  # Sort by callsign
+)
+
+ARRIVALS_TABLE_CONFIG = TableConfig(
+    columns=[
+        ColumnConfig("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS),
+        ColumnConfig("ORIG", flap_chars=ICAO_FLAP_CHARS),
+        ColumnConfig("NAME", update_width=True),
+        ColumnConfig("ETA", flap_chars=ETA_FLAP_CHARS, content_align="right"),
+        ColumnConfig("ETA (LT)", flap_chars=ETA_FLAP_CHARS, content_align="right"),
+    ],
+    sort_function=eta_sort_key
+)
+
+def create_airports_table_config(max_eta: float) -> TableConfig:
+    """Create airport table configuration based on max_eta setting"""
+    arr_suffix = f"(<{max_eta:,.1g}h)" if max_eta != 0 else "(all)"
+    
+    columns = [
+        ColumnConfig("ICAO", flap_chars=ICAO_FLAP_CHARS),
+        ColumnConfig("NAME", update_width=True),
+        ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
+        ColumnConfig("DEP    ", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
+        ColumnConfig(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
+    ]
+    
+    # Add ARR (all) column when max_eta_hours is specified
+    if max_eta != 0:
+        columns.append(ColumnConfig("ARR (all)", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"))
+    
+    columns.extend([
+        ColumnConfig("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right"),
+        ColumnConfig("STAFFED", flap_chars=POSITION_FLAP_CHARS, update_width=True),
+    ])
+    
+    return TableConfig(columns=columns)
+
+def create_groupings_table_config(max_eta: float) -> TableConfig:
+    """Create groupings table configuration based on max_eta setting"""
+    arr_suffix = f"(<{max_eta:,.1g}h)" if max_eta != 0 else "(all)"
+    
+    return TableConfig(
+        columns=[
+            ColumnConfig("GROUPING"),
+            ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS),
+            ColumnConfig("DEPARTING", flap_chars=NUMERIC_FLAP_CHARS),
+            ColumnConfig(f"ARRIVING {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS),
+            ColumnConfig("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right"),
+        ]
+    )
+
 
 class FlightBoardScreen(ModalScreen):
     """Modal screen showing departure and arrivals board for an airport or grouping"""
@@ -107,8 +321,10 @@ class FlightBoardScreen(ModalScreen):
         self.refresh_interval = refresh_interval
         self.departures_row_keys = []
         self.arrivals_row_keys = []
-        self.is_first_load = True
         self.enable_animations = enable_animations
+        # TableManagers will be initialized after tables are created
+        self.departures_manager = None
+        self.arrivals_manager = None
     
     def compose(self) -> ComposeResult:
         # Determine the window title based on whether we have a disambiguator
@@ -175,185 +391,30 @@ class FlightBoardScreen(ModalScreen):
 
     def populate_tables(self) -> None:
         """Populate the departure and arrivals tables with separate ICAO and NAME columns."""
-        # Sort arrivals by ETA before displaying
-        def eta_sort_key(arrival_row):
-            """Sort key for arrivals: LANDED at top, then by ETA (soonest first), then by flight callsign for stability"""
-            flight, origin_tuple, eta, eta_local = arrival_row
-            eta_str = str(eta).upper()
-            flight_str = str(flight)
-            
-            # Put LANDED flights at the top
-            if "LANDED" in eta_str:
-                return (0, 0, flight_str)
-            
-            # Handle relative time formats with hours and/or minutes like "1H", "1H30M", "2H", "45M", "<1M"
-            if "H" in eta_str or "M" in eta_str:
-                try:
-                    total_minutes = 0
-                    
-                    # Check if it starts with '<' for "less than" times
-                    if eta_str.startswith("<"):
-                        # <1M means less than 1 minute, treat as 0.5 minutes for sorting
-                        minutes_str = eta_str.replace("<", "").replace("M", "").strip()
-                        total_minutes = float(minutes_str) - 0.5  # Subtract 0.5 to sort before the actual minute
-                    elif "H" in eta_str and "M" in eta_str:
-                        # Format like "1H30M" or "2H15M"
-                        parts = eta_str.replace("H", " ").replace("M", "").split()
-                        hours = int(parts[0])
-                        minutes = int(parts[1])
-                        total_minutes = hours * 60 + minutes
-                    elif "H" in eta_str:
-                        # Format like "1H" or "2H"
-                        hours = int(eta_str.replace("H", "").strip())
-                        total_minutes = hours * 60
-                    elif "M" in eta_str:
-                        # Format like "45M" or "30M"
-                        total_minutes = float(eta_str.replace("M", "").strip())
-                    
-                    return (1, total_minutes, flight_str)
-                except (ValueError, IndexError):
-                    return (2, 0, flight_str)
-            
-            # Handle absolute time formats like "13:04"
-            if ":" in eta_str:
-                try:
-                    # Parse HH:MM format
-                    parts = eta_str.split(":")
-                    hours = int(parts[0])
-                    minutes = int(parts[1])
-                    total_minutes = hours * 60 + minutes
-                    return (2, total_minutes, flight_str)
-                except ValueError:
-                    return (2, 0, flight_str)
-            
-            # Default: treat as lowest priority
-            return (3, 0, flight_str)
+        # Initialize TableManagers if not already done
+        if self.departures_manager is None:
+            departures_table = self.query_one("#departures-table", SplitFlapDataTable)
+            self.departures_manager = TableManager(departures_table, DEPARTURES_TABLE_CONFIG, self.departures_row_keys)
         
-        # Sort the arrivals data (Python's sort is stable by default)
-        self.arrivals_data = sorted(self.arrivals_data, key=eta_sort_key)
+        if self.arrivals_manager is None:
+            arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
+            self.arrivals_manager = TableManager(arrivals_table, ARRIVALS_TABLE_CONFIG, self.arrivals_row_keys)
         
-        # Sort departures by callsign alphabetically
-        self.departures_data = sorted(self.departures_data, key=lambda x: str(x[0]))
+        # Transform departures data: (flight, destination_tuple) -> (flight, dest_icao, dest_name)
+        departures_formatted = [
+            (flight, destination_tuple[1], destination_tuple[0])
+            for flight, destination_tuple in self.departures_data
+        ]
         
-        # Set up departures table
-        departures_table = self.query_one("#departures-table", SplitFlapDataTable)
-        if not departures_table.columns: # Only add columns if they don't exist
-            departures_table.add_column("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS)
-            departures_table.add_column("DEST", flap_chars=ICAO_FLAP_CHARS)
-            departures_table.add_column("NAME")
+        # Transform arrivals data: (flight, origin_tuple, eta, eta_local) -> (flight, origin_icao, origin_name, eta, eta_local)
+        arrivals_formatted = [
+            (flight, origin_tuple[1], origin_tuple[0], eta, eta_local)
+            for flight, origin_tuple, eta, eta_local in self.arrivals_data
+        ]
         
-        column_keys_dep = list(departures_table.columns.keys())
-        
-        # For first load, create rows with blank values and animate
-        if self.is_first_load:
-            departures_table.clear()
-            self.departures_row_keys.clear()
-            for flight, destination_tuple in self.departures_data:
-                dest_name = destination_tuple[0]
-                dest_icao = destination_tuple[1]
-                # Add row with blank values, then animate to actual values
-                row_key = departures_table.add_row(" " * 7, " " * 4, " " * len(str(dest_name)))
-                self.departures_row_keys.append(row_key)
-                departures_table.update_cell_animated(row_key, column_keys_dep[0], flight)
-                departures_table.update_cell_animated(row_key, column_keys_dep[1], dest_icao)
-                departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name, update_width=True)
-        else:
-            # For subsequent updates, efficiently update existing rows
-            current_row_count = len(self.departures_row_keys)
-            new_row_count = len(self.departures_data)
-            
-            # Update existing rows
-            for i in range(min(current_row_count, new_row_count)):
-                flight, destination_tuple = self.departures_data[i]
-                dest_name = destination_tuple[0]
-                dest_icao = destination_tuple[1]
-                if i < len(self.departures_row_keys):
-                    departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[0], flight)
-                    departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[1], dest_icao)
-                    departures_table.update_cell_animated(self.departures_row_keys[i], column_keys_dep[2], dest_name, update_width=True)
-            
-            # Add new rows if needed
-            if new_row_count > current_row_count:
-                for i in range(current_row_count, new_row_count):
-                    flight, destination_tuple = self.departures_data[i]
-                    dest_name = destination_tuple[0]
-                    dest_icao = destination_tuple[1]
-                    row_key = departures_table.add_row(" " * 7, " " * 4, " " * len(str(dest_name)))
-                    self.departures_row_keys.append(row_key)
-                    departures_table.update_cell_animated(row_key, column_keys_dep[0], flight)
-                    departures_table.update_cell_animated(row_key, column_keys_dep[1], dest_icao)
-                    departures_table.update_cell_animated(row_key, column_keys_dep[2], dest_name, update_width=True)
-            # Remove extra rows if needed
-            elif new_row_count < current_row_count:
-                for i in range(new_row_count, current_row_count):
-                    if i < len(self.departures_row_keys):
-                        # Clear the row at this index (it stays in table as empty)
-                        departures_table.remove_row(self.departures_row_keys[i])
-        
-        # Set up arrivals table
-        arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
-        if not arrivals_table.columns: # Only add columns if they don't exist
-            arrivals_table.add_column("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS)
-            arrivals_table.add_column("ORIG", flap_chars=ICAO_FLAP_CHARS)
-            arrivals_table.add_column("NAME")
-            arrivals_table.add_column("ETA", flap_chars=ETA_FLAP_CHARS, content_align="right")
-            arrivals_table.add_column("ETA (LT)", flap_chars=ETA_FLAP_CHARS, content_align="right")
-        
-        column_keys_arr = list(arrivals_table.columns.keys())
-        
-        # For first load, create rows with blank values and animate
-        if self.is_first_load:
-            arrivals_table.clear()
-            self.arrivals_row_keys.clear()
-            for flight, origin_tuple, eta, eta_local in self.arrivals_data:
-                origin_name = origin_tuple[0]
-                origin_icao = origin_tuple[1]
-                # Add row with blank values, then animate to actual values
-                row_key = arrivals_table.add_row(" " * 7, " " * 4, " " * len(str(origin_name)), " " * 6, " " * 5)
-                self.arrivals_row_keys.append(row_key)
-                arrivals_table.update_cell_animated(row_key, column_keys_arr[0], flight)
-                arrivals_table.update_cell_animated(row_key, column_keys_arr[1], origin_icao)
-                arrivals_table.update_cell_animated(row_key, column_keys_arr[2], origin_name, update_width=True)
-                arrivals_table.update_cell_animated(row_key, column_keys_arr[3], eta)
-                arrivals_table.update_cell_animated(row_key, column_keys_arr[4], eta_local)
-            
-            self.is_first_load = False
-        else:
-            # For subsequent updates, efficiently update existing rows
-            current_row_count = len(self.arrivals_row_keys)
-            new_row_count = len(self.arrivals_data)
-            
-            # Update existing rows
-            for i in range(min(current_row_count, new_row_count)):
-                flight, origin_tuple, eta, eta_local = self.arrivals_data[i]
-                origin_name = origin_tuple[0]
-                origin_icao = origin_tuple[1]
-                if i < len(self.arrivals_row_keys):
-                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[0], flight)
-                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[1], origin_icao)
-                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[2], origin_name, update_width=True)
-                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[3], eta)
-                    arrivals_table.update_cell_animated(self.arrivals_row_keys[i], column_keys_arr[4], eta_local)
-            
-            # Add new rows if needed
-            if new_row_count > current_row_count:
-                for i in range(current_row_count, new_row_count):
-                    flight, origin_tuple, eta, eta_local = self.arrivals_data[i]
-                    origin_name = origin_tuple[0]
-                    origin_icao = origin_tuple[1]
-                    row_key = arrivals_table.add_row(" " * 7, " " * 4, " " * len(str(origin_name)), " " * 6, " " * 5)
-                    self.arrivals_row_keys.append(row_key)
-                    arrivals_table.update_cell_animated(row_key, column_keys_arr[0], flight)
-                    arrivals_table.update_cell_animated(row_key, column_keys_arr[1], origin_icao)
-                    arrivals_table.update_cell_animated(row_key, column_keys_arr[2], origin_name, update_width=True)
-                    arrivals_table.update_cell_animated(row_key, column_keys_arr[3], eta)
-                    arrivals_table.update_cell_animated(row_key, column_keys_arr[4], eta_local)
-            # Remove extra rows if needed
-            elif new_row_count < current_row_count:
-                for i in range(new_row_count, current_row_count):
-                    if i < len(self.arrivals_row_keys):
-                        # Clear the row at this index (it stays in table as empty)
-                        arrivals_table.remove_row(self.arrivals_row_keys[i])
+        # Populate tables using TableManagers
+        self.departures_manager.populate(departures_formatted)
+        self.arrivals_manager.populate(arrivals_formatted)
     
     def action_close_board(self) -> None:
         """Close the modal"""
@@ -468,6 +529,9 @@ class VATSIMControlApp(App):
         self.initial_setup_complete = False  # Prevent timer resets during initial setup
         self.flight_board_open = False # Is a flight board currently open?
         self.active_flight_board = None  # Reference to the active flight board screen
+        # TableManagers will be initialized after tables are created
+        self.airports_manager = None
+        self.groupings_manager = None
         
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -515,128 +579,39 @@ class VATSIMControlApp(App):
         self.watch_for_user_activity = False  # Temporarily disable user activity tracking
 
         max_eta = self.args.max_eta_hours if self.args else 1.0
-        arr_suffix = f"(<{max_eta:,.1g}h)" if max_eta != 0 else "(all)"
-
-        # Set up airports table
+        
+        # Initialize or recreate TableManagers with current configuration
         airports_table = self.query_one("#airports-table", SplitFlapDataTable)
+        groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
         
         # DIAGNOSTIC LOG
         debug_log(f"populate_tables BEFORE clear - airports_table.row_count={airports_table.row_count}, len(airports_row_keys)={len(self.airports_row_keys)}")
         
+        # Clear tables and recreate managers (needed when columns change, e.g., on first load)
         airports_table.clear(columns=True)
-        self.airports_row_keys.clear()  # Clear stale row keys when clearing table
-        airports_table.add_column("ICAO", flap_chars=ICAO_FLAP_CHARS)
-        airports_table.add_column("NAME")
-        airports_table.add_column("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right")
-        airports_table.add_column("DEP    ", flap_chars=NUMERIC_FLAP_CHARS, content_align="right")
-        airports_table.add_column(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right")
-        # Add ARR (all) column when max_eta_hours is specified
-        if max_eta != 0:
-            airports_table.add_column("ARR (all)", flap_chars=NUMERIC_FLAP_CHARS, content_align="right")
-        airports_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right")
-        airports_table.add_column("STAFFED", flap_chars=POSITION_FLAP_CHARS)
-
-        column_keys = list(airports_table.columns.keys())
-        for row_data in self.airport_data:
-            # Add row with blank values, then animate to actual values
-            blank_row = tuple(" " * len(str(cell)) for cell in row_data)
-            row_key = airports_table.add_row(*blank_row)
-            self.airports_row_keys.append(row_key)
-            # Animate each cell to its target value
-            for col_idx, cell_value in enumerate(row_data):
-                # Use update_width=True for NAME (col 1) and STAFFED (last column) to handle variable-length content
-                update_width = col_idx == 1 or col_idx == len(row_data) - 1
-                airports_table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
+        self.airports_row_keys.clear()
+        
+        groupings_table.clear(columns=True)
+        self.groupings_row_keys.clear()
+        
+        # Create fresh TableManagers with current config
+        airports_config = create_airports_table_config(max_eta)
+        self.airports_manager = TableManager(airports_table, airports_config, self.airports_row_keys)
+        
+        groupings_config = create_groupings_table_config(max_eta)
+        self.groupings_manager = TableManager(groupings_table, groupings_config, self.groupings_row_keys)
+        
+        # Populate tables using TableManagers
+        self.airports_manager.populate(self.airport_data)
+        
+        if self.groupings_data:
+            self.groupings_manager.populate(self.groupings_data)
         
         # DIAGNOSTIC LOG
         debug_log(f"populate_tables AFTER populate - airports_table.row_count={airports_table.row_count}, len(airports_row_keys)={len(self.airports_row_keys)}")
-        
-        # Set up groupings table
-        groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
-        
-        # DIAGNOSTIC LOG
-        debug_log(f"populate_tables BEFORE clear - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
-        
-        groupings_table.clear(columns=True)
-        self.groupings_row_keys.clear()  # Clear stale row keys when clearing table
-        groupings_table.add_column("GROUPING")
-        groupings_table.add_column("TOTAL", flap_chars=NUMERIC_FLAP_CHARS)
-        groupings_table.add_column("DEPARTING", flap_chars=NUMERIC_FLAP_CHARS)
-        groupings_table.add_column(f"ARRIVING {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS)
-        groupings_table.add_column("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right")
-        
-        if self.groupings_data:
-            column_keys = list(groupings_table.columns.keys())
-            for row_data in self.groupings_data:
-                # Add row with blank values, then animate to actual values
-                blank_row = tuple(" " * len(str(cell)) for cell in row_data)
-                row_key = groupings_table.add_row(*blank_row)
-                self.groupings_row_keys.append(row_key)
-                # Animate each cell to its target value
-                for col_idx, cell_value in enumerate(row_data):
-                    groupings_table.update_cell_animated(row_key, column_keys[col_idx], cell_value)
-        
-        # DIAGNOSTIC LOG
         debug_log(f"populate_tables AFTER populate - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
                 
         self.watch_for_user_activity = True  # Re-enable user activity tracking
-    
-    def update_table_efficiently(self, table: SplitFlapDataTable, row_keys: list, new_data: list) -> None:
-        """
-        Efficiently update a table by updating cells in existing rows, then adding/removing rows as needed.
-        This is much faster than clearing and rebuilding the entire table.
-        Uses animated cell updates for smooth transitions.
-        
-        Args:
-            table: The SplitFlapDataTable widget to update
-            row_keys: List of row keys for tracking table rows
-            new_data: The new data (list of tuples)
-        """
-        current_row_count = table.row_count
-        new_row_count = len(new_data)
-        
-        # DIAGNOSTIC LOG
-        debug_log(f"update_table_efficiently current_row_count={current_row_count}, new_row_count={new_row_count}, len(row_keys)={len(row_keys)}")
-        debug_log(f"update_table_efficiently table.columns={list(table.columns.keys())}")
-        debug_log(f"update_table_efficiently table row_keys in table: {[key in table.rows for key in row_keys[:5]]}")
-        
-        # Get column keys list once
-        column_keys = list(table.columns.keys())
-        
-        # Update existing rows in place (up to the minimum of current and new row counts)
-        rows_to_update = min(current_row_count, new_row_count, len(row_keys))
-        debug_log(f"update_table_efficiently rows_to_update={rows_to_update}")
-        
-        for row_index in range(rows_to_update):
-            new_row_data = new_data[row_index]
-            # Update each cell in the row
-            for col_index, col_key in enumerate(column_keys):
-                if col_index < len(new_row_data):
-                    debug_log(f"update_table_efficiently Updating row {row_index}, col {col_index}: row_key={row_keys[row_index]}, col_key={col_key}, value={new_row_data[col_index]}")
-                    # Use update_width=True for NAME (col 1) and STAFFED (last column) to handle variable-length content
-                    update_width = col_index == 1 or col_index == len(new_row_data) - 1
-                    table.update_cell_animated(row_keys[row_index], col_key, new_row_data[col_index], update_width=update_width)
-        
-        # If we have more new data than current rows, add the additional rows with animation
-        if new_row_count > current_row_count:
-            for row_index in range(current_row_count, new_row_count):
-                row_data = new_data[row_index]
-                # Add row with blank values first
-                blank_row = tuple(" " * len(str(cell)) for cell in row_data)
-                row_key = table.add_row(*blank_row)
-                row_keys.append(row_key)
-                # Then animate each cell to its target value
-                for col_index, col_key in enumerate(column_keys):
-                    if col_index < len(row_data):
-                        # Use update_width=True for NAME (col 1) and STAFFED (last column) to handle variable-length content
-                        update_width = col_index == 1 or col_index == len(row_data) - 1
-                        table.update_cell_animated(row_key, col_key, row_data[col_index], update_width=update_width)
-        # If we have fewer new data than current rows, remove the extra rows from the end
-        elif new_row_count < current_row_count:
-            for i in range(new_row_count, current_row_count):
-                if i < len(row_keys):
-                    # Clear the row at this index (it stays in table as empty)
-                    table.remove_row(row_keys[i])
     
     async def action_quit(self) -> None:
         """Quit the application."""
@@ -817,10 +792,6 @@ class VATSIMControlApp(App):
             self.groupings_data = groupings_data or []
             self.total_flights = total_flights or 0
             
-            # Efficiently update tables instead of rebuilding
-            airports_table = self.query_one("#airports-table", SplitFlapDataTable)
-            groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
-            
             # If search is active, reapply the filter to the new data before updating table
             if self.search_active:
                 search_input = self.query_one("#search-input", Input)
@@ -838,50 +809,14 @@ class VATSIMControlApp(App):
                 else:
                     self.airport_data = self.original_airport_data
             
-            # Update airports table efficiently
-            if old_airport_data and len(old_airport_data) > 0:
-                self.update_table_efficiently(airports_table, self.airports_row_keys, self.airport_data)
-            else:
-                # First time or empty, populate with animation
-                airports_table.clear()
-                self.airports_row_keys.clear()  # Clear stale row keys when clearing table
-                column_keys = list(airports_table.columns.keys())
-                for row_data in self.airport_data:
-                    # Add row with blank values, then animate to actual values
-                    blank_row = tuple(" " * len(str(cell)) for cell in row_data)
-                    row_key = airports_table.add_row(*blank_row)
-                    self.airports_row_keys.append(row_key)
-                    # Animate each cell to its target value
-                    for col_idx, cell_value in enumerate(row_data):
-                        # Use update_width=True for NAME (col 1) and STAFFED (last column) to handle variable-length content
-                        update_width = col_idx == 1 or col_idx == len(row_data) - 1
-                        airports_table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
-                
-            # Update groupings table efficiently
-            if self.groupings_data and len(self.groupings_data) > 0:
-                if old_groupings_data and len(old_groupings_data) > 0:
-                    # DIAGNOSTIC LOG
-                    debug_log(f"refresh_worker BEFORE efficient update - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}, len(groupings_data)={len(self.groupings_data)}")
-                    
-                    self.update_table_efficiently(groupings_table, self.groupings_row_keys, self.groupings_data)
-                else:
-                    # DIAGNOSTIC LOG
-                    debug_log(f"refresh_worker BEFORE rebuild - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
-                    
-                    groupings_table.clear()
-                    self.groupings_row_keys.clear()  # Clear stale row keys when clearing table
-                    column_keys = list(groupings_table.columns.keys())
-                    for row_data in self.groupings_data:
-                        # Add row with blank values, then animate to actual values
-                        blank_row = tuple(" " * len(str(cell)) for cell in row_data)
-                        row_key = groupings_table.add_row(*blank_row)
-                        self.groupings_row_keys.append(row_key)
-                        # Animate each cell to its target value
-                        for col_idx, cell_value in enumerate(row_data):
-                            groupings_table.update_cell_animated(row_key, column_keys[col_idx], cell_value)
-                    
-                    # DIAGNOSTIC LOG
-                    debug_log(f"refresh_worker AFTER rebuild - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
+            # Update tables using TableManagers
+            if self.airports_manager:
+                debug_log(f"refresh_worker: Updating airports table with {len(self.airport_data)} rows")
+                self.airports_manager.populate(self.airport_data)
+            
+            if self.groupings_manager and self.groupings_data:
+                debug_log(f"refresh_worker: Updating groupings table with {len(self.groupings_data)} rows")
+                self.groupings_manager.populate(self.groupings_data)
             
             # Restore cursor position and scroll offset
             if current_tab == "airports":
