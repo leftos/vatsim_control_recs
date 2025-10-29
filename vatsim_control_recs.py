@@ -13,6 +13,9 @@ CONTROL_POSITION_ORDER = ["TWR", "GND", "DEL"] # ATIS is handled specially in di
 # VATSIM data endpoint
 VATSIM_DATA_URL = "https://data.vatsim.net/v3/vatsim-data.json"
 
+# Cache for aircraft approach speeds
+_AIRCRAFT_APPROACH_SPEEDS = None
+
 def haversine_distance_nm(lat1, lon1, lat2, lon2):
     """
     Calculate the great circle distance between two points
@@ -62,6 +65,45 @@ def load_airport_data(filename):
     except FileNotFoundError:
         print(f"Error: Airport data file '{filename}' not found.")
     return airports
+
+def load_aircraft_approach_speeds(filename):
+    """
+    Load aircraft approach speeds from CSV file.
+    Returns a dictionary mapping ICAO aircraft codes to approach speeds (in knots).
+    Uses caching to avoid reloading on every call.
+    """
+    global _AIRCRAFT_APPROACH_SPEEDS
+    
+    if _AIRCRAFT_APPROACH_SPEEDS is not None:
+        return _AIRCRAFT_APPROACH_SPEEDS
+    
+    approach_speeds = {}
+    try:
+        with open(filename, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                icao_code = row.get('ICAO_Code', '').strip()
+                approach_speed_str = row.get('Approach_Speed_knot', '').strip()
+                
+                # Only add entries with valid ICAO codes and approach speeds
+                if icao_code and approach_speed_str and approach_speed_str != 'N/A':
+                    try:
+                        approach_speed = int(approach_speed_str)
+                        approach_speeds[icao_code] = approach_speed
+                    except ValueError:
+                        # Skip entries with invalid approach speed values
+                        continue
+        
+        _AIRCRAFT_APPROACH_SPEEDS = approach_speeds
+        return approach_speeds
+    except FileNotFoundError:
+        print(f"Warning: Aircraft data file '{filename}' not found. ETA calculations will not use approach speeds.")
+        _AIRCRAFT_APPROACH_SPEEDS = {}
+        return {}
+    except Exception as e:
+        print(f"Warning: Error loading aircraft data from '{filename}': {e}. ETA calculations will not use approach speeds.")
+        _AIRCRAFT_APPROACH_SPEEDS = {}
+        return {}
 
 def load_custom_groupings(filename):
     """Load custom airport groupings from JSON file"""
@@ -202,7 +244,8 @@ def filter_flights_by_airports(data, airports, airport_allowlist=None):
                         'latitude': flight.get('latitude'),
                         'longitude': flight.get('longitude'),
                         'groundspeed': flight.get('groundspeed'),
-                        'altitude': flight.get('altitude')
+                        'altitude': flight.get('altitude'),
+                        'flight_plan': flight.get('flight_plan')
                     })
             elif departure and arrival and departure in airports and arrival in airports:
                 filtered_flights.append({
@@ -212,7 +255,8 @@ def filter_flights_by_airports(data, airports, airport_allowlist=None):
                     'latitude': flight.get('latitude'),
                     'longitude': flight.get('longitude'),
                     'groundspeed': flight.get('groundspeed'),
-                    'altitude': flight.get('altitude')
+                    'altitude': flight.get('altitude'),
+                    'flight_plan': flight.get('flight_plan')
                 })
         # For flights without valid flight plans, we'll still include them for ground analysis
         # but with None for departure/arrival
@@ -224,7 +268,8 @@ def filter_flights_by_airports(data, airports, airport_allowlist=None):
                 'latitude': flight.get('latitude'),
                 'longitude': flight.get('longitude'),
                 'groundspeed': flight.get('groundspeed'),
-                'altitude': flight.get('altitude')
+                'altitude': flight.get('altitude'),
+                'flight_plan': flight.get('flight_plan')
             })
     
     return filtered_flights
@@ -401,6 +446,9 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     # Extract staffed positions
     staffed_positions = get_staffed_positions(data, all_airports_data)
 
+    # Load aircraft approach speeds
+    aircraft_approach_speeds = load_aircraft_approach_speeds(os.path.join(script_dir, 'aircraft_data.csv'))
+
     # Filter flights
     flights = filter_flights_by_airports(data, airports, airport_allowlist)
     
@@ -415,7 +463,7 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     for flight in flights:
         # First, calculate the true earliest ETA for all in-flight arrivals
         if flight['arrival'] in airports and flight.get('groundspeed', 0) > 40:
-            _, _, eta_hours = _calculate_eta(flight, airports)
+            _, _, eta_hours = _calculate_eta(flight, airports, aircraft_approach_speeds)
             if eta_hours < earliest_arrival_eta[flight['arrival']]:
                 earliest_arrival_eta[flight['arrival']] = eta_hours
 
@@ -511,8 +559,12 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
     
     return airport_data, grouped_data, len(flights)
 
-def _calculate_eta(flight, airports_data):
-    """Calculate ETA for a flight and return display strings."""
+def _calculate_eta(flight, airports_data, aircraft_approach_speeds=None):
+    """
+    Calculate ETA for a flight and return display strings.
+    Uses a two-phase calculation: current groundspeed for most of the journey,
+    then approach speed for the final 5 nautical miles.
+    """
     if flight['arrival'] in airports_data and flight.get('groundspeed', 0) > 40:
         arrival_airport = airports_data[flight['arrival']]
         distance = haversine_distance_nm(
@@ -521,7 +573,35 @@ def _calculate_eta(flight, airports_data):
             arrival_airport['latitude'],
             arrival_airport['longitude']
         )
-        eta_hours = distance / flight['groundspeed']
+        
+        # Default: use current groundspeed for entire distance
+        groundspeed = flight['groundspeed']
+        eta_hours = distance / groundspeed
+        
+        # If we have aircraft approach speeds, use more sophisticated calculation
+        if aircraft_approach_speeds:
+            # Extract aircraft type from flight plan
+            aircraft_type = None
+            if flight.get('flight_plan') and flight['flight_plan'].get('aircraft_short'):
+                aircraft_type = flight['flight_plan']['aircraft_short']
+            
+            # If we have approach speed for this aircraft type, use two-phase calculation
+            if aircraft_type and aircraft_type in aircraft_approach_speeds:
+                approach_speed = aircraft_approach_speeds[aircraft_type]
+                final_approach_distance = 5.0  # nautical miles
+                
+                if distance > final_approach_distance:
+                    # Two-phase: current speed for most of journey, approach speed for final 5 nm
+                    cruise_distance = distance - final_approach_distance
+                    cruise_time = cruise_distance / groundspeed
+                    approach_time = final_approach_distance / approach_speed
+                    eta_hours = cruise_time + approach_time
+                else:
+                    # Already within final approach distance, use minimum of current speed or approach speed
+                    # (aircraft may already be slower than approach speed)
+                    effective_speed = min(groundspeed, approach_speed)
+                    eta_hours = distance / effective_speed
+        
         eta_display = format_eta_display(eta_hours, 1, 0)
         
         current_time_utc = datetime.now(timezone.utc)
@@ -567,6 +647,9 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0, disambig
     data = download_vatsim_data()
     if not data:
         return [], []
+    
+    # Load aircraft approach speeds
+    aircraft_approach_speeds = load_aircraft_approach_speeds(os.path.join(script_dir, 'aircraft_data.csv'))
     
     # Filter flights - we need all flights that involve our airports
     flights = filter_flights_by_airports(data, all_airports_data, airport_icao_list)
@@ -621,14 +704,14 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0, disambig
             elif is_flight_flying_near_arrival(flight, all_airports_data, max_eta_hours=0):
                 if is_local_flight:
                     # Local flight in the air - show LOCAL for name and ---- for ICAO
-                    eta_display, eta_local_time, _ = _calculate_eta(flight, all_airports_data)
+                    eta_display, eta_local_time, _ = _calculate_eta(flight, all_airports_data, aircraft_approach_speeds)
                     # Add to list if it meets the original max_eta_hours criteria
                     if max_eta_hours == 0 or _ <= max_eta_hours:
                         arrivals_list.append((callsign, ("LOCAL", "----"), eta_display, eta_local_time))
                 else:
                     origin = flight['departure'] if flight['departure'] else "----"
                     pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
-                    eta_display, eta_local_time, _ = _calculate_eta(flight, all_airports_data)
+                    eta_display, eta_local_time, _ = _calculate_eta(flight, all_airports_data, aircraft_approach_speeds)
                     # Add to list if it meets the original max_eta_hours criteria
                     if max_eta_hours == 0 or _ <= max_eta_hours:
                         arrivals_list.append((callsign, (pretty_origin, origin), eta_display, eta_local_time))
