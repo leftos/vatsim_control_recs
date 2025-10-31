@@ -263,7 +263,7 @@ ARRIVALS_TABLE_CONFIG = TableConfig(
         ColumnConfig("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS),
         ColumnConfig("ORIG", flap_chars=ICAO_FLAP_CHARS),
         ColumnConfig("NAME", update_width=True),
-        ColumnConfig("ETA", flap_chars=ETA_FLAP_CHARS, content_align="right"),
+        ColumnConfig("ETA", flap_chars=ETA_FLAP_CHARS, content_align="right", update_width=True),
         ColumnConfig("ETA (LT)", flap_chars=ETA_FLAP_CHARS, content_align="right"),
     ],
     sort_function=eta_sort_key
