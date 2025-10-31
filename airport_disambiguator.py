@@ -47,7 +47,7 @@ class AirportDisambiguator:
         "Naval": "Navy",
     }
     
-    def __init__(self, airports_file_path, lazy_load=True):
+    def __init__(self, airports_file_path, lazy_load=True, unified_data=None):
         self.airports_file_path = airports_file_path
         self.lazy_load = lazy_load
         
@@ -64,12 +64,30 @@ class AirportDisambiguator:
         # Cache for processed entities to avoid reprocessing
         self._entity_cache = {}
         
-        # Load all airports data
-        try:
-            with open(self.airports_file_path, 'r', encoding='utf-8') as f:
-                self.airports_data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+        # Load airports data - prefer unified_data if provided
+        if unified_data:
+            # Convert unified data format to airports.json format for compatibility
             self.airports_data = {}
+            for code, info in unified_data.items():
+                self.airports_data[code] = {
+                    'icao': info.get('icao', code),
+                    'iata': info.get('iata', ''),
+                    'name': info.get('name', ''),
+                    'city': info.get('city', ''),
+                    'state': info.get('state', ''),
+                    'country': info.get('country', ''),
+                    'lat': info.get('latitude'),
+                    'lon': info.get('longitude'),
+                    'elevation': info.get('elevation'),
+                    'tz': info.get('tz', '')
+                }
+        else:
+            # Fallback to loading from file
+            try:
+                with open(self.airports_file_path, 'r', encoding='utf-8') as f:
+                    self.airports_data = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                self.airports_data = {}
         
         # Build location mapping
         self.location_to_airports = defaultdict(list)
@@ -780,30 +798,75 @@ class AirportDisambiguator:
 
 
 if __name__ == "__main__":
-    import sys
+    import argparse
+    import os
+    from airport_data_loader import load_unified_airport_data
     
-    if len(sys.argv) < 3:
-        print("Usage: python airport_disambiguator.py <airports.json> <ICAO1> [ICAO2] [ICAO3] ...")
-        print("\nExample: python airport_disambiguator.py airports.json KMER KBAB KNZY")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Test airport name disambiguation with provided ICAO codes.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python airport_disambiguator.py KMER KBAB KNZY
+  python airport_disambiguator.py --apt-base APT_BASE.csv --airports airports.json --iata-icao iata-icao.csv KSFO KLAX
+        """
+    )
     
-    airports_file = sys.argv[1]
-    icaos = sys.argv[2:]
+    parser.add_argument(
+        "icao_codes",
+        nargs="+",
+        help="One or more ICAO airport codes to disambiguate"
+    )
+    parser.add_argument(
+        "--apt-base",
+        default="APT_BASE.csv",
+        help="Path to APT_BASE.csv file (default: APT_BASE.csv)"
+    )
+    parser.add_argument(
+        "--airports",
+        default="airports.json",
+        help="Path to airports.json file (default: airports.json)"
+    )
+    parser.add_argument(
+        "--iata-icao",
+        default="iata-icao.csv",
+        help="Path to iata-icao.csv file (default: iata-icao.csv)"
+    )
+    
+    args = parser.parse_args()
     
     try:
-        disambiguator = AirportDisambiguator(airports_file)
+        # Load unified airport data from all three sources
+        print(f"Loading airport data from:")
+        print(f"  - {args.apt_base}")
+        print(f"  - {args.airports}")
+        print(f"  - {args.iata_icao}")
         
-        print(f"\nAirport Pretty Names from {airports_file}:")
+        unified_data = load_unified_airport_data(
+            args.apt_base,
+            args.airports,
+            args.iata_icao
+        )
+        
+        # Create disambiguator with unified data
+        disambiguator = AirportDisambiguator(
+            args.airports,
+            unified_data=unified_data
+        )
+        
+        print(f"\nAirport Pretty Names:")
         print("=" * 80)
         
-        for icao in icaos:
+        for icao in args.icao_codes:
             pretty_name = disambiguator.get_pretty_name(icao)
             print(f"{icao}: {pretty_name}")
         
         print()
-    except FileNotFoundError:
-        print(f"Error: File '{airports_file}' not found.")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        import sys
         sys.exit(1)
-    except json.JSONDecodeError:
-        print(f"Error: File '{airports_file}' is not valid JSON.")
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in file - {e}")
+        import sys
         sys.exit(1)

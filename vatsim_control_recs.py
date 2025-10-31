@@ -6,6 +6,7 @@ import os
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from airport_disambiguator import AirportDisambiguator # pyright: ignore[reportAttributeAccessIssue]
+from airport_data_loader import load_unified_airport_data
 
 # Define the preferred order for control positions
 CONTROL_POSITION_ORDER = ["APP", "DEP", "TWR", "GND", "DEL"] # ATIS is handled specially in display logic
@@ -15,6 +16,9 @@ VATSIM_DATA_URL = "https://data.vatsim.net/v3/vatsim-data.json"
 
 # Cache for aircraft approach speeds
 _AIRCRAFT_APPROACH_SPEEDS = None
+
+# Cache for ARTCC groupings (loaded once on startup)
+_ARTCC_GROUPINGS = None
 
 def haversine_distance_nm(lat1, lon1, lat2, lon2):
     """
@@ -48,23 +52,53 @@ def format_eta_display(eta_hours, arrivals_in_flight_count, arrivals_on_ground_c
         minutes = int((eta_hours - hours) * 60)
         return f"{hours}h{minutes:02d}m"
 
-def load_airport_data(filename):
-    """Load airport data from CSV file"""
+def load_airport_data(unified_data):
+    """
+    Convert unified airport data to the format expected by the rest of the application.
+    Returns a dict mapping ICAO codes to coordinate/country data.
+    """
     airports = {}
-    try:
-        with open(filename, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                icao = row['icao']
-                if icao:  # Only include airports with ICAO codes
-                    airports[icao] = {
-                        'latitude': float(row['latitude']),
-                        'longitude': float(row['longitude']),
-                        'country_code': row['country_code']
-                    }
-    except FileNotFoundError:
-        print(f"Error: Airport data file '{filename}' not found.")
+    for code, info in unified_data.items():
+        if info.get('latitude') is not None and info.get('longitude') is not None:
+            airports[code] = {
+                'latitude': info['latitude'],
+                'longitude': info['longitude'],
+                'country_code': info.get('country', '')
+            }
     return airports
+
+def load_artcc_groupings(unified_data):
+    """
+    Load ARTCC groupings from unified airport data.
+    Creates groupings like "ZOA All", "ZMP All", etc. containing all airports under each ARTCC.
+    Uses caching to avoid reloading on every call.
+    """
+    global _ARTCC_GROUPINGS
+    
+    if _ARTCC_GROUPINGS is not None:
+        return _ARTCC_GROUPINGS
+    
+    if not unified_data:
+        _ARTCC_GROUPINGS = {}
+        return {}
+    
+    # Group airports by ARTCC
+    artcc_airports = defaultdict(list)
+    
+    for airport_code, airport_info in unified_data.items():
+        artcc = airport_info.get('artcc', '').strip()
+        if artcc:
+            artcc_airports[artcc].append(airport_code)
+    
+    # Create groupings in the format "ARTCC All"
+    artcc_groupings = {}
+    for artcc, airports in artcc_airports.items():
+        grouping_name = f"{artcc} All"
+        artcc_groupings[grouping_name] = sorted(airports)  # Sort for consistency
+    
+    _ARTCC_GROUPINGS = artcc_groupings
+    #print(f"Created {len(artcc_groupings)} ARTCC groupings")
+    return artcc_groupings
 
 def load_aircraft_approach_speeds(filename):
     """
@@ -117,6 +151,26 @@ def load_custom_groupings(filename):
         print(f"Error: Could not decode JSON from '{filename}'. Check file format.")
         return None
 
+def load_all_groupings(custom_groupings_filename, unified_data):
+    """
+    Load and merge custom groupings and ARTCC groupings.
+    Custom groupings take precedence over ARTCC groupings if there's a name conflict.
+    Returns a merged dictionary of all groupings.
+    """
+    # Load ARTCC groupings first
+    artcc_groupings = load_artcc_groupings(unified_data)
+    
+    # Load custom groupings
+    custom_groupings = load_custom_groupings(custom_groupings_filename)
+    
+    # Merge them (custom groupings override ARTCC groupings if there's a conflict)
+    if custom_groupings:
+        all_groupings = {**artcc_groupings, **custom_groupings}
+    else:
+        all_groupings = artcc_groupings
+    
+    return all_groupings
+
 def download_vatsim_data():
     """Download VATSIM data from the API"""
     try:
@@ -131,7 +185,19 @@ def download_vatsim_data():
         return None
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-DISAMBIGUATOR = AirportDisambiguator(os.path.join(script_dir, 'airports.json'))
+
+# Load unified airport data on module import
+UNIFIED_AIRPORT_DATA = load_unified_airport_data(
+    os.path.join(script_dir, 'APT_BASE.csv'),
+    os.path.join(script_dir, 'airports.json'),
+    os.path.join(script_dir, 'iata-icao.csv')
+)
+
+# Create disambiguator with unified data
+DISAMBIGUATOR = AirportDisambiguator(
+    os.path.join(script_dir, 'airports.json'),
+    unified_data=UNIFIED_AIRPORT_DATA
+)
 
 def _get_valid_icao_from_callsign(icao_candidate, airports_data):
     """
@@ -363,14 +429,14 @@ def find_nearest_airport(flight, airports):
 
 def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_allowlist=None, supergroupings_allowlist=None, include_all_staffed=True):
     """Main function to analyze VATSIM flights and controller staffing - returns data structures"""
-    # Get the directory where this script is located
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Use pre-loaded unified airport data
+    all_airports_data = load_airport_data(UNIFIED_AIRPORT_DATA)
     
-    # Load airport data
-    all_airports_data = load_airport_data(os.path.join(script_dir, 'iata-icao.csv'))
-    
-    # Load all custom groupings
-    all_custom_groupings = load_custom_groupings(os.path.join(script_dir, 'custom_groupings.json'))
+    # Load all custom groupings and ARTCC groupings
+    all_custom_groupings = load_all_groupings(
+        os.path.join(script_dir, 'custom_groupings.json'),
+        UNIFIED_AIRPORT_DATA
+    )
     
     # Determine which groupings to display and which to use for filtering
     display_custom_groupings = {}
@@ -538,6 +604,7 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         for group_name, group_airports in display_custom_groupings.items():
             group_departing = sum(departure_counts.get(ap_icao, 0) for ap_icao in group_airports)
             group_arriving = sum(arrival_counts.get(ap_icao, 0) for ap_icao in group_airports)
+            group_arriving_all = sum(arrival_counts_all.get(ap_icao, 0) for ap_icao in group_airports)
             group_total = group_departing + group_arriving
             
             # Find the earliest ETA among all airports in this grouping
@@ -552,8 +619,12 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             
             group_eta_display = format_eta_display(group_earliest_eta, group_arrivals_in_flight, group_arrivals_on_ground)
             
+            # Collect staffed airports in this grouping
+            staffed_airports = [ap_icao for ap_icao in group_airports if ap_icao in staffed_positions and staffed_positions[ap_icao]]
+            staffed_display = ", ".join(staffed_airports) if staffed_airports else ""
+            
             if group_total > 0: # Only include groupings with activity
-                grouped_data.append((group_name, str(group_total), str(group_departing), str(group_arriving), group_eta_display))
+                grouped_data.append((group_name, str(group_total), str(group_departing), str(group_arriving), str(group_arriving_all), group_eta_display, staffed_display))
         
         grouped_data.sort(key=lambda x: int(x[1]), reverse=True)
     
@@ -628,11 +699,8 @@ def get_airport_flight_details(airport_icao_or_list, max_eta_hours=1.0, disambig
         - departures: (callsign, (destination_pretty_name, destination_icao))
         - arrivals: (callsign, (origin_pretty_name, origin_icao), eta_display, eta_local_time)
     """
-    # Get the directory where this script is located
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Load airport data
-    all_airports_data = load_airport_data(os.path.join(script_dir, 'iata-icao.csv'))
+    # Use pre-loaded unified airport data
+    all_airports_data = load_airport_data(UNIFIED_AIRPORT_DATA)
     
     # Normalize input to a list
     if isinstance(airport_icao_or_list, str):

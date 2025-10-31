@@ -11,7 +11,8 @@ from textual.screen import ModalScreen
 import os
 
 # Import backend functionality
-from vatsim_control_recs import analyze_flights_data, get_airport_flight_details, DISAMBIGUATOR # pyright: ignore[reportAttributeAccessIssue]
+from vatsim_control_recs import analyze_flights_data, get_airport_flight_details, DISAMBIGUATOR, UNIFIED_AIRPORT_DATA # pyright: ignore[reportAttributeAccessIssue]
+from airport_data_loader import load_unified_airport_data
 
 # Import custom split-flap datatable
 from split_flap_datatable import SplitFlapDataTable, TIME_FLAP_CHARS, NUMERIC_FLAP_CHARS
@@ -296,16 +297,24 @@ def create_groupings_table_config(max_eta: float) -> TableConfig:
     """Create groupings table configuration based on max_eta setting"""
     arr_suffix = f"(<{max_eta:,.1g}h)" if max_eta != 0 else "(all)"
     
-    return TableConfig(
-        columns=[
-            ColumnConfig("GROUPING"),
-            ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS),
-            ColumnConfig("DEPARTING", flap_chars=NUMERIC_FLAP_CHARS),
-            ColumnConfig(f"ARRIVING {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS),
-            ColumnConfig("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right"),
-        ]
-    )
+    columns=[
+        ColumnConfig("GROUPING", update_width=True),
+        ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
+        ColumnConfig("DEP    ", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
+        ColumnConfig(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
+    ]
 
+    # Add ARR (all) column when max_eta_hours is specified
+    if max_eta != 0:
+        columns.append(ColumnConfig("ARR (all)", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"))
+
+    columns.extend([
+        ColumnConfig("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right"),
+        ColumnConfig("STAFFED", flap_chars=POSITION_FLAP_CHARS, update_width=True),
+    ])
+                    
+    return TableConfig(columns=columns)
+    
 
 class FlightBoardScreen(ModalScreen):
     """Modal screen showing departure and arrivals board for an airport or grouping"""
@@ -1051,25 +1060,29 @@ class VATSIMControlApp(App):
                 grouping_name = self.groupings_data[groupings_table.cursor_row][0]
                 
                 # Get the list of airports in this grouping
-                # We need to load the custom groupings file again to get the airport list
-                import json
+                # Load all groupings (custom + ARTCC) to get the airport list
                 import os
+                import json
+                from vatsim_control_recs import load_all_groupings
+                
                 script_dir = os.path.dirname(os.path.abspath(__file__))
                 try:
-                    with open(os.path.join(script_dir, 'custom_groupings.json'), 'r', encoding='utf-8') as f:
-                        all_groupings = json.load(f)
-                        if grouping_name in all_groupings:
-                            airport_list = all_groupings[grouping_name]
-                            title = grouping_name
-                             
-                            # Open the flight board and store reference
-                            self.flight_board_open = True
-                            enable_anims = not self.args.disable_animations if self.args else True
-                            flight_board = FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR, enable_anims)
-                            self.active_flight_board = flight_board
-                            self.push_screen(flight_board)
-                except (FileNotFoundError, json.JSONDecodeError):
-                    pass
+                    all_groupings = load_all_groupings(
+                        os.path.join(script_dir, 'custom_groupings.json'),
+                        UNIFIED_AIRPORT_DATA
+                    )
+                    if grouping_name in all_groupings:
+                        airport_list = all_groupings[grouping_name]
+                        title = grouping_name
+                         
+                        # Open the flight board and store reference
+                        self.flight_board_open = True
+                        enable_anims = not self.args.disable_animations if self.args else True
+                        flight_board = FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, DISAMBIGUATOR, enable_anims)
+                        self.active_flight_board = flight_board
+                        self.push_screen(flight_board)
+                except Exception as e:
+                    print(f"Error loading groupings: {e}")
 
 
 def main():
