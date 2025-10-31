@@ -619,8 +619,8 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             
             group_eta_display = format_eta_display(group_earliest_eta, group_arrivals_in_flight, group_arrivals_on_ground)
             
-            # Collect staffed airports in this grouping
-            staffed_airports = [ap_icao for ap_icao in group_airports if ap_icao in staffed_positions and staffed_positions[ap_icao]]
+            # Collect staffed airports in this grouping (exclude airports with only ATIS)
+            staffed_airports = [ap_icao for ap_icao in group_airports if ap_icao in staffed_positions and any(pos != "ATIS" for pos in staffed_positions[ap_icao])]
             staffed_display = ", ".join(staffed_airports) if staffed_airports else ""
             
             if group_total > 0: # Only include groupings with activity
