@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from airport_disambiguator import AirportDisambiguator # pyright: ignore[reportAttributeAccessIssue]
 
 # Define the preferred order for control positions
-CONTROL_POSITION_ORDER = ["TWR", "GND", "DEL"] # ATIS is handled specially in display logic
+CONTROL_POSITION_ORDER = ["APP", "DEP", "TWR", "GND", "DEL"] # ATIS is handled specially in display logic
 
 # VATSIM data endpoint
 VATSIM_DATA_URL = "https://data.vatsim.net/v3/vatsim-data.json"
@@ -171,7 +171,7 @@ def get_staffed_positions(data, airports_data, excluded_frequency="199.998"):
             position_suffix = parts[-1]
 
             # Only consider non-ATIS positions for the 'controllers' array
-            allowed_positions = {"DEL", "GND", "TWR"}
+            allowed_positions = CONTROL_POSITION_ORDER.copy()
 
             if position_suffix in allowed_positions:
                 valid_icao = _get_valid_icao_from_callsign(icao_candidate_prefix, airports_data)
