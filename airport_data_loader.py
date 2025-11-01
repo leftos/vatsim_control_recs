@@ -72,7 +72,8 @@ def load_unified_airport_data(
                     'longitude': float(row['longitude']) if row.get('longitude') else None,
                     'elevation': int(row['elevation']) if row.get('elevation') else None,
                     'artcc': '',
-                    'tz': row.get('tz', '').strip()
+                    'tz': row.get('tz', '').strip(),
+                    'tower_type': ''  # Will be updated by APT_BASE if available
                 }
         #print(f"  Loaded {len(airports)} airports from iata-icao.csv")
     except FileNotFoundError:
@@ -120,7 +121,8 @@ def load_unified_airport_data(
                         'longitude': details.get('lon'),
                         'elevation': details.get('elevation'),
                         'artcc': '',
-                        'tz': safe_strip(details.get('tz'))
+                        'tz': safe_strip(details.get('tz')),
+                        'tower_type': ''  # Will be updated by APT_BASE if available
                     }
         #print(f"  Merged data from airports.json (now {len(airports)} airports)")
     except FileNotFoundError:
@@ -189,7 +191,8 @@ def load_unified_airport_data(
                     'longitude': None,
                     'elevation': None,
                     'artcc': '',
-                    'tz': ''
+                    'tz': '',
+                    'tower_type': ''
                 })
                 
                 # Update with APT_BASE data (highest priority)
@@ -204,6 +207,7 @@ def load_unified_airport_data(
                     'longitude': long_decimal if long_decimal is not None else airport_data.get('longitude'),
                     'elevation': elevation if elevation is not None else airport_data.get('elevation'),
                     'artcc': row.get('RESP_ARTCC_ID', '').strip(),
+                    'tower_type': row.get('TWR_TYPE_CODE', '').strip(),
                 })
                 
                 airports[primary_code] = airport_data

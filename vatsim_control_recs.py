@@ -564,8 +564,15 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         
         current_staffed_positions = staffed_positions.get(airport, [])
         staffed_pos_display = ""
-
-        if "ATIS" in current_staffed_positions and len(current_staffed_positions) == 1:
+        
+        # Check if airport has no tower (NON-ATCT)
+        airport_info = UNIFIED_AIRPORT_DATA.get(airport, {})
+        tower_type = airport_info.get('tower_type', '')
+        
+        if tower_type == 'NON-ATCT':
+            # For non-towered airports, show "N/A" instead of staffed positions
+            staffed_pos_display = "N/A"
+        elif "ATIS" in current_staffed_positions and len(current_staffed_positions) == 1:
             staffed_pos_display = "TOP-DOWN"
         elif current_staffed_positions:
             # Remove ATIS from display if other positions are present
@@ -582,7 +589,8 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         )
         
         # Include airport if it has flights, or if it's staffed and we want to include staffed zero-plane airports
-        if total_flights > 0 or (staffed_pos_display and include_all_staffed):
+        # Note: "N/A" doesn't count as staffing (it means the airport has no tower)
+        if total_flights > 0 or (staffed_pos_display and staffed_pos_display != "N/A" and include_all_staffed):
             # Get the pretty name for the airport
             pretty_name = DISAMBIGUATOR.get_pretty_name(airport) if DISAMBIGUATOR else airport
             # Pad numeric columns to consistent width (3 characters, right-aligned)
