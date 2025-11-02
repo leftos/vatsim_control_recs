@@ -9,9 +9,12 @@ from textual.events import Key
 from textual.timer import Timer
 from textual.screen import ModalScreen
 import os
+import json
+import urllib.request
+import urllib.error
 
 # Import backend functionality
-from vatsim_control_recs import analyze_flights_data, get_airport_flight_details, DISAMBIGUATOR, UNIFIED_AIRPORT_DATA # pyright: ignore[reportAttributeAccessIssue]
+from vatsim_control_recs import analyze_flights_data, get_airport_flight_details, get_wind_info, DISAMBIGUATOR, UNIFIED_AIRPORT_DATA # pyright: ignore[reportAttributeAccessIssue]
 from airport_data_loader import load_unified_airport_data
 
 # Import custom split-flap datatable
@@ -19,9 +22,10 @@ from split_flap_datatable import SplitFlapDataTable, TIME_FLAP_CHARS, NUMERIC_FL
 
 # Custom flap character sets for specific column types
 ETA_FLAP_CHARS = "9876543210hm:ADELN <-"  # For NEXT ETA columns: numbers in descending order for countdown effect, <, h, m, colon, LANDED letters, space, dash
-ICAO_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"  # For ICAO codes
+ICAO_FLAP_CHARS = "-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"  # For ICAO codes
 CALLSIGN_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- "  # For flight callsigns
 POSITION_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ- "  # For controller positions
+WIND_FLAP_CHARS = "0123456789@GCALM "  # For wind data: numbers for direction/speed/gusts, @, G for gusts, and "Calm" for zero wind
 
 # Set up debug logging to file
 DEBUG_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug.log")
@@ -277,6 +281,7 @@ def create_airports_table_config(max_eta: float) -> TableConfig:
     columns = [
         ColumnConfig("ICAO", flap_chars=ICAO_FLAP_CHARS),
         ColumnConfig("NAME", update_width=True),
+        ColumnConfig("WIND", flap_chars=WIND_FLAP_CHARS, update_width=True),
         ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
         ColumnConfig("DEP    ", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
         ColumnConfig(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
@@ -314,7 +319,93 @@ def create_groupings_table_config(max_eta: float) -> TableConfig:
     ])
                     
     return TableConfig(columns=columns)
+
+class WindInfoScreen(ModalScreen):
+    """Modal screen showing wind information for an airport"""
     
+    CSS = """
+    WindInfoScreen {
+        align: center middle;
+    }
+    
+    #wind-container {
+        width: 60;
+        height: auto;
+        background: $surface;
+        border: thick $primary;
+        padding: 1 2;
+    }
+    
+    #wind-title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    
+    #wind-input-container {
+        height: auto;
+        margin-bottom: 1;
+    }
+    
+    #wind-result {
+        text-align: center;
+        height: auto;
+        margin-top: 1;
+    }
+    
+    #wind-hint {
+        text-align: center;
+        color: $text-muted;
+        margin-top: 1;
+    }
+    """
+    
+    BINDINGS = [
+        Binding("escape", "close", "Close", priority=True),
+        Binding("enter", "fetch_wind", "Fetch Wind", priority=True),
+    ]
+    
+    def __init__(self):
+        super().__init__()
+        self.wind_result = ""
+    
+    def compose(self) -> ComposeResult:
+        with Container(id="wind-container"):
+            yield Static("Wind Information Lookup", id="wind-title")
+            with Container(id="wind-input-container"):
+                yield Input(placeholder="Enter airport ICAO code (e.g., KSFO)", id="wind-input")
+            yield Static("", id="wind-result")
+            yield Static("Press Enter to fetch, Escape to close", id="wind-hint")
+    
+    def on_mount(self) -> None:
+        """Focus the input when mounted"""
+        wind_input = self.query_one("#wind-input", Input)
+        wind_input.focus()
+    
+    def action_fetch_wind(self) -> None:
+        """Fetch wind information for the entered airport"""
+        wind_input = self.query_one("#wind-input", Input)
+        icao = wind_input.value.strip().upper()
+        
+        if not icao:
+            result_widget = self.query_one("#wind-result", Static)
+            result_widget.update("Please enter an airport ICAO code")
+            return
+        
+        # Fetch wind info (this uses the existing caching and fallback logic)
+        wind_info = get_wind_info(icao)
+        
+        result_widget = self.query_one("#wind-result", Static)
+        if wind_info:
+            # Get pretty name if available
+            pretty_name = DISAMBIGUATOR.get_pretty_name(icao) if DISAMBIGUATOR else icao
+            result_widget.update(f"{pretty_name} ({icao})\nWind: {wind_info}")
+        else:
+            result_widget.update(f"{icao}\nNo wind data available")
+    
+    def action_close(self) -> None:
+        """Close the modal"""
+        self.dismiss()
 
 class FlightBoardScreen(ModalScreen):
     """Modal screen showing departure and arrivals board for an airport or grouping"""
@@ -389,25 +480,17 @@ class FlightBoardScreen(ModalScreen):
         self.departures_row_keys = []
         self.arrivals_row_keys = []
         self.enable_animations = enable_animations
+        self.window_title = ""  # Store the current window title
         # TableManagers will be initialized after tables are created
         self.departures_manager = None
         self.arrivals_manager = None
     
     def compose(self) -> ComposeResult:
-        # Determine the window title based on whether we have a disambiguator
-        if self.disambiguator and isinstance(self.airport_icao_or_list, str):
-            # For individual airports, get the full name
-            full_name = self.disambiguator.get_pretty_name(self.airport_icao_or_list)
-            window_title = f"Flight Board - {full_name} ({self.airport_icao_or_list})"
-        else:
-            # For groupings or when no disambiguator is available, use the original title
-            window_title = f"Flight Board - {self.title}"
-            
-        # Set the window title
-        self.app.console.set_window_title(window_title)
+        # Build initial window title
+        self._update_window_title()
         
         with Container(id="board-container"):
-            yield Static(window_title, id="board-header")
+            yield Static(self.window_title, id="board-header")
             with Horizontal(id="board-tables"):
                 with Vertical(classes="board-section", id="departures-section"):
                     yield Static("DEPARTURES", classes="section-title")
@@ -456,8 +539,43 @@ class FlightBoardScreen(ModalScreen):
         """Refresh flight data (called by parent app)"""
         self.run_worker(self.load_flight_data(), exclusive=True)
 
+    def _update_window_title(self) -> None:
+        """Update the window title with fresh wind data."""
+        window_title: str
+        if self.disambiguator and isinstance(self.airport_icao_or_list, str):
+            # For individual airports, get the full name
+            full_name = self.disambiguator.get_pretty_name(self.airport_icao_or_list)
+            
+            # Fetch wind information
+            wind_info = get_wind_info(self.airport_icao_or_list)
+            
+            # Format title: "Airport Name (ICAO) - Wind XXX@Y"
+            if wind_info:
+                window_title = f"{full_name} ({self.airport_icao_or_list}) - {wind_info}"
+            else:
+                window_title = f"{full_name} ({self.airport_icao_or_list})"
+        else:
+            # For groupings or when no disambiguator is available, use the original title
+            window_title = str(self.title)
+        
+        self.window_title = window_title
+        
+        # Set the console window title
+        self.app.console.set_window_title(window_title)
+        
+        # Update the header Static widget if it exists
+        try:
+            header = self.query_one("#board-header", Static)
+            header.update(window_title)
+        except Exception:
+            # Widget not yet mounted, will be set in compose
+            pass
+    
     def populate_tables(self) -> None:
         """Populate the departure and arrivals tables with separate ICAO and NAME columns."""
+        # Update window title with fresh wind data
+        self._update_window_title()
+        
         # Initialize TableManagers if not already done
         if self.departures_manager is None:
             departures_table = self.query_one("#departures-table", SplitFlapDataTable)
@@ -567,6 +685,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+r", "refresh", "Refresh", priority=True),
         Binding("ctrl+space", "toggle_pause", "Pause/Resume", priority=True),
         Binding("ctrl+f", "toggle_search", "Find", priority=True),
+        Binding("ctrl+w", "show_wind_lookup", "Wind Lookup", priority=True),
         Binding("escape", "cancel_search", "Cancel Search", show=False),
         Binding("enter", "open_flight_board", "Flight Board"),
     ]
@@ -1083,6 +1202,11 @@ class VATSIMControlApp(App):
                         self.push_screen(flight_board)
                 except Exception as e:
                     print(f"Error loading groupings: {e}")
+    
+    def action_show_wind_lookup(self) -> None:
+        """Show the wind information lookup modal"""
+        wind_screen = WindInfoScreen()
+        self.push_screen(wind_screen)
 
 
 def main():

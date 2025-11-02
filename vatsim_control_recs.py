@@ -3,10 +3,16 @@ import json
 import csv
 import math
 import os
+import urllib.request
+import urllib.error
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from airport_disambiguator import AirportDisambiguator # pyright: ignore[reportAttributeAccessIssue]
 from airport_data_loader import load_unified_airport_data
+
+# Cache for wind data
+_WIND_DATA_CACHE = {}  # {airport_icao: {'wind_info': str, 'timestamp': datetime}}
+_WIND_CACHE_DURATION = 60  # seconds
 
 # Define the preferred order for control positions
 CONTROL_POSITION_ORDER = ["APP", "DEP", "TWR", "GND", "DEL"] # ATIS is handled specially in display logic
@@ -51,6 +57,105 @@ def format_eta_display(eta_hours, arrivals_in_flight_count, arrivals_on_ground_c
         hours = int(eta_hours)
         minutes = int((eta_hours - hours) * 60)
         return f"{hours}h{minutes:02d}m"
+
+def _parse_wind_from_observation(properties: dict) -> tuple[bool, str]:
+    """Parse wind data from a single observation.
+    
+    Returns:
+        (has_data, wind_string) tuple where has_data is True if valid wind data was found
+    """
+    wind_direction = properties.get('windDirection', {}).get('value')
+    wind_speed_kmh = properties.get('windSpeed', {}).get('value')
+    wind_gust_kmh = properties.get('windGust', {}).get('value')
+    
+    # Check if we have valid wind data
+    if wind_direction is None or wind_speed_kmh is None:
+        return (False, "")
+    
+    # Convert km/h to knots (1 knot = 1.852 km/h)
+    wind_speed_knots = round(wind_speed_kmh / 1.852)
+    
+    # Handle calm winds (0 knots)
+    if wind_speed_knots == 0:
+        return (True, "Calm")
+    
+    # Format base wind: "270@5"
+    wind_str = f"{int(wind_direction):03d}@{wind_speed_knots}"
+    
+    # Add gusts if present and greater than steady wind
+    if wind_gust_kmh is not None and wind_gust_kmh > 0:
+        wind_gust_knots = round(wind_gust_kmh / 1.852)
+        if wind_gust_knots > wind_speed_knots:
+            wind_str += f"G{wind_gust_knots}"
+    
+    return (True, wind_str)
+
+def get_wind_info(airport_icao: str) -> str:
+    """Fetch current wind information from weather.gov API with caching.
+    
+    Wind data is cached for 60 seconds to avoid excessive API calls.
+    If the latest observation doesn't have wind data, fetches the last 10 observations
+    and returns the most recent one with valid wind data.
+    
+    Args:
+        airport_icao: The ICAO code of the airport
+        
+    Returns:
+        Formatted wind string like "270@5G12" or "270@5" or empty string if unavailable
+    """
+    global _WIND_DATA_CACHE
+    
+    # Check if we have valid cached data
+    current_time = datetime.now(timezone.utc)
+    if airport_icao in _WIND_DATA_CACHE:
+        cache_entry = _WIND_DATA_CACHE[airport_icao]
+        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+        if time_since_cache < _WIND_CACHE_DURATION:
+            return cache_entry['wind_info']
+    
+    # Cache miss or expired - fetch new data
+    try:
+        # First, try the latest observation
+        url = f"https://api.weather.gov/stations/{airport_icao}/observations/latest"
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+        
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = json.loads(response.read().decode())
+        
+        properties = data.get('properties', {})
+        has_data, wind_str = _parse_wind_from_observation(properties)
+        
+        # If latest observation doesn't have wind data, try the last 10 observations
+        if not has_data:
+            url = f"https://api.weather.gov/stations/{airport_icao}/observations?limit=10"
+            req = urllib.request.Request(url)
+            req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+            
+            with urllib.request.urlopen(req, timeout=3) as response:
+                data = json.loads(response.read().decode())
+            
+            # Iterate through observations to find the first one with wind data
+            features = data.get('features', [])
+            for feature in features:
+                properties = feature.get('properties', {})
+                has_data, wind_str = _parse_wind_from_observation(properties)
+                if has_data:
+                    break
+        
+        # Cache the result (even if empty)
+        _WIND_DATA_CACHE[airport_icao] = {
+            'wind_info': wind_str,
+            'timestamp': current_time
+        }
+        
+        return wind_str
+        
+    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, KeyError, ValueError, TimeoutError):
+        # On error, return cached data if available (even if expired), otherwise empty string
+        if airport_icao in _WIND_DATA_CACHE:
+            return _WIND_DATA_CACHE[airport_icao]['wind_info']
+        return ""
 
 def load_airport_data(unified_data):
     """
@@ -593,18 +698,21 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
         if total_flights > 0 or (staffed_pos_display and staffed_pos_display != "N/A" and include_all_staffed):
             # Get the pretty name for the airport
             pretty_name = DISAMBIGUATOR.get_pretty_name(airport) if DISAMBIGUATOR else airport
+            # Get wind information for the airport
+            wind_info = get_wind_info(airport)
             # Pad numeric columns to consistent width (3 characters, right-aligned)
             dep_str = str(departing).rjust(3)
             arr_str = str(arriving).rjust(3)
             arr_all_str = str(arriving_all).rjust(3)
+            # Column order: ICAO, NAME, WIND, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED
             # Include arriving_all in the tuple when max_eta_hours is specified
             if max_eta_hours != 0:
-                airport_data.append((airport, pretty_name, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
+                airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
             else:
-                airport_data.append((airport, pretty_name, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
+                airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
     
-    # Sort by total count descending
-    airport_data.sort(key=lambda x: int(x[2]), reverse=True)
+    # Sort by total count descending (TOTAL is now at index 3 due to WIND column at index 2)
+    airport_data.sort(key=lambda x: int(x[3]), reverse=True)
     
     # Process custom groupings data
     grouped_data = []
