@@ -551,7 +551,7 @@ class FlightBoardScreen(ModalScreen):
             
             # Format title: "Airport Name (ICAO) - Wind XXX@Y"
             if wind_info:
-                window_title = f"{full_name} ({self.airport_icao_or_list}) - {wind_info}"
+                window_title = f"{full_name} ({self.airport_icao_or_list}) - Wind {wind_info}"
             else:
                 window_title = f"{full_name} ({self.airport_icao_or_list})"
         else:

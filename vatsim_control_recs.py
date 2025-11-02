@@ -13,6 +13,7 @@ from airport_data_loader import load_unified_airport_data
 # Cache for wind data
 _WIND_DATA_CACHE = {}  # {airport_icao: {'wind_info': str, 'timestamp': datetime}}
 _WIND_CACHE_DURATION = 60  # seconds
+_WIND_BLACKLIST = set()  # Set of airport ICAOs that don't have weather data available (404)
 
 # Define the preferred order for control positions
 CONTROL_POSITION_ORDER = ["APP", "DEP", "TWR", "GND", "DEL"] # ATIS is handled specially in display logic
@@ -96,6 +97,7 @@ def get_wind_info(airport_icao: str) -> str:
     Wind data is cached for 60 seconds to avoid excessive API calls.
     If the latest observation doesn't have wind data, fetches the last 10 observations
     and returns the most recent one with valid wind data.
+    Airports returning 404 are blacklisted and never queried again.
     
     Args:
         airport_icao: The ICAO code of the airport
@@ -103,7 +105,11 @@ def get_wind_info(airport_icao: str) -> str:
     Returns:
         Formatted wind string like "270@5G12" or "270@5" or empty string if unavailable
     """
-    global _WIND_DATA_CACHE
+    global _WIND_DATA_CACHE, _WIND_BLACKLIST
+    
+    # Check if airport is blacklisted (doesn't have weather data available)
+    if airport_icao in _WIND_BLACKLIST:
+        return ""
     
     # Check if we have valid cached data
     current_time = datetime.now(timezone.utc)
@@ -151,8 +157,17 @@ def get_wind_info(airport_icao: str) -> str:
         
         return wind_str
         
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, KeyError, ValueError, TimeoutError):
-        # On error, return cached data if available (even if expired), otherwise empty string
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            # Station doesn't exist - blacklist it permanently
+            _WIND_BLACKLIST.add(airport_icao)
+            return ""
+        # For other HTTP errors, return cached data if available
+        if airport_icao in _WIND_DATA_CACHE:
+            return _WIND_DATA_CACHE[airport_icao]['wind_info']
+        return ""
+    except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError):
+        # On other errors, return cached data if available (even if expired), otherwise empty string
         if airport_icao in _WIND_DATA_CACHE:
             return _WIND_DATA_CACHE[airport_icao]['wind_info']
         return ""
