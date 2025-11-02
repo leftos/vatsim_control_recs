@@ -283,20 +283,55 @@ class AirportDisambiguator:
         return city
     
     def _name_contains_location(self, airport_name, city, state):
-        """Check if the airport name contains the city or state name."""
+        """Check if the airport name contains the city or state name as a standalone word.
+        Location words within compound words (e.g., 'MEDFORD' in 'INTL/MEDFORD') are not counted."""
         airport_name_lower = airport_name.lower()
         
-        # Check if any word from the city name appears in the airport name
-        # Split on spaces, hyphens, and slashes to handle cities like "Frankfurt-am-Main"
+        # Split the airport name into words
+        name_words = airport_name.split()
+        
+        # Check if any word from the city name appears as a standalone word
         if city:
             city_words = re.split(r'[\s\-/]+', city.lower())
-            for word in city_words:
-                if word and word in airport_name_lower:  # Skip empty strings
-                    return True
+            for city_word in city_words:
+                if not city_word:  # Skip empty strings
+                    continue
+                # Check if this city word appears as a complete word (not just within a compound)
+                for name_word in name_words:
+                    name_word_lower = name_word.lower()
+                    # Check if it's the complete word
+                    if name_word_lower == city_word:
+                        return True
+                    # Check if it's within a compound word (contains / or -)
+                    if '/' in name_word or '-' in name_word:
+                        # Split the compound and check each part
+                        parts = name_word.replace('-', '/').split('/')
+                        # Only count it if the city word is NOT just a suffix after a slash/hyphen
+                        # For "INTL/MEDFORD", we want to ignore "MEDFORD" as it's trailing context
+                        for i, part in enumerate(parts):
+                            if part.lower() == city_word:
+                                # If it's the last part of a compound, don't count it
+                                # (e.g., MEDFORD in INTL/MEDFORD is trailing context)
+                                if i == len(parts) - 1:
+                                    continue
+                                return True
         
-        # Check if state name appears in the airport name
-        if state and state.lower() in airport_name_lower:
-            return True
+        # Check if state name appears as a standalone word
+        if state:
+            state_lower = state.lower()
+            for name_word in name_words:
+                name_word_lower = name_word.lower()
+                # Check if it's the complete word
+                if name_word_lower == state_lower:
+                    return True
+                # Check within compounds, but not if it's the trailing part
+                if '/' in name_word or '-' in name_word:
+                    parts = name_word.replace('-', '/').split('/')
+                    for i, part in enumerate(parts):
+                        if part.lower() == state_lower:
+                            if i == len(parts) - 1:
+                                continue
+                            return True
         
         return False
     
@@ -498,12 +533,37 @@ class AirportDisambiguator:
                     # Regular logic: location + distinguishing word (no hyphen)
                     name = airport_names[icao]
                     location_words = {word.lower() for word in location.split()}
-                    distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
                     
-                    # Find the first high-priority word, or just use the first word
+                    # Filter out location words, including checking within compound words
+                    distinguishing_parts = []
+                    for word in name.split():
+                        word_lower = word.lower()
+                        # Check if word is a location word
+                        if word_lower in location_words:
+                            continue
+                        # Check if word is a compound (contains / or -) and any part is a location word
+                        if '/' in word or '-' in word:
+                            parts = word.replace('-', '/').split('/')
+                            if any(part.lower() in location_words for part in parts):
+                                continue
+                        distinguishing_parts.append(word)
+                    
+                    # Find the first high-priority word, checking within compound words
                     high_priority_word = None
                     for word in distinguishing_parts:
+                        is_high_priority = False
+                        # Check if word itself is high-priority
                         if word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS:
+                            is_high_priority = True
+                        # Check if word is a compound and any part is high-priority
+                        elif '/' in word or '-' in word:
+                            parts = word.replace('-', '/').split('/')
+                            for part in parts:
+                                if part in self.HIGH_PRIORITY_WORDS or part.lower().capitalize() in self.HIGH_PRIORITY_WORDS:
+                                    is_high_priority = True
+                                    break
+                        
+                        if is_high_priority:
                             high_priority_word = word
                             break
                     
@@ -705,11 +765,37 @@ class AirportDisambiguator:
             else:
                 name = airport_names[icao]
                 location_words = {word.lower() for word in location.split()}
-                distinguishing_parts = [word for word in name.split() if word.lower() not in location_words]
                 
+                # Filter out location words, including checking within compound words
+                distinguishing_parts = []
+                for word in name.split():
+                    word_lower = word.lower()
+                    # Check if word is a location word
+                    if word_lower in location_words:
+                        continue
+                    # Check if word is a compound (contains / or -) and any part is a location word
+                    if '/' in word or '-' in word:
+                        parts = word.replace('-', '/').split('/')
+                        if any(part.lower() in location_words for part in parts):
+                            continue
+                    distinguishing_parts.append(word)
+                
+                # Find the first high-priority word, checking within compound words
                 high_priority_word = None
                 for word in distinguishing_parts:
+                    is_high_priority = False
+                    # Check if word itself is high-priority
                     if word in self.HIGH_PRIORITY_WORDS or word.lower().capitalize() in self.HIGH_PRIORITY_WORDS:
+                        is_high_priority = True
+                    # Check if word is a compound and any part is high-priority
+                    elif '/' in word or '-' in word:
+                        parts = word.replace('-', '/').split('/')
+                        for part in parts:
+                            if part in self.HIGH_PRIORITY_WORDS or part.lower().capitalize() in self.HIGH_PRIORITY_WORDS:
+                                is_high_priority = True
+                                break
+                    
+                    if is_high_priority:
                         high_priority_word = word
                         break
                 
