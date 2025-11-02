@@ -29,7 +29,7 @@ def _get_valid_icao_from_callsign(
     # 2. If not found, try prepending 'K' for 3-letter US airport candidates
     if len(icao_candidate) == 3 and icao_candidate.isalpha():
         k_prefixed_icao = 'K' + icao_candidate
-        if k_prefixed_icao in airports_data and airports_data[k_prefixed_icao].get('country') == 'US':
+        if k_prefixed_icao in airports_data and airports_data[k_prefixed_icao]['country_code'] == 'US':
             return k_prefixed_icao
             
     return None
