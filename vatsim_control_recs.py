@@ -80,14 +80,17 @@ def _parse_wind_from_observation(properties: dict) -> tuple[bool, str]:
     if wind_speed_knots == 0:
         return (True, "Calm")
     
-    # Format base wind: "270@5"
-    wind_str = f"{int(wind_direction):03d}@{wind_speed_knots}"
+    # Format base wind: "27005KT"
+    wind_str = f"{int(wind_direction):03d}{wind_speed_knots:02d}"
     
     # Add gusts if present and greater than steady wind
     if wind_gust_kmh is not None and wind_gust_kmh > 0:
         wind_gust_knots = round(wind_gust_kmh / 1.852)
         if wind_gust_knots > wind_speed_knots:
-            wind_str += f"G{wind_gust_knots}"
+            wind_str += f"G{wind_gust_knots:02d}"
+    
+    # Add KT suffix
+    wind_str += "KT"
     
     return (True, wind_str)
 
@@ -103,7 +106,7 @@ def get_wind_info(airport_icao: str) -> str:
         airport_icao: The ICAO code of the airport
         
     Returns:
-        Formatted wind string like "270@5G12" or "270@5" or empty string if unavailable
+        Formatted wind string like "27005G12KT" or "27005KT" or empty string if unavailable
     """
     global _WIND_DATA_CACHE, _WIND_BLACKLIST
     

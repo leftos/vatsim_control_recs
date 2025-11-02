@@ -25,7 +25,7 @@ ETA_FLAP_CHARS = "9876543210hm:ADELN <-"  # For NEXT ETA columns: numbers in des
 ICAO_FLAP_CHARS = "-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"  # For ICAO codes
 CALLSIGN_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- "  # For flight callsigns
 POSITION_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ- "  # For controller positions
-WIND_FLAP_CHARS = "0123456789@GCALM "  # For wind data: numbers for direction/speed/gusts, @, G for gusts, and "Calm" for zero wind
+WIND_FLAP_CHARS = "0123456789GKTCALM "  # For wind data: numbers for direction/speed/gusts, G for gusts, KT suffix, and "Calm" for zero wind
 
 # Set up debug logging to file
 DEBUG_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug.log")
