@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from backend.cache.manager import load_aircraft_approach_speeds
 from backend.data.loaders import load_unified_airport_data
 from backend.data.vatsim_api import download_vatsim_data, filter_flights_by_airports
-from backend.data.weather import get_wind_info
+from backend.data.weather import get_wind_info, get_wind_info_batch
 from backend.core.controllers import get_staffed_positions
 from backend.core.calculations import format_eta_display, calculate_eta
 from backend.core.groupings import load_all_groupings
@@ -77,6 +77,7 @@ def analyze_flights_data(
     # Load unified airport data if not already loaded
     global UNIFIED_AIRPORT_DATA
     if UNIFIED_AIRPORT_DATA is None:
+        print("Loading airport database...")
         UNIFIED_AIRPORT_DATA = load_unified_airport_data(
             apt_base_path=os.path.join(_script_dir, 'data', 'APT_BASE.csv'),
             airports_json_path=os.path.join(_script_dir, 'data', 'airports.json'),
@@ -159,17 +160,20 @@ def analyze_flights_data(
         airports = all_airports_data
     
     # Download VATSIM data
+    print("Downloading live flight data...")
     data = download_vatsim_data()
     if not data:
         return None, None, 0
     
     # Extract staffed positions
+    print("Analyzing controller positions...")
     staffed_positions = get_staffed_positions(data, all_airports_data)
 
     # Load aircraft approach speeds
     aircraft_approach_speeds = load_aircraft_approach_speeds(os.path.join(_script_dir, 'data', 'aircraft_data.csv'))
 
     # Filter flights
+    print(f"Processing flights for {len(airports)} airports...")
     flights = filter_flights_by_airports(data, airports, airport_allowlist)
     
     # Count flights on ground at departure and near arrival
@@ -209,8 +213,9 @@ def analyze_flights_data(
             # This catches flights on ground at departure that haven't departed yet, or in-flight beyond max_eta_hours
             arrival_counts_all[flight['arrival']] += 1
 
-    # Create a list of airports with their counts and staffed positions
-    airport_data = []
+    # First pass: determine which airports will be displayed
+    # (those with flights or that are staffed when include_all_staffed is True)
+    airports_to_display = []
     for airport in airports:
         departing = departure_counts.get(airport, 0)
         arriving = arrival_counts.get(airport, 0)
@@ -245,21 +250,40 @@ def analyze_flights_data(
         # Include airport if it has flights, or if it's staffed and we want to include staffed zero-plane airports
         # Note: "N/A" doesn't count as staffing (it means the airport has no tower)
         if total_flights > 0 or (staffed_pos_display and staffed_pos_display != "N/A" and include_all_staffed):
-            # Get the pretty name for the airport
-            pretty_name = DISAMBIGUATOR.get_pretty_name(airport) if DISAMBIGUATOR else airport
-            # Get wind information for the airport
-            wind_info = get_wind_info(airport, source=WIND_SOURCE)
-            # Pad numeric columns to consistent width (3 characters, right-aligned)
-            dep_str = str(departing).rjust(3)
-            arr_str = str(arriving).rjust(3)
-            arr_all_str = str(arriving_all).rjust(3)
-            # Column order: ICAO, NAME, WIND, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED
-            # Include arriving_all in the tuple when max_eta_hours is specified
-            if max_eta_hours != 0:
-                airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
-            else:
-                airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
+            airports_to_display.append((
+                airport, departing, arriving, arriving_all,
+                total_flights, eta_display, staffed_pos_display
+            ))
     
+    # Batch fetch wind information only for airports that will be displayed (parallelized)
+    airports_to_fetch = [apt[0] for apt in airports_to_display]
+    if airports_to_fetch:
+        print(f"Fetching weather data for {len(airports_to_fetch)} active airports...")
+    wind_info_batch = get_wind_info_batch(airports_to_fetch, source=WIND_SOURCE) if airports_to_fetch else {}
+    
+    if airports_to_fetch:
+        print(f"Processing airport names for {len(airports_to_fetch)} airports...")
+    # Batch fetch pretty names only for airports that will be displayed (processes locations efficiently)
+    pretty_names_batch = DISAMBIGUATOR.get_pretty_names_batch(airports_to_fetch) if DISAMBIGUATOR and airports_to_fetch else {}
+    
+    # Second pass: build airport_data with fetched information
+    airport_data = []
+    for airport, departing, arriving, arriving_all, total_flights, eta_display, staffed_pos_display in airports_to_display:
+        # Get the pretty name from batch results
+        pretty_name = pretty_names_batch.get(airport, airport)
+        # Get wind information from batch results
+        wind_info = wind_info_batch.get(airport, "")
+        
+        # Pad numeric columns to consistent width (3 characters, right-aligned)
+        dep_str = str(departing).rjust(3)
+        arr_str = str(arriving).rjust(3)
+        arr_all_str = str(arriving_all).rjust(3)
+        # Column order: ICAO, NAME, WIND, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED
+        # Include arriving_all in the tuple when max_eta_hours is specified
+        if max_eta_hours != 0:
+            airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
+        else:
+            airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
     # Sort by total count descending (TOTAL is now at index 3 due to WIND column at index 2)
     airport_data.sort(key=lambda x: int(x[3]), reverse=True)
     

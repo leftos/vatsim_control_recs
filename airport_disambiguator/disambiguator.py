@@ -137,6 +137,37 @@ class AirportDisambiguator:
         
         return self.icao_to_pretty_name.get(icao, icao)
     
+    def get_pretty_names_batch(self, icaos: list[str]) -> dict[str, str]:
+        """
+        Get pretty names for multiple airports efficiently.
+        
+        This method processes all unique locations at once, which is much more efficient
+        than calling get_pretty_name() individually for many airports in the same location.
+        
+        Args:
+            icaos: List of ICAO codes to get pretty names for
+            
+        Returns:
+            Dictionary mapping ICAO codes to pretty names
+        """
+        # If not lazy loading, all names are already computed
+        if not self.lazy_load:
+            return {icao: self.icao_to_pretty_name.get(icao, icao) for icao in icaos}
+        
+        # For lazy loading, find all unprocessed locations
+        locations_to_process = set()
+        for icao in icaos:
+            location = self.data_manager.get_location_for_airport(icao)
+            if location and location not in self._processed_locations:
+                locations_to_process.add(location)
+        
+        # Process all locations at once
+        for location in locations_to_process:
+            self._process_location(location)
+        
+        # Return the pretty names
+        return {icao: self.icao_to_pretty_name.get(icao, icao) for icao in icaos}
+    
     # Properties for backwards compatibility with original implementation
     @property
     def nlp(self):

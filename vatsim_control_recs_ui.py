@@ -119,11 +119,14 @@ def eta_sort_key(arrival_row):
 class TableManager:
     """Manages table population and updates with split-flap animations"""
     
-    def __init__(self, table: SplitFlapDataTable, config: TableConfig, row_keys: list):
+    def __init__(self, table: SplitFlapDataTable, config: TableConfig, row_keys: list,
+                 progressive_load_chunk_size: int = 20):
         self.table = table
         self.config = config
         self.row_keys = row_keys
         self.is_first_load = True
+        self.progressive_load_chunk_size = progressive_load_chunk_size
+        self.progressive_load_active = False
     
     async def _wait_and_remove_row(self, row_key) -> None:
         """Wait for the clearing animation to complete, then actually remove the row"""
@@ -189,9 +192,15 @@ class TableManager:
                     content_align=col_config.content_align
                 )
     
-    def populate(self, data: list) -> None:
-        """Populate table with data, applying sorting and animations"""
-        debug_log(f"[TableManager] populate START - data length: {len(data)}, is_first_load: {self.is_first_load}")
+    def populate(self, data: list, progressive: bool = False) -> None:
+        """
+        Populate table with data, applying sorting and animations.
+        
+        Args:
+            data: List of row data tuples
+            progressive: If True, load data in chunks for better perceived performance
+        """
+        debug_log(f"[TableManager] populate START - data length: {len(data)}, is_first_load: {self.is_first_load}, progressive: {progressive}")
         
         # Apply sorting if configured
         if self.config.sort_function:
@@ -209,20 +218,17 @@ class TableManager:
             self.table.clear()
             self.row_keys.clear()
             
-            debug_log(f"[TableManager] Adding {len(data)} rows")
-            for row_data in data:
-                # Add row with blank values, then animate to actual values
-                blank_row = tuple(" " * len(str(cell)) for cell in row_data)
-                row_key = self.table.add_row(*blank_row)
-                self.row_keys.append(row_key)
-                
-                # Animate each cell to its target value
-                for col_idx, cell_value in enumerate(row_data):
-                    col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
-                    update_width = col_config.update_width if col_config else False
-                    self.table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
+            if progressive and len(data) > self.progressive_load_chunk_size:
+                # Progressive loading: load in chunks
+                debug_log(f"[TableManager] Starting progressive load with {len(data)} rows in chunks of {self.progressive_load_chunk_size}")
+                self.progressive_load_active = True
+                asyncio.create_task(self._populate_progressive(data, column_keys))
+            else:
+                # Standard loading: load all at once
+                debug_log(f"[TableManager] Adding {len(data)} rows")
+                self._add_rows_to_table(data, column_keys)
+                debug_log(f"[TableManager] First load complete - table.row_count: {self.table.row_count}")
             
-            debug_log(f"[TableManager] First load complete - table.row_count: {self.table.row_count}")
             self.is_first_load = False
         else:
             # Subsequent updates: efficiently update existing rows
@@ -231,20 +237,74 @@ class TableManager:
         
         debug_log(f"[TableManager] populate COMPLETE - final table.row_count: {self.table.row_count}")
     
+    def _add_rows_to_table(self, data: list, column_keys: list) -> None:
+        """Add rows to table with animations"""
+        for row_data in data:
+            # Add row with blank values, then animate to actual values
+            blank_row = tuple(" " * len(str(cell)) for cell in row_data)
+            row_key = self.table.add_row(*blank_row)
+            self.row_keys.append(row_key)
+            
+            # Animate each cell to its target value
+            for col_idx, cell_value in enumerate(row_data):
+                col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
+                update_width = col_config.update_width if col_config else False
+                self.table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
+    
+    async def _populate_progressive(self, data: list, column_keys: list) -> None:
+        """Populate table progressively in chunks for better perceived performance"""
+        total_rows = len(data)
+        chunk_size = self.progressive_load_chunk_size
+        
+        for i in range(0, total_rows, chunk_size):
+            chunk = data[i:i + chunk_size]
+            chunk_end = min(i + chunk_size, total_rows)
+            
+            debug_log(f"[TableManager] Progressive load chunk {i}-{chunk_end}/{total_rows}")
+            
+            # Add this chunk of rows
+            self._add_rows_to_table(chunk, column_keys)
+            
+            # Small delay to allow UI to update and remain responsive
+            await asyncio.sleep(0.05)  # 50ms between chunks
+        
+        self.progressive_load_active = False
+        debug_log(f"[TableManager] Progressive load complete - {total_rows} rows loaded")
+    
     def _update_efficiently(self, new_data: list, column_keys: list) -> None:
         """Efficiently update table by modifying existing rows and adding/removing as needed"""
         current_row_count = len(self.row_keys)
         new_row_count = len(new_data)
         
-        # Update existing rows
+        # Track if we cached the old data for comparison
+        if not hasattr(self, '_cached_data'):
+            self._cached_data = []
+        
+        # Update existing rows with diff checking
+        cells_updated = 0
+        cells_skipped = 0
+        
         for i in range(min(current_row_count, new_row_count)):
             row_data = new_data[i]
+            old_row_data = self._cached_data[i] if i < len(self._cached_data) else None
+            
             if i < len(self.row_keys):
                 for col_idx, cell_value in enumerate(row_data):
                     if col_idx < len(column_keys):
-                        col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
-                        update_width = col_config.update_width if col_config else False
-                        self.table.update_cell_animated(self.row_keys[i], column_keys[col_idx], cell_value, update_width=update_width)
+                        # Only update if value actually changed
+                        if old_row_data is None or col_idx >= len(old_row_data) or str(old_row_data[col_idx]) != str(cell_value):
+                            col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
+                            update_width = col_config.update_width if col_config else False
+                            self.table.update_cell_animated(self.row_keys[i], column_keys[col_idx], cell_value, update_width=update_width)
+                            cells_updated += 1
+                        else:
+                            cells_skipped += 1
+        
+        # Debug log for diff efficiency
+        if cells_updated > 0 or cells_skipped > 0:
+            total_cells = cells_updated + cells_skipped
+            skip_rate = (cells_skipped / total_cells * 100) if total_cells > 0 else 0
+            debug_log(f"[TableManager] Diff update: {cells_updated} updated, {cells_skipped} skipped ({skip_rate:.1f}% skip rate)")
         
         # Add new rows if needed
         if new_row_count > current_row_count:
@@ -269,6 +329,9 @@ class TableManager:
                     self.table.remove_row(row_key)
                     # Schedule actual removal after animation completes
                     asyncio.create_task(self._wait_and_remove_row(row_key))
+        
+        # Cache the new data for next comparison
+        self._cached_data = [tuple(row) for row in new_data]
 
 # Table configuration constants
 DEPARTURES_TABLE_CONFIG = TableConfig(
@@ -1422,6 +1485,10 @@ def main():
                         help="Include airports with zero planes if they are staffed (default: False)")
     parser.add_argument("--disable-animations", action="store_true",
                         help="Disable split-flap animations for instant text updates (default: False)")
+    parser.add_argument("--progressive-load", action="store_true",
+                        help="Enable progressive loading for faster perceived startup (default: auto for 50+ airports)")
+    parser.add_argument("--progressive-chunk-size", type=int, default=20,
+                        help="Number of rows to load per chunk in progressive mode (default: 20)")
     parser.add_argument("--wind-source", choices=["metar", "minute"], default="metar",
                         help="Wind data source: 'metar' for METAR from aviationweather.gov (default), 'minute' for up-to-the-minute from weather.gov")
     

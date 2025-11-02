@@ -6,8 +6,9 @@ import json
 import re
 import urllib.request
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Tuple
+from typing import Dict, List, Tuple
 
 from backend.cache.manager import get_wind_cache, get_metar_cache
 from backend.config.constants import WIND_CACHE_DURATION, METAR_CACHE_DURATION
@@ -289,3 +290,41 @@ def get_wind_info(airport_icao: str, source: str = "metar") -> str:
     else:
         # Default to METAR for unknown sources
         return get_wind_from_metar(airport_icao)
+
+
+def get_wind_info_batch(airport_icaos: List[str], source: str = "metar", max_workers: int = 10) -> Dict[str, str]:
+    """
+    Fetch wind information for multiple airports in parallel.
+    
+    This is much more efficient than calling get_wind_info() sequentially for many airports.
+    Uses ThreadPoolExecutor to fetch wind data concurrently.
+    
+    Args:
+        airport_icaos: List of ICAO codes to fetch wind info for
+        source: Wind data source - "metar" or "minute" (default: "metar")
+        max_workers: Maximum number of concurrent threads (default: 10)
+        
+    Returns:
+        Dictionary mapping ICAO codes to wind strings (empty string if unavailable)
+    """
+    results = {}
+    
+    # Use ThreadPoolExecutor to parallelize network requests
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_icao = {
+            executor.submit(get_wind_info, icao, source): icao
+            for icao in airport_icaos
+        }
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_icao):
+            icao = future_to_icao[future]
+            try:
+                wind_info = future.result()
+                results[icao] = wind_info
+            except Exception:
+                # If there's an error, just use empty string
+                results[icao] = ""
+    
+    return results

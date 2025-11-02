@@ -455,6 +455,12 @@ class SplitFlapDataTable(DataTable):
         delay = self._update_counter * self.stagger_delay
         self._update_counter = (self._update_counter + 1) % 20  # Reset after 20 updates to prevent excessive delays
         self.animated_cells[cell_key].set_target(str(value), delay_frames=delay)
+        
+        # Restart animation timer if it was stopped
+        if self._animation_timer is None:
+            # Adaptive animation speed based on number of cells
+            speed = self._get_adaptive_animation_speed()
+            self._animation_timer = self.set_interval(speed, self._animate_cells)
     
     def _get_row_index(self, row_label: str) -> int:
         """Get row index from row label"""
@@ -469,6 +475,21 @@ class SplitFlapDataTable(DataTable):
             if str(column.label) == column_label:
                 return idx
         raise ValueError(f"Column with label '{column_label}' not found")
+    
+    def _get_adaptive_animation_speed(self) -> float:
+        """Calculate adaptive animation speed based on number of cells"""
+        cell_count = len(self.animated_cells)
+        
+        # Base speed
+        base_speed = self.animation_speed
+        
+        # Slow down animations for very large tables to reduce CPU load
+        if cell_count > 1000:
+            return base_speed * 2.0  # Half speed
+        elif cell_count > 500:
+            return base_speed * 1.5  # 33% slower
+        
+        return base_speed
     
     def _animate_cells(self) -> None:
         """Perform one animation step for all animating cells"""
@@ -485,8 +506,10 @@ class SplitFlapDataTable(DataTable):
             visible_height = self.size.height
             # Estimate row height (typically 1 line + borders)
             row_height = 1
-            first_visible_row = max(0, int(scroll_y / row_height))
-            last_visible_row = min(len(row_keys), int((scroll_y + visible_height) / row_height) + 1)
+            # Add buffer rows above and below viewport for smoother scrolling
+            buffer_rows = 5
+            first_visible_row = max(0, int(scroll_y / row_height) - buffer_rows)
+            last_visible_row = min(len(row_keys), int((scroll_y + visible_height) / row_height) + buffer_rows + 1)
         except Exception:
             # If we can't determine viewport, treat all rows as visible
             first_visible_row = 0
@@ -496,25 +519,39 @@ class SplitFlapDataTable(DataTable):
         cells_to_update = []
         cells_to_instant_update = []
         
+        # Track if any visible cells are still animating
+        has_visible_animations = False
+        
         for (row_idx, col_idx), cell in self.animated_cells.items():
-            # Check if row is in visible viewport
+            # Check if row is in visible viewport (or buffer zone)
             is_visible = first_visible_row <= row_idx < last_visible_row
             
             if is_visible:
                 # Animate visible cells normally
                 is_animating, display_value = cell.animate_step()
                 
+                if is_animating:
+                    has_visible_animations = True
+                
                 # Only update if display value actually changed
                 if display_value is not None:
                     cells_to_update.append((row_idx, col_idx, display_value))
             else:
-                # Instantly update off-screen cells to their target
+                # Instantly complete off-screen animations to save CPU
                 if cell.animating:
                     cell.current_value = cell.target_value
                     cell.animating = False
                     cells_to_instant_update.append((row_idx, col_idx, cell.target_value))
         
-        # Apply all updates
+        # Optimize: Stop timer if no visible cells are animating
+        if not has_visible_animations and not cells_to_instant_update:
+            # Check if ALL cells are done animating
+            all_complete = all(not cell.animating for cell in self.animated_cells.values())
+            if all_complete and self._animation_timer is not None:
+                self._animation_timer.stop()
+                self._animation_timer = None
+        
+        # Apply all updates in batch
         for row_idx, col_idx, display_value in cells_to_update + cells_to_instant_update:
             try:
                 if row_idx < len(row_keys) and col_idx < len(col_keys):
