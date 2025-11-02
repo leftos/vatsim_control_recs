@@ -919,7 +919,7 @@ class VATSIMControlApp(App):
         Binding("enter", "open_flight_board", "Flight Board"),
     ]
     
-    def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None):
+    def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None, airport_allowlist=None):
         super().__init__()
         self.console.set_window_title("VATSIM Control Recommendations")
         self.original_airport_data = airport_data or []
@@ -927,6 +927,7 @@ class VATSIMControlApp(App):
         self.groupings_data = groupings_data or []
         self.total_flights = total_flights
         self.args = args
+        self.airport_allowlist = airport_allowlist  # Store the expanded airport allowlist (including country expansions)
         self.include_all_staffed = args.include_all_staffed if args else False
         self.search_active = False
         self.refresh_paused = False
@@ -1127,7 +1128,7 @@ class VATSIMControlApp(App):
             None,
             analyze_flights_data,
             self.args.max_eta_hours if self.args else 1.0,
-            self.args.airports if self.args else None,
+            self.airport_allowlist,  # Use stored airport_allowlist (includes country expansions)
             self.args.groupings if self.args else None,
             self.args.supergroupings if self.args else None,
             self.include_all_staffed
@@ -1530,7 +1531,7 @@ def main():
         return
     
     # Run the Textual app
-    app = VATSIMControlApp(airport_data, groupings_data, total_flights or 0, args)
+    app = VATSIMControlApp(airport_data, groupings_data, total_flights or 0, args, airport_allowlist if airport_allowlist else None)
     app.run()
 
 
