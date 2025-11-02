@@ -14,9 +14,6 @@ import json
 import os
 from typing import Dict, Any, Optional
 
-# Cache for unified airport data
-_UNIFIED_AIRPORT_DATA = None
-
 def load_unified_airport_data(
     apt_base_path: str,
     airports_json_path: str,
@@ -24,6 +21,8 @@ def load_unified_airport_data(
 ) -> Dict[str, Dict[str, Any]]:
     """
     Load and merge airport data from all three sources.
+    
+    Note: Caching should be handled by the caller if needed.
     
     Returns a dictionary mapping airport codes (ICAO preferred, FAA otherwise) to airport info:
     {
@@ -43,11 +42,6 @@ def load_unified_airport_data(
         }
     }
     """
-    global _UNIFIED_AIRPORT_DATA
-    
-    if _UNIFIED_AIRPORT_DATA is not None:
-        return _UNIFIED_AIRPORT_DATA
-    
     #print("Loading unified airport data...")
     airports = {}
     
@@ -221,15 +215,5 @@ def load_unified_airport_data(
     except Exception as e:
         print(f"  Warning: Error loading APT_BASE.csv: {e}")
     
-    _UNIFIED_AIRPORT_DATA = airports
     #print(f"✓ Unified airport data loaded: {len(airports)} airports\n")
     return airports
-
-def get_unified_airport_data() -> Optional[Dict[str, Dict[str, Any]]]:
-    """Get the cached unified airport data, or None if not loaded yet."""
-    return _UNIFIED_AIRPORT_DATA
-
-def clear_cache():
-    """Clear the cached airport data (useful for testing)."""
-    global _UNIFIED_AIRPORT_DATA
-    _UNIFIED_AIRPORT_DATA = None

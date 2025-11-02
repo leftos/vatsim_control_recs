@@ -14,9 +14,9 @@ from backend import (
     analyze_flights_data,
     get_wind_info,
     get_metar,
-    DISAMBIGUATOR,
-    UNIFIED_AIRPORT_DATA
+    load_unified_airport_data
 )
+from airport_disambiguator import AirportDisambiguator
 from backend.core.flights import get_airport_flight_details, DepartureInfo, ArrivalInfo
 from backend.core.groupings import load_all_groupings
 from backend.cache.manager import load_aircraft_approach_speeds
@@ -46,6 +46,11 @@ def debug_log(message: str):
 # Clear debug log on startup
 with open(DEBUG_LOG_FILE, "w", encoding="utf-8") as f:
     f.write(f"=== Debug log started at {datetime.now()} ===\n")
+
+# Module-level instances for the UI - initialized when data is first loaded
+UNIFIED_AIRPORT_DATA = None
+DISAMBIGUATOR = None
+
 from dataclasses import dataclass
 from typing import Optional, Callable, Literal
 
@@ -698,19 +703,9 @@ class FlightBoardScreen(ModalScreen):
             aircraft_speeds = load_aircraft_approach_speeds(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'aircraft_data.csv'))
             vatsim_data = download_vatsim_data()
             
-            # Ensure UNIFIED_AIRPORT_DATA is loaded by calling analyze_flights_data first
-            # This will initialize the global UNIFIED_AIRPORT_DATA and DISAMBIGUATOR if they're None
-            from backend.core.analysis import UNIFIED_AIRPORT_DATA as current_unified_data, DISAMBIGUATOR as current_disambiguator
-            if current_unified_data is None:
-                # Call analyze_flights_data to initialize the global data
-                analyze_flights_data(max_eta_hours=0, include_all_staffed=False)
-                # Re-import to get the updated values
-                from backend.core.analysis import UNIFIED_AIRPORT_DATA as updated_unified_data, DISAMBIGUATOR as updated_disambiguator
-                unified_data_to_use = updated_unified_data
-                disambiguator_to_use = updated_disambiguator
-            else:
-                unified_data_to_use = current_unified_data
-                disambiguator_to_use = current_disambiguator
+            # Use the module-level instances
+            unified_data_to_use = UNIFIED_AIRPORT_DATA
+            disambiguator_to_use = DISAMBIGUATOR
             
             result = await loop.run_in_executor(
                 None,
@@ -1086,6 +1081,8 @@ class VATSIMControlApp(App):
     
     async def fetch_data_async(self):
         """Asynchronously fetch data from VATSIM."""
+        global UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
+        
         # Run the blocking call in a thread pool to avoid blocking the UI
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -1095,8 +1092,16 @@ class VATSIMControlApp(App):
             self.airport_allowlist,  # Use stored airport_allowlist (includes country expansions)
             self.args.groupings if self.args else None,
             self.args.supergroupings if self.args else None,
-            self.include_all_staffed
+            self.include_all_staffed,
+            UNIFIED_AIRPORT_DATA,  # Pass existing instance or None
+            DISAMBIGUATOR  # Pass existing instance or None
         )
+        
+        # Update module-level instances from the result
+        if len(result) == 5:
+            airport_data, groupings_data, total_flights, UNIFIED_AIRPORT_DATA, DISAMBIGUATOR = result
+            return airport_data, groupings_data, total_flights
+        
         return result
     
     def action_refresh(self) -> None:
@@ -1354,8 +1359,8 @@ class VATSIMControlApp(App):
             if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
                 # Get the ICAO code from the selected row
                 icao = self.airport_data[airports_table.cursor_row][0]
-                title = icao
-                full_name = DISAMBIGUATOR.get_pretty_name(icao) if DISAMBIGUATOR else icao
+                # Use the pretty name as the title instead of just the ICAO
+                title = DISAMBIGUATOR.get_pretty_name(icao) if DISAMBIGUATOR else icao
                  
                 # Open the flight board and store reference
                 self.flight_board_open = True
@@ -1463,29 +1468,37 @@ def main():
     
     print("Loading VATSIM data...")
     
+    # Initialize module-level instances
+    global UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
+    
     # Expand country codes to airport ICAO codes if --countries is provided
     airport_allowlist = args.airports or []
     if args.countries:
         # Load unified airport data to expand countries
-        from backend.data.loaders import load_unified_airport_data
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        unified_data = load_unified_airport_data(
+        UNIFIED_AIRPORT_DATA = load_unified_airport_data(
             apt_base_path=os.path.join(script_dir, 'data', 'APT_BASE.csv'),
             airports_json_path=os.path.join(script_dir, 'data', 'airports.json'),
             iata_icao_path=os.path.join(script_dir, 'data', 'iata-icao.csv')
         )
-        country_airports = expand_countries_to_airports(args.countries, unified_data)
+        DISAMBIGUATOR = AirportDisambiguator(
+            os.path.join(script_dir, 'data', 'airports.json'),
+            unified_data=UNIFIED_AIRPORT_DATA
+        )
+        country_airports = expand_countries_to_airports(args.countries, UNIFIED_AIRPORT_DATA)
         print(f"Expanded {len(args.countries)} country code(s) to {len(country_airports)} airport(s)")
         # Combine with any explicitly provided airports
         airport_allowlist = list(set(airport_allowlist + country_airports))
     
     # Get the data
-    airport_data, groupings_data, total_flights = analyze_flights_data(
+    airport_data, groupings_data, total_flights, UNIFIED_AIRPORT_DATA, DISAMBIGUATOR = analyze_flights_data(
         max_eta_hours=args.max_eta_hours,
         airport_allowlist=airport_allowlist if airport_allowlist else None,
         groupings_allowlist=args.groupings,
         supergroupings_allowlist=args.supergroupings,
-        include_all_staffed=args.include_all_staffed
+        include_all_staffed=args.include_all_staffed,
+        unified_airport_data=UNIFIED_AIRPORT_DATA,
+        disambiguator=DISAMBIGUATOR
     )
     
     if airport_data is None:

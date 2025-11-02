@@ -15,17 +15,11 @@ from backend.core.calculations import format_eta_display, calculate_eta
 from backend.core.groupings import load_all_groupings
 from backend.core.flights import get_nearest_airport_if_on_ground, is_flight_flying_near_arrival
 from backend.config.constants import WIND_SOURCE
+from airport_disambiguator import AirportDisambiguator
 
 
 # Module-level variables for data that needs to be accessible
 _script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Unified airport data - initialized lazily when needed
-UNIFIED_AIRPORT_DATA: Optional[Dict[str, Dict[str, Any]]] = None
-
-# Disambiguator - initialized after unified data is loaded
-from airport_disambiguator import AirportDisambiguator
-DISAMBIGUATOR: Optional[AirportDisambiguator] = None
 
 def load_airport_data(unified_data: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """
@@ -53,8 +47,10 @@ def analyze_flights_data(
     airport_allowlist: Optional[List[str]] = None,
     groupings_allowlist: Optional[List[str]] = None,
     supergroupings_allowlist: Optional[List[str]] = None,
-    include_all_staffed: bool = True
-) -> Tuple[Optional[List[Tuple]], Optional[List[Tuple]], int]:
+    include_all_staffed: bool = True,
+    unified_airport_data: Optional[Dict[str, Dict[str, Any]]] = None,
+    disambiguator: Optional[AirportDisambiguator] = None
+) -> Tuple[Optional[List[Tuple]], Optional[List[Tuple]], int, Dict[str, Dict[str, Any]], Optional[AirportDisambiguator]]:
     """
     Main function to analyze VATSIM flights and controller staffing - returns data structures.
     
@@ -64,37 +60,41 @@ def analyze_flights_data(
         groupings_allowlist: Optional list of custom grouping names to include
         supergroupings_allowlist: Optional list of supergrouping names to include
         include_all_staffed: Whether to include airports with zero planes if staffed (default: True)
+        unified_airport_data: Optional pre-loaded unified airport data
+        disambiguator: Optional pre-created disambiguator instance
     
     Returns:
-        Tuple of (airport_data, grouped_data, total_flights):
+        Tuple of (airport_data, grouped_data, total_flights, unified_airport_data, disambiguator):
         - airport_data: List of tuples with airport statistics
         - grouped_data: List of tuples with grouping statistics
         - total_flights: Total number of flights analyzed
+        - unified_airport_data: The unified airport data (for reuse by caller)
+        - disambiguator: The disambiguator instance (for reuse by caller)
     """
-    # Load unified airport data if not already loaded
-    global UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
-    if UNIFIED_AIRPORT_DATA is None:
+    # Load unified airport data if not provided
+    if unified_airport_data is None:
         print("Loading airport database...")
-        UNIFIED_AIRPORT_DATA = load_unified_airport_data(
+        unified_airport_data = load_unified_airport_data(
             apt_base_path=os.path.join(_script_dir, 'data', 'APT_BASE.csv'),
             airports_json_path=os.path.join(_script_dir, 'data', 'airports.json'),
             iata_icao_path=os.path.join(_script_dir, 'data', 'iata-icao.csv')
         )
-        if UNIFIED_AIRPORT_DATA is None:
-            return None, None, 0
-        
-        # Create/update disambiguator with the loaded unified data
-        DISAMBIGUATOR = AirportDisambiguator(
+        if unified_airport_data is None:
+            return None, None, 0, {}, None
+    
+    # Create disambiguator if not provided
+    if disambiguator is None:
+        disambiguator = AirportDisambiguator(
             os.path.join(_script_dir, 'data', 'airports.json'),
-            unified_data=UNIFIED_AIRPORT_DATA
+            unified_data=unified_airport_data
         )
     
-    all_airports_data = load_airport_data(UNIFIED_AIRPORT_DATA)
+    all_airports_data = load_airport_data(unified_airport_data)
     
     # Load all custom groupings and ARTCC groupings
     all_custom_groupings = load_all_groupings(
         os.path.join(_script_dir, 'data','custom_groupings.json'),
-        UNIFIED_AIRPORT_DATA
+        unified_airport_data
     )
     
     # Determine which groupings to display and which to use for filtering
@@ -166,7 +166,7 @@ def analyze_flights_data(
     print("Downloading live flight data...")
     data = download_vatsim_data()
     if not data:
-        return None, None, 0
+        return None, None, 0, unified_airport_data, disambiguator
     
     # Extract staffed positions
     print("Analyzing controller positions...")
@@ -228,7 +228,7 @@ def analyze_flights_data(
         staffed_pos_display = ""
         
         # Check if airport has no tower (NON-ATCT)
-        airport_info = UNIFIED_AIRPORT_DATA.get(airport, {}) if UNIFIED_AIRPORT_DATA else {}
+        airport_info = unified_airport_data.get(airport, {})
         tower_type = airport_info.get('tower_type', '')
         
         if tower_type == 'NON-ATCT':
@@ -267,7 +267,7 @@ def analyze_flights_data(
     if airports_to_fetch:
         print(f"Processing airport names for {len(airports_to_fetch)} airports...")
     # Batch fetch pretty names only for airports that will be displayed (processes locations efficiently)
-    pretty_names_batch = DISAMBIGUATOR.get_pretty_names_batch(airports_to_fetch) if DISAMBIGUATOR and airports_to_fetch else {}
+    pretty_names_batch = disambiguator.get_pretty_names_batch(airports_to_fetch) if disambiguator and airports_to_fetch else {}
     
     # Second pass: build airport_data with fetched information
     airport_data = []
@@ -320,4 +320,4 @@ def analyze_flights_data(
         
         grouped_data.sort(key=lambda x: int(x[1]), reverse=True)
     
-    return airport_data, grouped_data, len(flights)
+    return airport_data, grouped_data, len(flights), unified_airport_data, disambiguator
