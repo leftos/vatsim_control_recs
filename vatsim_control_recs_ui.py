@@ -918,7 +918,7 @@ class VATSIMControlApp(App):
         # Start auto-refresh timer - check every second
         self.refresh_timer = self.set_interval(1, self.auto_refresh_callback)
         # Start UTC clock and status bar update timer (update every 0.2 seconds)
-        self.status_update_timer = self.set_interval(0.2, self.update_time_displays)
+        self.status_update_timer = self.set_interval(0.25, self.update_time_displays)
         # Initial update
         self.update_time_displays()
         
@@ -1377,6 +1377,32 @@ class VATSIMControlApp(App):
         self.push_screen(metar_screen)
 
 
+def expand_countries_to_airports(country_codes: list, unified_airport_data: dict) -> list:
+    """
+    Expand country codes to a list of airport ICAO codes.
+    
+    Args:
+        country_codes: List of country codes (e.g., ['US', 'DE'])
+        unified_airport_data: Dictionary of all airport data
+    
+    Returns:
+        List of airport ICAO codes matching the given country codes
+    """
+    if not country_codes or not unified_airport_data:
+        return []
+    
+    # Normalize country codes to uppercase
+    country_codes_upper = [code.upper() for code in country_codes]
+    
+    # Find all airports matching the country codes
+    matching_airports = []
+    for icao, airport_data in unified_airport_data.items():
+        airport_country = airport_data.get('country', '').upper()
+        if airport_country in country_codes_upper:
+            matching_airports.append(icao)
+    
+    return sorted(matching_airports)
+
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Analyze VATSIM flight data and controller staffing")
@@ -1386,6 +1412,8 @@ def main():
                         help="Auto-refresh interval in seconds (default: 15)")
     parser.add_argument("--airports", nargs="+",
                         help="List of airport ICAO codes to include in analysis (default: all)")
+    parser.add_argument("--countries", nargs="+",
+                        help="List of country codes (e.g., US DE) to include all airports from those countries")
     parser.add_argument("--groupings", nargs="+",
                         help="List of custom grouping names to include in analysis (default: all)")
     parser.add_argument("--supergroupings", nargs="+",
@@ -1405,10 +1433,26 @@ def main():
     
     print("Loading VATSIM data...")
     
+    # Expand country codes to airport ICAO codes if --countries is provided
+    airport_allowlist = args.airports or []
+    if args.countries:
+        # Load unified airport data to expand countries
+        from backend.data.loaders import load_unified_airport_data
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        unified_data = load_unified_airport_data(
+            apt_base_path=os.path.join(script_dir, 'data', 'APT_BASE.csv'),
+            airports_json_path=os.path.join(script_dir, 'data', 'airports.json'),
+            iata_icao_path=os.path.join(script_dir, 'data', 'iata-icao.csv')
+        )
+        country_airports = expand_countries_to_airports(args.countries, unified_data)
+        print(f"Expanded {len(args.countries)} country code(s) to {len(country_airports)} airport(s)")
+        # Combine with any explicitly provided airports
+        airport_allowlist = list(set(airport_allowlist + country_airports))
+    
     # Get the data
     airport_data, groupings_data, total_flights = analyze_flights_data(
         max_eta_hours=args.max_eta_hours,
-        airport_allowlist=args.airports,
+        airport_allowlist=airport_allowlist if airport_allowlist else None,
         groupings_allowlist=args.groupings,
         supergroupings_allowlist=args.supergroupings,
         include_all_staffed=args.include_all_staffed
