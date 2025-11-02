@@ -15,6 +15,14 @@ _WIND_DATA_CACHE = {}  # {airport_icao: {'wind_info': str, 'timestamp': datetime
 _WIND_CACHE_DURATION = 60  # seconds
 _WIND_BLACKLIST = set()  # Set of airport ICAOs that don't have weather data available (404)
 
+# Cache for METAR data
+_METAR_DATA_CACHE = {}  # {airport_icao: {'metar': str, 'timestamp': datetime}}
+_METAR_CACHE_DURATION = 60  # seconds
+_METAR_BLACKLIST = set()  # Set of airport ICAOs that don't have METAR data available
+
+# Global wind source setting (can be "metar" or "minute")
+WIND_SOURCE = "metar"  # Default to METAR
+
 # Define the preferred order for control positions
 CONTROL_POSITION_ORDER = ["APP", "DEP", "TWR", "GND", "DEL"] # ATIS is handled specially in display logic
 
@@ -94,7 +102,30 @@ def _parse_wind_from_observation(properties: dict) -> tuple[bool, str]:
     
     return (True, wind_str)
 
-def get_wind_info(airport_icao: str) -> str:
+def get_wind_info(airport_icao: str, source: str = "metar") -> str:
+    """Fetch current wind information with caching.
+    
+    Wind data is cached for 60 seconds to avoid excessive API calls.
+    Supports two sources:
+    - "metar": Uses METAR from aviationweather.gov (default)
+    - "minute": Uses up-to-the-minute observations from weather.gov
+    
+    Args:
+        airport_icao: The ICAO code of the airport
+        source: Wind data source - "metar" or "minute" (default: "metar")
+        
+    Returns:
+        Formatted wind string like "27005G12KT" or "27005KT" or empty string if unavailable
+    """
+    if source.lower() == "metar":
+        return get_wind_from_metar(airport_icao)
+    elif source.lower() == "minute":
+        return _get_wind_info_minute(airport_icao)
+    else:
+        # Default to METAR for unknown sources
+        return get_wind_from_metar(airport_icao)
+
+def _get_wind_info_minute(airport_icao: str) -> str:
     """Fetch current wind information from weather.gov API with caching.
     
     Wind data is cached for 60 seconds to avoid excessive API calls.
@@ -174,6 +205,133 @@ def get_wind_info(airport_icao: str) -> str:
         if airport_icao in _WIND_DATA_CACHE:
             return _WIND_DATA_CACHE[airport_icao]['wind_info']
         return ""
+
+def get_metar(airport_icao: str) -> str:
+    """Fetch current METAR from aviationweather.gov API with caching.
+    
+    METAR data is cached for 60 seconds to avoid excessive API calls.
+    Airports returning 404 or no data are blacklisted and never queried again in this session.
+    
+    Args:
+        airport_icao: The ICAO code of the airport
+        
+    Returns:
+        Full METAR string or empty string if unavailable
+    """
+    global _METAR_DATA_CACHE, _METAR_BLACKLIST
+    
+    # Check if airport is blacklisted (doesn't have METAR data available)
+    if airport_icao in _METAR_BLACKLIST:
+        return ""
+    
+    # Check if we have valid cached data
+    current_time = datetime.now(timezone.utc)
+    if airport_icao in _METAR_DATA_CACHE:
+        cache_entry = _METAR_DATA_CACHE[airport_icao]
+        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+        if time_since_cache < _METAR_CACHE_DURATION:
+            return cache_entry['metar']
+    
+    # Cache miss or expired - fetch new data
+    try:
+        url = f"https://aviationweather.gov/api/data/metar?ids={airport_icao}&format=raw"
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            metar_text = response.read().decode('utf-8').strip()
+        
+        # Check if we got valid data (not empty and not an error message)
+        if not metar_text or metar_text.startswith('No METAR') or metar_text.startswith('Error'):
+            # No data available - blacklist it
+            _METAR_BLACKLIST.add(airport_icao)
+            return ""
+        
+        # Cache the result
+        _METAR_DATA_CACHE[airport_icao] = {
+            'metar': metar_text,
+            'timestamp': current_time
+        }
+        
+        return metar_text
+        
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            # Station doesn't exist - blacklist it permanently
+            _METAR_BLACKLIST.add(airport_icao)
+            return ""
+        # For other HTTP errors, return cached data if available
+        if airport_icao in _METAR_DATA_CACHE:
+            return _METAR_DATA_CACHE[airport_icao]['metar']
+        return ""
+    except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError, Exception):
+        # On other errors, return cached data if available (even if expired), otherwise empty string
+        if airport_icao in _METAR_DATA_CACHE:
+            return _METAR_DATA_CACHE[airport_icao]['metar']
+        return ""
+
+def get_wind_from_metar(airport_icao: str) -> str:
+    """Extract wind information from METAR.
+    
+    Args:
+        airport_icao: The ICAO code of the airport
+        
+    Returns:
+        Wind string in format like "27005KT" or "27005G12KT" or "Calm" or empty string if unavailable
+    """
+    metar = get_metar(airport_icao)
+    if not metar:
+        return ""
+    
+    # Parse wind from METAR
+    # Wind format in METAR: DDDSSGggKT or DDDSSKMHor DDDSSKPH (Direction Speed Gust)
+    # Also handle VRB for variable, and 00000KT for calm
+    import re
+    
+    # Look for wind pattern: direction (3 digits or VRB), speed (2-3 digits), optional gust (G + 2-3 digits), units (KT/KMH/KPH/MPS)
+    wind_pattern = r'\b(\d{3}|VRB)(\d{2,3})(G\d{2,3})?(KT|KMH|KPH|MPS)\b'
+    match = re.search(wind_pattern, metar)
+    
+    if match:
+        direction = match.group(1)
+        speed = match.group(2)
+        gust = match.group(3)  # Includes 'G' prefix if present
+        units = match.group(4)
+        
+        # Check for calm winds
+        if direction != 'VRB' and int(speed) == 0:
+            return "Calm"
+        
+        # Build wind string (always convert to KT for consistency)
+        wind_str = f"{direction}{speed}"
+        if gust:
+            wind_str += gust
+        
+        # Add KT suffix (convert if needed, but METAR is usually in KT)
+        if units == 'KT':
+            wind_str += 'KT'
+        elif units in ['KMH', 'KPH']:
+            # Convert km/h to knots (1 knot = 1.852 km/h)
+            speed_kt = round(int(speed) / 1.852)
+            wind_str = f"{direction}{speed_kt:02d}"
+            if gust:
+                gust_kt = round(int(gust[1:]) / 1.852)
+                wind_str += f"G{gust_kt:02d}"
+            wind_str += 'KT'
+        elif units == 'MPS':
+            # Convert m/s to knots (1 knot = 0.514444 m/s)
+            speed_kt = round(int(speed) / 0.514444)
+            wind_str = f"{direction}{speed_kt:02d}"
+            if gust:
+                gust_kt = round(int(gust[1:]) / 0.514444)
+                wind_str += f"G{gust_kt:02d}"
+            wind_str += 'KT'
+        else:
+            wind_str += 'KT'
+        
+        return wind_str
+    
+    return ""
 
 def load_airport_data(unified_data):
     """
@@ -717,7 +875,7 @@ def analyze_flights_data(max_eta_hours=1.0, airport_allowlist=None, groupings_al
             # Get the pretty name for the airport
             pretty_name = DISAMBIGUATOR.get_pretty_name(airport) if DISAMBIGUATOR else airport
             # Get wind information for the airport
-            wind_info = get_wind_info(airport)
+            wind_info = get_wind_info(airport, source=WIND_SOURCE)
             # Pad numeric columns to consistent width (3 characters, right-aligned)
             dep_str = str(departing).rjust(3)
             arr_str = str(arriving).rjust(3)
