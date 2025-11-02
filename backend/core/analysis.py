@@ -23,12 +23,9 @@ _script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__
 # Unified airport data - initialized lazily when needed
 UNIFIED_AIRPORT_DATA: Optional[Dict[str, Dict[str, Any]]] = None
 
-# Create disambiguator with unified data (imported from airport_disambiguator)
+# Disambiguator - initialized after unified data is loaded
 from airport_disambiguator import AirportDisambiguator
-DISAMBIGUATOR = AirportDisambiguator(
-    os.path.join(_script_dir, 'data', 'airports.json'),
-    unified_data=UNIFIED_AIRPORT_DATA
-)
+DISAMBIGUATOR: Optional[AirportDisambiguator] = None
 
 def load_airport_data(unified_data: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """
@@ -75,7 +72,7 @@ def analyze_flights_data(
         - total_flights: Total number of flights analyzed
     """
     # Load unified airport data if not already loaded
-    global UNIFIED_AIRPORT_DATA
+    global UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
     if UNIFIED_AIRPORT_DATA is None:
         print("Loading airport database...")
         UNIFIED_AIRPORT_DATA = load_unified_airport_data(
@@ -85,6 +82,12 @@ def analyze_flights_data(
         )
         if UNIFIED_AIRPORT_DATA is None:
             return None, None, 0
+        
+        # Create/update disambiguator with the loaded unified data
+        DISAMBIGUATOR = AirportDisambiguator(
+            os.path.join(_script_dir, 'data', 'airports.json'),
+            unified_data=UNIFIED_AIRPORT_DATA
+        )
     
     all_airports_data = load_airport_data(UNIFIED_AIRPORT_DATA)
     
