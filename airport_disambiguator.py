@@ -261,12 +261,20 @@ class AirportDisambiguator:
         """
         Extract the most relevant distinguishing entity using NER.
         This is the main method that will be called to get the entity for disambiguation.
+        Entities are truncated to a maximum of 3 words (treating /, -, and spaces as word separators).
         """
         # Get entities from the name
         persons, locations = self._extract_entities_from_name(airport_name, city, state)
         
         # Get the first occurring entity
         entity = self._get_first_occurring_entity(airport_name, persons, locations)
+        
+        # Truncate to 3 words maximum, treating /, -, and spaces as word separators
+        if entity:
+            words = re.split(r'[\s\-/]+', entity)
+            words = [w for w in words if w]  # Remove empty strings
+            if len(words) > 3:
+                entity = ' '.join(words[:3])
         
         return entity
 
