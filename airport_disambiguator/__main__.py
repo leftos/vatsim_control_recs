@@ -2,19 +2,10 @@
 
 import argparse
 import json
-import os
 import sys
 
 from .disambiguator import AirportDisambiguator
-
-# Import the airport_data_loader from parent directory
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-try:
-    from airport_data_loader import load_unified_airport_data
-except ImportError:
-    print("Error: airport_data_loader.py not found in parent directory")
-    sys.exit(1)
-
+from backend.data.loaders import load_unified_airport_data
 
 def main():
     """Main entry point for command-line usage."""
@@ -24,7 +15,7 @@ def main():
         epilog="""
 Examples:
   python -m airport_disambiguator KMER KBAB KNZY
-  python -m airport_disambiguator --apt-base APT_BASE.csv --airports airports.json --iata-icao iata-icao.csv KSFO KLAX
+  python -m airport_disambiguator --apt-base data/APT_BASE.csv --airports data/airports.json --iata-icao data/iata-icao.csv KSFO KLAX
         """
     )
     
@@ -35,18 +26,18 @@ Examples:
     )
     parser.add_argument(
         "--apt-base",
-        default="APT_BASE.csv",
-        help="Path to APT_BASE.csv file (default: APT_BASE.csv)"
+        default="data/APT_BASE.csv",
+        help="Path to APT_BASE.csv file (default: data/APT_BASE.csv)"
     )
     parser.add_argument(
         "--airports",
-        default="airports.json",
-        help="Path to airports.json file (default: airports.json)"
+        default="data/airports.json",
+        help="Path to airports.json file (default: data/airports.json)"
     )
     parser.add_argument(
         "--iata-icao",
-        default="iata-icao.csv",
-        help="Path to iata-icao.csv file (default: iata-icao.csv)"
+        default="data/iata-icao.csv",
+        help="Path to iata-icao.csv file (default: data/iata-icao.csv)"
     )
     
     args = parser.parse_args()

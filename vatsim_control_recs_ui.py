@@ -6,20 +6,26 @@ from textual.widgets import DataTable, TabbedContent, TabPane, Footer, Input, St
 from textual.binding import Binding
 from textual.containers import Container, Vertical, Horizontal
 from textual.events import Key
-from textual.timer import Timer
 from textual.screen import ModalScreen
 import os
-import json
-import urllib.request
-import urllib.error
 
 # Import backend functionality
-from vatsim_control_recs import analyze_flights_data, get_airport_flight_details, get_wind_info, get_metar, DISAMBIGUATOR, UNIFIED_AIRPORT_DATA, WIND_SOURCE # pyright: ignore[reportAttributeAccessIssue]
-from airport_data_loader import load_unified_airport_data
-import vatsim_control_recs
+from backend import (
+    analyze_flights_data,
+    get_wind_info,
+    get_metar,
+    DISAMBIGUATOR,
+    UNIFIED_AIRPORT_DATA
+)
+from backend.core.flights import get_airport_flight_details
+from backend.core.groupings import load_all_groupings
+from backend.cache.manager import load_aircraft_approach_speeds
+from backend.data.vatsim_api import download_vatsim_data
+from backend.config import constants as backend_constants
+import backend.config.constants
 
 # Import custom split-flap datatable
-from split_flap_datatable import SplitFlapDataTable, TIME_FLAP_CHARS, NUMERIC_FLAP_CHARS
+from widgets.split_flap_datatable import SplitFlapDataTable, NUMERIC_FLAP_CHARS
 
 # Custom flap character sets for specific column types
 ETA_FLAP_CHARS = "9876543210hm:ADELN <-"  # For NEXT ETA columns: numbers in descending order for countdown effect, <, h, m, colon, LANDED letters, space, dash
@@ -41,7 +47,7 @@ def debug_log(message: str):
 with open(DEBUG_LOG_FILE, "w", encoding="utf-8") as f:
     f.write(f"=== Debug log started at {datetime.now()} ===\n")
 from dataclasses import dataclass
-from typing import Optional, Callable, Any, Literal
+from typing import Optional, Callable, Literal
 
 @dataclass
 class ColumnConfig:
@@ -185,19 +191,25 @@ class TableManager:
     
     def populate(self, data: list) -> None:
         """Populate table with data, applying sorting and animations"""
+        debug_log(f"[TableManager] populate START - data length: {len(data)}, is_first_load: {self.is_first_load}")
+        
         # Apply sorting if configured
         if self.config.sort_function:
             data = sorted(data, key=self.config.sort_function)
+            debug_log(f"[TableManager] Applied sorting")
         
         # Set up columns
         self.setup_columns()
         column_keys = list(self.table.columns.keys())
+        debug_log(f"[TableManager] Column keys: {column_keys}")
         
         if self.is_first_load:
             # First load: clear table and animate from blank
+            debug_log(f"[TableManager] First load - clearing table")
             self.table.clear()
             self.row_keys.clear()
             
+            debug_log(f"[TableManager] Adding {len(data)} rows")
             for row_data in data:
                 # Add row with blank values, then animate to actual values
                 blank_row = tuple(" " * len(str(cell)) for cell in row_data)
@@ -210,10 +222,14 @@ class TableManager:
                     update_width = col_config.update_width if col_config else False
                     self.table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
             
+            debug_log(f"[TableManager] First load complete - table.row_count: {self.table.row_count}")
             self.is_first_load = False
         else:
             # Subsequent updates: efficiently update existing rows
+            debug_log(f"[TableManager] Subsequent update - calling _update_efficiently")
             self._update_efficiently(data, column_keys)
+        
+        debug_log(f"[TableManager] populate COMPLETE - final table.row_count: {self.table.row_count}")
     
     def _update_efficiently(self, new_data: list, column_keys: list) -> None:
         """Efficiently update table by modifying existing rows and adding/removing as needed"""
@@ -416,7 +432,7 @@ class WindInfoScreen(ModalScreen):
             result_lines.append("Minute: No data available")
         
         # Show which source is currently active
-        active_source = "METAR" if WIND_SOURCE == "metar" else "Minute"
+        active_source = "METAR" if backend_constants.WIND_SOURCE == "metar" else "Minute"
         result_lines.append(f"\nActive source: {active_source}")
         
         result_widget.update("\n".join(result_lines))
@@ -616,6 +632,8 @@ class FlightBoardScreen(ModalScreen):
     
     async def load_flight_data(self) -> None:
         """Load flight data from backend"""
+        debug_log(f"[FlightBoard] load_flight_data START for {self.airport_icao_or_list}")
+        
         # Disable parent app activity tracking for the entire operation
         app = self.app
         if isinstance(app, VATSIMControlApp):
@@ -624,18 +642,46 @@ class FlightBoardScreen(ModalScreen):
         try:
             # Run the blocking call in a thread pool
             loop = asyncio.get_event_loop()
+            # Prepare parameters for get_airport_flight_details
+            aircraft_speeds = load_aircraft_approach_speeds(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'aircraft_data.csv'))
+            vatsim_data = download_vatsim_data()
+            
+            # Ensure UNIFIED_AIRPORT_DATA is loaded by calling analyze_flights_data first
+            # This will initialize the global UNIFIED_AIRPORT_DATA if it's None
+            from backend.core.analysis import UNIFIED_AIRPORT_DATA as current_unified_data
+            if current_unified_data is None:
+                debug_log(f"[FlightBoard] UNIFIED_AIRPORT_DATA is None, triggering initialization via analyze_flights_data")
+                # Call analyze_flights_data to initialize the global data
+                analyze_flights_data(max_eta_hours=0, include_all_staffed=False)
+                # Re-import to get the updated value
+                from backend.core.analysis import UNIFIED_AIRPORT_DATA as updated_unified_data
+                unified_data_to_use = updated_unified_data
+            else:
+                unified_data_to_use = current_unified_data
+            
+            debug_log(f"[FlightBoard] Using unified_data: {unified_data_to_use is not None}")
+            debug_log(f"[FlightBoard] Calling get_airport_flight_details with airport={self.airport_icao_or_list}, max_eta=0")
+            
             result = await loop.run_in_executor(
                 None,
                 get_airport_flight_details,
                 self.airport_icao_or_list,
                 0,  # Always show all arrivals on the flight board
-                DISAMBIGUATOR
+                DISAMBIGUATOR,
+                unified_data_to_use,
+                aircraft_speeds,
+                vatsim_data
             )
+            
+            debug_log(f"[FlightBoard] get_airport_flight_details returned: {result is not None}")
             
             if result:
                 self.departures_data, self.arrivals_data = result
+                debug_log(f"[FlightBoard] Data loaded - departures: {len(self.departures_data)}, arrivals: {len(self.arrivals_data)}")
                 # Defer populate_tables until after the widget tree is fully mounted
                 self.call_after_refresh(self.populate_tables)
+            else:
+                debug_log(f"[FlightBoard] ERROR: get_airport_flight_details returned None/empty")
         finally:
             # Re-enable activity tracking
             if isinstance(app, VATSIMControlApp):
@@ -653,7 +699,7 @@ class FlightBoardScreen(ModalScreen):
             full_name = self.disambiguator.get_pretty_name(self.airport_icao_or_list)
             
             # Fetch wind information using the current global wind source
-            wind_info = get_wind_info(self.airport_icao_or_list, source=WIND_SOURCE)
+            wind_info = get_wind_info(self.airport_icao_or_list, source=backend_constants.WIND_SOURCE)
             
             # Format title: "Airport Name (ICAO) - Wind XXX@Y"
             if wind_info:
@@ -679,6 +725,8 @@ class FlightBoardScreen(ModalScreen):
     
     def populate_tables(self) -> None:
         """Populate the departure and arrivals tables with separate ICAO and NAME columns."""
+        debug_log(f"[FlightBoard] populate_tables START - departures_data length: {len(self.departures_data)}, arrivals_data length: {len(self.arrivals_data)}")
+        
         # Update window title with fresh wind data
         self._update_window_title()
         
@@ -686,26 +734,37 @@ class FlightBoardScreen(ModalScreen):
         if self.departures_manager is None:
             departures_table = self.query_one("#departures-table", SplitFlapDataTable)
             self.departures_manager = TableManager(departures_table, DEPARTURES_TABLE_CONFIG, self.departures_row_keys)
+            debug_log(f"[FlightBoard] Created departures_manager")
         
         if self.arrivals_manager is None:
             arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
             self.arrivals_manager = TableManager(arrivals_table, ARRIVALS_TABLE_CONFIG, self.arrivals_row_keys)
+            debug_log(f"[FlightBoard] Created arrivals_manager")
         
         # Transform departures data: (flight, destination_tuple) -> (flight, dest_icao, dest_name)
         departures_formatted = [
             (flight, destination_tuple[1], destination_tuple[0])
             for flight, destination_tuple in self.departures_data
         ]
+        debug_log(f"[FlightBoard] Formatted departures: {len(departures_formatted)} rows")
+        if departures_formatted:
+            debug_log(f"[FlightBoard] Sample departure: {departures_formatted[0]}")
         
         # Transform arrivals data: (flight, origin_tuple, eta, eta_local) -> (flight, origin_icao, origin_name, eta, eta_local)
         arrivals_formatted = [
             (flight, origin_tuple[1], origin_tuple[0], eta, eta_local)
             for flight, origin_tuple, eta, eta_local in self.arrivals_data
         ]
+        debug_log(f"[FlightBoard] Formatted arrivals: {len(arrivals_formatted)} rows")
+        if arrivals_formatted:
+            debug_log(f"[FlightBoard] Sample arrival: {arrivals_formatted[0]}")
         
         # Populate tables using TableManagers
+        debug_log(f"[FlightBoard] Calling departures_manager.populate")
         self.departures_manager.populate(departures_formatted)
+        debug_log(f"[FlightBoard] Calling arrivals_manager.populate")
         self.arrivals_manager.populate(arrivals_formatted)
+        debug_log(f"[FlightBoard] populate_tables COMPLETE")
     
     def action_close_board(self) -> None:
         """Close the modal"""
@@ -1287,14 +1346,11 @@ class VATSIMControlApp(App):
                 
                 # Get the list of airports in this grouping
                 # Load all groupings (custom + ARTCC) to get the airport list
-                import os
-                import json
-                from vatsim_control_recs import load_all_groupings
                 
                 script_dir = os.path.dirname(os.path.abspath(__file__))
                 try:
                     all_groupings = load_all_groupings(
-                        os.path.join(script_dir, 'custom_groupings.json'),
+                        os.path.join(script_dir, 'data', 'custom_groupings.json'),
                         UNIFIED_AIRPORT_DATA
                     )
                     if grouping_name in all_groupings:
@@ -1345,7 +1401,7 @@ def main():
     args = parser.parse_args()
     
     # Set the global wind source from command-line argument
-    vatsim_control_recs.WIND_SOURCE = args.wind_source
+    backend.config.constants.WIND_SOURCE = args.wind_source
     
     print("Loading VATSIM data...")
     
