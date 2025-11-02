@@ -17,7 +17,7 @@ from backend import (
     DISAMBIGUATOR,
     UNIFIED_AIRPORT_DATA
 )
-from backend.core.flights import get_airport_flight_details
+from backend.core.flights import get_airport_flight_details, DepartureInfo, ArrivalInfo
 from backend.core.groupings import load_all_groupings
 from backend.cache.manager import load_aircraft_approach_speeds
 from backend.data.vatsim_api import download_vatsim_data
@@ -65,9 +65,14 @@ class TableConfig:
     
 def eta_sort_key(arrival_row):
     """Sort key for arrivals: LANDED at top, then by ETA (soonest first), then by flight callsign for stability"""
-    flight, origin_icao, origin_name, eta, eta_local = arrival_row
-    eta_str = str(eta).upper()
-    flight_str = str(flight)
+    # Handle both tuple format (for display) and DepartureInfo/ArrivalInfo objects
+    if isinstance(arrival_row, ArrivalInfo):
+        flight_str = arrival_row.callsign
+        eta_str = arrival_row.eta_display.upper()
+    else:
+        flight, origin_icao, origin_name, eta, eta_local = arrival_row
+        eta_str = str(eta).upper()
+        flight_str = str(flight)
     
     # Put LANDED flights at the top
     if "LANDED" in eta_str:
@@ -200,43 +205,33 @@ class TableManager:
             data: List of row data tuples
             progressive: If True, load data in chunks for better perceived performance
         """
-        debug_log(f"[TableManager] populate START - data length: {len(data)}, is_first_load: {self.is_first_load}, progressive: {progressive}")
         
         # Apply sorting if configured
         if self.config.sort_function:
             data = sorted(data, key=self.config.sort_function)
-            debug_log(f"[TableManager] Applied sorting")
         
         # Set up columns
         self.setup_columns()
         column_keys = list(self.table.columns.keys())
-        debug_log(f"[TableManager] Column keys: {column_keys}")
         
         if self.is_first_load:
             # First load: clear table and animate from blank
-            debug_log(f"[TableManager] First load - clearing table")
             self.table.clear()
             self.row_keys.clear()
             
             if progressive and len(data) > self.progressive_load_chunk_size:
                 # Progressive loading: load in chunks
-                debug_log(f"[TableManager] Starting progressive load with {len(data)} rows in chunks of {self.progressive_load_chunk_size}")
                 self.progressive_load_active = True
                 asyncio.create_task(self._populate_progressive(data, column_keys))
             else:
                 # Standard loading: load all at once
-                debug_log(f"[TableManager] Adding {len(data)} rows")
                 self._add_rows_to_table(data, column_keys)
-                debug_log(f"[TableManager] First load complete - table.row_count: {self.table.row_count}")
             
             self.is_first_load = False
         else:
             # Subsequent updates: efficiently update existing rows
-            debug_log(f"[TableManager] Subsequent update - calling _update_efficiently")
             self._update_efficiently(data, column_keys)
-        
-        debug_log(f"[TableManager] populate COMPLETE - final table.row_count: {self.table.row_count}")
-    
+
     def _add_rows_to_table(self, data: list, column_keys: list) -> None:
         """Add rows to table with animations"""
         for row_data in data:
@@ -258,9 +253,6 @@ class TableManager:
         
         for i in range(0, total_rows, chunk_size):
             chunk = data[i:i + chunk_size]
-            chunk_end = min(i + chunk_size, total_rows)
-            
-            debug_log(f"[TableManager] Progressive load chunk {i}-{chunk_end}/{total_rows}")
             
             # Add this chunk of rows
             self._add_rows_to_table(chunk, column_keys)
@@ -269,7 +261,6 @@ class TableManager:
             await asyncio.sleep(0.05)  # 50ms between chunks
         
         self.progressive_load_active = False
-        debug_log(f"[TableManager] Progressive load complete - {total_rows} rows loaded")
     
     def _update_efficiently(self, new_data: list, column_keys: list) -> None:
         """Efficiently update table by modifying existing rows and adding/removing as needed"""
@@ -304,7 +295,6 @@ class TableManager:
         if cells_updated > 0 or cells_skipped > 0:
             total_cells = cells_updated + cells_skipped
             skip_rate = (cells_skipped / total_cells * 100) if total_cells > 0 else 0
-            debug_log(f"[TableManager] Diff update: {cells_updated} updated, {cells_skipped} skipped ({skip_rate:.1f}% skip rate)")
         
         # Add new rows if needed
         if new_row_count > current_row_count:
@@ -695,7 +685,6 @@ class FlightBoardScreen(ModalScreen):
     
     async def load_flight_data(self) -> None:
         """Load flight data from backend"""
-        debug_log(f"[FlightBoard] load_flight_data START for {self.airport_icao_or_list}")
         
         # Disable parent app activity tracking for the entire operation
         app = self.app
@@ -710,41 +699,34 @@ class FlightBoardScreen(ModalScreen):
             vatsim_data = download_vatsim_data()
             
             # Ensure UNIFIED_AIRPORT_DATA is loaded by calling analyze_flights_data first
-            # This will initialize the global UNIFIED_AIRPORT_DATA if it's None
-            from backend.core.analysis import UNIFIED_AIRPORT_DATA as current_unified_data
+            # This will initialize the global UNIFIED_AIRPORT_DATA and DISAMBIGUATOR if they're None
+            from backend.core.analysis import UNIFIED_AIRPORT_DATA as current_unified_data, DISAMBIGUATOR as current_disambiguator
             if current_unified_data is None:
-                debug_log(f"[FlightBoard] UNIFIED_AIRPORT_DATA is None, triggering initialization via analyze_flights_data")
                 # Call analyze_flights_data to initialize the global data
                 analyze_flights_data(max_eta_hours=0, include_all_staffed=False)
-                # Re-import to get the updated value
-                from backend.core.analysis import UNIFIED_AIRPORT_DATA as updated_unified_data
+                # Re-import to get the updated values
+                from backend.core.analysis import UNIFIED_AIRPORT_DATA as updated_unified_data, DISAMBIGUATOR as updated_disambiguator
                 unified_data_to_use = updated_unified_data
+                disambiguator_to_use = updated_disambiguator
             else:
                 unified_data_to_use = current_unified_data
-            
-            debug_log(f"[FlightBoard] Using unified_data: {unified_data_to_use is not None}")
-            debug_log(f"[FlightBoard] Calling get_airport_flight_details with airport={self.airport_icao_or_list}, max_eta=0")
+                disambiguator_to_use = current_disambiguator
             
             result = await loop.run_in_executor(
                 None,
                 get_airport_flight_details,
                 self.airport_icao_or_list,
                 0,  # Always show all arrivals on the flight board
-                DISAMBIGUATOR,
+                disambiguator_to_use,
                 unified_data_to_use,
                 aircraft_speeds,
                 vatsim_data
             )
             
-            debug_log(f"[FlightBoard] get_airport_flight_details returned: {result is not None}")
-            
             if result:
                 self.departures_data, self.arrivals_data = result
-                debug_log(f"[FlightBoard] Data loaded - departures: {len(self.departures_data)}, arrivals: {len(self.arrivals_data)}")
                 # Defer populate_tables until after the widget tree is fully mounted
                 self.call_after_refresh(self.populate_tables)
-            else:
-                debug_log(f"[FlightBoard] ERROR: get_airport_flight_details returned None/empty")
         finally:
             # Re-enable activity tracking
             if isinstance(app, VATSIMControlApp):
@@ -788,7 +770,6 @@ class FlightBoardScreen(ModalScreen):
     
     def populate_tables(self) -> None:
         """Populate the departure and arrivals tables with separate ICAO and NAME columns."""
-        debug_log(f"[FlightBoard] populate_tables START - departures_data length: {len(self.departures_data)}, arrivals_data length: {len(self.arrivals_data)}")
         
         # Update window title with fresh wind data
         self._update_window_title()
@@ -797,37 +778,27 @@ class FlightBoardScreen(ModalScreen):
         if self.departures_manager is None:
             departures_table = self.query_one("#departures-table", SplitFlapDataTable)
             self.departures_manager = TableManager(departures_table, DEPARTURES_TABLE_CONFIG, self.departures_row_keys)
-            debug_log(f"[FlightBoard] Created departures_manager")
         
         if self.arrivals_manager is None:
             arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
             self.arrivals_manager = TableManager(arrivals_table, ARRIVALS_TABLE_CONFIG, self.arrivals_row_keys)
-            debug_log(f"[FlightBoard] Created arrivals_manager")
         
-        # Transform departures data: (flight, destination_tuple) -> (flight, dest_icao, dest_name)
+        # Transform structured data to tuple format for table display
+        # departures_data is List[DepartureInfo], convert to (callsign, icao, name)
         departures_formatted = [
-            (flight, destination_tuple[1], destination_tuple[0])
-            for flight, destination_tuple in self.departures_data
+            (dep.callsign, dep.destination.icao_code, dep.destination.pretty_name)
+            for dep in self.departures_data
         ]
-        debug_log(f"[FlightBoard] Formatted departures: {len(departures_formatted)} rows")
-        if departures_formatted:
-            debug_log(f"[FlightBoard] Sample departure: {departures_formatted[0]}")
         
-        # Transform arrivals data: (flight, origin_tuple, eta, eta_local) -> (flight, origin_icao, origin_name, eta, eta_local)
+        # arrivals_data is List[ArrivalInfo], convert to (callsign, icao, name, eta, eta_local)
         arrivals_formatted = [
-            (flight, origin_tuple[1], origin_tuple[0], eta, eta_local)
-            for flight, origin_tuple, eta, eta_local in self.arrivals_data
+            (arr.callsign, arr.origin.icao_code, arr.origin.pretty_name, arr.eta_display, arr.eta_local_time)
+            for arr in self.arrivals_data
         ]
-        debug_log(f"[FlightBoard] Formatted arrivals: {len(arrivals_formatted)} rows")
-        if arrivals_formatted:
-            debug_log(f"[FlightBoard] Sample arrival: {arrivals_formatted[0]}")
         
         # Populate tables using TableManagers
-        debug_log(f"[FlightBoard] Calling departures_manager.populate")
         self.departures_manager.populate(departures_formatted)
-        debug_log(f"[FlightBoard] Calling arrivals_manager.populate")
         self.arrivals_manager.populate(arrivals_formatted)
-        debug_log(f"[FlightBoard] populate_tables COMPLETE")
     
     def action_close_board(self) -> None:
         """Close the modal"""
@@ -1000,9 +971,6 @@ class VATSIMControlApp(App):
         airports_table = self.query_one("#airports-table", SplitFlapDataTable)
         groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
         
-        # DIAGNOSTIC LOG
-        debug_log(f"populate_tables BEFORE clear - airports_table.row_count={airports_table.row_count}, len(airports_row_keys)={len(self.airports_row_keys)}")
-        
         # Clear tables and recreate managers (needed when columns change, e.g., on first load)
         airports_table.clear(columns=True)
         self.airports_row_keys.clear()
@@ -1022,10 +990,6 @@ class VATSIMControlApp(App):
         
         if self.groupings_data:
             self.groupings_manager.populate(self.groupings_data)
-        
-        # DIAGNOSTIC LOG
-        debug_log(f"populate_tables AFTER populate - airports_table.row_count={airports_table.row_count}, len(airports_row_keys)={len(self.airports_row_keys)}")
-        debug_log(f"populate_tables AFTER populate - groupings_table.row_count={groupings_table.row_count}, len(groupings_row_keys)={len(self.groupings_row_keys)}")
                 
         self.watch_for_user_activity = True  # Re-enable user activity tracking
     
@@ -1227,11 +1191,9 @@ class VATSIMControlApp(App):
             
             # Update tables using TableManagers
             if self.airports_manager:
-                debug_log(f"refresh_worker: Updating airports table with {len(self.airport_data)} rows")
                 self.airports_manager.populate(self.airport_data)
             
             if self.groupings_manager and self.groupings_data:
-                debug_log(f"refresh_worker: Updating groupings table with {len(self.groupings_data)} rows")
                 self.groupings_manager.populate(self.groupings_data)
             
             # Restore cursor position and scroll offset
