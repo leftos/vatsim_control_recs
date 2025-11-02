@@ -1351,7 +1351,7 @@ class VATSIMControlApp(App):
                 try:
                     all_groupings = load_all_groupings(
                         os.path.join(script_dir, 'data', 'custom_groupings.json'),
-                        UNIFIED_AIRPORT_DATA
+                        UNIFIED_AIRPORT_DATA or {}
                     )
                     if grouping_name in all_groupings:
                         airport_list = all_groupings[grouping_name]
