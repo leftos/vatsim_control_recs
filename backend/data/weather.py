@@ -36,7 +36,7 @@ def _parse_wind_from_observation(properties: dict) -> Tuple[bool, str]:
     
     # Handle calm winds (0 knots)
     if wind_speed_knots == 0:
-        return (True, "Calm")
+        return (True, "00000KT")
     
     # Format base wind: "27005KT"
     wind_str = f"{int(wind_direction):03d}{wind_speed_knots:02d}"
@@ -210,7 +210,7 @@ def get_wind_from_metar(airport_icao: str) -> str:
         airport_icao: The ICAO code of the airport
         
     Returns:
-        Wind string in format like "27005KT" or "27005G12KT" or "Calm" or empty string if unavailable
+        Wind string in format like "27005KT" or "27005G12KT" or "00000KT" or empty string if unavailable
     """
     metar = get_metar(airport_icao)
     if not metar:
@@ -232,7 +232,7 @@ def get_wind_from_metar(airport_icao: str) -> str:
         
         # Check for calm winds
         if direction != 'VRB' and int(speed) == 0:
-            return "Calm"
+            return "00000KT"
         
         # Build wind string (always convert to KT for consistency)
         wind_str = f"{direction}{speed}"

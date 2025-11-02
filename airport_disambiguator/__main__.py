@@ -4,8 +4,9 @@ import argparse
 import json
 import sys
 
-from .disambiguator import AirportDisambiguator
 from backend.data.loaders import load_unified_airport_data
+from .disambiguator import AirportDisambiguator
+
 
 def main():
     """Main entry point for command-line usage."""
