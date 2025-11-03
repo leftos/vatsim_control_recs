@@ -1,7 +1,8 @@
 # VATSIM Control Recommendations
 
 ```text
-usage: vatsim_control_recs_ui.py [-h] [--max-eta-hours MAX_ETA_HOURS] [--refresh-interval REFRESH_INTERVAL] [--airports AIRPORTS [AIRPORTS ...]] [--groupings GROUPINGS [GROUPINGS ...]] [--supergroupings SUPERGROUPINGS [SUPERGROUPINGS ...]]
+usage: main.py [-h] [--max-eta-hours MAX_ETA_HOURS] [--refresh-interval REFRESH_INTERVAL] [--airports AIRPORTS [AIRPORTS ...]] [--countries COUNTRIES [COUNTRIES ...]] [--groupings GROUPINGS [GROUPINGS ...]]
+               [--supergroupings SUPERGROUPINGS [SUPERGROUPINGS ...]] [--include-all-staffed] [--disable-animations] [--progressive-load] [--progressive-chunk-size PROGRESSIVE_CHUNK_SIZE] [--wind-source {metar,minute}]
 
 Analyze VATSIM flight data and controller staffing
 
@@ -13,10 +14,21 @@ options:
                         Auto-refresh interval in seconds (default: 15)
   --airports AIRPORTS [AIRPORTS ...]
                         List of airport ICAO codes to include in analysis (default: all)
+  --countries COUNTRIES [COUNTRIES ...]
+                        List of country codes (e.g., US DE) to include all airports from those countries
   --groupings GROUPINGS [GROUPINGS ...]
                         List of custom grouping names to include in analysis (default: all)
   --supergroupings SUPERGROUPINGS [SUPERGROUPINGS ...]
                         List of custom grouping names to use as supergroupings. This will include all airports in these supergroupings and any detected sub-groupings.
+  --include-all-staffed
+                        Include airports with zero planes if they are staffed (default: False)
+  --disable-animations  Disable split-flap animations for instant text updates (default: False)
+  --progressive-load    Enable progressive loading for faster perceived startup (default: auto for 50+ airports)
+  --progressive-chunk-size PROGRESSIVE_CHUNK_SIZE
+                        Number of rows to load per chunk in progressive mode (default: 20)
+  --wind-source {metar,minute}
+                        Wind data source: 'metar' for METAR from aviationweather.gov (default), 'minute' for up-to-the-minute from weather.gov
+
 ```
 
 **This project includes IATA/ICAO List data available from <http://www.ip2location.com>.**
