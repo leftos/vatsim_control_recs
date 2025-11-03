@@ -182,5 +182,8 @@ class EntityExtractor:
             words = [w for w in words if w]  # Remove empty strings
             if len(words) > 3:
                 entity = ' '.join(words[:3])
+            else:
+                # Always re-join with spaces to normalize separators
+                entity = ' '.join(words)
         
         return entity
