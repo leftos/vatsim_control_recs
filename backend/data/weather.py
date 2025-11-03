@@ -98,7 +98,7 @@ def get_wind_info_minute(airport_icao: str) -> str:
         
         # If latest observation doesn't have wind data, try the last 15 observations
         if not has_data:
-            url = f"https://api.weather.gov/stations/{airport_icao}/observations?limit=15"
+            url = f"https://api.weather.gov/stations/{airport_icao}/observations?limit=30"
             req = urllib.request.Request(url)
             req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
             
