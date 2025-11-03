@@ -238,18 +238,24 @@ ARRIVALS_TABLE_CONFIG = TableConfig(
 )
 
 
-def create_airports_table_config(max_eta: float) -> TableConfig:
-    """Create airport table configuration based on max_eta setting"""
+def create_airports_table_config(max_eta: float, hide_wind: bool = False) -> TableConfig:
+    """Create airport table configuration based on max_eta setting and hide_wind option"""
     arr_suffix = f"(<{max_eta:,.1g}h)" if max_eta != 0 else "(all)"
     
     columns = [
         ColumnConfig("ICAO", flap_chars=ICAO_FLAP_CHARS),
         ColumnConfig("NAME", update_width=True),
-        ColumnConfig("WIND", flap_chars=WIND_FLAP_CHARS, update_width=True),
+    ]
+    
+    # Conditionally add wind column
+    if not hide_wind:
+        columns.append(ColumnConfig("WIND", flap_chars=WIND_FLAP_CHARS, update_width=True))
+    
+    columns.extend([
         ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
         ColumnConfig("DEP    ", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
         ColumnConfig(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
-    ]
+    ])
     
     # Add ARR (all) column when max_eta_hours is specified
     if max_eta != 0:

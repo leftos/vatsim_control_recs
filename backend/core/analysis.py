@@ -48,6 +48,8 @@ def analyze_flights_data(
     groupings_allowlist: Optional[List[str]] = None,
     supergroupings_allowlist: Optional[List[str]] = None,
     include_all_staffed: bool = True,
+    hide_wind: bool = False,
+    include_all_arriving_airports: bool = False,
     unified_airport_data: Optional[Dict[str, Dict[str, Any]]] = None,
     disambiguator: Optional[AirportDisambiguator] = None
 ) -> Tuple[Optional[List[Tuple]], Optional[List[Tuple]], int, Dict[str, Dict[str, Any]], Optional[AirportDisambiguator]]:
@@ -60,6 +62,8 @@ def analyze_flights_data(
         groupings_allowlist: Optional list of custom grouping names to include
         supergroupings_allowlist: Optional list of supergrouping names to include
         include_all_staffed: Whether to include airports with zero planes if staffed (default: True)
+        hide_wind: Whether to hide the wind column from the main view (default: False)
+        include_all_arriving_airports: Whether to include airports with any arrivals filed, regardless of max_eta_hours (default: False)
         unified_airport_data: Optional pre-loaded unified airport data
         disambiguator: Optional pre-created disambiguator instance
     
@@ -250,19 +254,23 @@ def analyze_flights_data(
             arrivals_on_ground.get(airport, 0)
         )
         
-        # Include airport if it has flights, or if it's staffed and we want to include staffed zero-plane airports
+        # Include airport if it has flights, or if it's staffed and we want to include staffed zero-plane airports,
+        # or if it has any arrivals and include_all_arriving_airports is enabled
         # Note: "N/A" doesn't count as staffing (it means the airport has no tower)
-        if total_flights > 0 or (staffed_pos_display and staffed_pos_display != "N/A" and include_all_staffed):
+        if (total_flights > 0 or
+            (staffed_pos_display and staffed_pos_display != "N/A" and include_all_staffed) or
+            (arriving_all > 0 and include_all_arriving_airports)):
             airports_to_display.append((
                 airport, departing, arriving, arriving_all,
                 total_flights, eta_display, staffed_pos_display
             ))
     
     # Batch fetch wind information only for airports that will be displayed (parallelized)
+    # Skip fetching wind if hide_wind is enabled
     airports_to_fetch = [apt[0] for apt in airports_to_display]
-    if airports_to_fetch:
+    if airports_to_fetch and not hide_wind:
         print(f"Fetching weather data for {len(airports_to_fetch)} active airports...")
-    wind_info_batch = get_wind_info_batch(airports_to_fetch, source=WIND_SOURCE) if airports_to_fetch else {}
+    wind_info_batch = get_wind_info_batch(airports_to_fetch, source=WIND_SOURCE) if (airports_to_fetch and not hide_wind) else {}
     
     if airports_to_fetch:
         print(f"Processing airport names for {len(airports_to_fetch)} airports...")
@@ -274,21 +282,33 @@ def analyze_flights_data(
     for airport, departing, arriving, arriving_all, total_flights, eta_display, staffed_pos_display in airports_to_display:
         # Get the pretty name from batch results
         pretty_name = pretty_names_batch.get(airport, airport)
-        # Get wind information from batch results
-        wind_info = wind_info_batch.get(airport, "")
+        # Get wind information from batch results (only if not hidden)
+        wind_info = wind_info_batch.get(airport, "") if not hide_wind else ""
         
         # Pad numeric columns to consistent width (3 characters, right-aligned)
         dep_str = str(departing).rjust(3)
         arr_str = str(arriving).rjust(3)
         arr_all_str = str(arriving_all).rjust(3)
-        # Column order: ICAO, NAME, WIND, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED
-        # Include arriving_all in the tuple when max_eta_hours is specified
-        if max_eta_hours != 0:
-            airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
+        
+        # Build airport data tuple based on hide_wind and max_eta_hours settings
+        # Column order without wind: ICAO, NAME, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED
+        # Column order with wind: ICAO, NAME, WIND, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED
+        if hide_wind:
+            # Build tuple without wind column
+            if max_eta_hours != 0:
+                airport_data.append((airport, pretty_name, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
+            else:
+                airport_data.append((airport, pretty_name, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
         else:
-            airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
-    # Sort by total count descending (TOTAL is now at index 3 due to WIND column at index 2)
-    airport_data.sort(key=lambda x: int(x[3]), reverse=True)
+            # Build tuple with wind column
+            if max_eta_hours != 0:
+                airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
+            else:
+                airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
+    # Sort by total count descending
+    # TOTAL is at index 2 when hide_wind is True, index 3 when hide_wind is False
+    total_idx = 2 if hide_wind else 3
+    airport_data.sort(key=lambda x: int(x[total_idx]), reverse=True)
     
     # Process custom groupings data
     grouped_data = []

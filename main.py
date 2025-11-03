@@ -39,6 +39,10 @@ def main():
                         help="Number of rows to load per chunk in progressive mode (default: 20)")
     parser.add_argument("--wind-source", choices=["metar", "minute"], default="metar",
                         help="Wind data source: 'metar' for METAR from aviationweather.gov (default), 'minute' for up-to-the-minute from weather.gov")
+    parser.add_argument("--hide-wind", action="store_true",
+                        help="Hide the wind column from the main view (default: False)")
+    parser.add_argument("--include-all-arriving-airports", action="store_true",
+                        help="Include airports with any arrivals filed, regardless of max-eta-hours (default: False)")
     
     # Parse arguments
     args = parser.parse_args()
@@ -77,6 +81,8 @@ def main():
         groupings_allowlist=args.groupings,
         supergroupings_allowlist=args.supergroupings,
         include_all_staffed=args.include_all_staffed,
+        hide_wind=args.hide_wind,
+        include_all_arriving_airports=args.include_all_arriving_airports,
         unified_airport_data=ui_config.UNIFIED_AIRPORT_DATA,
         disambiguator=ui_config.DISAMBIGUATOR
     )

@@ -28,6 +28,9 @@ options:
                         Number of rows to load per chunk in progressive mode (default: 20)
   --wind-source {metar,minute}
                         Wind data source: 'metar' for METAR from aviationweather.gov (default), 'minute' for up-to-the-minute from weather.gov
+  --hide-wind           Hide the wind column from the main view (default: False)
+  --include-all-arriving-airports
+                        Include airports with any arrivals filed, regardless of max-eta-hours (default: False)
 
 ```
 

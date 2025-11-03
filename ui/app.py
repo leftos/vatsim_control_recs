@@ -110,6 +110,8 @@ class VATSIMControlApp(App):
         self.args = args
         self.airport_allowlist = airport_allowlist  # Store the expanded airport allowlist (including country expansions)
         self.include_all_staffed = args.include_all_staffed if args else False
+        self.hide_wind = args.hide_wind if args else False
+        self.include_all_arriving_airports = args.include_all_arriving_airports if args else False
         self.search_active = False
         self.refresh_paused = False
         self.refresh_interval = args.refresh_interval if args else 5
@@ -189,7 +191,7 @@ class VATSIMControlApp(App):
         self.groupings_row_keys.clear()
         
         # Create fresh TableManagers with current config
-        airports_config = create_airports_table_config(max_eta)
+        airports_config = create_airports_table_config(max_eta, self.hide_wind)
         self.airports_manager = TableManager(airports_table, airports_config, self.airports_row_keys)
         
         groupings_config = create_groupings_table_config(max_eta)
@@ -311,6 +313,8 @@ class VATSIMControlApp(App):
             self.args.groupings if self.args else None,
             self.args.supergroupings if self.args else None,
             self.include_all_staffed,
+            self.hide_wind,
+            self.include_all_arriving_airports,
             config.UNIFIED_AIRPORT_DATA,  # Pass existing instance or None
             config.DISAMBIGUATOR  # Pass existing instance or None
         )
