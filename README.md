@@ -34,6 +34,37 @@ options:
 
 ```
 
+## Keyboard Shortcuts
+
+While the app is running, you can use these keyboard shortcuts:
+
+- **Ctrl+C**: Quit the application
+- **Ctrl+R**: Manually refresh data from VATSIM
+- **Ctrl+Space**: Pause/Resume auto-refresh
+- **Ctrl+F**: Open search box to filter airports (airports tab only)
+- **Ctrl+W**: Wind information lookup
+- **Ctrl+E**: METAR lookup
+- **Ctrl+T**: Dynamic airport tracking - Add or remove airports from tracking
+- **Enter**: Open flight board for selected airport/grouping
+- **Escape**: Close modals or cancel search
+
+### Dynamic Airport Tracking (Ctrl+T)
+
+The **Ctrl+T** keyboard shortcut opens a modal that allows you to dynamically add or remove airports from tracking, independent of the filters used when starting the app.
+
+**Usage:**
+- Press `Ctrl+T` to open the Airport Tracking Manager
+- Enter a space-separated list of airport ICAO codes with `+` or `-` prefixes
+- Press `Enter` to apply changes
+- Press `Escape` to cancel
+
+**Examples:**
+- `+KSFO +KOAK` - Add tracking for San Francisco Intl and Oakland Intl
+- `-KSJC -KMRY` - Remove tracking for San Jose Intl and Monterey Regional
+- `+KSFO +KOAK -KSJC -KMRY` - Add KSFO and KOAK, remove KSJC and KMRY
+
+The app will automatically refresh with the updated airport list after applying changes.
+
 **This project includes IATA/ICAO List data available from <http://www.ip2location.com>.**
 
 IATA is a registered trademark of International Air Transport Association.  

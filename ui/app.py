@@ -19,7 +19,7 @@ from backend.config import constants as backend_constants
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .config import UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, AirportTrackingModal
 
 
 class VATSIMControlApp(App):
@@ -96,6 +96,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+f", "toggle_search", "Find", priority=True),
         Binding("ctrl+w", "show_wind_lookup", "Wind Lookup", priority=True),
         Binding("ctrl+e", "show_metar_lookup", "METAR Lookup", priority=True),
+        Binding("ctrl+t", "show_airport_tracking", "Track Airports", priority=True),
         Binding("escape", "cancel_search", "Cancel Search", show=False),
         Binding("enter", "open_flight_board", "Flight Board"),
     ]
@@ -633,3 +634,40 @@ class VATSIMControlApp(App):
         """Show the METAR lookup modal"""
         metar_screen = MetarInfoScreen()
         self.push_screen(metar_screen)
+    
+    def action_show_airport_tracking(self) -> None:
+        """Show the airport tracking modal"""
+        tracking_modal = AirportTrackingModal()
+        self.push_screen(tracking_modal, callback=self.handle_tracking_result)
+    
+    def handle_tracking_result(self, result) -> None:
+        """Handle the result from airport tracking modal"""
+        if result is None:
+            # User cancelled
+            return
+        
+        airports_to_add, airports_to_remove = result
+        
+        # Initialize airport_allowlist if it's None
+        if self.airport_allowlist is None:
+            self.airport_allowlist = []
+        else:
+            # Make a copy to avoid modifying the original
+            self.airport_allowlist = list(self.airport_allowlist)
+        
+        # Remove airports
+        for icao in airports_to_remove:
+            if icao in self.airport_allowlist:
+                self.airport_allowlist.remove(icao)
+        
+        # Add new airports
+        for icao in airports_to_add:
+            if icao not in self.airport_allowlist:
+                self.airport_allowlist.append(icao)
+        
+        # If the allowlist is now empty, set it back to None (means track all)
+        if not self.airport_allowlist:
+            self.airport_allowlist = None
+        
+        # Refresh data with new airport list
+        self.action_refresh()
