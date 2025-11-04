@@ -110,6 +110,7 @@ class VATSIMControlApp(App):
         self.total_flights = total_flights
         self.args = args
         self.airport_allowlist = airport_allowlist  # Store the expanded airport allowlist (including country expansions)
+        self.airport_blocklist = []  # Airports to exclude from tracking
         self.include_all_staffed = args.include_all_staffed if args else False
         self.hide_wind = args.hide_wind if args else False
         self.include_all_arriving_airports = args.include_all_arriving_airports if args else False
@@ -317,7 +318,8 @@ class VATSIMControlApp(App):
             self.hide_wind,
             self.include_all_arriving_airports,
             config.UNIFIED_AIRPORT_DATA,  # Pass existing instance or None
-            config.DISAMBIGUATOR  # Pass existing instance or None
+            config.DISAMBIGUATOR,  # Pass existing instance or None
+            self.airport_blocklist  # Pass blocklist for dynamic exclusions
         )
         
         # Update module-level instances from the result
@@ -648,26 +650,29 @@ class VATSIMControlApp(App):
         
         airports_to_add, airports_to_remove = result
         
-        # Initialize airport_allowlist if it's None
-        if self.airport_allowlist is None:
-            self.airport_allowlist = []
-        else:
-            # Make a copy to avoid modifying the original
-            self.airport_allowlist = list(self.airport_allowlist)
-        
-        # Remove airports
-        for icao in airports_to_remove:
-            if icao in self.airport_allowlist:
-                self.airport_allowlist.remove(icao)
-        
-        # Add new airports
+        # Handle additions: remove from blocklist if present, add to allowlist if explicit list exists
         for icao in airports_to_add:
-            if icao not in self.airport_allowlist:
-                self.airport_allowlist.append(icao)
+            # Remove from blocklist if it was blocked
+            if icao in self.airport_blocklist:
+                self.airport_blocklist.remove(icao)
+            
+            # If we have an explicit allowlist, add to it
+            if self.airport_allowlist is not None:
+                if icao not in self.airport_allowlist:
+                    self.airport_allowlist.append(icao)
+            else:
+                # If no explicit allowlist, create one with just this airport
+                self.airport_allowlist = [icao]
         
-        # If the allowlist is now empty, set it back to None (means track all)
-        if not self.airport_allowlist:
-            self.airport_allowlist = None
+        # Handle removals: add to blocklist or remove from allowlist
+        for icao in airports_to_remove:
+            # If we have an explicit allowlist, remove from it
+            if self.airport_allowlist is not None:
+                if icao in self.airport_allowlist:
+                    self.airport_allowlist.remove(icao)
+            # Always add to blocklist to prevent it from appearing
+            if icao not in self.airport_blocklist:
+                self.airport_blocklist.append(icao)
         
-        # Refresh data with new airport list
+        # Refresh data with new configuration
         self.action_refresh()

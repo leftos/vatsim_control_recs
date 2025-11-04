@@ -51,7 +51,8 @@ def analyze_flights_data(
     hide_wind: bool = False,
     include_all_arriving_airports: bool = False,
     unified_airport_data: Optional[Dict[str, Dict[str, Any]]] = None,
-    disambiguator: Optional[AirportDisambiguator] = None
+    disambiguator: Optional[AirportDisambiguator] = None,
+    airport_blocklist: Optional[List[str]] = None
 ) -> Tuple[Optional[List[Tuple]], Optional[List[Tuple]], int, Dict[str, Dict[str, Any]], Optional[AirportDisambiguator]]:
     """
     Main function to analyze VATSIM flights and controller staffing - returns data structures.
@@ -66,6 +67,7 @@ def analyze_flights_data(
         include_all_arriving_airports: Whether to include airports with any arrivals filed, regardless of max_eta_hours (default: False)
         unified_airport_data: Optional pre-loaded unified airport data
         disambiguator: Optional pre-created disambiguator instance
+        airport_blocklist: Optional list of airport ICAOs to exclude from tracking
     
     Returns:
         Tuple of (airport_data, grouped_data, total_flights, unified_airport_data, disambiguator):
@@ -75,6 +77,9 @@ def analyze_flights_data(
         - unified_airport_data: The unified airport data (for reuse by caller)
         - disambiguator: The disambiguator instance (for reuse by caller)
     """
+    # Initialize blocklist if not provided
+    if airport_blocklist is None:
+        airport_blocklist = []
     # Load unified airport data if not provided
     if unified_airport_data is None:
         print("Loading airport database...")
@@ -162,9 +167,9 @@ def analyze_flights_data(
         active_groupings_for_filter = {}
 
     if airport_allowlist:  # If there's an explicit airport_allowlist (from --airports or active groupings)
-        airports = {icao: data for icao, data in all_airports_data.items() if icao in airport_allowlist}
-    else:  # If no explicit airport_allowlist, use all airports
-        airports = all_airports_data
+        airports = {icao: data for icao, data in all_airports_data.items() if icao in airport_allowlist and icao not in airport_blocklist}
+    else:  # If no explicit airport_allowlist, use all airports (excluding blocklist)
+        airports = {icao: data for icao, data in all_airports_data.items() if icao not in airport_blocklist}
     
     # Download VATSIM data
     print("Downloading live flight data...")

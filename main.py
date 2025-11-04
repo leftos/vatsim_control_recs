@@ -84,7 +84,8 @@ def main():
         hide_wind=args.hide_wind,
         include_all_arriving_airports=args.include_all_arriving_airports,
         unified_airport_data=ui_config.UNIFIED_AIRPORT_DATA,
-        disambiguator=ui_config.DISAMBIGUATOR
+        disambiguator=ui_config.DISAMBIGUATOR,
+        airport_blocklist=[]  # Empty at startup, only used for dynamic tracking
     )
     
     if airport_data is None:
