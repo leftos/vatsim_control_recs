@@ -8,5 +8,6 @@
   "NCT E NV (R)": ["KRNO"],
   "ZOA Combined": ["KAPC", "KBAB", "KCCR", "KCIC", "KFAT", "KHWD", "KKWA", "KLVK", "KMCC", "KMER", "KMHR", "KMOD", "KMRY", "KNLC", "KNFL", "KNUQ", "KOAK", "KPAO", "KRDD", "KRHV", "KRNO", "KSAC", "KSCK", "KSFO", "KSJC", "KSMF", "KSNS", "KSQL", "KSTS", "KSUU", "KTRK"],
   "FAT_APP": ["KFAT", "KFCH", "KHJO", "KMAE", "KTLR", "O32", "0Q4", "D86", "E79", "KVIS", "1Q1"],
-  "HCF_APP": ["PHNL", "PHJR", "PHIK", "PHHI"]
+  "HNL_APP": ["PHNL", "PHJR", "PHIK", "PHHI"],
+  "OGG_APP": ["PHOG","PHJH"]
 }
