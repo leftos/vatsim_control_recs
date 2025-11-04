@@ -4,7 +4,9 @@ Contains TableManager class and table configuration builders
 """
 
 import asyncio
+from typing import Any, List, Union
 from widgets.split_flap_datatable import SplitFlapDataTable, NUMERIC_FLAP_CHARS
+from backend.core.models import AirportStats, GroupingStats
 from .config import (
     ColumnConfig, TableConfig,
     ETA_FLAP_CHARS, ICAO_FLAP_CHARS, CALLSIGN_FLAP_CHARS,
@@ -89,16 +91,16 @@ class TableManager:
                     content_align=col_config.content_align
                 )
     
-    def populate(self, data: list, progressive: bool = False) -> None:
+    def populate(self, data: List[Any], progressive: bool = False) -> None:
         """
         Populate table with data, applying sorting and animations.
         
         Args:
-            data: List of row data tuples
+            data: List of AirportStats, GroupingStats, or tuple objects
             progressive: If True, load data in chunks for better perceived performance
         """
         
-        # Apply sorting if configured
+        # Apply sorting if configured (works with both objects and tuples)
         if self.config.sort_function:
             data = sorted(data, key=self.config.sort_function)
         
@@ -124,9 +126,12 @@ class TableManager:
             # Subsequent updates: efficiently update existing rows
             self._update_efficiently(data, column_keys)
 
-    def _add_rows_to_table(self, data: list, column_keys: list) -> None:
+    def _add_rows_to_table(self, data: List[Any], column_keys: list) -> None:
         """Add rows to table with animations"""
-        for row_data in data:
+        for row_obj in data:
+            # Convert object to tuple if needed
+            row_data = self._to_tuple(row_obj)
+            
             # Add row with blank values, then animate to actual values
             blank_row = tuple(" " * len(str(cell)) for cell in row_data)
             row_key = self.table.add_row(*blank_row)
@@ -138,7 +143,7 @@ class TableManager:
                 update_width = col_config.update_width if col_config else False
                 self.table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
     
-    async def _populate_progressive(self, data: list, column_keys: list) -> None:
+    async def _populate_progressive(self, data: List[Any], column_keys: list) -> None:
         """Populate table progressively in chunks for better perceived performance"""
         total_rows = len(data)
         chunk_size = self.progressive_load_chunk_size
@@ -154,7 +159,26 @@ class TableManager:
         
         self.progressive_load_active = False
     
-    def _update_efficiently(self, new_data: list, column_keys: list) -> None:
+    def _to_tuple(self, row_obj: Any) -> tuple:
+        """
+        Convert row object to tuple for display.
+        Handles AirportStats, GroupingStats, and already-tuple data.
+        """
+        if isinstance(row_obj, AirportStats):
+            # Check if we should hide wind column based on the config
+            hide_wind = not any(col.name == "WIND" for col in self.config.columns)
+            # Check if we should include arrivals_all based on column count
+            include_arrivals_all = any("(all)" in col.name for col in self.config.columns)
+            return row_obj.to_tuple(hide_wind=hide_wind, include_arrivals_all=include_arrivals_all)
+        elif isinstance(row_obj, GroupingStats):
+            # Check if we should include arrivals_all based on column count
+            include_arrivals_all = any("(all)" in col.name for col in self.config.columns)
+            return row_obj.to_tuple(include_arrivals_all=include_arrivals_all)
+        else:
+            # Already a tuple
+            return row_obj
+    
+    def _update_efficiently(self, new_data: List[Any], column_keys: list) -> None:
         """Efficiently update table by modifying existing rows and adding/removing as needed"""
         current_row_count = len(self.row_keys)
         new_row_count = len(new_data)
@@ -168,7 +192,8 @@ class TableManager:
         cells_skipped = 0
         
         for i in range(min(current_row_count, new_row_count)):
-            row_data = new_data[i]
+            row_obj = new_data[i]
+            row_data = self._to_tuple(row_obj)
             old_row_data = self._cached_data[i] if i < len(self._cached_data) else None
             
             if i < len(self.row_keys):
@@ -191,7 +216,8 @@ class TableManager:
         # Add new rows if needed
         if new_row_count > current_row_count:
             for i in range(current_row_count, new_row_count):
-                row_data = new_data[i]
+                row_obj = new_data[i]
+                row_data = self._to_tuple(row_obj)
                 blank_row = tuple(" " * len(str(cell)) for cell in row_data)
                 row_key = self.table.add_row(*blank_row)
                 self.row_keys.append(row_key)
@@ -212,8 +238,8 @@ class TableManager:
                     # Schedule actual removal after animation completes
                     asyncio.create_task(self._wait_and_remove_row(row_key))
         
-        # Cache the new data for next comparison
-        self._cached_data = [tuple(row) for row in new_data]
+        # Cache the new data for next comparison (convert to tuples)
+        self._cached_data = [self._to_tuple(row) for row in new_data]
 
 
 # Table configuration constants

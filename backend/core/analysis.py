@@ -14,6 +14,7 @@ from backend.core.controllers import get_staffed_positions
 from backend.core.calculations import format_eta_display, calculate_eta
 from backend.core.groupings import load_all_groupings
 from backend.core.flights import get_nearest_airport_if_on_ground, is_flight_flying_near_arrival
+from backend.core.models import AirportStats, GroupingStats
 from backend.config.constants import WIND_SOURCE
 from airport_disambiguator import AirportDisambiguator
 
@@ -53,7 +54,7 @@ def analyze_flights_data(
     unified_airport_data: Optional[Dict[str, Dict[str, Any]]] = None,
     disambiguator: Optional[AirportDisambiguator] = None,
     airport_blocklist: Optional[List[str]] = None
-) -> Tuple[Optional[List[Tuple]], Optional[List[Tuple]], int, Dict[str, Dict[str, Any]], Optional[AirportDisambiguator]]:
+) -> Tuple[Optional[List[AirportStats]], Optional[List[GroupingStats]], int, Dict[str, Dict[str, Any]], Optional[AirportDisambiguator]]:
     """
     Main function to analyze VATSIM flights and controller staffing - returns data structures.
     
@@ -71,8 +72,8 @@ def analyze_flights_data(
     
     Returns:
         Tuple of (airport_data, grouped_data, total_flights, unified_airport_data, disambiguator):
-        - airport_data: List of tuples with airport statistics
-        - grouped_data: List of tuples with grouping statistics
+        - airport_data: List of AirportStats objects with airport statistics
+        - grouped_data: List of GroupingStats objects with grouping statistics
         - total_flights: Total number of flights analyzed
         - unified_airport_data: The unified airport data (for reuse by caller)
         - disambiguator: The disambiguator instance (for reuse by caller)
@@ -265,14 +266,19 @@ def analyze_flights_data(
         if (total_flights > 0 or
             (staffed_pos_display and staffed_pos_display != "N/A" and include_all_staffed) or
             (arriving_all > 0 and include_all_arriving)):
-            airports_to_display.append((
-                airport, departing, arriving, arriving_all,
-                total_flights, eta_display, staffed_pos_display
-            ))
+            airports_to_display.append({
+                'icao': airport,
+                'departing': departing,
+                'arriving': arriving,
+                'arriving_all': arriving_all,
+                'total_flights': total_flights,
+                'eta_display': eta_display,
+                'staffed_pos_display': staffed_pos_display
+            })
     
     # Batch fetch wind information only for airports that will be displayed (parallelized)
     # Skip fetching wind if hide_wind is enabled
-    airports_to_fetch = [apt[0] for apt in airports_to_display]
+    airports_to_fetch = [apt['icao'] for apt in airports_to_display]
     if airports_to_fetch and not hide_wind:
         print(f"Fetching weather data for {len(airports_to_fetch)} active airports...")
     wind_info_batch = get_wind_info_batch(airports_to_fetch, source=WIND_SOURCE) if (airports_to_fetch and not hide_wind) else {}
@@ -284,44 +290,36 @@ def analyze_flights_data(
     
     # Second pass: build airport_data with fetched information
     airport_data = []
-    for airport, departing, arriving, arriving_all, total_flights, eta_display, staffed_pos_display in airports_to_display:
-        # Get the pretty name from batch results
-        pretty_name = pretty_names_batch.get(airport, airport)
+    for apt_dict in airports_to_display:
+        airport = apt_dict['icao']
+        departing = apt_dict['departing']
+        arriving = apt_dict['arriving']
+        arriving_all = apt_dict['arriving_all']
+        total_flights = apt_dict['total_flights']
+        eta_display = apt_dict['eta_display']
+        staffed_pos_display = apt_dict['staffed_pos_display']
+        
+        # Get the pretty name from batch results (with fallback to ICAO)
+        pretty_name = pretty_names_batch.get(airport) or airport
         # Get wind information from batch results (only if not hidden)
-        wind_info = wind_info_batch.get(airport, "") if not hide_wind else ""
+        wind_info = wind_info_batch.get(airport) or "" if not hide_wind else ""
         
-        # Pad numeric columns to consistent width (3 characters, right-aligned)
-        dep_str = str(departing).rjust(3)
-        arr_str = str(arriving).rjust(3)
-        arr_all_str = str(arriving_all).rjust(3)
-        
-        # Build airport data tuple based on hide_wind and max_eta_hours settings
-        # Column order without wind: ICAO, NAME, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED
-        # Column order with wind: ICAO, NAME, WIND, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED
-        if hide_wind:
-            # Build tuple without wind column
-            if max_eta_hours != 0:
-                airport_data.append((airport, pretty_name, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
-            else:
-                airport_data.append((airport, pretty_name, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
-        else:
-            # Build tuple with wind column
-            if max_eta_hours != 0:
-                airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
-            else:
-                airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
+        # Create AirportStats object
+        stats = AirportStats(
+            icao=airport,
+            name=pretty_name,
+            wind=wind_info,
+            total=total_flights,
+            departures=departing,
+            arrivals=arriving,
+            arrivals_all=arriving_all,
+            next_eta=eta_display,
+            staffed=staffed_pos_display
+        )
+        airport_data.append(stats)
+    
     # Sort by total count descending, with arrivals (independent of ETA) as tie-breaker, then alphabetically by ICAO
-    # TOTAL is at index 2 when hide_wind is True, index 3 when hide_wind is False
-    # ARR(all) is at index 5 when hide_wind is True and max_eta_hours != 0, index 6 when hide_wind is False and max_eta_hours != 0
-    # ARR is at index 4 when hide_wind is True and max_eta_hours == 0, index 5 when hide_wind is False and max_eta_hours == 0
-    # ICAO is always at index 0
-    total_idx = 2 if hide_wind else 3
-    if max_eta_hours != 0:
-        arrivals_idx = 5 if hide_wind else 6
-    else:
-        arrivals_idx = 4 if hide_wind else 5
-    # Use negative values for descending numeric sorts, positive for ascending alphabetical
-    airport_data.sort(key=lambda x: (-int(x[total_idx]), -int(x[arrivals_idx]), x[0]))
+    airport_data.sort(key=lambda x: (-x.total, -x.arrivals_all, x.icao))
     
     # Process custom groupings data
     grouped_data = []
@@ -349,8 +347,17 @@ def analyze_flights_data(
             staffed_display = ", ".join(staffed_airports) if staffed_airports else ""
             
             if group_total > 0:  # Only include groupings with activity
-                grouped_data.append((group_name, str(group_total), str(group_departing), str(group_arriving), str(group_arriving_all), group_eta_display, staffed_display))
+                stats = GroupingStats(
+                    name=group_name,
+                    total=group_total,
+                    departures=group_departing,
+                    arrivals=group_arriving,
+                    arrivals_all=group_arriving_all,
+                    next_eta=group_eta_display,
+                    staffed=staffed_display
+                )
+                grouped_data.append(stats)
         
-        grouped_data.sort(key=lambda x: int(x[1]), reverse=True)
+        grouped_data.sort(key=lambda x: x.total, reverse=True)
     
     return airport_data, grouped_data, len(flights), unified_airport_data, disambiguator

@@ -358,14 +358,14 @@ class VATSIMControlApp(App):
             airports_table = self.query_one("#airports-table", SplitFlapDataTable)
             if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
                 saved_row_index = airports_table.cursor_row
-                saved_airport_icao = str(self.airport_data[airports_table.cursor_row][0])  # ICAO is first column
+                saved_airport_icao = self.airport_data[airports_table.cursor_row].icao
                 # Save current scroll offset
                 saved_scroll_offset = airports_table.scroll_offset.y
         elif current_tab == "groupings":
             groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
             if self.groupings_data and groupings_table.cursor_row is not None and groupings_table.cursor_row < len(self.groupings_data):
                 saved_row_index = groupings_table.cursor_row
-                saved_grouping_name = str(self.groupings_data[groupings_table.cursor_row][0])  # Name is first column
+                saved_grouping_name = self.groupings_data[groupings_table.cursor_row].name
                 saved_scroll_offset = groupings_table.scroll_offset.y
         
         # Start async data fetch
@@ -409,13 +409,11 @@ class VATSIMControlApp(App):
                 search_text = search_input.value
                 if search_text:
                     search_text = search_text.upper()
-                    # Determine staffed position index based on row length
-                    staffed_idx = -1  # Last element is always staffed positions
                     self.airport_data = [
                         row for row in self.original_airport_data
-                        if search_text in row[0].upper() or  # ICAO
-                           search_text in row[1].upper() or  # Airport name
-                           search_text in row[staffed_idx].upper()      # Staffed positions
+                        if search_text in row.icao.upper() or
+                           search_text in row.name.upper() or
+                           search_text in row.staffed.upper()
                     ]
                 else:
                     self.airport_data = self.original_airport_data
@@ -435,7 +433,7 @@ class VATSIMControlApp(App):
                 new_row_index = saved_row_index
                 if saved_airport_icao:
                     for i, row in enumerate(self.airport_data):
-                        if row[0] == saved_airport_icao:
+                        if row.icao == saved_airport_icao:
                             new_row_index = i
                             break
                 # Ensure row index is within bounds
@@ -458,7 +456,7 @@ class VATSIMControlApp(App):
                 new_row_index = saved_row_index
                 if saved_grouping_name:
                     for i, row in enumerate(self.groupings_data):
-                        if row[0] == saved_grouping_name:
+                        if row.name == saved_grouping_name:
                             new_row_index = i
                             break
                 # Ensure row index is within bounds
@@ -560,13 +558,11 @@ class VATSIMControlApp(App):
             self.airport_data = self.original_airport_data
         else:
             search_text = search_text.upper()
-            # Determine staffed position index based on row length
-            staffed_idx = -1  # Last element is always staffed positions
             self.airport_data = [
                 row for row in self.original_airport_data
-                if search_text in row[0].upper() or  # ICAO
-                   search_text in row[1].upper() or  # Airport name
-                   search_text in row[staffed_idx].upper()      # Staffed positions
+                if search_text in row.icao.upper() or
+                   search_text in row.name.upper() or
+                   search_text in row.staffed.upper()
             ]
         
         self.populate_tables()
@@ -587,7 +583,7 @@ class VATSIMControlApp(App):
             airports_table = self.query_one("#airports-table", SplitFlapDataTable)
             if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
                 # Get the ICAO code from the selected row
-                icao: str = str(self.airport_data[airports_table.cursor_row][0])
+                icao: str = self.airport_data[airports_table.cursor_row].icao
                 # Use the pretty name as the title instead of just the ICAO
                 title: str = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
                  
@@ -602,7 +598,7 @@ class VATSIMControlApp(App):
             groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
             if self.groupings_data and groupings_table.cursor_row is not None and groupings_table.cursor_row < len(self.groupings_data):
                 # Get the grouping name from the selected row
-                grouping_name = str(self.groupings_data[groupings_table.cursor_row][0])
+                grouping_name = self.groupings_data[groupings_table.cursor_row].name
                 
                 # Get the list of airports in this grouping
                 # Load all groupings (custom + ARTCC) to get the airport list
