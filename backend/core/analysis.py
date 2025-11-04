@@ -310,10 +310,18 @@ def analyze_flights_data(
                 airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, arr_all_str, eta_display, staffed_pos_display))
             else:
                 airport_data.append((airport, pretty_name, wind_info, str(total_flights), dep_str, arr_str, eta_display, staffed_pos_display))
-    # Sort by total count descending
+    # Sort by total count descending, with arrivals (independent of ETA) as tie-breaker, then alphabetically by ICAO
     # TOTAL is at index 2 when hide_wind is True, index 3 when hide_wind is False
+    # ARR(all) is at index 5 when hide_wind is True and max_eta_hours != 0, index 6 when hide_wind is False and max_eta_hours != 0
+    # ARR is at index 4 when hide_wind is True and max_eta_hours == 0, index 5 when hide_wind is False and max_eta_hours == 0
+    # ICAO is always at index 0
     total_idx = 2 if hide_wind else 3
-    airport_data.sort(key=lambda x: int(x[total_idx]), reverse=True)
+    if max_eta_hours != 0:
+        arrivals_idx = 5 if hide_wind else 6
+    else:
+        arrivals_idx = 4 if hide_wind else 5
+    # Use negative values for descending numeric sorts, positive for ascending alphabetical
+    airport_data.sort(key=lambda x: (-int(x[total_idx]), -int(x[arrivals_idx]), x[0]))
     
     # Process custom groupings data
     grouped_data = []
