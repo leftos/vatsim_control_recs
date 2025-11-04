@@ -41,7 +41,7 @@ def main():
                         help="Wind data source: 'metar' for METAR from aviationweather.gov (default), 'minute' for up-to-the-minute from weather.gov")
     parser.add_argument("--hide-wind", action="store_true",
                         help="Hide the wind column from the main view (default: False)")
-    parser.add_argument("--include-all-arriving-airports", action="store_true",
+    parser.add_argument("--include-all-arriving", action="store_true",
                         help="Include airports with any arrivals filed, regardless of max-eta-hours (default: False)")
     
     # Parse arguments
@@ -82,7 +82,7 @@ def main():
         supergroupings_allowlist=args.supergroupings,
         include_all_staffed=args.include_all_staffed,
         hide_wind=args.hide_wind,
-        include_all_arriving_airports=args.include_all_arriving_airports,
+        include_all_arriving=args.include_all_arriving,
         unified_airport_data=ui_config.UNIFIED_AIRPORT_DATA,
         disambiguator=ui_config.DISAMBIGUATOR,
         airport_blocklist=[]  # Empty at startup, only used for dynamic tracking

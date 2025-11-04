@@ -113,7 +113,7 @@ class VATSIMControlApp(App):
         self.airport_blocklist = []  # Airports to exclude from tracking
         self.include_all_staffed = args.include_all_staffed if args else False
         self.hide_wind = args.hide_wind if args else False
-        self.include_all_arriving_airports = args.include_all_arriving_airports if args else False
+        self.include_all_arriving = args.include_all_arriving if args else False
         self.search_active = False
         self.refresh_paused = False
         self.refresh_interval = args.refresh_interval if args else 5
@@ -316,7 +316,7 @@ class VATSIMControlApp(App):
             self.args.supergroupings if self.args else None,
             self.include_all_staffed,
             self.hide_wind,
-            self.include_all_arriving_airports,
+            self.include_all_arriving,
             config.UNIFIED_AIRPORT_DATA,  # Pass existing instance or None
             config.DISAMBIGUATOR,  # Pass existing instance or None
             self.airport_blocklist  # Pass blocklist for dynamic exclusions

@@ -49,7 +49,7 @@ def analyze_flights_data(
     supergroupings_allowlist: Optional[List[str]] = None,
     include_all_staffed: bool = True,
     hide_wind: bool = False,
-    include_all_arriving_airports: bool = False,
+    include_all_arriving: bool = False,
     unified_airport_data: Optional[Dict[str, Dict[str, Any]]] = None,
     disambiguator: Optional[AirportDisambiguator] = None,
     airport_blocklist: Optional[List[str]] = None
@@ -64,7 +64,7 @@ def analyze_flights_data(
         supergroupings_allowlist: Optional list of supergrouping names to include
         include_all_staffed: Whether to include airports with zero planes if staffed (default: True)
         hide_wind: Whether to hide the wind column from the main view (default: False)
-        include_all_arriving_airports: Whether to include airports with any arrivals filed, regardless of max_eta_hours (default: False)
+        include_all_arriving: Whether to include airports with any arrivals filed, regardless of max_eta_hours (default: False)
         unified_airport_data: Optional pre-loaded unified airport data
         disambiguator: Optional pre-created disambiguator instance
         airport_blocklist: Optional list of airport ICAOs to exclude from tracking
@@ -260,11 +260,11 @@ def analyze_flights_data(
         )
         
         # Include airport if it has flights, or if it's staffed and we want to include staffed zero-plane airports,
-        # or if it has any arrivals and include_all_arriving_airports is enabled
+        # or if it has any arrivals and include_all_arriving is enabled
         # Note: "N/A" doesn't count as staffing (it means the airport has no tower)
         if (total_flights > 0 or
             (staffed_pos_display and staffed_pos_display != "N/A" and include_all_staffed) or
-            (arriving_all > 0 and include_all_arriving_airports)):
+            (arriving_all > 0 and include_all_arriving)):
             airports_to_display.append((
                 airport, departing, arriving, arriving_all,
                 total_flights, eta_display, staffed_pos_display
