@@ -92,7 +92,7 @@ class VATSIMControlApp(App):
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit", priority=True),
         Binding("ctrl+r", "refresh", "Refresh", priority=True),
-        Binding("ctrl+space", "toggle_pause", "Pause/Resume", priority=True),
+        Binding("ctrl+p", "toggle_pause", "Pause/Resume", priority=True),
         Binding("ctrl+f", "toggle_search", "Find", priority=True),
         Binding("ctrl+w", "show_wind_lookup", "Wind Lookup", priority=True),
         Binding("ctrl+e", "show_metar_lookup", "METAR Lookup", priority=True),
