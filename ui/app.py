@@ -6,6 +6,7 @@ Contains the VATSIMControlApp Textual application class
 import asyncio
 import os
 from datetime import datetime, timezone
+from typing import List, Tuple, Any, Optional, Sequence
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, TabbedContent, TabPane, Footer, Input, Static
 from textual.binding import Binding
@@ -104,9 +105,9 @@ class VATSIMControlApp(App):
     def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None, airport_allowlist=None):
         super().__init__()
         self.console.set_window_title("VATSIM Control Recommendations")
-        self.original_airport_data = airport_data or []
-        self.airport_data = airport_data or []
-        self.groupings_data = groupings_data or []
+        self.original_airport_data: List[Any] = list(airport_data) if airport_data else []
+        self.airport_data: List[Any] = list(airport_data) if airport_data else []
+        self.groupings_data: List[Any] = list(groupings_data) if groupings_data else []
         self.total_flights = total_flights
         self.args = args
         self.airport_allowlist = airport_allowlist  # Store the expanded airport allowlist (including country expansions)
@@ -357,14 +358,14 @@ class VATSIMControlApp(App):
             airports_table = self.query_one("#airports-table", SplitFlapDataTable)
             if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
                 saved_row_index = airports_table.cursor_row
-                saved_airport_icao = self.airport_data[airports_table.cursor_row][0]  # ICAO is first column
+                saved_airport_icao = str(self.airport_data[airports_table.cursor_row][0])  # ICAO is first column
                 # Save current scroll offset
                 saved_scroll_offset = airports_table.scroll_offset.y
         elif current_tab == "groupings":
             groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
             if self.groupings_data and groupings_table.cursor_row is not None and groupings_table.cursor_row < len(self.groupings_data):
                 saved_row_index = groupings_table.cursor_row
-                saved_grouping_name = self.groupings_data[groupings_table.cursor_row][0]  # Name is first column
+                saved_grouping_name = str(self.groupings_data[groupings_table.cursor_row][0])  # Name is first column
                 saved_scroll_offset = groupings_table.scroll_offset.y
         
         # Start async data fetch
@@ -397,9 +398,9 @@ class VATSIMControlApp(App):
         if airport_data is not None:
             self.watch_for_user_activity = False  # Temporarily disable user activity tracking
             
-            self.original_airport_data = airport_data
-            self.airport_data = airport_data
-            self.groupings_data = groupings_data or []
+            self.original_airport_data = list(airport_data)
+            self.airport_data = list(airport_data)
+            self.groupings_data = list(groupings_data) if groupings_data else []
             self.total_flights = total_flights or 0
             
             # If search is active, reapply the filter to the new data before updating table
@@ -586,9 +587,9 @@ class VATSIMControlApp(App):
             airports_table = self.query_one("#airports-table", SplitFlapDataTable)
             if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
                 # Get the ICAO code from the selected row
-                icao = self.airport_data[airports_table.cursor_row][0]
+                icao: str = str(self.airport_data[airports_table.cursor_row][0])
                 # Use the pretty name as the title instead of just the ICAO
-                title = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
+                title: str = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
                  
                 # Open the flight board and store reference
                 self.flight_board_open = True
@@ -601,7 +602,7 @@ class VATSIMControlApp(App):
             groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
             if self.groupings_data and groupings_table.cursor_row is not None and groupings_table.cursor_row < len(self.groupings_data):
                 # Get the grouping name from the selected row
-                grouping_name = self.groupings_data[groupings_table.cursor_row][0]
+                grouping_name = str(self.groupings_data[groupings_table.cursor_row][0])
                 
                 # Get the list of airports in this grouping
                 # Load all groupings (custom + ARTCC) to get the airport list
