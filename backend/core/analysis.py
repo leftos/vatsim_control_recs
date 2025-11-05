@@ -52,23 +52,21 @@ def analyze_flights_data(
     hide_wind: bool = False,
     include_all_arriving: bool = False,
     unified_airport_data: Optional[Dict[str, Dict[str, Any]]] = None,
-    disambiguator: Optional[AirportDisambiguator] = None,
-    airport_blocklist: Optional[List[str]] = None
+    disambiguator: Optional[AirportDisambiguator] = None
 ) -> Tuple[Optional[List[AirportStats]], Optional[List[GroupingStats]], int, Dict[str, Dict[str, Any]], Optional[AirportDisambiguator]]:
     """
     Main function to analyze VATSIM flights and controller staffing - returns data structures.
     
     Args:
         max_eta_hours: Maximum ETA in hours for arrival filter (default: 1.0)
-        airport_allowlist: Optional list of airport ICAOs to include
-        groupings_allowlist: Optional list of custom grouping names to include
-        supergroupings_allowlist: Optional list of supergrouping names to include
+        airport_allowlist: Optional list of airport ICAOs to include (already expanded from groupings/supergroupings)
+        groupings_allowlist: Optional list of custom grouping names to display (for display purposes only)
+        supergroupings_allowlist: Optional list of supergrouping names to display (for display purposes only)
         include_all_staffed: Whether to include airports with zero planes if staffed (default: True)
         hide_wind: Whether to hide the wind column from the main view (default: False)
         include_all_arriving: Whether to include airports with any arrivals filed, regardless of max_eta_hours (default: False)
         unified_airport_data: Optional pre-loaded unified airport data
         disambiguator: Optional pre-created disambiguator instance
-        airport_blocklist: Optional list of airport ICAOs to exclude from tracking
     
     Returns:
         Tuple of (airport_data, grouped_data, total_flights, unified_airport_data, disambiguator):
@@ -78,9 +76,6 @@ def analyze_flights_data(
         - unified_airport_data: The unified airport data (for reuse by caller)
         - disambiguator: The disambiguator instance (for reuse by caller)
     """
-    # Initialize blocklist if not provided
-    if airport_blocklist is None:
-        airport_blocklist = []
     # Load unified airport data if not provided
     if unified_airport_data is None:
         print("Loading airport database...")
@@ -101,76 +96,57 @@ def analyze_flights_data(
     
     all_airports_data = load_airport_data(unified_airport_data)
     
-    # Load all custom groupings and ARTCC groupings
+    # Load all custom groupings and ARTCC groupings for display purposes
     all_custom_groupings = load_all_groupings(
         os.path.join(_script_dir, 'data','custom_groupings.json'),
         unified_airport_data
     )
     
-    # Determine which groupings to display and which to use for filtering
+    # Determine which groupings to display (for the groupings tab)
+    # Note: The airport_allowlist already contains all airports from groupings/supergroupings
     display_custom_groupings = {}
-    active_groupings_for_filter = {}
     
     if all_custom_groupings:
         if supergroupings_allowlist:
-            supergroup_airports_set = set()
+            # Display supergroupings and their sub-groupings
             included_group_names = set()
             
             for supergroup_name in supergroupings_allowlist:
                 if supergroup_name in all_custom_groupings:
-                    # Add airports from the supergrouping itself
                     current_supergroup_airports = set(all_custom_groupings[supergroup_name])
-                    supergroup_airports_set.update(current_supergroup_airports)
                     included_group_names.add(supergroup_name)
                     
                     # Find all sub-groupings
                     for other_group_name, other_group_airports in all_custom_groupings.items():
                         if other_group_name != supergroup_name:
                             other_group_airports_set = set(other_group_airports)
-                            # If the other grouping is a subset of the current supergroup, include it
                             if other_group_airports_set.issubset(current_supergroup_airports):
                                 included_group_names.add(other_group_name)
-                                supergroup_airports_set.update(other_group_airports_set)
                 else:
                     print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json.")
             
-            # Populate display and active groupings based on supergrouping logic
+            # Populate display groupings
             for name in included_group_names:
                 display_custom_groupings[name] = all_custom_groupings[name]
-                active_groupings_for_filter[name] = all_custom_groupings[name]
 
         elif groupings_allowlist:
-            # Existing logic for groupings_allowlist
+            # Display only the specified groupings
             for group_name in groupings_allowlist:
                 if group_name in all_custom_groupings:
                     display_custom_groupings[group_name] = all_custom_groupings[group_name]
-                    active_groupings_for_filter[group_name] = all_custom_groupings[group_name]
                 else:
                     print(f"Warning: Custom grouping '{group_name}' not found in custom_groupings.json.")
         else:
             # If no groupings_allowlist and no supergrouping, display all groupings
             display_custom_groupings = all_custom_groupings
-
-        # Prepare main airport_allowlist based on provided --airports and/or active groupings
-        final_airport_allowlist = set()
-        if airport_allowlist:
-            final_airport_allowlist.update(airport_allowlist)
-        
-        # Add airports from groupings to the filter if --groupings or --supergrouping was explicitly used
-        if groupings_allowlist or supergroupings_allowlist:
-            for group_name, airports_in_group in active_groupings_for_filter.items():
-                final_airport_allowlist.update(airports_in_group)
-            
-        airport_allowlist = list(final_airport_allowlist)  # Convert back to list
-
     else:
         display_custom_groupings = {}
-        active_groupings_for_filter = {}
 
-    if airport_allowlist:  # If there's an explicit airport_allowlist (from --airports or active groupings)
-        airports = {icao: data for icao, data in all_airports_data.items() if icao in airport_allowlist and icao not in airport_blocklist}
-    else:  # If no explicit airport_allowlist, use all airports (excluding blocklist)
-        airports = {icao: data for icao, data in all_airports_data.items() if icao not in airport_blocklist}
+    # Filter airports based on allowlist - simple and clean
+    if airport_allowlist:
+        airports = {icao: data for icao, data in all_airports_data.items() if icao in airport_allowlist}
+    else:
+        airports = all_airports_data
     
     # Download VATSIM data
     print("Downloading live flight data...")

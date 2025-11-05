@@ -6,7 +6,7 @@ Contains the VATSIMControlApp Textual application class
 import asyncio
 import os
 from datetime import datetime, timezone
-from typing import List, Tuple, Any, Optional, Sequence
+from typing import List, Any
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, TabbedContent, TabPane, Footer, Input, Static
 from textual.binding import Binding
@@ -15,12 +15,11 @@ from textual.events import Key
 
 from backend import analyze_flights_data
 from backend.core.groupings import load_all_groupings
-from backend.config import constants as backend_constants
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .config import UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, AirportTrackingModal
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal
 
 
 class VATSIMControlApp(App):
@@ -97,7 +96,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+f", "toggle_search", "Find", priority=True),
         Binding("ctrl+w", "show_wind_lookup", "Wind Lookup", priority=True),
         Binding("ctrl+e", "show_metar_lookup", "METAR Lookup", priority=True),
-        Binding("ctrl+t", "show_airport_tracking", "Track Airports", priority=True),
+        Binding("ctrl+t", "show_airport_tracking", "Manage Tracked Airports", priority=True),
         Binding("escape", "cancel_search", "Cancel Search", show=False),
         Binding("enter", "open_flight_board", "Flight Board"),
     ]
@@ -110,8 +109,7 @@ class VATSIMControlApp(App):
         self.groupings_data: List[Any] = list(groupings_data) if groupings_data else []
         self.total_flights = total_flights
         self.args = args
-        self.airport_allowlist = airport_allowlist  # Store the expanded airport allowlist (including country expansions)
-        self.airport_blocklist = []  # Airports to exclude from tracking
+        self.airport_allowlist = list(airport_allowlist) if airport_allowlist else []  # Store the expanded airport allowlist
         self.include_all_staffed = args.include_all_staffed if args else False
         self.hide_wind = args.hide_wind if args else False
         self.include_all_arriving = args.include_all_arriving if args else False
@@ -319,8 +317,7 @@ class VATSIMControlApp(App):
             self.hide_wind,
             self.include_all_arriving,
             config.UNIFIED_AIRPORT_DATA,  # Pass existing instance or None
-            config.DISAMBIGUATOR,  # Pass existing instance or None
-            self.airport_blocklist  # Pass blocklist for dynamic exclusions
+            config.DISAMBIGUATOR  # Pass existing instance or None
         )
         
         # Update module-level instances from the result
@@ -635,41 +632,19 @@ class VATSIMControlApp(App):
         self.push_screen(metar_screen)
     
     def action_show_airport_tracking(self) -> None:
-        """Show the airport tracking modal"""
-        tracking_modal = AirportTrackingModal()
+        """Show the tracked airports manager modal"""
+        from . import config
+        tracking_modal = TrackedAirportsModal(self.airport_allowlist, config.DISAMBIGUATOR)
         self.push_screen(tracking_modal, callback=self.handle_tracking_result)
     
     def handle_tracking_result(self, result) -> None:
-        """Handle the result from airport tracking modal"""
+        """Handle the result from tracked airports modal"""
         if result is None:
             # User cancelled
             return
         
-        airports_to_add, airports_to_remove = result
-        
-        # Handle additions: remove from blocklist if present, add to allowlist if explicit list exists
-        for icao in airports_to_add:
-            # Remove from blocklist if it was blocked
-            if icao in self.airport_blocklist:
-                self.airport_blocklist.remove(icao)
-            
-            # If we have an explicit allowlist, add to it
-            if self.airport_allowlist is not None:
-                if icao not in self.airport_allowlist:
-                    self.airport_allowlist.append(icao)
-            else:
-                # If no explicit allowlist, create one with just this airport
-                self.airport_allowlist = [icao]
-        
-        # Handle removals: add to blocklist or remove from allowlist
-        for icao in airports_to_remove:
-            # If we have an explicit allowlist, remove from it
-            if self.airport_allowlist is not None:
-                if icao in self.airport_allowlist:
-                    self.airport_allowlist.remove(icao)
-            # Always add to blocklist to prevent it from appearing
-            if icao not in self.airport_blocklist:
-                self.airport_blocklist.append(icao)
+        # Result is the updated airport allowlist
+        self.airport_allowlist = result
         
         # Refresh data with new configuration
         self.action_refresh()

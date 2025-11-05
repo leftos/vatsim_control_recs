@@ -9,6 +9,7 @@ import os
 
 from backend import analyze_flights_data, load_unified_airport_data
 from backend.config import constants as backend_constants
+from backend.core.groupings import load_all_groupings
 from airport_disambiguator import AirportDisambiguator
 from ui import VATSIMControlApp, init_debug_log, expand_countries_to_airports
 from ui import config as ui_config
@@ -55,11 +56,9 @@ def main():
     
     print("Loading VATSIM data...")
     
-    # Expand country codes to airport ICAO codes if --countries is provided
-    airport_allowlist = args.airports or []
-    if args.countries:
-        # Load unified airport data to expand countries
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Load unified airport data if we need to expand countries, groupings, or supergroupings
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if args.countries or args.groupings or args.supergroupings:
         ui_config.UNIFIED_AIRPORT_DATA = load_unified_airport_data(
             apt_base_path=os.path.join(script_dir, 'data', 'APT_BASE.csv'),
             airports_json_path=os.path.join(script_dir, 'data', 'airports.json'),
@@ -69,23 +68,65 @@ def main():
             os.path.join(script_dir, 'data', 'airports.json'),
             unified_data=ui_config.UNIFIED_AIRPORT_DATA
         )
+    
+    # Start with explicitly provided airports
+    airport_allowlist = args.airports or []
+    
+    # Expand country codes to airport ICAO codes
+    if args.countries and ui_config.UNIFIED_AIRPORT_DATA:
         country_airports = expand_countries_to_airports(args.countries, ui_config.UNIFIED_AIRPORT_DATA)
         print(f"Expanded {len(args.countries)} country code(s) to {len(country_airports)} airport(s)")
-        # Combine with any explicitly provided airports
         airport_allowlist = list(set(airport_allowlist + country_airports))
     
-    # Get the data
+    # Expand groupings and supergroupings to airport ICAO codes at bootup
+    if (args.groupings or args.supergroupings) and ui_config.UNIFIED_AIRPORT_DATA:
+        all_groupings = load_all_groupings(
+            os.path.join(script_dir, 'data', 'custom_groupings.json'),
+            ui_config.UNIFIED_AIRPORT_DATA
+        )
+        
+        grouping_airports = set()
+        
+        # Handle supergroupings (includes sub-groupings)
+        if args.supergroupings:
+            for supergroup_name in args.supergroupings:
+                if supergroup_name in all_groupings:
+                    # Add airports from the supergrouping itself
+                    current_supergroup_airports = set(all_groupings[supergroup_name])
+                    grouping_airports.update(current_supergroup_airports)
+                    
+                    # Find and include all sub-groupings
+                    for other_group_name, other_group_airports in all_groupings.items():
+                        if other_group_name != supergroup_name:
+                            other_group_airports_set = set(other_group_airports)
+                            if other_group_airports_set.issubset(current_supergroup_airports):
+                                grouping_airports.update(other_group_airports_set)
+                else:
+                    print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json")
+        
+        # Handle regular groupings
+        if args.groupings:
+            for group_name in args.groupings:
+                if group_name in all_groupings:
+                    grouping_airports.update(all_groupings[group_name])
+                else:
+                    print(f"Warning: Grouping '{group_name}' not found in custom_groupings.json")
+        
+        if grouping_airports:
+            print(f"Expanded groupings/supergroupings to {len(grouping_airports)} airport(s)")
+            airport_allowlist = list(set(airport_allowlist + list(grouping_airports)))
+    
+    # Get the data (groupings/supergroupings already expanded to airport_allowlist)
     airport_data, groupings_data, total_flights, ui_config.UNIFIED_AIRPORT_DATA, ui_config.DISAMBIGUATOR = analyze_flights_data(
         max_eta_hours=args.max_eta_hours,
         airport_allowlist=airport_allowlist if airport_allowlist else None,
-        groupings_allowlist=args.groupings,
-        supergroupings_allowlist=args.supergroupings,
+        groupings_allowlist=args.groupings,  # Still used for display purposes only
+        supergroupings_allowlist=args.supergroupings,  # Still used for display purposes only
         include_all_staffed=args.include_all_staffed,
         hide_wind=args.hide_wind,
         include_all_arriving=args.include_all_arriving,
         unified_airport_data=ui_config.UNIFIED_AIRPORT_DATA,
-        disambiguator=ui_config.DISAMBIGUATOR,
-        airport_blocklist=[]  # Empty at startup, only used for dynamic tracking
+        disambiguator=ui_config.DISAMBIGUATOR
     )
     
     if airport_data is None:

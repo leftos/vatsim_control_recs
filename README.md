@@ -17,9 +17,9 @@ options:
   --countries COUNTRIES [COUNTRIES ...]
                         List of country codes (e.g., US DE) to include all airports from those countries
   --groupings GROUPINGS [GROUPINGS ...]
-                        List of custom grouping names to include in analysis (default: all)
+                        List of custom grouping names to track. All airports in these groupings will be tracked. Groupings are shown in the Groupings tab.
   --supergroupings SUPERGROUPINGS [SUPERGROUPINGS ...]
-                        List of custom grouping names to use as supergroupings. This will include all airports in these supergroupings and any detected sub-groupings.
+                        List of supergrouping names to track. All airports in these supergroupings and their sub-groupings will be tracked. Groupings are shown in the Groupings tab.
   --include-all-staffed
                         Include airports with zero planes if they are staffed (default: False)
   --disable-animations  Disable split-flap animations for instant text updates (default: False)
@@ -44,16 +44,22 @@ While the app is running, you can use these keyboard shortcuts:
 - **Ctrl+F**: Open search box to filter airports (airports tab only)
 - **Ctrl+W**: Wind information lookup
 - **Ctrl+E**: METAR lookup
-- **Ctrl+T**: Dynamic airport tracking - Add or remove airports from tracking
+- **Ctrl+T**: Tracked Airports Manager - View all tracked airports and add/remove airports
 - **Enter**: Open flight board for selected airport/grouping
 - **Escape**: Close modals or cancel search
 
-### Dynamic Airport Tracking (Ctrl+T)
+### Tracked Airports Manager (Ctrl+T)
 
-The **Ctrl+T** keyboard shortcut opens a modal that allows you to dynamically add or remove airports from tracking, independent of the filters used when starting the app.
+The **Ctrl+T** keyboard shortcut opens the **Tracked Airports Manager** modal, which provides a comprehensive view of all airports being tracked and allows you to manage them.
 
-**Usage:**
-- Press `Ctrl+T` to open the Airport Tracking Manager
+**Features:**
+- **View All Tracked Airports**: See a complete list of airports currently being tracked, with their full names
+- **Select/Deselect Airports**: Use arrow keys to navigate and Space to select airports for removal
+- **Remove Selected**: Press Delete or click the "Remove Selected" button to stop tracking selected airports
+- **Quick Add/Remove**: Press 'A' or click "Add Airports" to open the quick add/remove dialog
+
+**Quick Add/Remove Dialog:**
+Within the Tracked Airports Manager, you can press 'A' to open a quick dialog for adding or removing airports:
 - Enter a space-separated list of airport ICAO codes with `+` or `-` prefixes
 - Press `Enter` to apply changes
 - Press `Escape` to cancel
@@ -64,6 +70,8 @@ The **Ctrl+T** keyboard shortcut opens a modal that allows you to dynamically ad
 - `+KSFO +KOAK -KSJC -KMRY` - Add KSFO and KOAK, remove KSJC and KMRY
 
 The app will automatically refresh with the updated airport list after applying changes.
+
+**Note:** When you use `--groupings` or `--supergroupings` command-line options, all airports within those groupings are automatically tracked. The groupings are used for display purposes in the Groupings tab, but all tracking and analysis works at the individual airport level.
 
 **This project includes IATA/ICAO List data available from <http://www.ip2location.com>.**
 
