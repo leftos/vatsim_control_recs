@@ -1,15 +1,125 @@
 {
-  "NCT Combined": ["KSJC", "KMRY", "KSNS", "KRHV", "KPAO", "KSQL", "KNUQ", "KSFO", "KOAK", "KHWD", "KLVK", "KMOD", "KSCK", "KMER", "KSMF", "KSAC", "KMHR", "KBAB", "KRNO"],
-  "NCT Area A": ["KSJC", "KMRY", "KSNS", "KRHV", "KPAO", "KSQL", "KNUQ"],
-  "NCT Area B": ["KSFO", "KSQL"],
-  "NCT Area C": ["KOAK", "KHWD", "KLVK", "KMOD", "KSCK", "KMER"],
-  "NCT Area D": ["KSFO", "KOAK"],
-  "NCT E CA": ["KSMF", "KSAC", "KMHR", "KBAB"],
-  "NCT E NV (R)": ["KRNO"],
-  "ZOA Combined": ["KAPC", "KBAB", "KCCR", "KCIC", "KFAT", "KHWD", "KKWA", "KLVK", "KMCC", "KMER", "KMHR", "KMOD", "KMRY", "KNLC", "KNFL", "KNUQ", "KOAK", "KPAO", "KRDD", "KRHV", "KRNO", "KSAC", "KSCK", "KSFO", "KSJC", "KSMF", "KSNS", "KSQL", "KSTS", "KSUU", "KTRK"],
-  "FAT_APP": ["KFAT", "KFCH", "KHJO", "KMAE", "KTLR", "O32", "0Q4", "D86", "E79", "KVIS", "1Q1"],
-  "HNL_APP": ["PHNL", "PHJR", "PHIK", "PHHI"],
-  "OGG_APP": ["PHOG","PHJH"],
-  "A11": ["PANC","PAED","PAMR","PALH","PAFR"],
-  "FAI_APP": ["PAFA","PAFB","PAEI"]
+  "NCT Combined": [
+    "KSJC",
+    "KMRY",
+    "KSNS",
+    "KRHV",
+    "KPAO",
+    "KSQL",
+    "KNUQ",
+    "KSFO",
+    "KOAK",
+    "KHWD",
+    "KLVK",
+    "KMOD",
+    "KSCK",
+    "KMER",
+    "KSMF",
+    "KSAC",
+    "KMHR",
+    "KBAB",
+    "KRNO"
+  ],
+  "NCT Area A": [
+    "KSJC",
+    "KMRY",
+    "KSNS",
+    "KRHV",
+    "KPAO",
+    "KSQL",
+    "KNUQ"
+  ],
+  "NCT Area B": [
+    "KSFO",
+    "KSQL"
+  ],
+  "NCT Area C": [
+    "KOAK",
+    "KHWD",
+    "KLVK",
+    "KMOD",
+    "KSCK",
+    "KMER"
+  ],
+  "NCT Area D": [
+    "KSFO",
+    "KOAK"
+  ],
+  "NCT E CA": [
+    "KSMF",
+    "KSAC",
+    "KMHR",
+    "KBAB"
+  ],
+  "NCT E NV (R)": [
+    "KRNO"
+  ],
+  "ZOA Combined": [
+    "KAPC",
+    "KBAB",
+    "KCCR",
+    "KCIC",
+    "KFAT",
+    "KHWD",
+    "KKWA",
+    "KLVK",
+    "KMCC",
+    "KMER",
+    "KMHR",
+    "KMOD",
+    "KMRY",
+    "KNLC",
+    "KNFL",
+    "KNUQ",
+    "KOAK",
+    "KPAO",
+    "KRDD",
+    "KRHV",
+    "KRNO",
+    "KSAC",
+    "KSCK",
+    "KSFO",
+    "KSJC",
+    "KSMF",
+    "KSNS",
+    "KSQL",
+    "KSTS",
+    "KSUU",
+    "KTRK"
+  ],
+  "FAT_APP": [
+    "KFAT",
+    "KFCH",
+    "KHJO",
+    "KMAE",
+    "KTLR",
+    "O32",
+    "0Q4",
+    "D86",
+    "E79",
+    "KVIS",
+    "1Q1"
+  ],
+  "HNL_APP": [
+    "PHNL",
+    "PHJR",
+    "PHIK",
+    "PHHI"
+  ],
+  "OGG_APP": [
+    "PHOG",
+    "PHJH"
+  ],
+  "A11": [
+    "PANC",
+    "PAED",
+    "PAMR",
+    "PALH",
+    "PAFR"
+  ],
+  "FAI_APP": [
+    "PAFA",
+    "PAFB",
+    "PAEI"
+  ]
 }

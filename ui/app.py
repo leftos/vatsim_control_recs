@@ -96,7 +96,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+f", "toggle_search", "Find", priority=True),
         Binding("ctrl+w", "show_wind_lookup", "Wind Lookup", priority=True),
         Binding("ctrl+e", "show_metar_lookup", "METAR Lookup", priority=True),
-        Binding("ctrl+t", "show_airport_tracking", "Manage Tracked Airports", priority=True),
+        Binding("ctrl+t", "show_airport_tracking", "Tracked Airports", priority=True),
         Binding("escape", "cancel_search", "Cancel Search", show=False),
         Binding("enter", "open_flight_board", "Flight Board"),
     ]
