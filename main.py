@@ -11,8 +11,9 @@ from backend import analyze_flights_data, load_unified_airport_data
 from backend.config import constants as backend_constants
 from backend.core.groupings import load_all_groupings
 from airport_disambiguator import AirportDisambiguator
-from ui import VATSIMControlApp, init_debug_log, expand_countries_to_airports
+from ui import VATSIMControlApp, expand_countries_to_airports
 from ui import config as ui_config
+from ui import debug_logger  # Import to trigger log cleanup on bootup
 
 
 def main():
@@ -51,8 +52,8 @@ def main():
     # Set the global wind source from command-line argument
     backend_constants.WIND_SOURCE = args.wind_source
     
-    # Initialize debug log
-    init_debug_log()
+    # Log cleanup happens automatically when debug_logger is imported
+    debug_logger.info("Application starting")
     
     print("Loading VATSIM data...")
     

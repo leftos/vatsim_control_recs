@@ -5,11 +5,34 @@ Provides centralized logging to a debug file for tracking issues
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 
 # Create logs directory if it doesn't exist
 LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
 os.makedirs(LOGS_DIR, exist_ok=True)
+
+# Clean up old log files (older than 10 days)
+def cleanup_old_logs(days_to_keep: int = 10):
+    """Remove log files older than the specified number of days"""
+    try:
+        cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+        logs_path = Path(LOGS_DIR)
+        
+        for log_file in logs_path.glob('debug_*.log'):
+            try:
+                # Get file modification time
+                file_mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+                if file_mtime < cutoff_date:
+                    log_file.unlink()
+                    print(f"Deleted old log file: {log_file.name}")
+            except Exception as e:
+                print(f"Error deleting log file {log_file.name}: {e}")
+    except Exception as e:
+        print(f"Error during log cleanup: {e}")
+
+# Clean up old logs on module initialization
+cleanup_old_logs()
 
 # Create debug log file with timestamp
 LOG_FILE = os.path.join(LOGS_DIR, f'debug_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')

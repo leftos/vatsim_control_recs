@@ -15,9 +15,6 @@ CALLSIGN_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- "  # For flight cal
 POSITION_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ- "  # For controller positions
 WIND_FLAP_CHARS = "0123456789GKT "  # For wind data: numbers for direction/speed/gusts
 
-# Debug logging configuration
-DEBUG_LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "debug.log")
-
 # Module-level instances for the UI - initialized when data is first loaded
 UNIFIED_AIRPORT_DATA = None
 DISAMBIGUATOR = None
@@ -37,9 +34,3 @@ class TableConfig:
     """Configuration for a complete table"""
     columns: list[ColumnConfig]
     sort_function: Optional[Callable] = None
-
-
-def init_debug_log():
-    """Initialize the debug log file"""
-    with open(DEBUG_LOG_FILE, "w", encoding="utf-8") as f:
-        f.write(f"=== Debug log started at {datetime.now()} ===\n")

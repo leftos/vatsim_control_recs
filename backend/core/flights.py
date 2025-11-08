@@ -184,25 +184,15 @@ def get_airport_flight_details(
         - arrivals_list: List[ArrivalInfo]
     """
     from backend.data.vatsim_api import filter_flights_by_airports
-    import os
+    from ui import debug_logger
     
-    # Set up debug logging to file
-    DEBUG_LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "debug.log")
-    
-    def debug_log(message: str):
-        """Write a debug message to the log file."""
-        from datetime import datetime
-        with open(DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
-            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-            f.write(f"[{timestamp}] {message}\n")
-    
-    debug_log(f"[BACKEND] get_airport_flight_details called with airport={airport_icao_or_list}, max_eta={max_eta_hours}")
+    debug_logger.debug(f"[BACKEND] get_airport_flight_details called with airport={airport_icao_or_list}, max_eta={max_eta_hours}")
     
     if all_airports_data is None or vatsim_data is None:
-        debug_log(f"[BACKEND] ERROR: all_airports_data is None: {all_airports_data is None}, vatsim_data is None: {vatsim_data is None}")
+        debug_logger.error(f"[BACKEND] all_airports_data is None: {all_airports_data is None}, vatsim_data is None: {vatsim_data is None}")
         return [], []
     
-    debug_log(f"[BACKEND] all_airports_data has {len(all_airports_data)} airports, vatsim_data keys: {list(vatsim_data.keys())}")
+    debug_logger.debug(f"[BACKEND] all_airports_data has {len(all_airports_data)} airports, vatsim_data keys: {list(vatsim_data.keys())}")
     
     # Normalize input to a list
     if isinstance(airport_icao_or_list, str):
@@ -210,20 +200,20 @@ def get_airport_flight_details(
     else:
         airport_icao_list = list(airport_icao_or_list)
     
-    debug_log(f"[BACKEND] airport_icao_list: {airport_icao_list}")
+    debug_logger.debug(f"[BACKEND] airport_icao_list: {airport_icao_list}")
     
     # Create airports dict for the specified airports
     airports = {icao: data for icao, data in all_airports_data.items() if icao in airport_icao_list}
-    debug_log(f"[BACKEND] Created airports dict with {len(airports)} airports")
+    debug_logger.debug(f"[BACKEND] Created airports dict with {len(airports)} airports")
     
     # Filter flights - we need all flights that involve our airports
     flights = filter_flights_by_airports(vatsim_data, all_airports_data, airport_icao_list)
-    debug_log(f"[BACKEND] filter_flights_by_airports returned {len(flights)} flights")
+    debug_logger.debug(f"[BACKEND] filter_flights_by_airports returned {len(flights)} flights")
     
     departures_list = []
     arrivals_list = []
     
-    debug_log(f"[BACKEND] Processing {len(flights)} flights...")
+    debug_logger.debug(f"[BACKEND] Processing {len(flights)} flights...")
     
     for flight in flights:
         callsign = flight['callsign']
@@ -245,10 +235,10 @@ def get_airport_flight_details(
                     ))
                 else:
                     destination = flight['arrival'] if flight['arrival'] else "----"
-                    debug_log(f"[BACKEND] Departure {callsign}: destination={destination}, disambiguator={disambiguator is not None}")
+                    debug_logger.debug(f"[BACKEND] Departure {callsign}: destination={destination}, disambiguator={disambiguator is not None}")
                     if disambiguator and destination != "----":
                         pretty_destination = disambiguator.get_pretty_name(destination)
-                        debug_log(f"[BACKEND] Departure {callsign}: got pretty_destination={pretty_destination}")
+                        debug_logger.debug(f"[BACKEND] Departure {callsign}: got pretty_destination={pretty_destination}")
                     else:
                         pretty_destination = destination
                     departures_list.append(DepartureInfo(
@@ -285,7 +275,7 @@ def get_airport_flight_details(
                 else:
                     origin = flight['departure'] if flight['departure'] else "----"
                     pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
-                    debug_log(f"[BACKEND] Arrival {callsign} LANDED: origin={origin}, pretty_origin={pretty_origin}")
+                    debug_logger.debug(f"[BACKEND] Arrival {callsign} LANDED: origin={origin}, pretty_origin={pretty_origin}")
                     arrivals_list.append(ArrivalInfo(
                         callsign=callsign,
                         origin=AirportInfo(pretty_name=pretty_origin, icao_code=origin),
@@ -348,7 +338,7 @@ def get_airport_flight_details(
                     destination=AirportInfo(pretty_name="----", icao_code="----")
                 ))
     
-    debug_log(f"[BACKEND] Final counts - departures: {len(departures_list)}, arrivals: {len(arrivals_list)}")
+    debug_logger.debug(f"[BACKEND] Final counts - departures: {len(departures_list)}, arrivals: {len(arrivals_list)}")
     
     # Sort departures by callsign
     departures_list.sort(key=lambda x: x.callsign)

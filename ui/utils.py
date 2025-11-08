@@ -5,14 +5,12 @@ Contains helper functions for sorting, logging, and data processing
 
 from datetime import datetime
 from backend.core.flights import ArrivalInfo
-from .config import DEBUG_LOG_FILE
+from . import debug_logger
 
 
 def debug_log(message: str):
     """Write a debug message to the log file."""
-    with open(DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        f.write(f"[{timestamp}] {message}\n")
+    debug_logger.debug(message)
 
 
 def eta_sort_key(arrival_row):
