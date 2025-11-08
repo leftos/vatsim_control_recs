@@ -8,6 +8,12 @@ from typing import Any, Optional, Literal
 from textual.widgets import DataTable
 from textual.widgets._data_table import RowKey, ColumnKey
 from rich.text import Text
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ui.debug_logger import debug
 
 # Default character sets for the split-flap effect
 DEFAULT_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :-"
@@ -267,6 +273,7 @@ class SplitFlapDataTable(DataTable):
         if self._empty_rows:
             # Reuse the first empty row
             row_key = self._empty_rows.pop()
+            debug(f"SplitFlapDataTable.add_row: Reusing empty row_key={row_key}. Remaining empty rows: {len(self._empty_rows)}")
             
             # Get the row index
             row_idx = list(self.rows.keys()).index(row_key)
@@ -346,8 +353,11 @@ class SplitFlapDataTable(DataTable):
                 row_key = list(self.rows.keys())[row_idx]
             else:
                 row_idx = list(self.rows.keys()).index(row_key)
+            
+            debug(f"SplitFlapDataTable.remove_row: row_key={row_key}, row_idx={row_idx}")
         except (ValueError, KeyError):
             # Row not found, nothing to do
+            debug(f"SplitFlapDataTable.remove_row: Row not found - row_key={row_key}")
             return
         
         # Store the widths of each cell before clearing
@@ -372,6 +382,7 @@ class SplitFlapDataTable(DataTable):
                 self.update_cell_animated(row_key, col_key, empty_value, update_width=False)
         
         # Mark this row as empty (hidden)
+        debug(f"SplitFlapDataTable.remove_row: Marking row_key={row_key} as empty. Total empty rows: {len(self._empty_rows) + 1}")
         self._empty_rows.add(row_key)
     
     def update_cell_animated(

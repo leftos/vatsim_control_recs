@@ -13,6 +13,7 @@ from .config import (
     POSITION_FLAP_CHARS, WIND_FLAP_CHARS
 )
 from .utils import eta_sort_key
+from .debug_logger import debug
 
 
 class TableManager:
@@ -26,15 +27,18 @@ class TableManager:
         self.is_first_load = True
         self.progressive_load_chunk_size = progressive_load_chunk_size
         self.progressive_load_active = False
+        self.pending_removal_tasks = []  # Track pending async removal tasks
     
     async def _wait_and_remove_row(self, row_key) -> None:
         """Wait for the clearing animation to complete, then actually remove the row"""
+        debug(f"_wait_and_remove_row: Waiting for animations on row_key={row_key}")
         # Wait for animations to complete
         while True:
             await asyncio.sleep(0.1)
             
             # Check if row still exists
             if row_key not in self.table.rows:
+                debug(f"_wait_and_remove_row: Row {row_key} no longer exists in table, exiting")
                 break
             
             row_keys = list(self.table.rows.keys())
@@ -53,10 +57,12 @@ class TableManager:
                         break
             
             if not still_animating:
+                debug(f"_wait_and_remove_row: Animations complete for row_key={row_key}")
                 break
         
         # Animation complete - now actually remove the row from the datatable
         if row_key in self.table.rows:
+            debug(f"_wait_and_remove_row: Actually removing row_key={row_key} from datatable")
             # Remove from the _empty_rows set if present
             if row_key in self.table._empty_rows:
                 self.table._empty_rows.remove(row_key)
@@ -76,10 +82,12 @@ class TableManager:
             
             # Actually remove the row using parent's method
             super(SplitFlapDataTable, self.table).remove_row(row_key)
+            debug(f"_wait_and_remove_row: Row {row_key} physically removed from table")
             
             # Remove from row_keys list
             if row_key in self.row_keys:
                 self.row_keys.remove(row_key)
+                debug(f"_wait_and_remove_row: Row {row_key} removed from row_keys. Remaining rows: {len(self.row_keys)}")
     
     def setup_columns(self) -> None:
         """Set up table columns if they don't exist"""
@@ -124,7 +132,8 @@ class TableManager:
             self.is_first_load = False
         else:
             # Subsequent updates: efficiently update existing rows
-            self._update_efficiently(data, column_keys)
+            # Run as async task to await pending removals
+            asyncio.create_task(self._update_efficiently_async(data, column_keys))
 
     def _add_rows_to_table(self, data: List[Any], column_keys: list) -> None:
         """Add rows to table with animations"""
@@ -178,10 +187,24 @@ class TableManager:
             # Already a tuple
             return row_obj
     
+    async def _update_efficiently_async(self, new_data: List[Any], column_keys: list) -> None:
+        """Async wrapper that waits for pending removals before updating"""
+        # CRITICAL: Wait for any pending row removals to complete before proceeding
+        if self.pending_removal_tasks:
+            debug(f"_update_efficiently_async: Waiting for {len(self.pending_removal_tasks)} pending removal tasks to complete")
+            await asyncio.gather(*self.pending_removal_tasks, return_exceptions=True)
+            self.pending_removal_tasks.clear()
+            debug(f"_update_efficiently_async: All pending removals completed")
+        
+        # Now proceed with the synchronous update
+        self._update_efficiently(new_data, column_keys)
+    
     def _update_efficiently(self, new_data: List[Any], column_keys: list) -> None:
         """Efficiently update table by modifying existing rows and adding/removing as needed"""
         current_row_count = len(self.row_keys)
         new_row_count = len(new_data)
+        
+        debug(f"_update_efficiently: START - current_rows={current_row_count}, new_rows={new_row_count}, empty_rows={len(self.table._empty_rows)}")
         
         # Track if we cached the old data for comparison
         if not hasattr(self, '_cached_data'):
@@ -215,6 +238,8 @@ class TableManager:
         
         # Add new rows if needed
         if new_row_count > current_row_count:
+            rows_to_add = new_row_count - current_row_count
+            debug(f"_update_efficiently: Adding {rows_to_add} new rows")
             for i in range(current_row_count, new_row_count):
                 row_obj = new_data[i]
                 row_data = self._to_tuple(row_obj)
@@ -230,13 +255,18 @@ class TableManager:
         
         # Remove extra rows if needed
         elif new_row_count < current_row_count:
+            rows_to_remove = current_row_count - new_row_count
+            debug(f"_update_efficiently: Removing {rows_to_remove} rows (current={current_row_count}, new={new_row_count})")
+            
             for i in range(new_row_count, current_row_count):
                 if i < len(self.row_keys):
                     row_key = self.row_keys[i]
+                    debug(f"Starting removal animation for row_key={row_key} at index {i}")
                     # Start clearing animation
                     self.table.remove_row(row_key)
-                    # Schedule actual removal after animation completes
-                    asyncio.create_task(self._wait_and_remove_row(row_key))
+                    # Schedule actual removal after animation completes and track the task
+                    task = asyncio.create_task(self._wait_and_remove_row(row_key))
+                    self.pending_removal_tasks.append(task)
         
         # Cache the new data for next comparison (convert to tuples)
         self._cached_data = [self._to_tuple(row) for row in new_data]
