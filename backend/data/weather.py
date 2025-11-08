@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 
-from backend.cache.manager import get_wind_cache, get_metar_cache
+from backend.cache.manager import get_wind_cache, get_metar_cache, get_taf_cache
 from backend.config.constants import WIND_CACHE_DURATION, METAR_CACHE_DURATION
 
 
@@ -200,6 +200,72 @@ def get_metar(airport_icao: str) -> str:
         # On other errors, return cached data if available (even if expired), otherwise empty string
         if airport_icao in metar_data_cache:
             return metar_data_cache[airport_icao]['metar']
+        return ""
+
+
+def get_taf(airport_icao: str) -> str:
+    """
+    Fetch current TAF (Terminal Aerodrome Forecast) from aviationweather.gov API with caching.
+    
+    TAF data is cached for 60 seconds to avoid excessive API calls.
+    Airports returning 404 or no data are blacklisted and never queried again in this session.
+    
+    Args:
+        airport_icao: The ICAO code of the airport
+        
+    Returns:
+        Full TAF string or empty string if unavailable
+    """
+    taf_data_cache, taf_blacklist = get_taf_cache()
+    
+    # Check if airport is blacklisted (doesn't have TAF data available)
+    if airport_icao in taf_blacklist:
+        return ""
+    
+    # Check if we have valid cached data
+    current_time = datetime.now(timezone.utc)
+    if airport_icao in taf_data_cache:
+        cache_entry = taf_data_cache[airport_icao]
+        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+        if time_since_cache < METAR_CACHE_DURATION:  # Use same cache duration as METAR
+            return cache_entry['taf']
+    
+    # Cache miss or expired - fetch new data
+    try:
+        url = f"https://aviationweather.gov/api/data/taf?ids={airport_icao}&format=raw"
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            taf_text = response.read().decode('utf-8').strip()
+        
+        # Check if we got valid data (not empty and not an error message)
+        if not taf_text or taf_text.startswith('No TAF') or taf_text.startswith('Error'):
+            # No data available - blacklist it
+            taf_blacklist.add(airport_icao)
+            return ""
+        
+        # Cache the result
+        taf_data_cache[airport_icao] = {
+            'taf': taf_text,
+            'timestamp': current_time
+        }
+        
+        return taf_text
+        
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            # Station doesn't exist - blacklist it permanently
+            taf_blacklist.add(airport_icao)
+            return ""
+        # For other HTTP errors, return cached data if available
+        if airport_icao in taf_data_cache:
+            return taf_data_cache[airport_icao]['taf']
+        return ""
+    except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError, Exception):
+        # On other errors, return cached data if available (even if expired), otherwise empty string
+        if airport_icao in taf_data_cache:
+            return taf_data_cache[airport_icao]['taf']
         return ""
 
 

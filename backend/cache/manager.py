@@ -14,6 +14,10 @@ _WIND_BLACKLIST: Set[str] = set()  # Set of airport ICAOs that don't have weathe
 _METAR_DATA_CACHE: Dict[str, Dict[str, Any]] = {}  # {airport_icao: {'metar': str, 'timestamp': datetime}}
 _METAR_BLACKLIST: Set[str] = set()  # Set of airport ICAOs that don't have METAR data available
 
+# Cache for TAF data
+_TAF_DATA_CACHE: Dict[str, Dict[str, Any]] = {}  # {airport_icao: {'taf': str, 'timestamp': datetime}}
+_TAF_BLACKLIST: Set[str] = set()  # Set of airport ICAOs that don't have TAF data available
+
 # Cache for aircraft approach speeds
 _AIRCRAFT_APPROACH_SPEEDS: Optional[Dict[str, int]] = None
 
@@ -29,6 +33,11 @@ def get_wind_cache() -> tuple[Dict[str, Dict[str, Any]], Set[str]]:
 def get_metar_cache() -> tuple[Dict[str, Dict[str, Any]], Set[str]]:
     """Get METAR data cache and blacklist."""
     return _METAR_DATA_CACHE, _METAR_BLACKLIST
+
+
+def get_taf_cache() -> tuple[Dict[str, Dict[str, Any]], Set[str]]:
+    """Get TAF data cache and blacklist."""
+    return _TAF_DATA_CACHE, _TAF_BLACKLIST
 
 
 def get_aircraft_speeds_cache() -> Optional[Dict[str, int]]:
@@ -67,15 +76,25 @@ def clear_metar_cache() -> None:
     _METAR_BLACKLIST = set()
 
 
+def clear_taf_cache() -> None:
+    """Clear TAF data cache."""
+    global _TAF_DATA_CACHE, _TAF_BLACKLIST
+    _TAF_DATA_CACHE = {}
+    _TAF_BLACKLIST = set()
+
+
 def clear_all_caches() -> None:
     """Clear all caches."""
     global _WIND_DATA_CACHE, _WIND_BLACKLIST, _METAR_DATA_CACHE, _METAR_BLACKLIST
+    global _TAF_DATA_CACHE, _TAF_BLACKLIST
     global _AIRCRAFT_APPROACH_SPEEDS, _ARTCC_GROUPINGS
     
     _WIND_DATA_CACHE = {}
     _WIND_BLACKLIST = set()
     _METAR_DATA_CACHE = {}
     _METAR_BLACKLIST = set()
+    _TAF_DATA_CACHE = {}
+    _TAF_BLACKLIST = set()
     _AIRCRAFT_APPROACH_SPEEDS = None
     _ARTCC_GROUPINGS = None
 

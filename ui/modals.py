@@ -12,7 +12,7 @@ from textual.binding import Binding
 from textual import events
 from textual.app import ComposeResult
 
-from backend import get_wind_info, get_metar
+from backend import get_wind_info, get_metar, get_taf
 from backend.core.flights import get_airport_flight_details
 from backend.core.groupings import load_all_groupings
 from backend.cache.manager import load_aircraft_approach_speeds
@@ -130,7 +130,7 @@ class WindInfoScreen(ModalScreen):
 
 
 class MetarInfoScreen(ModalScreen):
-    """Modal screen showing full METAR for an airport"""
+    """Modal screen showing full METAR and TAF for an airport"""
     
     CSS = """
     MetarInfoScreen {
@@ -181,7 +181,7 @@ class MetarInfoScreen(ModalScreen):
     
     def compose(self) -> ComposeResult:
         with Container(id="metar-container"):
-            yield Static("METAR Lookup", id="metar-title")
+            yield Static("METAR & TAF Lookup", id="metar-title")
             with Container(id="metar-input-container"):
                 yield Input(placeholder="Enter airport ICAO code (e.g., KSFO)", id="metar-input")
             yield Static("", id="metar-result")
@@ -193,7 +193,7 @@ class MetarInfoScreen(ModalScreen):
         metar_input.focus()
     
     def action_fetch_metar(self) -> None:
-        """Fetch METAR for the entered airport"""
+        """Fetch METAR and TAF for the entered airport"""
         metar_input = self.query_one("#metar-input", Input)
         icao = metar_input.value.strip().upper()
         
@@ -202,16 +202,33 @@ class MetarInfoScreen(ModalScreen):
             result_widget.update("Please enter an airport ICAO code")
             return
         
-        # Fetch full METAR
+        # Fetch full METAR and TAF
         metar = get_metar(icao)
+        taf = get_taf(icao)
         
         result_widget = self.query_one("#metar-result", Static)
+        
+        # Get pretty name if available
+        pretty_name = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
+        
+        # Build the display string
+        result_lines = [f"{pretty_name} ({icao})", ""]
+        
+        # Add METAR
         if metar:
-            # Get pretty name if available
-            pretty_name = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
-            result_widget.update(f"{pretty_name} ({icao})\n{metar}")
+            result_lines.append(metar)
         else:
-            result_widget.update(f"{icao}\nNo METAR data available")
+            result_lines.append("METAR: No data available")
+        
+        result_lines.append("")  # Add blank line between METAR and TAF
+        
+        # Add TAF
+        if taf:
+            result_lines.append(taf)
+        else:
+            result_lines.append("TAF: No data available")
+        
+        result_widget.update("\n".join(result_lines))
     
     def action_close(self) -> None:
         """Close the modal"""
