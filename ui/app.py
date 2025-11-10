@@ -19,7 +19,7 @@ from backend.core.groupings import load_all_groupings
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .config import UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen
 
 
 class VATSIMControlApp(App):
@@ -94,6 +94,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+r", "refresh", "Refresh", priority=True),
         Binding("ctrl+p", "toggle_pause", "Pause/Resume", priority=True),
         Binding("ctrl+f", "toggle_search", "Find", priority=True),
+        Binding("ctrl+l", "show_flight_lookup", "Flight Lookup", priority=True),
         Binding("ctrl+w", "show_wind_lookup", "Wind Lookup", priority=True),
         Binding("ctrl+e", "show_metar_lookup", "METAR Lookup", priority=True),
         Binding("ctrl+t", "show_airport_tracking", "Tracked Airports", priority=True),
@@ -648,3 +649,8 @@ class VATSIMControlApp(App):
         
         # Refresh data with new configuration
         self.action_refresh()
+    
+    def action_show_flight_lookup(self) -> None:
+        """Show the flight lookup modal"""
+        flight_lookup_screen = FlightLookupScreen()
+        self.push_screen(flight_lookup_screen)

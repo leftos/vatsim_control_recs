@@ -8,6 +8,7 @@ from textual.widgets import Static
 from textual.containers import Container, Vertical, Horizontal
 from textual.binding import Binding
 from textual.app import ComposeResult
+from textual.events import Key
 
 from backend import get_wind_info
 from backend.core.flights import get_airport_flight_details
@@ -18,6 +19,7 @@ from backend.config import constants as backend_constants
 from widgets.split_flap_datatable import SplitFlapDataTable
 from ui import config
 from ui.tables import TableManager, DEPARTURES_TABLE_CONFIG, ARRIVALS_TABLE_CONFIG
+from ui.modals.flight_info import FlightInfoScreen
 
 
 class FlightBoardScreen(ModalScreen):
@@ -79,6 +81,7 @@ class FlightBoardScreen(ModalScreen):
     BINDINGS = [
         Binding("escape", "close_board", "Close", priority=True),
         Binding("q", "close_board", "Close"),
+        Binding("enter", "show_flight_info", "Flight Info", show=True),
     ]
     
     def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float, refresh_interval: int = 15, disambiguator=None, enable_animations: bool = True):
@@ -97,6 +100,7 @@ class FlightBoardScreen(ModalScreen):
         # TableManagers will be initialized after tables are created
         self.departures_manager = None
         self.arrivals_manager = None
+        self.vatsim_data = None  # Store VATSIM data for flight info lookup
     
     def compose(self) -> ComposeResult:
         # Build initial window title
@@ -135,6 +139,9 @@ class FlightBoardScreen(ModalScreen):
             # Prepare parameters for get_airport_flight_details
             aircraft_speeds = load_aircraft_approach_speeds(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'aircraft_data.csv'))
             vatsim_data = download_vatsim_data()
+            
+            # Store vatsim_data for flight info lookup
+            self.vatsim_data = vatsim_data
             
             # Use the module-level instances
             unified_data_to_use = config.UNIFIED_AIRPORT_DATA
@@ -238,3 +245,61 @@ class FlightBoardScreen(ModalScreen):
             setattr(app, 'active_flight_board', None)
             
         self.dismiss()
+    
+    def on_key(self, event: Key) -> None:
+        """Handle key events."""
+        # Handle Enter key for opening flight info when a DataTable has focus
+        if event.key == "enter":
+            # Check if focused widget is one of our DataTables
+            focused = self.focused
+            if focused and focused.id in ["departures-table", "arrivals-table"]:
+                # Let the action handle the rest of the logic
+                self.action_show_flight_info()
+                event.prevent_default()
+                event.stop()
+                return
+    
+    def action_show_flight_info(self) -> None:
+        """Show detailed flight information for the selected flight"""
+        if not self.vatsim_data:
+            return
+        
+        # Determine which table has focus
+        departures_table = self.query_one("#departures-table", SplitFlapDataTable)
+        arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
+        
+        # Get the focused table
+        focused_table = None
+        if departures_table.has_focus:
+            focused_table = departures_table
+        elif arrivals_table.has_focus:
+            focused_table = arrivals_table
+        else:
+            # If neither has focus, try to use whichever has a cursor
+            if departures_table.cursor_row >= 0:
+                focused_table = departures_table
+            elif arrivals_table.cursor_row >= 0:
+                focused_table = arrivals_table
+        
+        if not focused_table or focused_table.cursor_row < 0:
+            return
+        
+        # Get the row data from the selected row (always first column is callsign)
+        row_data = focused_table.get_row_at(focused_table.cursor_row)
+        if not row_data or len(row_data) == 0:
+            return
+        
+        callsign = str(row_data[0])  # First column is always callsign
+        
+        # Find the flight in vatsim_data
+        flight_data = None
+        for pilot in self.vatsim_data.get('pilots', []):
+            if pilot.get('callsign') == callsign:
+                flight_data = pilot
+                break
+        
+        if not flight_data:
+            return
+        
+        # Open the flight info modal
+        self.app.push_screen(FlightInfoScreen(flight_data))
