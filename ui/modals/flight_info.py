@@ -99,7 +99,8 @@ class FlightInfoScreen(ModalScreen):
             # Alternate
             alternate = flight_plan.get('alternate', '')
             if alternate:
-                line += f" (Altn: {alternate}) // "
+                line += f" (Altn: {alternate})"
+            line += " // "
             
             # Aircraft
             aircraft_short = flight_plan.get('aircraft_short', flight_plan.get('aircraft', '----'))
