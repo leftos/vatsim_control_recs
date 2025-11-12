@@ -5,6 +5,7 @@ import os
 
 from textual.screen import ModalScreen
 from textual.widgets import Static
+from textual.widgets.data_table import RowDoesNotExist
 from textual.containers import Container, Vertical, Horizontal
 from textual.binding import Binding
 from textual.app import ComposeResult
@@ -285,7 +286,10 @@ class FlightBoardScreen(ModalScreen):
             return
         
         # Get the row data from the selected row (always first column is callsign)
-        row_data = focused_table.get_row_at(focused_table.cursor_row)
+        try:
+            row_data = focused_table.get_row_at(focused_table.cursor_row)
+        except RowDoesNotExist:
+            return
         if not row_data or len(row_data) == 0:
             return
         
