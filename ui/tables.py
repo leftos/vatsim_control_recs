@@ -176,12 +176,14 @@ class TableManager:
         if isinstance(row_obj, AirportStats):
             # Check if we should hide wind column based on the config
             hide_wind = not any(col.name == "WIND" for col in self.config.columns)
-            # Check if we should include arrivals_all based on column count
-            include_arrivals_all = any("(all)" in col.name for col in self.config.columns)
+            # Check if we should use combined format (arrivals<xH / arrivals_all)
+            # This is true when max_eta != 0, detected by ARR column having "(<" in its name
+            include_arrivals_all = any("ARR" in col.name and "(<" in col.name for col in self.config.columns)
             return row_obj.to_tuple(hide_wind=hide_wind, include_arrivals_all=include_arrivals_all)
         elif isinstance(row_obj, GroupingStats):
-            # Check if we should include arrivals_all based on column count
-            include_arrivals_all = any("(all)" in col.name for col in self.config.columns)
+            # Check if we should use combined format (arrivals<xH / arrivals_all)
+            # This is true when max_eta != 0, detected by ARR column having "(<" in its name
+            include_arrivals_all = any("ARR" in col.name and "(<" in col.name for col in self.config.columns)
             return row_obj.to_tuple(include_arrivals_all=include_arrivals_all)
         else:
             # Already a tuple
@@ -308,16 +310,9 @@ def create_airports_table_config(max_eta: float, hide_wind: bool = False) -> Tab
         columns.append(ColumnConfig("WIND", flap_chars=WIND_FLAP_CHARS, update_width=True))
     
     columns.extend([
-        ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
+        ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right", update_width=True),
         ColumnConfig("DEP    ", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
-        ColumnConfig(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
-    ])
-    
-    # Add ARR (all) column when max_eta_hours is specified
-    if max_eta != 0:
-        columns.append(ColumnConfig("ARR (all)", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"))
-    
-    columns.extend([
+        ColumnConfig(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right", update_width=True),
         ColumnConfig("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right"),
         ColumnConfig("STAFFED", flap_chars=POSITION_FLAP_CHARS, update_width=True),
     ])
@@ -331,18 +326,11 @@ def create_groupings_table_config(max_eta: float) -> TableConfig:
     
     columns=[
         ColumnConfig("GROUPING", update_width=True),
-        ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
+        ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right", update_width=True),
         ColumnConfig("DEP    ", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
-        ColumnConfig(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"),
-    ]
-
-    # Add ARR (all) column when max_eta_hours is specified
-    if max_eta != 0:
-        columns.append(ColumnConfig("ARR (all)", flap_chars=NUMERIC_FLAP_CHARS, content_align="right"))
-
-    columns.extend([
+        ColumnConfig(f"ARR {arr_suffix}", flap_chars=NUMERIC_FLAP_CHARS, content_align="right", update_width=True),
         ColumnConfig("NEXT ETA", flap_chars=ETA_FLAP_CHARS, content_align="right"),
         ColumnConfig("STAFFED", flap_chars=POSITION_FLAP_CHARS, update_width=True),
-    ])
+    ]
                     
     return TableConfig(columns=columns)

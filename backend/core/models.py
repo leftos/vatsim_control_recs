@@ -25,47 +25,73 @@ class AirportStats:
         Convert to tuple format for display with wind column.
         
         Args:
-            include_arrivals_all: Whether to include the arrivals_all column
+            include_arrivals_all: Whether to include the arrivals_all column (now combined with arrivals)
         
         Returns:
-            Tuple in format: (ICAO, NAME, WIND, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED)
+            Tuple in format: (ICAO, NAME, WIND, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
+            When include_arrivals_all=True: TOTAL shows "dep+arr<xH / dep+arr_all" and ARR shows "arr<xH / arr_all"
         """
-        base = (
+        # Calculate total with all arrivals
+        total_all = self.departures + self.arrivals_all
+        
+        # Format TOTAL column: "current / total_all" (or just current if they're the same)
+        if include_arrivals_all and self.total != total_all:
+            total_display = f"{self.total}/{total_all}"
+        else:
+            total_display = str(self.total)
+        
+        # Format ARR column: "arrivals / arrivals_all" (or just arrivals if they're the same)
+        if include_arrivals_all and self.arrivals != self.arrivals_all:
+            arr_display = f"{self.arrivals}/{self.arrivals_all}".rjust(7)
+        else:
+            arr_display = str(self.arrivals).rjust(3)
+        
+        return (
             self.icao,
             self.name,
             self.wind,
-            str(self.total),
+            total_display,
             str(self.departures).rjust(3),
-            str(self.arrivals).rjust(3),
+            arr_display,
+            self.next_eta,
+            self.staffed
         )
-        
-        if include_arrivals_all:
-            return base + (str(self.arrivals_all).rjust(3), self.next_eta, self.staffed)
-        else:
-            return base + (self.next_eta, self.staffed)
     
     def to_tuple_without_wind(self, include_arrivals_all: bool = True) -> tuple:
         """
         Convert to tuple format for display without wind column.
         
         Args:
-            include_arrivals_all: Whether to include the arrivals_all column
+            include_arrivals_all: Whether to include the arrivals_all column (now combined with arrivals)
         
         Returns:
-            Tuple in format: (ICAO, NAME, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED)
+            Tuple in format: (ICAO, NAME, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
+            When include_arrivals_all=True: TOTAL shows "dep+arr<xH / dep+arr_all" and ARR shows "arr<xH / arr_all"
         """
-        base = (
+        # Calculate total with all arrivals
+        total_all = self.departures + self.arrivals_all
+        
+        # Format TOTAL column: "current / total_all" (or just current if they're the same)
+        if include_arrivals_all and self.total != total_all:
+            total_display = f"{self.total}/{total_all}"
+        else:
+            total_display = str(self.total)
+        
+        # Format ARR column: "arrivals / arrivals_all" (or just arrivals if they're the same)
+        if include_arrivals_all and self.arrivals != self.arrivals_all:
+            arr_display = f"{self.arrivals}/{self.arrivals_all}".rjust(7)
+        else:
+            arr_display = str(self.arrivals).rjust(3)
+        
+        return (
             self.icao,
             self.name,
-            str(self.total),
+            total_display,
             str(self.departures).rjust(3),
-            str(self.arrivals).rjust(3),
+            arr_display,
+            self.next_eta,
+            self.staffed
         )
-        
-        if include_arrivals_all:
-            return base + (str(self.arrivals_all).rjust(3), self.next_eta, self.staffed)
-        else:
-            return base + (self.next_eta, self.staffed)
     
     def to_tuple(self, hide_wind: bool = False, include_arrivals_all: bool = True) -> tuple:
         """
@@ -100,19 +126,32 @@ class GroupingStats:
         Convert to tuple format for display.
         
         Args:
-            include_arrivals_all: Whether to include the arrivals_all column
+            include_arrivals_all: Whether to include the arrivals_all column (now combined with arrivals)
         
         Returns:
-            Tuple in format: (NAME, TOTAL, DEP, ARR, [ARR(all)], NEXT ETA, STAFFED)
+            Tuple in format: (NAME, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
+            When include_arrivals_all=True: TOTAL shows "dep+arr<xH / dep+arr_all" and ARR shows "arr<xH / arr_all"
         """
-        base = (
-            self.name,
-            str(self.total),
-            str(self.departures),
-            str(self.arrivals),
-        )
+        # Calculate total with all arrivals
+        total_all = self.departures + self.arrivals_all
         
-        if include_arrivals_all:
-            return base + (str(self.arrivals_all), self.next_eta, self.staffed)
+        # Format TOTAL column: "current / total_all" (or just current if they're the same)
+        if include_arrivals_all and self.total != total_all:
+            total_display = f"{self.total}/{total_all}"
         else:
-            return base + (self.next_eta, self.staffed)
+            total_display = str(self.total)
+        
+        # Format ARR column: "arrivals / arrivals_all" (or just arrivals if they're the same)
+        if include_arrivals_all and self.arrivals != self.arrivals_all:
+            arr_display = f"{self.arrivals}/{self.arrivals_all}".rjust(7)
+        else:
+            arr_display = str(self.arrivals).rjust(3)
+        
+        return (
+            self.name,
+            total_display,
+            str(self.departures),
+            arr_display,
+            self.next_eta,
+            self.staffed
+        )
