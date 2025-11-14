@@ -14,7 +14,7 @@ ICAO_FLAP_CHARS = "-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"  # For ICAO codes
 CALLSIGN_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- "  # For flight callsigns
 POSITION_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ- "  # For controller positions
 WIND_FLAP_CHARS = "0123456789GKT "  # For wind data: numbers for direction/speed/gusts
-ALTIMETER_FLAP_CHARS = "0123456789AQ. "  # For altimeter: A/Q prefix, digits, decimal point
+ALTIMETER_FLAP_CHARS = "0123456789AQ "  # For altimeter: A/Q prefix, digits
 
 # Module-level instances for the UI - initialized when data is first loaded
 UNIFIED_AIRPORT_DATA = None

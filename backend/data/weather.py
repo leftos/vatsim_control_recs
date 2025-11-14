@@ -143,6 +143,8 @@ def get_metar(airport_icao: str) -> str:
     Fetch current METAR from aviationweather.gov API with caching.
     
     METAR data is cached for 60 seconds to avoid excessive API calls.
+    When fetching METAR, wind and altimeter are also parsed and cached
+    to avoid redundant parsing when both values are needed.
     Airports returning 404 or no data are blacklisted and never queried again in this session.
     
     Args:
@@ -180,9 +182,15 @@ def get_metar(airport_icao: str) -> str:
             metar_blacklist.add(airport_icao)
             return ""
         
-        # Cache the result
+        # Parse wind and altimeter from METAR for caching
+        parsed_wind = _parse_wind_from_metar(metar_text)
+        parsed_altimeter = parse_altimeter_from_metar(metar_text)
+        
+        # Cache the result with parsed values
         metar_data_cache[airport_icao] = {
             'metar': metar_text,
+            'wind': parsed_wind,
+            'altimeter': parsed_altimeter,
             'timestamp': current_time
         }
         
@@ -193,14 +201,26 @@ def get_metar(airport_icao: str) -> str:
             # Station doesn't exist - blacklist it permanently
             metar_blacklist.add(airport_icao)
             return ""
-        # For other HTTP errors, return cached data if available
+        # For other HTTP errors, return cached data if available (even if expired)
         if airport_icao in metar_data_cache:
-            return metar_data_cache[airport_icao]['metar']
+            cache_entry = metar_data_cache[airport_icao]
+            # Update cache entry to be current if it doesn't have parsed data yet
+            if 'wind' not in cache_entry:
+                metar_text = cache_entry['metar']
+                cache_entry['wind'] = _parse_wind_from_metar(metar_text)
+                cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
+            return cache_entry['metar']
         return ""
     except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError, Exception):
         # On other errors, return cached data if available (even if expired), otherwise empty string
         if airport_icao in metar_data_cache:
-            return metar_data_cache[airport_icao]['metar']
+            cache_entry = metar_data_cache[airport_icao]
+            # Update cache entry to be current if it doesn't have parsed data yet
+            if 'wind' not in cache_entry:
+                metar_text = cache_entry['metar']
+                cache_entry['wind'] = _parse_wind_from_metar(metar_text)
+                cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
+            return cache_entry['metar']
         return ""
 
 
@@ -270,17 +290,16 @@ def get_taf(airport_icao: str) -> str:
         return ""
 
 
-def get_wind_from_metar(airport_icao: str) -> str:
+def _parse_wind_from_metar(metar: str) -> str:
     """
-    Extract wind information from METAR.
+    Parse wind information from a METAR string.
     
     Args:
-        airport_icao: The ICAO code of the airport
+        metar: The METAR string
         
     Returns:
         Wind string in format like "27005KT" or "27005G12KT" or "00000KT" or empty string if unavailable
     """
-    metar = get_metar(airport_icao)
     if not metar:
         return ""
     
@@ -332,6 +351,41 @@ def get_wind_from_metar(airport_icao: str) -> str:
         return wind_str
     
     return ""
+
+
+def get_wind_from_metar(airport_icao: str) -> str:
+    """
+    Extract wind information from METAR.
+    Uses cached parsed wind if available to avoid redundant parsing.
+    
+    Args:
+        airport_icao: The ICAO code of the airport
+        
+    Returns:
+        Wind string in format like "27005KT" or "27005G12KT" or "00000KT" or empty string if unavailable
+    """
+    metar_data_cache, metar_blacklist = get_metar_cache()
+    
+    # Check if we have cached parsed wind data
+    current_time = datetime.now(timezone.utc)
+    if airport_icao in metar_data_cache:
+        cache_entry = metar_data_cache[airport_icao]
+        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+        if time_since_cache < METAR_CACHE_DURATION:
+            # Return cached parsed wind if available
+            return cache_entry.get('wind', '')
+    
+    # Cache miss or expired - fetch METAR (which will parse and cache wind)
+    metar = get_metar(airport_icao)
+    if not metar:
+        return ""
+    
+    # After get_metar, check cache again for parsed wind
+    if airport_icao in metar_data_cache:
+        return metar_data_cache[airport_icao].get('wind', '')
+    
+    # Fallback: parse directly if cache doesn't have it for some reason
+    return _parse_wind_from_metar(metar)
 
 
 def get_wind_info(airport_icao: str, source: str = "metar") -> str:
@@ -425,6 +479,7 @@ def parse_altimeter_from_metar(metar: str) -> Optional[str]:
 def get_altimeter_setting(airport_icao: str) -> Optional[str]:
     """
     Get altimeter setting for an airport from its METAR.
+    Uses cached parsed altimeter if available to avoid redundant parsing.
     
     Args:
         airport_icao: The ICAO code of the airport
@@ -432,7 +487,27 @@ def get_altimeter_setting(airport_icao: str) -> Optional[str]:
     Returns:
         Altimeter string (e.g., "A2992" or "Q1013") or None if unavailable
     """
+    metar_data_cache, metar_blacklist = get_metar_cache()
+    
+    # Check if we have cached parsed altimeter data
+    current_time = datetime.now(timezone.utc)
+    if airport_icao in metar_data_cache:
+        cache_entry = metar_data_cache[airport_icao]
+        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+        if time_since_cache < METAR_CACHE_DURATION:
+            # Return cached parsed altimeter if available
+            return cache_entry.get('altimeter')
+    
+    # Cache miss or expired - fetch METAR (which will parse and cache altimeter)
     metar = get_metar(airport_icao)
+    if not metar:
+        return None
+    
+    # After get_metar, check cache again for parsed altimeter
+    if airport_icao in metar_data_cache:
+        return metar_data_cache[airport_icao].get('altimeter')
+    
+    # Fallback: parse directly if cache doesn't have it for some reason
     return parse_altimeter_from_metar(metar)
 
 
