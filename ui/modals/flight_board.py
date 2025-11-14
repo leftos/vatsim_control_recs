@@ -11,7 +11,7 @@ from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.events import Key
 
-from backend import get_wind_info
+from backend import get_wind_info, get_altimeter_setting
 from backend.core.flights import get_airport_flight_details
 from backend.cache.manager import load_aircraft_approach_speeds
 from backend.data.vatsim_api import download_vatsim_data
@@ -173,7 +173,7 @@ class FlightBoardScreen(ModalScreen):
         self.run_worker(self.load_flight_data(), exclusive=True)
 
     def _update_window_title(self) -> None:
-        """Update the window title with fresh wind data."""
+        """Update the window title with fresh wind and altimeter data."""
         window_title: str
         if self.disambiguator and isinstance(self.airport_icao_or_list, str):
             # For individual airports, get the full name
@@ -182,11 +182,23 @@ class FlightBoardScreen(ModalScreen):
             # Fetch wind information using the current global wind source
             wind_info = get_wind_info(self.airport_icao_or_list, source=backend_constants.WIND_SOURCE)
             
-            # Format title: "Airport Name (ICAO) - Wind XXX@Y"
+            # Fetch altimeter information (use raw format: A2992 or Q1013)
+            altimeter_info = get_altimeter_setting(self.airport_icao_or_list)
+            
+            # Format title: "Airport Name (ICAO) - Altimeter Wind"
+            title_parts = [f"{full_name} ({self.airport_icao_or_list})"]
+            conditions_part = ""
+            if altimeter_info:
+                conditions_part += f"{altimeter_info}"
             if wind_info:
-                window_title = f"{full_name} ({self.airport_icao_or_list}) - Wind {wind_info}"
-            else:
-                window_title = f"{full_name} ({self.airport_icao_or_list})"
+                if conditions_part:
+                    conditions_part += " "
+                conditions_part += f"{wind_info}"
+            
+            if conditions_part:
+                title_parts.append(conditions_part)
+            
+            window_title = " - ".join(title_parts)
         else:
             # For groupings or when no disambiguator is available, use the original title
             window_title = str(self.title)

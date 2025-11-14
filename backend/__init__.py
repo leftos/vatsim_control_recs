@@ -10,7 +10,14 @@ from backend.core.analysis import analyze_flights_data
 from backend.core.flights import get_airport_flight_details
 
 # Import weather functions
-from backend.data.weather import get_wind_info, get_wind_info_batch, get_metar, get_taf
+from backend.data.weather import (
+    get_wind_info,
+    get_wind_info_batch,
+    get_metar,
+    get_taf,
+    get_altimeter_setting,
+    find_nearest_airport_with_metar
+)
 
 # Import groupings functions
 from backend.core.groupings import load_all_groupings
@@ -31,6 +38,8 @@ __all__ = [
     'get_wind_info_batch',
     'get_metar',
     'get_taf',
+    'get_altimeter_setting',
+    'find_nearest_airport_with_metar',
     'load_all_groupings',
     'load_unified_airport_data',
     'WIND_SOURCE',

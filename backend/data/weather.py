@@ -8,10 +8,11 @@ import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional, Any
 
 from backend.cache.manager import get_wind_cache, get_metar_cache, get_taf_cache
 from backend.config.constants import WIND_CACHE_DURATION, METAR_CACHE_DURATION
+from backend.core.calculations import haversine_distance_nm
 
 
 def _parse_wind_from_observation(properties: dict) -> Tuple[bool, str]:
@@ -394,3 +395,187 @@ def get_wind_info_batch(airport_icaos: List[str], source: str = "metar", max_wor
                 results[icao] = ""
     
     return results
+
+
+def parse_altimeter_from_metar(metar: str) -> Optional[str]:
+    """
+    Extract altimeter setting from METAR.
+    
+    Args:
+        metar: The METAR string
+        
+    Returns:
+        Altimeter string in format "A2992" or "Q1013" or None if not found
+    """
+    if not metar:
+        return None
+    
+    # Altimeter format in METAR:
+    # A#### for inches of mercury (e.g., A2992 = 29.92 inHg)
+    # Q#### for hectopascals/millibars (e.g., Q1013 = 1013 hPa)
+    altimeter_pattern = r'\b([AQ]\d{4})\b'
+    match = re.search(altimeter_pattern, metar)
+    
+    if match:
+        return match.group(1)
+    
+    return None
+
+
+def get_altimeter_setting(airport_icao: str) -> Optional[str]:
+    """
+    Get altimeter setting for an airport from its METAR.
+    
+    Args:
+        airport_icao: The ICAO code of the airport
+        
+    Returns:
+        Altimeter string (e.g., "A2992" or "Q1013") or None if unavailable
+    """
+    metar = get_metar(airport_icao)
+    return parse_altimeter_from_metar(metar)
+
+
+# Global cache for spatial index of airports with METAR
+_METAR_AIRPORT_SPATIAL_INDEX: Optional[Dict[str, Any]] = None
+_METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP: Optional[datetime] = None
+_METAR_SPATIAL_INDEX_DURATION = 300  # 5 minutes cache
+
+
+def _build_metar_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Build a spatial index of airports that have METAR data for efficient nearest-airport lookups.
+    
+    For optimization, we use a simple grid-based spatial hash:
+    - Divide the world into 1-degree grid cells
+    - Store airports in each cell for quick regional lookup
+    - This avoids expensive distance calculations for all airports
+    
+    Args:
+        airports_data: Dictionary of all airport data
+        
+    Returns:
+        Dictionary with spatial index structure
+    """
+    metar_data_cache, metar_blacklist = get_metar_cache()
+    
+    # Build list of airports that might have METAR (not blacklisted)
+    valid_airports = []
+    for icao, data in airports_data.items():
+        # Skip if blacklisted or missing coordinates
+        if icao in metar_blacklist or data.get('latitude') is None or data.get('longitude') is None:
+            continue
+        valid_airports.append({
+            'icao': icao,
+            'lat': data['latitude'],
+            'lon': data['longitude']
+        })
+    
+    # Build spatial grid (1-degree cells)
+    spatial_grid = {}
+    for airport in valid_airports:
+        lat_cell = int(airport['lat'])
+        lon_cell = int(airport['lon'])
+        cell_key = (lat_cell, lon_cell)
+        
+        if cell_key not in spatial_grid:
+            spatial_grid[cell_key] = []
+        spatial_grid[cell_key].append(airport)
+    
+    return {
+        'grid': spatial_grid,
+        'airports': valid_airports,
+        'cell_size': 1.0  # degrees
+    }
+
+
+def find_nearest_airport_with_metar(
+    latitude: float,
+    longitude: float,
+    airports_data: Dict[str, Dict[str, Any]],
+    max_distance_nm: float = 100.0
+) -> Optional[Tuple[str, str, float]]:
+    """
+    Find the nearest airport with METAR data to given coordinates.
+    
+    Uses a spatial index for efficient lookup. The index is cached and rebuilt
+    every 5 minutes to account for new METAR blacklists.
+    
+    Args:
+        latitude: Latitude in decimal degrees
+        longitude: Longitude in decimal degrees
+        airports_data: Dictionary of all airport data
+        max_distance_nm: Maximum search radius in nautical miles (default: 100)
+        
+    Returns:
+        Tuple of (icao_code, altimeter_setting, distance_nm) or None if no airport found
+        Distance is in nautical miles
+    """
+    global _METAR_AIRPORT_SPATIAL_INDEX, _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP
+    
+    # Check if we need to build or rebuild the spatial index
+    current_time = datetime.now(timezone.utc)
+    if (_METAR_AIRPORT_SPATIAL_INDEX is None or
+        _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None or
+        (current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds() > _METAR_SPATIAL_INDEX_DURATION):
+        _METAR_AIRPORT_SPATIAL_INDEX = _build_metar_airport_spatial_index(airports_data)
+        _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
+    
+    spatial_index = _METAR_AIRPORT_SPATIAL_INDEX
+    grid = spatial_index['grid']
+    cell_size = spatial_index['cell_size']
+    
+    # Determine which cells to search (current cell + surrounding cells)
+    lat_cell = int(latitude)
+    lon_cell = int(longitude)
+    
+    # Search current cell and adjacent cells (3x3 grid)
+    search_cells = []
+    for dlat in [-1, 0, 1]:
+        for dlon in [-1, 0, 1]:
+            search_cells.append((lat_cell + dlat, lon_cell + dlon))
+    
+    # Find nearest airport within search cells
+    nearest_icao = None
+    nearest_distance = float('inf')
+    
+    for cell_key in search_cells:
+        if cell_key not in grid:
+            continue
+        
+        for airport in grid[cell_key]:
+            distance = haversine_distance_nm(
+                latitude, longitude,
+                airport['lat'], airport['lon']
+            )
+            
+            if distance < nearest_distance and distance <= max_distance_nm:
+                nearest_distance = distance
+                nearest_icao = airport['icao']
+    
+    # If we found an airport, try to get its altimeter setting
+    if nearest_icao:
+        altimeter = get_altimeter_setting(nearest_icao)
+        if altimeter:
+            return (nearest_icao, altimeter, nearest_distance)
+        # If no altimeter available, airport likely doesn't have METAR - continue search
+    
+    # If no valid METAR found in nearby cells, expand search to all airports (slower fallback)
+    # This handles edge cases where nearest airport doesn't have METAR
+    for airport in spatial_index['airports']:
+        if airport['icao'] == nearest_icao:
+            continue  # Already tried this one
+        
+        distance = haversine_distance_nm(
+            latitude, longitude,
+            airport['lat'], airport['lon']
+        )
+        
+        if distance <= max_distance_nm:
+            altimeter = get_altimeter_setting(airport['icao'])
+            if altimeter and distance < nearest_distance:
+                nearest_distance = distance
+                nearest_icao = airport['icao']
+                return (nearest_icao, altimeter, nearest_distance)
+    
+    return None

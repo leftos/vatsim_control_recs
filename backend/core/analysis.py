@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from backend.cache.manager import load_aircraft_approach_speeds
 from backend.data.loaders import load_unified_airport_data
 from backend.data.vatsim_api import download_vatsim_data, filter_flights_by_airports
-from backend.data.weather import get_wind_info, get_wind_info_batch
+from backend.data.weather import get_wind_info, get_wind_info_batch, get_altimeter_setting
 from backend.core.controllers import get_staffed_positions
 from backend.core.calculations import format_eta_display, calculate_eta
 from backend.core.groupings import load_all_groupings
@@ -259,6 +259,22 @@ def analyze_flights_data(
         print(f"Fetching weather data for {len(airports_to_fetch)} active airports...")
     wind_info_batch = get_wind_info_batch(airports_to_fetch, source=WIND_SOURCE) if (airports_to_fetch and not hide_wind) else {}
     
+    # Batch fetch altimeter settings for all airports that will be displayed
+    altimeter_batch = {}
+    if airports_to_fetch:
+        print(f"Fetching altimeter settings for {len(airports_to_fetch)} active airports...")
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_icao = {executor.submit(get_altimeter_setting, icao): icao for icao in airports_to_fetch}
+            for future in as_completed(future_to_icao):
+                icao = future_to_icao[future]
+                try:
+                    result = future.result()
+                    # Use raw format (A2992 or Q1013)
+                    altimeter_batch[icao] = result if result else ""
+                except Exception:
+                    altimeter_batch[icao] = ""
+    
     if airports_to_fetch:
         print(f"Processing airport names for {len(airports_to_fetch)} airports...")
     # Batch fetch pretty names only for airports that will be displayed (processes locations efficiently)
@@ -279,12 +295,15 @@ def analyze_flights_data(
         pretty_name = pretty_names_batch.get(airport) or airport
         # Get wind information from batch results (only if not hidden)
         wind_info = wind_info_batch.get(airport) or "" if not hide_wind else ""
+        # Get altimeter from batch results
+        altimeter_info = altimeter_batch.get(airport) or ""
         
         # Create AirportStats object
         stats = AirportStats(
             icao=airport,
             name=pretty_name,
             wind=wind_info,
+            altimeter=altimeter_info,
             total=total_flights,
             departures=departing,
             arrivals=arriving,

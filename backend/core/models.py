@@ -13,6 +13,7 @@ class AirportStats:
     icao: str
     name: str
     wind: str
+    altimeter: str
     total: int
     departures: int
     arrivals: int
@@ -28,7 +29,7 @@ class AirportStats:
             include_arrivals_all: Whether to include the arrivals_all column (now combined with arrivals)
         
         Returns:
-            Tuple in format: (ICAO, NAME, WIND, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
+            Tuple in format: (ICAO, NAME, WIND, ALT, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
             When include_arrivals_all=True: TOTAL shows "dep+arr<xH / dep+arr_all" and ARR shows "arr<xH / arr_all"
         """
         # Calculate total with all arrivals
@@ -50,6 +51,7 @@ class AirportStats:
             self.icao,
             self.name,
             self.wind,
+            self.altimeter,
             total_display,
             str(self.departures).rjust(3),
             arr_display,
@@ -65,7 +67,7 @@ class AirportStats:
             include_arrivals_all: Whether to include the arrivals_all column (now combined with arrivals)
         
         Returns:
-            Tuple in format: (ICAO, NAME, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
+            Tuple in format: (ICAO, NAME, ALT, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
             When include_arrivals_all=True: TOTAL shows "dep+arr<xH / dep+arr_all" and ARR shows "arr<xH / arr_all"
         """
         # Calculate total with all arrivals
@@ -86,6 +88,7 @@ class AirportStats:
         return (
             self.icao,
             self.name,
+            self.altimeter,
             total_display,
             str(self.departures).rjust(3),
             arr_display,

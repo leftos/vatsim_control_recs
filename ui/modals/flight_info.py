@@ -5,6 +5,8 @@ from textual.widgets import Static
 from textual.containers import Container, Vertical
 from textual.binding import Binding
 from textual.app import ComposeResult
+from backend import find_nearest_airport_with_metar
+from ui import config
 
 
 class FlightInfoScreen(ModalScreen):
@@ -86,7 +88,7 @@ class FlightInfoScreen(ModalScreen):
         
         # Flight Plan section
         flight_plan = self.flight_data.get('flight_plan')
-        if flight_plan:            
+        if flight_plan:
             # Display info as 
             # DEP->ARR (Altn: ALTN) // ACFT
             # ALT // IFR/VFR            
@@ -127,6 +129,12 @@ class FlightInfoScreen(ModalScreen):
                 route_lines = self._wrap_text(route, 82)
                 for route_line in route_lines:
                     lines.append(f"  {route_line}")
+                lines.append("")
+        
+            # Altimeter section (display first, above flight plan)
+            altimeter_info = self._get_altimeter_info()
+            if altimeter_info:
+                lines.append(altimeter_info)
                 lines.append("")
             
             # Remarks (only show first part if too long)
@@ -185,6 +193,58 @@ class FlightInfoScreen(ModalScreen):
             minutes = duration_str[2:]
             return f"{hours}h {minutes}m"
         return duration_str
+    
+    def _get_altimeter_info(self) -> str:
+        """Get nearest airport altimeter setting for the flight's current position"""
+        # Check if we have position data
+        latitude = self.flight_data.get('latitude')
+        longitude = self.flight_data.get('longitude')
+        altitude = self.flight_data.get('altitude')
+        
+        # Debug: Check what data we have
+        if latitude is None or longitude is None:
+            return ""
+        
+        # Only show altimeter for aircraft below FL180 (18,000 feet)
+        # Above this altitude, pilots use standard pressure setting (29.92/1013.25)
+        if altitude is not None and altitude >= 18000:
+            return ""
+        
+        if config.UNIFIED_AIRPORT_DATA is None:
+            return ""
+        
+        try:
+            # Find nearest airport with METAR
+            result = find_nearest_airport_with_metar(
+                latitude,
+                longitude,
+                config.UNIFIED_AIRPORT_DATA,
+                max_distance_nm=100.0
+            )
+            
+            if result:
+                airport_icao, altimeter, distance_nm = result
+                
+                # Get the city name from airport data
+                airport_data = config.UNIFIED_AIRPORT_DATA.get(airport_icao, {})
+                city_name = airport_data.get('city', airport_icao)
+                
+                altimeter_word = ""
+                if altimeter.startswith('A'):
+                    altimeter_word = "Altimeter"
+                elif altimeter.startswith('Q'):
+                    altimeter_word = "QNH"
+                
+                return f"[bold]{city_name} {altimeter_word}:[/bold] {altimeter} ({airport_icao}, {distance_nm:.1f}nm)"
+            else:
+                # No airport with METAR found within range
+                return ""
+        except Exception as e:
+            # Log the error for debugging
+            import traceback
+            print(f"Error getting altimeter info: {e}")
+            traceback.print_exc()
+            return ""
     
     def action_close(self) -> None:
         """Close the modal"""

@@ -10,7 +10,7 @@ from backend.core.models import AirportStats, GroupingStats
 from .config import (
     ColumnConfig, TableConfig,
     ETA_FLAP_CHARS, ICAO_FLAP_CHARS, CALLSIGN_FLAP_CHARS,
-    POSITION_FLAP_CHARS, WIND_FLAP_CHARS
+    POSITION_FLAP_CHARS, WIND_FLAP_CHARS, ALTIMETER_FLAP_CHARS
 )
 from .utils import eta_sort_key
 from .debug_logger import debug
@@ -308,6 +308,9 @@ def create_airports_table_config(max_eta: float, hide_wind: bool = False) -> Tab
     # Conditionally add wind column
     if not hide_wind:
         columns.append(ColumnConfig("WIND", flap_chars=WIND_FLAP_CHARS, update_width=True))
+    
+    # Always add altimeter column
+    columns.append(ColumnConfig("ALT", flap_chars=ALTIMETER_FLAP_CHARS, update_width=True))
     
     columns.extend([
         ColumnConfig("TOTAL", flap_chars=NUMERIC_FLAP_CHARS, content_align="right", update_width=True),
