@@ -20,7 +20,13 @@ def eta_sort_key(arrival_row):
         flight_str = arrival_row.callsign
         eta_str = arrival_row.eta_display.upper()
     else:
-        flight, origin_icao, origin_name, eta, eta_local = arrival_row
+        # Handle both single airport format (5 values) and grouping format (7 values)
+        if len(arrival_row) == 7:
+            # Grouping format: (callsign, origin_icao, origin_name, arrival_icao, arrival_name, eta, eta_local)
+            flight, origin_icao, origin_name, arrival_icao, arrival_name, eta, eta_local = arrival_row
+        else:
+            # Single airport format: (callsign, origin_icao, origin_name, eta, eta_local)
+            flight, origin_icao, origin_name, eta, eta_local = arrival_row
         eta_str = str(eta).upper()
         flight_str = str(flight)
     

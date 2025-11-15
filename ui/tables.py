@@ -295,6 +295,31 @@ ARRIVALS_TABLE_CONFIG = TableConfig(
     sort_function=eta_sort_key
 )
 
+# Table configurations for groupings (show both airports)
+GROUPING_DEPARTURES_TABLE_CONFIG = TableConfig(
+    columns=[
+        ColumnConfig("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS),
+        ColumnConfig("FROM", flap_chars=ICAO_FLAP_CHARS),
+        ColumnConfig("NAME", update_width=True),
+        ColumnConfig("DEST", flap_chars=ICAO_FLAP_CHARS),
+        ColumnConfig("NAME", update_width=True),
+    ],
+    sort_function=lambda x: str(x[0])  # Sort by callsign
+)
+
+GROUPING_ARRIVALS_TABLE_CONFIG = TableConfig(
+    columns=[
+        ColumnConfig("FLIGHT", flap_chars=CALLSIGN_FLAP_CHARS),
+        ColumnConfig("TO", flap_chars=ICAO_FLAP_CHARS),
+        ColumnConfig("NAME", update_width=True),
+        ColumnConfig("ORIG", flap_chars=ICAO_FLAP_CHARS),
+        ColumnConfig("NAME", update_width=True),
+        ColumnConfig("ETA", flap_chars=ETA_FLAP_CHARS, content_align="right", update_width=True),
+        ColumnConfig("ETA (LT)", flap_chars=ETA_FLAP_CHARS, content_align="right"),
+    ],
+    sort_function=eta_sort_key
+)
+
 
 def create_airports_table_config(max_eta: float, hide_wind: bool = False) -> TableConfig:
     """Create airport table configuration based on max_eta setting and hide_wind option"""

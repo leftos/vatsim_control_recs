@@ -19,7 +19,7 @@ from backend.config import constants as backend_constants
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from ui import config
-from ui.tables import TableManager, DEPARTURES_TABLE_CONFIG, ARRIVALS_TABLE_CONFIG
+from ui.tables import TableManager, DEPARTURES_TABLE_CONFIG, ARRIVALS_TABLE_CONFIG, GROUPING_DEPARTURES_TABLE_CONFIG, GROUPING_ARRIVALS_TABLE_CONFIG
 from ui.modals.flight_info import FlightInfoScreen
 
 
@@ -222,27 +222,58 @@ class FlightBoardScreen(ModalScreen):
         # Update window title with fresh wind data
         self._update_window_title()
         
-        # Initialize TableManagers if not already done
+        # Detect if this is a grouping (list of airports) or single airport
+        is_grouping = isinstance(self.airport_icao_or_list, list) and len(self.airport_icao_or_list) > 1
+        
+        # Initialize TableManagers if not already done, using appropriate config
         if self.departures_manager is None:
             departures_table = self.query_one("#departures-table", SplitFlapDataTable)
-            self.departures_manager = TableManager(departures_table, DEPARTURES_TABLE_CONFIG, self.departures_row_keys)
+            departures_config = GROUPING_DEPARTURES_TABLE_CONFIG if is_grouping else DEPARTURES_TABLE_CONFIG
+            self.departures_manager = TableManager(departures_table, departures_config, self.departures_row_keys)
         
         if self.arrivals_manager is None:
             arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
-            self.arrivals_manager = TableManager(arrivals_table, ARRIVALS_TABLE_CONFIG, self.arrivals_row_keys)
+            arrivals_config = GROUPING_ARRIVALS_TABLE_CONFIG if is_grouping else ARRIVALS_TABLE_CONFIG
+            self.arrivals_manager = TableManager(arrivals_table, arrivals_config, self.arrivals_row_keys)
         
         # Transform structured data to tuple format for table display
-        # departures_data is List[DepartureInfo], convert to (callsign, icao, name)
-        departures_formatted = [
-            (dep.callsign, dep.destination.icao_code, dep.destination.pretty_name)
-            for dep in self.departures_data
-        ]
-        
-        # arrivals_data is List[ArrivalInfo], convert to (callsign, icao, name, eta, eta_local)
-        arrivals_formatted = [
-            (arr.callsign, arr.origin.icao_code, arr.origin.pretty_name, arr.eta_display, arr.eta_local_time)
-            for arr in self.arrivals_data
-        ]
+        if is_grouping:
+            # For groupings: show departure airport, destination airport, both with ICAO and name
+            # Format: (callsign, from_icao, from_name, dest_icao, dest_name)
+            departures_formatted = [
+                (dep.callsign,
+                 dep.departure.icao_code if dep.departure else "----",
+                 dep.departure.pretty_name if dep.departure else "----",
+                 dep.destination.icao_code,
+                 dep.destination.pretty_name)
+                for dep in self.departures_data
+            ]
+            
+            # For arrivals: show arrival airport first, then origin airport, both with ICAO and name, plus ETA
+            # Format: (callsign, to_icao, to_name, orig_icao, orig_name, eta, eta_local)
+            arrivals_formatted = [
+                (arr.callsign,
+                 arr.arrival.icao_code if arr.arrival else "----",
+                 arr.arrival.pretty_name if arr.arrival else "----",
+                 arr.origin.icao_code,
+                 arr.origin.pretty_name,
+                 arr.eta_display,
+                 arr.eta_local_time)
+                for arr in self.arrivals_data
+            ]
+        else:
+            # For single airport: show only destination for departures, origin for arrivals
+            # Format: (callsign, icao, name)
+            departures_formatted = [
+                (dep.callsign, dep.destination.icao_code, dep.destination.pretty_name)
+                for dep in self.departures_data
+            ]
+            
+            # Format: (callsign, icao, name, eta, eta_local)
+            arrivals_formatted = [
+                (arr.callsign, arr.origin.icao_code, arr.origin.pretty_name, arr.eta_display, arr.eta_local_time)
+                for arr in self.arrivals_data
+            ]
         
         # Populate tables using TableManagers
         self.departures_manager.populate(departures_formatted)
@@ -305,16 +336,19 @@ class FlightBoardScreen(ModalScreen):
         if not row_data or len(row_data) == 0:
             return
         
-        callsign = str(row_data[0])  # First column is always callsign
+        # Extract callsign from first column and clean it
+        callsign = str(row_data[0]).strip()
         
         # Find the flight in vatsim_data
         flight_data = None
-        for pilot in self.vatsim_data.get('pilots', []):
-            if pilot.get('callsign') == callsign:
+        pilots_list = self.vatsim_data.get('pilots', [])
+        for pilot in pilots_list:
+            if pilot.get('callsign', '').strip() == callsign:
                 flight_data = pilot
                 break
         
         if not flight_data:
+            # Debug: log that flight was not found
             return
         
         # Open the flight info modal
