@@ -1,5 +1,6 @@
 """Flight Information Modal Screen"""
 
+import asyncio
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.containers import Container, Vertical
@@ -68,13 +69,42 @@ class FlightInfoScreen(ModalScreen):
         """
         super().__init__()
         self.flight_data = flight_data
+        self.altimeter_info = None  # Will be populated asynchronously
+        self.altimeter_loading = True
     
     def compose(self) -> ComposeResult:
         with Container(id="flight-info-container"):
             yield Static(self._format_title(), id="flight-info-title")
             with Vertical():
-                yield Static(self._format_flight_info(), classes="info-section")
+                yield Static(self._format_flight_info(), classes="info-section", id="flight-info-content")
             yield Static("Press Escape or Q to close", id="flight-info-hint")
+    
+    async def on_mount(self) -> None:
+        """Load altimeter info asynchronously after modal is shown"""
+        await self._load_altimeter_info()
+    
+    async def _load_altimeter_info(self) -> None:
+        """Asynchronously fetch altimeter information"""
+        loop = asyncio.get_event_loop()
+        
+        # Run the blocking altimeter lookup in a thread pool
+        try:
+            self.altimeter_info = await loop.run_in_executor(
+                None,
+                self._get_altimeter_info_sync
+            )
+        except Exception as e:
+            print(f"Error loading altimeter info: {e}")
+            self.altimeter_info = ""
+        finally:
+            self.altimeter_loading = False
+            
+            # Update the display with the loaded altimeter info
+            try:
+                content_widget = self.query_one("#flight-info-content", Static)
+                content_widget.update(self._format_flight_info())
+            except Exception:
+                pass
     
     def _format_title(self) -> str:
         """Format the modal title with callsign"""
@@ -132,9 +162,11 @@ class FlightInfoScreen(ModalScreen):
                 lines.append("")
         
             # Altimeter section (display first, above flight plan)
-            altimeter_info = self._get_altimeter_info()
-            if altimeter_info:
-                lines.append(altimeter_info)
+            if self.altimeter_loading:
+                lines.append("[dim]Loading nearest altimeter...[/dim]")
+                lines.append("")
+            elif self.altimeter_info:
+                lines.append(self.altimeter_info)
                 lines.append("")
             
             # Remarks (only show first part if too long)
@@ -194,8 +226,8 @@ class FlightInfoScreen(ModalScreen):
             return f"{hours}h {minutes}m"
         return duration_str
     
-    def _get_altimeter_info(self) -> str:
-        """Get nearest airport altimeter setting for the flight's current position"""
+    def _get_altimeter_info_sync(self) -> str:
+        """Get nearest airport altimeter setting for the flight's current position (synchronous version for executor)"""
         # Check if we have position data
         latitude = self.flight_data.get('latitude')
         longitude = self.flight_data.get('longitude')

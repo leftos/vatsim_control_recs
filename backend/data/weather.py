@@ -635,8 +635,11 @@ def find_nearest_airport_with_metar(
             return (nearest_icao, altimeter, nearest_distance)
         # If no altimeter available, airport likely doesn't have METAR - continue search
     
-    # If no valid METAR found in nearby cells, expand search to all airports (slower fallback)
-    # This handles edge cases where nearest airport doesn't have METAR
+    # If no valid METAR found in nearby cells, do a limited expanded search
+    # Sort airports by distance and try only the closest N airports to avoid massive delays
+    MAX_FALLBACK_ATTEMPTS = 20  # Limit fallback search to prevent UI freezing
+    
+    candidates = []
     for airport in spatial_index['airports']:
         if airport['icao'] == nearest_icao:
             continue  # Already tried this one
@@ -647,10 +650,14 @@ def find_nearest_airport_with_metar(
         )
         
         if distance <= max_distance_nm:
-            altimeter = get_altimeter_setting(airport['icao'])
-            if altimeter and distance < nearest_distance:
-                nearest_distance = distance
-                nearest_icao = airport['icao']
-                return (nearest_icao, altimeter, nearest_distance)
+            candidates.append((distance, airport['icao']))
+    
+    # Sort by distance and try only the closest airports
+    candidates.sort(key=lambda x: x[0])
+    
+    for distance, icao in candidates[:MAX_FALLBACK_ATTEMPTS]:
+        altimeter = get_altimeter_setting(icao)
+        if altimeter:
+            return (icao, altimeter, distance)
     
     return None
