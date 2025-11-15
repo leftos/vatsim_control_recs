@@ -81,7 +81,8 @@ class FlightInfoScreen(ModalScreen):
     
     async def on_mount(self) -> None:
         """Load altimeter info asynchronously after modal is shown"""
-        await self._load_altimeter_info()
+        # Start loading altimeter info in the background (don't await)
+        asyncio.create_task(self._load_altimeter_info())
     
     async def _load_altimeter_info(self) -> None:
         """Asynchronously fetch altimeter information"""
