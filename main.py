@@ -144,8 +144,12 @@ def main():
                     print(f"Warning: Grouping '{group_name}' not found in custom_groupings.json")
         
         if grouping_airports:
-            print(f"Expanded groupings/supergroupings to {len(grouping_airports)} airport(s)")
-            airport_allowlist = list(set(airport_allowlist + list(grouping_airports)))
+            # Filter out airports without valid coordinates
+            valid_airports = [ap for ap in grouping_airports if ap in ui_config.UNIFIED_AIRPORT_DATA and
+                            ui_config.UNIFIED_AIRPORT_DATA[ap].get('latitude') is not None and
+                            ui_config.UNIFIED_AIRPORT_DATA[ap].get('longitude') is not None]
+            print(f"Expanded groupings/supergroupings to {len(valid_airports)} airport(s) (filtered from {len(grouping_airports)})")
+            airport_allowlist = list(set(airport_allowlist + valid_airports))
     
     # Get the data (groupings/supergroupings already expanded to airport_allowlist)
     airport_data, groupings_data, total_flights, ui_config.UNIFIED_AIRPORT_DATA, ui_config.DISAMBIGUATOR = analyze_flights_data(

@@ -106,24 +106,65 @@ def analyze_flights_data(
     # Note: The airport_allowlist already contains all airports from groupings/supergroupings
     display_custom_groupings = {}
     
+    def resolve_grouping_recursively_for_display(grouping_name, visited=None):
+        """
+        Recursively resolve a grouping name to its individual airports.
+        Handles nested groupings by looking up grouping names and resolving them.
+        
+        Args:
+            grouping_name: Name of the grouping to resolve
+            visited: Set of already-visited grouping names to prevent infinite loops
+        
+        Returns:
+            Set of airport ICAO codes
+        """
+        if visited is None:
+            visited = set()
+        
+        # Prevent infinite loops
+        if grouping_name in visited:
+            return set()
+        visited.add(grouping_name)
+        
+        if grouping_name not in all_custom_groupings:
+            return set()
+        
+        airports = set()
+        items = all_custom_groupings[grouping_name]
+        
+        for item in items:
+            # Check if this item is itself a grouping name
+            if item in all_custom_groupings:
+                # Recursively resolve the nested grouping
+                airports.update(resolve_grouping_recursively_for_display(item, visited))
+            else:
+                # It's an airport code, add it directly
+                airports.add(item)
+        
+        return airports
+    
     if all_custom_groupings:
         if supergroupings_allowlist:
             # Display supergroupings and their sub-groupings
             included_group_names = set()
+            resolved_supergroup_airports = set()
             
             for supergroup_name in supergroupings_allowlist:
                 if supergroup_name in all_custom_groupings:
-                    current_supergroup_airports = set(all_custom_groupings[supergroup_name])
                     included_group_names.add(supergroup_name)
-                    
-                    # Find all sub-groupings
-                    for other_group_name, other_group_airports in all_custom_groupings.items():
-                        if other_group_name != supergroup_name:
-                            other_group_airports_set = set(other_group_airports)
-                            if other_group_airports_set.issubset(current_supergroup_airports):
-                                included_group_names.add(other_group_name)
+                    # Recursively resolve the supergrouping to all airports
+                    supergroup_airports = resolve_grouping_recursively_for_display(supergroup_name)
+                    resolved_supergroup_airports.update(supergroup_airports)
                 else:
                     print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json.")
+            
+            # Find all sub-groupings that are subsets of the resolved supergrouping airports
+            for other_group_name, other_group_airports in all_custom_groupings.items():
+                if other_group_name not in included_group_names:
+                    # Resolve this grouping to see if it's a sub-grouping
+                    resolved_other_airports = resolve_grouping_recursively_for_display(other_group_name)
+                    if resolved_other_airports and resolved_other_airports.issubset(resolved_supergroup_airports):
+                        included_group_names.add(other_group_name)
             
             # Populate display groupings
             for name in included_group_names:
@@ -320,17 +361,20 @@ def analyze_flights_data(
     grouped_data = []
     if display_custom_groupings:
         for group_name, group_airports in display_custom_groupings.items():
-            group_departing = sum(departure_counts.get(ap_icao, 0) for ap_icao in group_airports)
-            group_arriving = sum(arrival_counts.get(ap_icao, 0) for ap_icao in group_airports)
-            group_arriving_all = sum(arrival_counts_all.get(ap_icao, 0) for ap_icao in group_airports)
+            # Resolve the grouping to actual airports (handles nested groupings)
+            resolved_airports = resolve_grouping_recursively_for_display(group_name)
+            
+            group_departing = sum(departure_counts.get(ap_icao, 0) for ap_icao in resolved_airports)
+            group_arriving = sum(arrival_counts.get(ap_icao, 0) for ap_icao in resolved_airports)
+            group_arriving_all = sum(arrival_counts_all.get(ap_icao, 0) for ap_icao in resolved_airports)
             group_total = group_departing + group_arriving
             
             # Find the earliest ETA among all airports in this grouping
             group_earliest_eta = float('inf')
-            group_arrivals_in_flight = sum(arrivals_in_flight.get(ap_icao, 0) for ap_icao in group_airports)
-            group_arrivals_on_ground = sum(arrivals_on_ground.get(ap_icao, 0) for ap_icao in group_airports)
+            group_arrivals_in_flight = sum(arrivals_in_flight.get(ap_icao, 0) for ap_icao in resolved_airports)
+            group_arrivals_on_ground = sum(arrivals_on_ground.get(ap_icao, 0) for ap_icao in resolved_airports)
             
-            for ap_icao in group_airports:
+            for ap_icao in resolved_airports:
                 if ap_icao in earliest_arrival_eta:
                     if earliest_arrival_eta[ap_icao] < group_earliest_eta:
                         group_earliest_eta = earliest_arrival_eta[ap_icao]
@@ -338,7 +382,7 @@ def analyze_flights_data(
             group_eta_display = format_eta_display(group_earliest_eta, group_arrivals_in_flight, group_arrivals_on_ground)
             
             # Collect staffed airports in this grouping (exclude airports with only ATIS)
-            staffed_airports = [ap_icao for ap_icao in group_airports if ap_icao in staffed_positions and any(pos != "ATIS" for pos in staffed_positions[ap_icao])]
+            staffed_airports = [ap_icao for ap_icao in resolved_airports if ap_icao in staffed_positions and any(pos != "ATIS" for pos in staffed_positions[ap_icao])]
             staffed_display = ", ".join(staffed_airports) if staffed_airports else ""
             
             if group_total > 0:  # Only include groupings with activity

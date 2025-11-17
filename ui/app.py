@@ -610,7 +610,31 @@ class VATSIMControlApp(App):
                         config.UNIFIED_AIRPORT_DATA or {}
                     )
                     if grouping_name in all_groupings:
-                        airport_list = all_groupings[grouping_name]
+                        # Recursively resolve the grouping to actual airports (handles nested groupings)
+                        def resolve_grouping_recursively(gname, visited=None):
+                            """Recursively resolve a grouping name to its individual airports."""
+                            if visited is None:
+                                visited = set()
+                            
+                            if gname in visited:
+                                return set()
+                            visited.add(gname)
+                            
+                            if gname not in all_groupings:
+                                return set()
+                            
+                            airports = set()
+                            items = all_groupings[gname]
+                            
+                            for item in items:
+                                if item in all_groupings:
+                                    airports.update(resolve_grouping_recursively(item, visited))
+                                else:
+                                    airports.add(item)
+                            
+                            return airports
+                        
+                        airport_list = list(resolve_grouping_recursively(grouping_name))
                         title = grouping_name
                          
                         # Open the flight board and store reference
