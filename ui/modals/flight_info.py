@@ -142,7 +142,11 @@ class FlightInfoScreen(ModalScreen):
             # Filed altitude
             altitude = flight_plan.get('altitude', '----')
             if altitude != '----':
-                line += f"{int(altitude):,} // "
+                try:
+                    line += f"{int(altitude):,} // "
+                except ValueError:
+                    # Altitude is not numeric (e.g., 'VFR'), display as-is
+                    line += f"{altitude} // "
             
             # Flight rules
             flight_rules = flight_plan.get('flight_rules', '?')
