@@ -13,26 +13,37 @@ def debug_log(message: str):
     debug_logger.debug(message)
 
 
-def eta_sort_key(arrival_row):
-    """Sort key for arrivals: LANDED at top, then by ETA (soonest first), then by flight callsign for stability"""
+def eta_sort_key(row):
+    """
+    Sort key for airport/grouping tables: LANDED at top, then by ETA (soonest first),
+    then by non-ETA total (descending), then by flight callsign for stability.
+    
+    For rows with TOTAL column in format "X/Y", sorts by:
+    1. ETA category (LANDED first, then relative times, then absolute times, then unknown)
+    2. ETA value (ascending - soonest first)
+    3. Non-ETA total value (descending - bigger totals first)
+    4. Flight callsign (for stability)
+    """
     # Handle both tuple format (for display) and DepartureInfo/ArrivalInfo objects
-    if isinstance(arrival_row, ArrivalInfo):
-        flight_str = arrival_row.callsign
-        eta_str = arrival_row.eta_display.upper()
+    if isinstance(row, ArrivalInfo):
+        flight_str = row.callsign
+        eta_str = row.eta_display.upper()
+        non_eta_total = 0  # Not available for ArrivalInfo objects
     else:
-        # Handle both single airport format (5 values) and grouping format (7 values)
-        if len(arrival_row) == 7:
+        # Determine format and extract fields
+        if len(row) == 7:
             # Grouping format: (callsign, origin_icao, origin_name, arrival_icao, arrival_name, eta, eta_local)
-            flight, origin_icao, origin_name, arrival_icao, arrival_name, eta, eta_local = arrival_row
+            flight, origin_icao, origin_name, arrival_icao, arrival_name, eta, eta_local = row
         else:
             # Single airport format: (callsign, origin_icao, origin_name, eta, eta_local)
-            flight, origin_icao, origin_name, eta, eta_local = arrival_row
+            flight, origin_icao, origin_name, eta, eta_local = row
         eta_str = str(eta).upper()
         flight_str = str(flight)
+        non_eta_total = 0  # Not available in arrival rows
     
     # Put LANDED flights at the top
     if "LANDED" in eta_str:
-        return (0, 0, flight_str)
+        return (0, 0, -non_eta_total, flight_str)
     
     # Handle relative time formats with hours and/or minutes like "1H", "1H30M", "2H", "45M", "<1M"
     if "H" in eta_str or "M" in eta_str:
@@ -58,9 +69,9 @@ def eta_sort_key(arrival_row):
                 # Format like "45M" or "30M"
                 total_minutes = float(eta_str.replace("M", "").strip())
             
-            return (1, total_minutes, flight_str)
+            return (1, total_minutes, -non_eta_total, flight_str)
         except (ValueError, IndexError):
-            return (2, 0, flight_str)
+            return (2, 0, -non_eta_total, flight_str)
     
     # Handle absolute time formats like "13:04"
     if ":" in eta_str:
@@ -70,12 +81,73 @@ def eta_sort_key(arrival_row):
             hours = int(parts[0])
             minutes = int(parts[1])
             total_minutes = hours * 60 + minutes
-            return (2, total_minutes, flight_str)
+            return (2, total_minutes, -non_eta_total, flight_str)
         except ValueError:
-            return (2, 0, flight_str)
+            return (2, 0, -non_eta_total, flight_str)
     
     # Default: treat as lowest priority
-    return (3, 0, flight_str)
+    return (3, 0, -non_eta_total, flight_str)
+
+
+def airport_grouping_sort_key(row):
+    """
+    Sort key for airport/grouping tables: by TOTAL column (descending).
+    
+    For rows with TOTAL column in format "X/Y", sorts by:
+    1. Non-ETA total (Y value, descending - bigger totals first)
+    2. ETA-dependent total (X value, descending - bigger totals first)
+    
+    This ensures rows with bigger non-eta totals appear above rows with
+    the same eta-dependent total but smaller non-eta totals.
+    """
+    # Handle both AirportStats and GroupingStats objects
+    if hasattr(row, 'total') and hasattr(row, 'arrivals_all'):
+        # Object format (AirportStats or GroupingStats)
+        eta_total = row.total
+        non_eta_total = row.departures + row.arrivals_all
+    else:
+        # Tuple format - need to extract TOTAL column
+        # For AirportStats with wind: (ICAO, NAME, WIND, ALT, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
+        # For AirportStats without wind: (ICAO, NAME, ALT, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
+        # For GroupingStats: (GROUPING, TOTAL, DEP, ARR, NEXT ETA, STAFFED)
+        
+        # Find the TOTAL column (it's typically at index 4 or 3 depending on format)
+        # We'll look for it by checking if it contains '/' or is numeric
+        total_str = None
+        
+        # Try to find TOTAL column by checking different positions
+        if len(row) >= 5:
+            # Check position 4 (with wind) or position 3 (without wind) or position 1 (grouping)
+            for idx in [4, 3, 1]:
+                if idx < len(row):
+                    val = str(row[idx])
+                    if '/' in val or val.isdigit():
+                        total_str = val
+                        break
+        
+        if total_str is None:
+            # Fallback: couldn't find TOTAL, return neutral sort key
+            return (0, 0)
+        
+        # Parse the TOTAL column
+        if '/' in total_str:
+            # Format: "X/Y"
+            try:
+                parts = total_str.split('/')
+                eta_total = int(parts[0].strip())
+                non_eta_total = int(parts[1].strip())
+            except (ValueError, IndexError):
+                return (0, 0)
+        else:
+            # Format: just "X"
+            try:
+                eta_total = int(total_str.strip())
+                non_eta_total = eta_total
+            except ValueError:
+                return (0, 0)
+    
+    # Sort by non-eta total (descending), then by eta total (descending)
+    return (-non_eta_total, -eta_total)
 
 
 def expand_countries_to_airports(country_codes: list, unified_airport_data: dict) -> list:

@@ -4,7 +4,7 @@ Contains TableManager class and table configuration builders
 """
 
 import asyncio
-from typing import Any, List, Union
+from typing import Any, List, Union, Optional
 from widgets.split_flap_datatable import SplitFlapDataTable, NUMERIC_FLAP_CHARS
 from backend.core.models import AirportStats, GroupingStats
 from .config import (
@@ -12,7 +12,7 @@ from .config import (
     ETA_FLAP_CHARS, ICAO_FLAP_CHARS, CALLSIGN_FLAP_CHARS,
     POSITION_FLAP_CHARS, WIND_FLAP_CHARS, ALTIMETER_FLAP_CHARS
 )
-from .utils import eta_sort_key
+from .utils import eta_sort_key, airport_grouping_sort_key
 from .debug_logger import debug
 
 
@@ -133,7 +133,7 @@ class TableManager:
         else:
             # Subsequent updates: efficiently update existing rows
             # Run as async task to await pending removals
-            asyncio.create_task(self._update_efficiently_async(data, column_keys))
+            asyncio.create_task(self._update_efficiently_async(data, column_keys, sorted_data=data))
 
     def _add_rows_to_table(self, data: List[Any], column_keys: list) -> None:
         """Add rows to table with animations"""
@@ -189,7 +189,7 @@ class TableManager:
             # Already a tuple
             return row_obj
     
-    async def _update_efficiently_async(self, new_data: List[Any], column_keys: list) -> None:
+    async def _update_efficiently_async(self, new_data: List[Any], column_keys: list, sorted_data: Optional[List[Any]] = None) -> None:
         """Async wrapper that waits for pending removals before updating"""
         # CRITICAL: Wait for any pending row removals to complete before proceeding
         if self.pending_removal_tasks:
@@ -198,8 +198,11 @@ class TableManager:
             self.pending_removal_tasks.clear()
             debug(f"_update_efficiently_async: All pending removals completed")
         
+        # Use sorted_data if provided, otherwise use new_data
+        data_to_use = sorted_data if sorted_data is not None else new_data
+        
         # Now proceed with the synchronous update
-        self._update_efficiently(new_data, column_keys)
+        self._update_efficiently(data_to_use, column_keys)
     
     def _update_efficiently(self, new_data: List[Any], column_keys: list) -> None:
         """Efficiently update table by modifying existing rows and adding/removing as needed"""
@@ -212,38 +215,26 @@ class TableManager:
         if not hasattr(self, '_cached_data'):
             self._cached_data = []
         
-        # Update existing rows with diff checking
-        cells_updated = 0
-        cells_skipped = 0
+        # Check if row order has changed (due to sorting)
+        # If so, we need to rebuild the table to maintain correct row order
+        rows_reordered = False
+        if current_row_count == new_row_count:
+            # Check if the order of rows has changed
+            table_row_keys = list(self.table.rows.keys())
+            if table_row_keys != self.row_keys:
+                rows_reordered = True
+                debug(f"_update_efficiently: Row order has changed, rebuilding table")
         
-        for i in range(min(current_row_count, new_row_count)):
-            row_obj = new_data[i]
-            row_data = self._to_tuple(row_obj)
-            old_row_data = self._cached_data[i] if i < len(self._cached_data) else None
+        if rows_reordered or new_row_count != current_row_count:
+            # Rebuild the table with rows in the correct order
+            debug(f"_update_efficiently: Rebuilding table (reordered={rows_reordered}, count_changed={new_row_count != current_row_count})")
             
-            if i < len(self.row_keys):
-                for col_idx, cell_value in enumerate(row_data):
-                    if col_idx < len(column_keys):
-                        # Only update if value actually changed
-                        if old_row_data is None or col_idx >= len(old_row_data) or str(old_row_data[col_idx]) != str(cell_value):
-                            col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
-                            update_width = col_config.update_width if col_config else False
-                            self.table.update_cell_animated(self.row_keys[i], column_keys[col_idx], cell_value, update_width=update_width)
-                            cells_updated += 1
-                        else:
-                            cells_skipped += 1
-        
-        # Debug log for diff efficiency
-        if cells_updated > 0 or cells_skipped > 0:
-            total_cells = cells_updated + cells_skipped
-            skip_rate = (cells_skipped / total_cells * 100) if total_cells > 0 else 0
-        
-        # Add new rows if needed
-        if new_row_count > current_row_count:
-            rows_to_add = new_row_count - current_row_count
-            debug(f"_update_efficiently: Adding {rows_to_add} new rows")
-            for i in range(current_row_count, new_row_count):
-                row_obj = new_data[i]
+            # Clear the table but keep the rows
+            self.table.clear(columns=False)
+            self.row_keys.clear()
+            
+            # Re-add all rows in the correct sorted order
+            for row_obj in new_data:
                 row_data = self._to_tuple(row_obj)
                 blank_row = tuple(" " * len(str(cell)) for cell in row_data)
                 row_key = self.table.add_row(*blank_row)
@@ -254,21 +245,27 @@ class TableManager:
                         col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
                         update_width = col_config.update_width if col_config else False
                         self.table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
-        
-        # Remove extra rows if needed
-        elif new_row_count < current_row_count:
-            rows_to_remove = current_row_count - new_row_count
-            debug(f"_update_efficiently: Removing {rows_to_remove} rows (current={current_row_count}, new={new_row_count})")
+        else:
+            # Rows are in the same order, just update cell values
+            cells_updated = 0
+            cells_skipped = 0
             
-            for i in range(new_row_count, current_row_count):
+            for i in range(min(current_row_count, new_row_count)):
+                row_obj = new_data[i]
+                row_data = self._to_tuple(row_obj)
+                old_row_data = self._cached_data[i] if i < len(self._cached_data) else None
+                
                 if i < len(self.row_keys):
-                    row_key = self.row_keys[i]
-                    debug(f"Starting removal animation for row_key={row_key} at index {i}")
-                    # Start clearing animation
-                    self.table.remove_row(row_key)
-                    # Schedule actual removal after animation completes and track the task
-                    task = asyncio.create_task(self._wait_and_remove_row(row_key))
-                    self.pending_removal_tasks.append(task)
+                    for col_idx, cell_value in enumerate(row_data):
+                        if col_idx < len(column_keys):
+                            # Only update if value actually changed
+                            if old_row_data is None or col_idx >= len(old_row_data) or str(old_row_data[col_idx]) != str(cell_value):
+                                col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
+                                update_width = col_config.update_width if col_config else False
+                                self.table.update_cell_animated(self.row_keys[i], column_keys[col_idx], cell_value, update_width=update_width)
+                                cells_updated += 1
+                            else:
+                                cells_skipped += 1
         
         # Cache the new data for next comparison (convert to tuples)
         self._cached_data = [self._to_tuple(row) for row in new_data]
@@ -345,7 +342,7 @@ def create_airports_table_config(max_eta: float, hide_wind: bool = False) -> Tab
         ColumnConfig("STAFFED", flap_chars=POSITION_FLAP_CHARS, update_width=True),
     ])
     
-    return TableConfig(columns=columns)
+    return TableConfig(columns=columns, sort_function=airport_grouping_sort_key)
 
 
 def create_groupings_table_config(max_eta: float) -> TableConfig:
@@ -361,4 +358,4 @@ def create_groupings_table_config(max_eta: float) -> TableConfig:
         ColumnConfig("STAFFED", flap_chars=POSITION_FLAP_CHARS, update_width=True),
     ]
                     
-    return TableConfig(columns=columns)
+    return TableConfig(columns=columns, sort_function=airport_grouping_sort_key)
