@@ -86,22 +86,52 @@ def main():
             ui_config.UNIFIED_AIRPORT_DATA
         )
         
+        def resolve_grouping_recursively(grouping_name, visited=None):
+            """
+            Recursively resolve a grouping name to its individual airports.
+            Handles nested groupings by looking up grouping names and resolving them.
+            
+            Args:
+                grouping_name: Name of the grouping to resolve
+                visited: Set of already-visited grouping names to prevent infinite loops
+            
+            Returns:
+                Set of airport ICAO codes
+            """
+            if visited is None:
+                visited = set()
+            
+            # Prevent infinite loops
+            if grouping_name in visited:
+                return set()
+            visited.add(grouping_name)
+            
+            if grouping_name not in all_groupings:
+                return set()
+            
+            airports = set()
+            items = all_groupings[grouping_name]
+            
+            for item in items:
+                # Check if this item is itself a grouping name
+                if item in all_groupings:
+                    # Recursively resolve the nested grouping
+                    airports.update(resolve_grouping_recursively(item, visited))
+                else:
+                    # It's an airport code, add it directly
+                    airports.add(item)
+            
+            return airports
+        
         grouping_airports = set()
         
         # Handle supergroupings (includes sub-groupings)
         if args.supergroupings:
             for supergroup_name in args.supergroupings:
                 if supergroup_name in all_groupings:
-                    # Add airports from the supergrouping itself
-                    current_supergroup_airports = set(all_groupings[supergroup_name])
-                    grouping_airports.update(current_supergroup_airports)
-                    
-                    # Find and include all sub-groupings
-                    for other_group_name, other_group_airports in all_groupings.items():
-                        if other_group_name != supergroup_name:
-                            other_group_airports_set = set(other_group_airports)
-                            if other_group_airports_set.issubset(current_supergroup_airports):
-                                grouping_airports.update(other_group_airports_set)
+                    # Recursively resolve the supergrouping to all airports
+                    resolved_airports = resolve_grouping_recursively(supergroup_name)
+                    grouping_airports.update(resolved_airports)
                 else:
                     print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json")
         
