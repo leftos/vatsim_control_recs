@@ -238,11 +238,6 @@ class FlightInfoScreen(ModalScreen):
         if latitude is None or longitude is None:
             return ""
         
-        # Only show altimeter for aircraft below FL180 (18,000 feet)
-        # Above this altitude, pilots use standard pressure setting (29.92/1013.25)
-        if altitude is not None and altitude >= 18000:
-            return ""
-        
         if config.UNIFIED_AIRPORT_DATA is None:
             return ""
         
