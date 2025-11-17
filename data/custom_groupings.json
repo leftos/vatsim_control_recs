@@ -45,47 +45,26 @@
     "KSFO",
     "KOAK"
   ],
-  "NCT E CA": [
+  "NCT Area E": [
     "KSMF",
     "KSAC",
+    "O88",
     "KMHR",
-    "KBAB"
+    "KAUN",
+    "KBAB",
+    "KGOO",
+    "KLHM",
+    "KMCC",
+    "KMYV",
+    "KOVE",
+    "KPVF"
   ],
-  "NCT E NV (R)": [
+  "NCT Area R": [
     "KRNO"
   ],
-  "ZOA Combined": [
-    "KAPC",
-    "KBAB",
-    "KCCR",
-    "KCIC",
-    "KFAT",
-    "KHWD",
-    "KKWA",
-    "KLVK",
-    "KMCC",
-    "KMER",
-    "KMHR",
-    "KMOD",
-    "KMRY",
-    "KNLC",
-    "KNFL",
-    "KNUQ",
-    "KOAK",
-    "KPAO",
-    "KRDD",
-    "KRHV",
-    "KRNO",
-    "KSAC",
-    "KSCK",
-    "KSFO",
-    "KSJC",
-    "KSMF",
-    "KSNS",
-    "KSQL",
-    "KSTS",
-    "KSUU",
-    "KTRK"
+  "NCT Areas E+R": [
+    "NCT Area E",
+    "NCT Area R"
   ],
   "FAT_APP": [
     "KFAT",
@@ -99,6 +78,15 @@
     "E79",
     "KVIS",
     "1Q1"
+  ],
+  "ZOA Combined": [
+    "NCT Area A",
+    "NCT Area B",
+    "NCT Area C",
+    "NCT Area D",
+    "NCT Area E",
+    "NCT Area R",
+    "FAT_APP"
   ],
   "HNL_APP": [
     "PHNL",
