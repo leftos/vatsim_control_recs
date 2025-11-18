@@ -61,6 +61,10 @@ def get_nearest_airport_if_on_ground(
         nearest_icao = None
         min_distance = float('inf')
         for icao, airport_data in airports.items():
+            # Skip airports with missing coordinates
+            if airport_data.get('latitude') is None or airport_data.get('longitude') is None:
+                continue
+            
             # Calculate distance from airport
             distance = haversine_distance_nm(
                 flight['latitude'],
