@@ -7,6 +7,7 @@ from textual.containers import Container, Vertical
 from textual.binding import Binding
 from textual.app import ComposeResult
 from backend import find_nearest_airport_with_metar
+from backend.core.flights import get_nearest_airport_if_on_ground
 from ui import config
 
 
@@ -120,9 +121,9 @@ class FlightInfoScreen(ModalScreen):
         # Flight Plan section
         flight_plan = self.flight_data.get('flight_plan')
         if flight_plan:
-            # Display info as 
+            # Display info as
             # DEP->ARR (Altn: ALTN) // ACFT
-            # ALT // IFR/VFR            
+            # ALT // IFR/VFR
             
             # Route
             departure = flight_plan.get('departure', '----')
@@ -185,6 +186,33 @@ class FlightInfoScreen(ModalScreen):
                 if len(remarks_lines) > 5:
                     lines.append(f"  ... ({len(remarks_lines) - 5} more lines)")
                 lines.append("")
+        else:
+            # No flight plan - show nearest altimeter and airport if on ground
+            lines.append("[bold]NO FLIGHT PLAN[/bold]")
+            lines.append("")# Nearest airport if on ground
+
+            groundspeed = self.flight_data.get('groundspeed', 0)
+            if groundspeed <= 40:  # On ground or nearly stopped                
+                # Get nearest airport info
+                if config.UNIFIED_AIRPORT_DATA:
+                    nearest_airport = get_nearest_airport_if_on_ground(
+                        self.flight_data,
+                        config.UNIFIED_AIRPORT_DATA
+                    )
+                    if nearest_airport:
+                        airport_data = config.UNIFIED_AIRPORT_DATA.get(nearest_airport, {})
+                        airport_name = airport_data.get('city', 'Unknown')
+                        lines.append(f"[bold]On Ground at [/bold]{nearest_airport} - {airport_name}")
+                        lines.append("")
+            
+            # Altimeter section
+            if self.altimeter_loading:
+                lines.append("[dim]Loading nearest altimeter...[/dim]")
+            elif self.altimeter_info:
+                lines.append(self.altimeter_info)
+            else:
+                lines.append("[dim]No altimeter information available[/dim]")
+            lines.append("")
         
         return "\n".join(lines)
     
