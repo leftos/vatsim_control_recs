@@ -5,6 +5,7 @@ Contains the VATSIMControlApp Textual application class
 
 import asyncio
 import os
+import sys
 from datetime import datetime, timezone
 from typing import List, Any
 from textual.app import App, ComposeResult
@@ -20,6 +21,40 @@ from widgets.split_flap_datatable import SplitFlapDataTable
 from .config import UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
 from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen
+
+
+def set_terminal_title(title: str) -> None:
+    """
+    Set the terminal window/tab title using ANSI escape sequences.
+    This works in most modern terminals including Windows Terminal, PowerShell, and WSL.
+    """
+    # Try multiple methods since Textual may capture stdout
+
+    # Method 1: Write to stderr (less likely to be captured)
+    try:
+        sys.stderr.write(f"\033]0;{title}\007")
+        sys.stderr.flush()
+    except:
+        pass
+
+    # Method 2: Write directly to the terminal file descriptor
+    try:
+        # Get the actual terminal file descriptor
+        import io
+        if hasattr(sys.stdout, 'buffer'):
+            # Use the underlying buffer
+            os.write(sys.stdout.fileno(), f"\033]0;{title}\007".encode())
+        else:
+            os.write(1, f"\033]0;{title}\007".encode())
+    except:
+        pass
+
+    # Method 3: Try the ST terminator instead of BEL
+    try:
+        sys.stdout.write(f"\033]2;{title}\033\\")
+        sys.stdout.flush()
+    except:
+        pass
 
 
 class VATSIMControlApp(App):
@@ -162,6 +197,14 @@ class VATSIMControlApp(App):
     
     def on_mount(self) -> None:
         """Set up the datatables when the app starts."""
+        # Set the terminal title using Textual's driver (bypasses stdout/stderr capture)
+        try:
+            # Use Textual's driver to write directly to the terminal
+            self.driver.write("\033]0;VATSIM Control Recommendations\007")
+        except:
+            # Fallback to other methods
+            set_terminal_title("VATSIM Control Recommendations")
+
         self.populate_tables()
         self.update_status_bar()
         # Start auto-refresh timer - check every second
@@ -170,7 +213,7 @@ class VATSIMControlApp(App):
         self.status_update_timer = self.set_interval(0.25, self.update_time_displays)
         # Initial update
         self.update_time_displays()
-        
+
         # Mark initial setup as complete after all initialization events have settled
         # This prevents automatic events (tab activation, row highlights) from resetting the timer
         self.call_after_refresh(lambda: setattr(self, 'initial_setup_complete', True))

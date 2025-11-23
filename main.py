@@ -6,6 +6,7 @@ Analyzes VATSIM flight data and controller staffing recommendations
 
 import argparse
 import os
+import sys
 
 from backend import analyze_flights_data, load_unified_airport_data
 from backend.config import constants as backend_constants
@@ -167,7 +168,15 @@ def main():
     if airport_data is None:
         print("Failed to download VATSIM data")
         return
-    
+
+    # Try to set terminal title before Textual takes over
+    try:
+        # Write to stderr to avoid buffering issues
+        sys.stderr.write("\033]0;VATSIM Control Recommendations\007")
+        sys.stderr.flush()
+    except:
+        pass
+
     # Run the Textual app
     app = VATSIMControlApp(airport_data, groupings_data, total_flights or 0, args, airport_allowlist if airport_allowlist else None)
     app.run()
