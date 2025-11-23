@@ -579,36 +579,53 @@ class VATSIMControlApp(App):
         
         if current_tab == "airports":
             airports_table = self.query_one("#airports-table", SplitFlapDataTable)
-            if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
-                # Get the ICAO code from the selected row
-                icao: str = self.airport_data[airports_table.cursor_row].icao
-                # Use the pretty name as the title instead of just the ICAO
-                title: str = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
-                 
-                # Open the flight board and store reference
-                self.flight_board_open = True
-                enable_anims = not self.args.disable_animations if self.args else True
-                flight_board = FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, config.DISAMBIGUATOR, enable_anims)
-                self.active_flight_board = flight_board
-                self.push_screen(flight_board)
+            if airports_table.cursor_row is not None and airports_table.row_count > 0:
+                try:
+                    # Get the ICAO code from the backend data, but account for table sorting
+                    # The table sorts by airport_grouping_sort_key, so we need to sort our data the same way
+                    from .utils import airport_grouping_sort_key
+                    
+                    # Sort airport_data the same way the table does
+                    sorted_airports = sorted(self.airport_data, key=airport_grouping_sort_key)
+                    
+                    # Now we can safely index with cursor_row
+                    icao: str = sorted_airports[airports_table.cursor_row].icao
+                    # Use the pretty name as the title instead of just the ICAO
+                    title: str = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
+                     
+                    # Open the flight board and store reference
+                    self.flight_board_open = True
+                    enable_anims = not self.args.disable_animations if self.args else True
+                    flight_board = FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, config.DISAMBIGUATOR, enable_anims)
+                    self.active_flight_board = flight_board
+                    self.push_screen(flight_board)
+                except (IndexError, KeyError):
+                    # Silently fail if there's an issue
+                    pass
         
         elif current_tab == "groupings":
             groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
-            if self.groupings_data and groupings_table.cursor_row is not None and groupings_table.cursor_row < len(self.groupings_data):
-                # Get the grouping name from the selected row
-                grouping_name = self.groupings_data[groupings_table.cursor_row].name
-                
-                # Get the list of airports in this grouping
-                # Load all groupings (custom + ARTCC) to get the airport list
-                
-                from . import config
-                
-                script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if groupings_table.cursor_row is not None and groupings_table.row_count > 0:
                 try:
+                    # Get the grouping name from the backend data, but account for table sorting
+                    # The table sorts by airport_grouping_sort_key, so we need to sort our data the same way
+                    from .utils import airport_grouping_sort_key
+                    from . import config
+                    
+                    # Sort groupings_data the same way the table does
+                    sorted_groupings = sorted(self.groupings_data, key=airport_grouping_sort_key)
+                    
+                    # Now we can safely index with cursor_row
+                    grouping_name = sorted_groupings[groupings_table.cursor_row].name
+                    
+                    # Get the list of airports in this grouping
+                    # Load all groupings (custom + ARTCC) to get the airport list
+                    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                     all_groupings = load_all_groupings(
                         os.path.join(script_dir, 'data', 'custom_groupings.json'),
                         config.UNIFIED_AIRPORT_DATA or {}
                     )
+                    
                     if grouping_name in all_groupings:
                         # Recursively resolve the grouping to actual airports (handles nested groupings)
                         def resolve_grouping_recursively(gname, visited=None):
@@ -643,8 +660,9 @@ class VATSIMControlApp(App):
                         flight_board = FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, config.DISAMBIGUATOR, enable_anims)
                         self.active_flight_board = flight_board
                         self.push_screen(flight_board)
-                except Exception as e:
-                    print(f"Error loading groupings: {e}")
+                except Exception:
+                    # Silently fail if there's an issue
+                    pass
     
     def action_show_wind_lookup(self) -> None:
         """Show the wind information lookup modal"""
