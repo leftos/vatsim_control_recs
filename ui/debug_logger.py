@@ -34,8 +34,8 @@ def cleanup_old_logs(days_to_keep: int = 10):
 # Clean up old logs on module initialization
 cleanup_old_logs()
 
-# Create debug log file with timestamp
-LOG_FILE = os.path.join(LOGS_DIR, f'debug_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+# Create debug log file with date (one file per day)
+LOG_FILE = os.path.join(LOGS_DIR, f'debug_{datetime.now().strftime("%Y%m%d")}.log')
 
 # Configure logger
 logger = logging.getLogger('vatsim_debug')
