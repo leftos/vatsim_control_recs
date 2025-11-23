@@ -104,7 +104,7 @@ class VATSIMControlApp(App):
     
     def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None, airport_allowlist=None):
         super().__init__()
-        self.console.set_window_title("VATSIM Control Recommendations")
+        self.title = "VATSIM Control Recommendations"
         self.original_airport_data: List[Any] = list(airport_data) if airport_data else []
         self.airport_data: List[Any] = list(airport_data) if airport_data else []
         self.groupings_data: List[Any] = list(groupings_data) if groupings_data else []
