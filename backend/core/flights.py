@@ -42,35 +42,41 @@ def get_nearest_airport_if_on_ground(
     """
     Determine if a flight is on the ground at an airport.
     Based on distance from airport and groundspeed.
-    
+
     Args:
         flight: Flight data dictionary
         airports: Dictionary of airport data
         max_distance_nm: Maximum distance in nautical miles to consider "on ground" (default: 6)
         max_groundspeed: Maximum groundspeed in knots to consider "on ground" (default: 40)
-    
+
     Returns:
         Airport ICAO code if flight is on ground at that airport, None otherwise
     """
-    if flight['groundspeed'] > max_groundspeed:
+    # Use .get() for defensive access to potentially missing fields
+    groundspeed = flight.get('groundspeed')
+    if groundspeed is None or groundspeed > max_groundspeed:
         return None
-    
+
     # For flights with flight plans but not near departure or arrival
     # or flights without flight plans, find the nearest airport
-    if flight['latitude'] is not None and flight['longitude'] is not None:
+    flight_lat = flight.get('latitude')
+    flight_lon = flight.get('longitude')
+    if flight_lat is not None and flight_lon is not None:
         nearest_icao = None
         min_distance = float('inf')
         for icao, airport_data in airports.items():
             # Skip airports with missing coordinates
-            if airport_data.get('latitude') is None or airport_data.get('longitude') is None:
+            airport_lat = airport_data.get('latitude')
+            airport_lon = airport_data.get('longitude')
+            if airport_lat is None or airport_lon is None:
                 continue
-            
+
             # Calculate distance from airport
             distance = haversine_distance_nm(
-                flight['latitude'],
-                flight['longitude'],
-                airport_data['latitude'],
-                airport_data['longitude']
+                flight_lat,
+                flight_lon,
+                airport_lat,
+                airport_lon
             )
 
             # Keep the minimum distance/airport
@@ -94,38 +100,50 @@ def is_flight_flying_near_arrival(
     """
     Determine if a flight is within specified hours of arriving at the arrival airport.
     Based on distance and groundspeed.
-    
+
     Args:
         flight: Flight data dictionary
         airports: Dictionary of airport data
         max_eta_hours: Maximum ETA in hours to consider "near arrival" (default: 1.0)
         min_groundspeed: Minimum groundspeed in knots to consider "in flight" (default: 40)
-    
+
     Returns:
         True if flight is within max_eta_hours of arrival, False otherwise
     """
-    if flight['groundspeed'] < min_groundspeed:
+    # Use .get() for defensive access to potentially missing fields
+    groundspeed = flight.get('groundspeed', 0)
+    if groundspeed < min_groundspeed:
         return False
-    
+
     # For flights with arrival airport in flight plan
-    if flight['arrival'] and flight['arrival'] in airports:
-        arrival_airport = airports.get(flight['arrival'])
+    flight_arrival = flight.get('arrival')
+    if flight_arrival and flight_arrival in airports:
+        arrival_airport = airports.get(flight_arrival)
         if not arrival_airport:
             return False
-        
+
+        # Validate flight and airport coordinates
+        flight_lat = flight.get('latitude')
+        flight_lon = flight.get('longitude')
+        airport_lat = arrival_airport.get('latitude')
+        airport_lon = arrival_airport.get('longitude')
+
+        if None in (flight_lat, flight_lon, airport_lat, airport_lon):
+            return False
+
         # Calculate distance to arrival airport
         distance = haversine_distance_nm(
-            flight['latitude'],
-            flight['longitude'],
-            arrival_airport['latitude'],
-            arrival_airport['longitude']
+            flight_lat,
+            flight_lon,
+            airport_lat,
+            airport_lon
         )
-        
+
         # Calculate estimated time of arrival (in hours)
-        if flight['groundspeed'] > 0:
-            eta_hours = distance / flight['groundspeed']
+        if groundspeed > 0:
+            eta_hours = distance / groundspeed
             return max_eta_hours == 0 or eta_hours <= max_eta_hours
-    
+
     return False
 
 
@@ -135,32 +153,40 @@ def find_nearest_airport(
 ) -> Optional[str]:
     """
     Find the nearest airport to a flight's current position.
-    
+
     Args:
         flight: Flight data dictionary
         airports: Dictionary of airport data
-    
+
     Returns:
         ICAO code of the nearest airport, or None if position not available
     """
-    if flight['latitude'] is None or flight['longitude'] is None:
+    # Use .get() for defensive access
+    flight_lat = flight.get('latitude')
+    flight_lon = flight.get('longitude')
+    if flight_lat is None or flight_lon is None:
         return None
-    
+
     nearest_airport = None
     min_distance = float('inf')
-    
+
     for icao, airport_data in airports.items():
+        airport_lat = airport_data.get('latitude')
+        airport_lon = airport_data.get('longitude')
+        if airport_lat is None or airport_lon is None:
+            continue
+
         distance = haversine_distance_nm(
-            flight['latitude'],
-            flight['longitude'],
-            airport_data['latitude'],
-            airport_data['longitude']
+            flight_lat,
+            flight_lon,
+            airport_lat,
+            airport_lon
         )
-        
+
         if distance < min_distance:
             min_distance = distance
             nearest_airport = icao
-    
+
     return nearest_airport
 
 

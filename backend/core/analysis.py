@@ -215,33 +215,37 @@ def analyze_flights_data(
     arrivals_in_flight = defaultdict(int)  # Track arrivals still in flight
     
     for flight in flights:
+        # Use .get() for defensive access to flight dictionary fields
+        flight_arrival = flight.get('arrival')
+        flight_departure = flight.get('departure')
+
         # First, calculate the true earliest ETA for all in-flight arrivals
-        if flight['arrival'] in airports and flight.get('groundspeed', 0) > 40:
+        if flight_arrival and flight_arrival in airports and flight.get('groundspeed', 0) > 40:
             _, _, eta_hours = calculate_eta(flight, airports, aircraft_approach_speeds)
-            if eta_hours < earliest_arrival_eta[flight['arrival']]:
-                earliest_arrival_eta[flight['arrival']] = eta_hours
+            if eta_hours < earliest_arrival_eta[flight_arrival]:
+                earliest_arrival_eta[flight_arrival] = eta_hours
 
         nearest_airport_if_on_ground = get_nearest_airport_if_on_ground(flight, airports)
-        if flight['departure'] and nearest_airport_if_on_ground == flight['departure']:
+        if flight_departure and nearest_airport_if_on_ground == flight_departure:
             # Count as departure if on ground at departure airport
-            departure_counts[flight['departure']] += 1
-        elif flight['arrival'] and nearest_airport_if_on_ground == flight['arrival']:
+            departure_counts[flight_departure] += 1
+        elif flight_arrival and nearest_airport_if_on_ground == flight_arrival:
             # Count as arrival if on ground at arrival airport
-            arrival_counts[flight['arrival']] += 1
-            arrival_counts_all[flight['arrival']] += 1
-            arrivals_on_ground[flight['arrival']] += 1
-        elif not flight['departure'] and not flight['arrival'] and nearest_airport_if_on_ground:
+            arrival_counts[flight_arrival] += 1
+            arrival_counts_all[flight_arrival] += 1
+            arrivals_on_ground[flight_arrival] += 1
+        elif not flight_departure and not flight_arrival and nearest_airport_if_on_ground:
             # For flights on ground without flight plans, count them as a departure at the nearest airport
             departure_counts[nearest_airport_if_on_ground] += 1
         elif is_flight_flying_near_arrival(flight, airports, max_eta_hours):
             # Count as arrival if within the specified ETA hours of arrival airport
-            arrival_counts[flight['arrival']] += 1
-            arrival_counts_all[flight['arrival']] += 1
-            arrivals_in_flight[flight['arrival']] += 1
-        elif flight['arrival'] and flight['arrival'] in airports:
+            arrival_counts[flight_arrival] += 1
+            arrival_counts_all[flight_arrival] += 1
+            arrivals_in_flight[flight_arrival] += 1
+        elif flight_arrival and flight_arrival in airports:
             # Flight has arrival filed but isn't on ground at arrival and isn't flying nearby
             # This catches flights on ground at departure that haven't departed yet, or in-flight beyond max_eta_hours
-            arrival_counts_all[flight['arrival']] += 1
+            arrival_counts_all[flight_arrival] += 1
 
     # First pass: determine which airports will be displayed
     # (those with flights or that are staffed when include_all_staffed is True)
