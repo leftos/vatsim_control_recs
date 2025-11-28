@@ -4,9 +4,55 @@ Airport groupings management (custom groupings and ARTCC-based groupings).
 
 import json
 from collections import defaultdict
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
 
 from backend.cache.manager import get_artcc_groupings_cache, set_artcc_groupings_cache
+
+
+def resolve_grouping_recursively(
+    grouping_name: str,
+    all_groupings: Dict[str, List[str]],
+    visited: Optional[Set[str]] = None
+) -> Set[str]:
+    """
+    Recursively resolve a grouping name to its individual airports.
+    Handles nested groupings by looking up grouping names and resolving them.
+
+    This function prevents infinite loops through cycle detection using the
+    visited set parameter.
+
+    Args:
+        grouping_name: Name of the grouping to resolve
+        all_groupings: Dictionary of all available groupings
+        visited: Set of already-visited grouping names to prevent infinite loops
+
+    Returns:
+        Set of airport ICAO codes
+    """
+    if visited is None:
+        visited = set()
+
+    # Prevent infinite loops
+    if grouping_name in visited:
+        return set()
+    visited.add(grouping_name)
+
+    if grouping_name not in all_groupings:
+        return set()
+
+    airports: Set[str] = set()
+    items = all_groupings[grouping_name]
+
+    for item in items:
+        # Check if this item is itself a grouping name
+        if item in all_groupings:
+            # Recursively resolve the nested grouping
+            airports.update(resolve_grouping_recursively(item, all_groupings, visited))
+        else:
+            # It's an airport code, add it directly
+            airports.add(item)
+
+    return airports
 
 
 def load_artcc_groupings(unified_data: Dict[str, Dict[str, Any]]) -> Dict[str, List[str]]:

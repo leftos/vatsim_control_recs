@@ -12,7 +12,7 @@ from backend.data.vatsim_api import download_vatsim_data, filter_flights_by_airp
 from backend.data.weather import get_wind_info, get_wind_info_batch, get_altimeter_setting
 from backend.core.controllers import get_staffed_positions
 from backend.core.calculations import format_eta_display, calculate_eta
-from backend.core.groupings import load_all_groupings
+from backend.core.groupings import load_all_groupings, resolve_grouping_recursively
 from backend.core.flights import get_nearest_airport_if_on_ground, is_flight_flying_near_arrival
 from backend.core.models import AirportStats, GroupingStats
 from backend.config.constants import WIND_SOURCE
@@ -105,44 +105,7 @@ def analyze_flights_data(
     # Determine which groupings to display (for the groupings tab)
     # Note: The airport_allowlist already contains all airports from groupings/supergroupings
     display_custom_groupings = {}
-    
-    def resolve_grouping_recursively_for_display(grouping_name, visited=None):
-        """
-        Recursively resolve a grouping name to its individual airports.
-        Handles nested groupings by looking up grouping names and resolving them.
-        
-        Args:
-            grouping_name: Name of the grouping to resolve
-            visited: Set of already-visited grouping names to prevent infinite loops
-        
-        Returns:
-            Set of airport ICAO codes
-        """
-        if visited is None:
-            visited = set()
-        
-        # Prevent infinite loops
-        if grouping_name in visited:
-            return set()
-        visited.add(grouping_name)
-        
-        if grouping_name not in all_custom_groupings:
-            return set()
-        
-        airports = set()
-        items = all_custom_groupings[grouping_name]
-        
-        for item in items:
-            # Check if this item is itself a grouping name
-            if item in all_custom_groupings:
-                # Recursively resolve the nested grouping
-                airports.update(resolve_grouping_recursively_for_display(item, visited))
-            else:
-                # It's an airport code, add it directly
-                airports.add(item)
-        
-        return airports
-    
+
     if all_custom_groupings:
         if supergroupings_allowlist:
             # Display supergroupings and their sub-groupings
@@ -153,7 +116,7 @@ def analyze_flights_data(
                 if supergroup_name in all_custom_groupings:
                     included_group_names.add(supergroup_name)
                     # Recursively resolve the supergrouping to all airports
-                    supergroup_airports = resolve_grouping_recursively_for_display(supergroup_name)
+                    supergroup_airports = resolve_grouping_recursively(supergroup_name, all_custom_groupings)
                     resolved_supergroup_airports.update(supergroup_airports)
                 else:
                     print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json.")
