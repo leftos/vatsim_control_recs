@@ -14,7 +14,7 @@ from typing import Dict, Any, Set, Optional
 
 from cachetools import LRUCache
 
-from ui import debug_logger
+from common import logger as debug_logger
 
 # Cache size limits
 MAX_WEATHER_CACHE_SIZE = 1000  # Max entries in weather data caches

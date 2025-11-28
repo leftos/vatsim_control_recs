@@ -7,7 +7,7 @@ import requests
 from typing import Dict, Any, List, Optional
 
 from backend.config.constants import VATSIM_DATA_URL
-from ui import debug_logger
+from common import logger as debug_logger
 
 
 def download_vatsim_data(timeout: int = 10) -> Optional[Dict[str, Any]]:

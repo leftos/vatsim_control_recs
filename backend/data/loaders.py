@@ -14,7 +14,7 @@ import json
 import os
 from typing import Dict, Any, Optional
 
-from ui import debug_logger
+from common import logger as debug_logger
 
 def load_unified_airport_data(
     apt_base_path: str,
