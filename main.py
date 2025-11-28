@@ -174,8 +174,8 @@ def main():
         # Write to stderr to avoid buffering issues
         sys.stderr.write("\033]0;VATSIM Control Recommendations\007")
         sys.stderr.flush()
-    except:
-        pass
+    except (OSError, IOError, AttributeError):
+        pass  # Terminal may not support escape sequences
 
     # Run the Textual app
     app = VATSIMControlApp(airport_data, groupings_data, total_flights or 0, args, airport_allowlist if airport_allowlist else None)

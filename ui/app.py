@@ -34,8 +34,8 @@ def set_terminal_title(title: str) -> None:
     try:
         sys.stderr.write(f"\033]0;{title}\007")
         sys.stderr.flush()
-    except:
-        pass
+    except (OSError, IOError, AttributeError):
+        pass  # Terminal may not support escape sequences
 
     # Method 2: Write directly to the terminal file descriptor
     try:
@@ -46,15 +46,15 @@ def set_terminal_title(title: str) -> None:
             os.write(sys.stdout.fileno(), f"\033]0;{title}\007".encode())
         else:
             os.write(1, f"\033]0;{title}\007".encode())
-    except:
-        pass
+    except (OSError, IOError, AttributeError, ValueError):
+        pass  # Terminal may not support escape sequences or stdout may be redirected
 
     # Method 3: Try the ST terminator instead of BEL
     try:
         sys.stdout.write(f"\033]2;{title}\033\\")
         sys.stdout.flush()
-    except:
-        pass
+    except (OSError, IOError, AttributeError):
+        pass  # Terminal may not support escape sequences
 
 
 class VATSIMControlApp(App):
@@ -201,8 +201,8 @@ class VATSIMControlApp(App):
         try:
             # Use Textual's driver to write directly to the terminal
             self.driver.write("\033]0;VATSIM Control Recommendations\007")
-        except:
-            # Fallback to other methods
+        except (AttributeError, OSError, IOError):
+            # Fallback to other methods if driver is unavailable or write fails
             set_terminal_title("VATSIM Control Recommendations")
 
         self.populate_tables()

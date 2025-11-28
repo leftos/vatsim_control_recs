@@ -521,8 +521,8 @@ class SplitFlapDataTable(DataTable):
             buffer_rows = 5
             first_visible_row = max(0, int(scroll_y / row_height) - buffer_rows)
             last_visible_row = min(len(row_keys), int((scroll_y + visible_height) / row_height) + buffer_rows + 1)
-        except Exception:
-            # If we can't determine viewport, treat all rows as visible
+        except (AttributeError, TypeError, ZeroDivisionError):
+            # If we can't determine viewport (e.g., size not yet available), treat all rows as visible
             first_visible_row = 0
             last_visible_row = len(row_keys)
         
@@ -582,8 +582,8 @@ class SplitFlapDataTable(DataTable):
                     # Clear the width update flag after applying
                     if needs_width_update and cell_key in self.cells_need_width_update:
                         del self.cells_need_width_update[cell_key]
-            except Exception:
-                pass  # Cell might not exist anymore
+            except (KeyError, IndexError):
+                pass  # Cell might not exist anymore (removed during animation)
     
     def _apply_alignment(self, value: Any, col_idx: int) -> Any:
         """
