@@ -10,7 +10,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple, Optional, Any
 
-from backend.cache.manager import get_wind_cache, get_metar_cache, get_taf_cache
+from backend.cache.manager import (
+    get_wind_cache, get_metar_cache, get_taf_cache,
+    get_wind_cache_lock, get_metar_cache_lock, get_taf_cache_lock
+)
 from backend.config.constants import WIND_CACHE_DURATION, METAR_CACHE_DURATION
 from backend.core.calculations import haversine_distance_nm
 
@@ -58,54 +61,58 @@ def _parse_wind_from_observation(properties: dict) -> Tuple[bool, str]:
 def get_wind_info_minute(airport_icao: str) -> str:
     """
     Fetch current wind information from weather.gov API with caching.
-    
+
     Wind data is cached for 60 seconds to avoid excessive API calls.
     If the latest observation doesn't have wind data, fetches the last 10 observations
     and returns the most recent one with valid wind data.
     Airports returning 404 are blacklisted and never queried again.
-    
+
+    This function is thread-safe.
+
     Args:
         airport_icao: The ICAO code of the airport
-        
+
     Returns:
         Formatted wind string like "27005G12KT" or "27005KT" or empty string if unavailable
     """
     wind_data_cache, wind_blacklist = get_wind_cache()
-    
+    wind_lock = get_wind_cache_lock()
+
     # Check if airport is blacklisted (doesn't have weather data available)
-    if airport_icao in wind_blacklist:
-        return ""
-    
-    # Check if we have valid cached data
-    current_time = datetime.now(timezone.utc)
-    if airport_icao in wind_data_cache:
-        cache_entry = wind_data_cache[airport_icao]
-        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
-        if time_since_cache < WIND_CACHE_DURATION:
-            return cache_entry['wind_info']
-    
-    # Cache miss or expired - fetch new data
+    with wind_lock:
+        if airport_icao in wind_blacklist:
+            return ""
+
+        # Check if we have valid cached data
+        current_time = datetime.now(timezone.utc)
+        if airport_icao in wind_data_cache:
+            cache_entry = wind_data_cache[airport_icao]
+            time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+            if time_since_cache < WIND_CACHE_DURATION:
+                return cache_entry['wind_info']
+
+    # Cache miss or expired - fetch new data (outside lock to avoid blocking)
     try:
         # First, try the latest observation
         url = f"https://api.weather.gov/stations/{airport_icao}/observations/latest"
         req = urllib.request.Request(url)
         req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
-        
+
         with urllib.request.urlopen(req, timeout=3) as response:
             data = json.loads(response.read().decode())
-        
+
         properties = data.get('properties', {})
         has_data, wind_str = _parse_wind_from_observation(properties)
-        
+
         # If latest observation doesn't have wind data, try the last 15 observations
         if not has_data:
             url = f"https://api.weather.gov/stations/{airport_icao}/observations?limit=30"
             req = urllib.request.Request(url)
             req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
-            
+
             with urllib.request.urlopen(req, timeout=3) as response:
                 data = json.loads(response.read().decode())
-            
+
             # Iterate through observations to find the first one with wind data
             features = data.get('features', [])
             for feature in features:
@@ -113,180 +120,205 @@ def get_wind_info_minute(airport_icao: str) -> str:
                 has_data, wind_str = _parse_wind_from_observation(properties)
                 if has_data:
                     break
-        
-        # Cache the result (even if empty)
-        wind_data_cache[airport_icao] = {
-            'wind_info': wind_str,
-            'timestamp': current_time
-        }
-        
+
+        # Cache the result (even if empty) - with lock
+        current_time = datetime.now(timezone.utc)
+        with wind_lock:
+            wind_data_cache[airport_icao] = {
+                'wind_info': wind_str,
+                'timestamp': current_time
+            }
+
         return wind_str
-        
+
     except urllib.error.HTTPError as e:
         if e.code == 404:
             # Station doesn't exist - blacklist it permanently
-            wind_blacklist.add(airport_icao)
+            with wind_lock:
+                wind_blacklist.add(airport_icao)
             return ""
         # For other HTTP errors, return cached data if available
-        if airport_icao in wind_data_cache:
-            return wind_data_cache[airport_icao]['wind_info']
+        with wind_lock:
+            if airport_icao in wind_data_cache:
+                return wind_data_cache[airport_icao]['wind_info']
         return ""
     except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError):
         # On other errors, return cached data if available (even if expired), otherwise empty string
-        if airport_icao in wind_data_cache:
-            return wind_data_cache[airport_icao]['wind_info']
+        with wind_lock:
+            if airport_icao in wind_data_cache:
+                return wind_data_cache[airport_icao]['wind_info']
         return ""
 
 
 def get_metar(airport_icao: str) -> str:
     """
     Fetch current METAR from aviationweather.gov API with caching.
-    
+
     METAR data is cached for 60 seconds to avoid excessive API calls.
     When fetching METAR, wind and altimeter are also parsed and cached
     to avoid redundant parsing when both values are needed.
     Airports returning 404 or no data are blacklisted and never queried again in this session.
-    
+
+    This function is thread-safe.
+
     Args:
         airport_icao: The ICAO code of the airport
-        
+
     Returns:
         Full METAR string or empty string if unavailable
     """
     metar_data_cache, metar_blacklist = get_metar_cache()
-    
+    metar_lock = get_metar_cache_lock()
+
     # Check if airport is blacklisted (doesn't have METAR data available)
-    if airport_icao in metar_blacklist:
-        return ""
-    
-    # Check if we have valid cached data
-    current_time = datetime.now(timezone.utc)
-    if airport_icao in metar_data_cache:
-        cache_entry = metar_data_cache[airport_icao]
-        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
-        if time_since_cache < METAR_CACHE_DURATION:
-            return cache_entry['metar']
-    
-    # Cache miss or expired - fetch new data
+    with metar_lock:
+        if airport_icao in metar_blacklist:
+            return ""
+
+        # Check if we have valid cached data
+        current_time = datetime.now(timezone.utc)
+        if airport_icao in metar_data_cache:
+            cache_entry = metar_data_cache[airport_icao]
+            time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+            if time_since_cache < METAR_CACHE_DURATION:
+                return cache_entry['metar']
+
+    # Cache miss or expired - fetch new data (outside lock to avoid blocking)
     try:
         url = f"https://aviationweather.gov/api/data/metar?ids={airport_icao}&format=raw"
         req = urllib.request.Request(url)
         req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
-        
+
         with urllib.request.urlopen(req, timeout=5) as response:
             metar_text = response.read().decode('utf-8').strip()
-        
+
         # Check if we got valid data (not empty and not an error message)
         if not metar_text or metar_text.startswith('No METAR') or metar_text.startswith('Error'):
             # No data available - blacklist it
-            metar_blacklist.add(airport_icao)
+            with metar_lock:
+                metar_blacklist.add(airport_icao)
             return ""
-        
+
         # Parse wind and altimeter from METAR for caching
         parsed_wind = _parse_wind_from_metar(metar_text)
         parsed_altimeter = parse_altimeter_from_metar(metar_text)
-        
+
         # Cache the result with parsed values
-        metar_data_cache[airport_icao] = {
-            'metar': metar_text,
-            'wind': parsed_wind,
-            'altimeter': parsed_altimeter,
-            'timestamp': current_time
-        }
-        
+        current_time = datetime.now(timezone.utc)
+        with metar_lock:
+            metar_data_cache[airport_icao] = {
+                'metar': metar_text,
+                'wind': parsed_wind,
+                'altimeter': parsed_altimeter,
+                'timestamp': current_time
+            }
+
         return metar_text
-        
+
     except urllib.error.HTTPError as e:
         if e.code == 404:
             # Station doesn't exist - blacklist it permanently
-            metar_blacklist.add(airport_icao)
+            with metar_lock:
+                metar_blacklist.add(airport_icao)
             return ""
         # For other HTTP errors, return cached data if available (even if expired)
-        if airport_icao in metar_data_cache:
-            cache_entry = metar_data_cache[airport_icao]
-            # Update cache entry to be current if it doesn't have parsed data yet
-            if 'wind' not in cache_entry:
-                metar_text = cache_entry['metar']
-                cache_entry['wind'] = _parse_wind_from_metar(metar_text)
-                cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
-            return cache_entry['metar']
+        with metar_lock:
+            if airport_icao in metar_data_cache:
+                cache_entry = metar_data_cache[airport_icao]
+                # Update cache entry to be current if it doesn't have parsed data yet
+                if 'wind' not in cache_entry:
+                    metar_text = cache_entry['metar']
+                    cache_entry['wind'] = _parse_wind_from_metar(metar_text)
+                    cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
+                return cache_entry['metar']
         return ""
     except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError, Exception):
         # On other errors, return cached data if available (even if expired), otherwise empty string
-        if airport_icao in metar_data_cache:
-            cache_entry = metar_data_cache[airport_icao]
-            # Update cache entry to be current if it doesn't have parsed data yet
-            if 'wind' not in cache_entry:
-                metar_text = cache_entry['metar']
-                cache_entry['wind'] = _parse_wind_from_metar(metar_text)
-                cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
-            return cache_entry['metar']
+        with metar_lock:
+            if airport_icao in metar_data_cache:
+                cache_entry = metar_data_cache[airport_icao]
+                # Update cache entry to be current if it doesn't have parsed data yet
+                if 'wind' not in cache_entry:
+                    metar_text = cache_entry['metar']
+                    cache_entry['wind'] = _parse_wind_from_metar(metar_text)
+                    cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
+                return cache_entry['metar']
         return ""
 
 
 def get_taf(airport_icao: str) -> str:
     """
     Fetch current TAF (Terminal Aerodrome Forecast) from aviationweather.gov API with caching.
-    
+
     TAF data is cached for 60 seconds to avoid excessive API calls.
     Airports returning 404 or no data are blacklisted and never queried again in this session.
-    
+
+    This function is thread-safe.
+
     Args:
         airport_icao: The ICAO code of the airport
-        
+
     Returns:
         Full TAF string or empty string if unavailable
     """
     taf_data_cache, taf_blacklist = get_taf_cache()
-    
+    taf_lock = get_taf_cache_lock()
+
     # Check if airport is blacklisted (doesn't have TAF data available)
-    if airport_icao in taf_blacklist:
-        return ""
-    
-    # Check if we have valid cached data
-    current_time = datetime.now(timezone.utc)
-    if airport_icao in taf_data_cache:
-        cache_entry = taf_data_cache[airport_icao]
-        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
-        if time_since_cache < METAR_CACHE_DURATION:  # Use same cache duration as METAR
-            return cache_entry['taf']
-    
-    # Cache miss or expired - fetch new data
+    with taf_lock:
+        if airport_icao in taf_blacklist:
+            return ""
+
+        # Check if we have valid cached data
+        current_time = datetime.now(timezone.utc)
+        if airport_icao in taf_data_cache:
+            cache_entry = taf_data_cache[airport_icao]
+            time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+            if time_since_cache < METAR_CACHE_DURATION:  # Use same cache duration as METAR
+                return cache_entry['taf']
+
+    # Cache miss or expired - fetch new data (outside lock to avoid blocking)
     try:
         url = f"https://aviationweather.gov/api/data/taf?ids={airport_icao}&format=raw"
         req = urllib.request.Request(url)
         req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
-        
+
         with urllib.request.urlopen(req, timeout=5) as response:
             taf_text = response.read().decode('utf-8').strip()
-        
+
         # Check if we got valid data (not empty and not an error message)
         if not taf_text or taf_text.startswith('No TAF') or taf_text.startswith('Error'):
             # No data available - blacklist it
-            taf_blacklist.add(airport_icao)
+            with taf_lock:
+                taf_blacklist.add(airport_icao)
             return ""
-        
+
         # Cache the result
-        taf_data_cache[airport_icao] = {
-            'taf': taf_text,
-            'timestamp': current_time
-        }
-        
+        current_time = datetime.now(timezone.utc)
+        with taf_lock:
+            taf_data_cache[airport_icao] = {
+                'taf': taf_text,
+                'timestamp': current_time
+            }
+
         return taf_text
-        
+
     except urllib.error.HTTPError as e:
         if e.code == 404:
             # Station doesn't exist - blacklist it permanently
-            taf_blacklist.add(airport_icao)
+            with taf_lock:
+                taf_blacklist.add(airport_icao)
             return ""
         # For other HTTP errors, return cached data if available
-        if airport_icao in taf_data_cache:
-            return taf_data_cache[airport_icao]['taf']
+        with taf_lock:
+            if airport_icao in taf_data_cache:
+                return taf_data_cache[airport_icao]['taf']
         return ""
     except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError, Exception):
         # On other errors, return cached data if available (even if expired), otherwise empty string
-        if airport_icao in taf_data_cache:
-            return taf_data_cache[airport_icao]['taf']
+        with taf_lock:
+            if airport_icao in taf_data_cache:
+                return taf_data_cache[airport_icao]['taf']
         return ""
 
 
@@ -357,33 +389,38 @@ def get_wind_from_metar(airport_icao: str) -> str:
     """
     Extract wind information from METAR.
     Uses cached parsed wind if available to avoid redundant parsing.
-    
+
+    This function is thread-safe.
+
     Args:
         airport_icao: The ICAO code of the airport
-        
+
     Returns:
         Wind string in format like "27005KT" or "27005G12KT" or "00000KT" or empty string if unavailable
     """
     metar_data_cache, metar_blacklist = get_metar_cache()
-    
+    metar_lock = get_metar_cache_lock()
+
     # Check if we have cached parsed wind data
-    current_time = datetime.now(timezone.utc)
-    if airport_icao in metar_data_cache:
-        cache_entry = metar_data_cache[airport_icao]
-        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
-        if time_since_cache < METAR_CACHE_DURATION:
-            # Return cached parsed wind if available
-            return cache_entry.get('wind', '')
-    
+    with metar_lock:
+        current_time = datetime.now(timezone.utc)
+        if airport_icao in metar_data_cache:
+            cache_entry = metar_data_cache[airport_icao]
+            time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+            if time_since_cache < METAR_CACHE_DURATION:
+                # Return cached parsed wind if available
+                return cache_entry.get('wind', '')
+
     # Cache miss or expired - fetch METAR (which will parse and cache wind)
     metar = get_metar(airport_icao)
     if not metar:
         return ""
-    
+
     # After get_metar, check cache again for parsed wind
-    if airport_icao in metar_data_cache:
-        return metar_data_cache[airport_icao].get('wind', '')
-    
+    with metar_lock:
+        if airport_icao in metar_data_cache:
+            return metar_data_cache[airport_icao].get('wind', '')
+
     # Fallback: parse directly if cache doesn't have it for some reason
     return _parse_wind_from_metar(metar)
 
@@ -480,33 +517,38 @@ def get_altimeter_setting(airport_icao: str) -> Optional[str]:
     """
     Get altimeter setting for an airport from its METAR.
     Uses cached parsed altimeter if available to avoid redundant parsing.
-    
+
+    This function is thread-safe.
+
     Args:
         airport_icao: The ICAO code of the airport
-        
+
     Returns:
         Altimeter string (e.g., "A2992" or "Q1013") or None if unavailable
     """
     metar_data_cache, metar_blacklist = get_metar_cache()
-    
+    metar_lock = get_metar_cache_lock()
+
     # Check if we have cached parsed altimeter data
-    current_time = datetime.now(timezone.utc)
-    if airport_icao in metar_data_cache:
-        cache_entry = metar_data_cache[airport_icao]
-        time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
-        if time_since_cache < METAR_CACHE_DURATION:
-            # Return cached parsed altimeter if available
-            return cache_entry.get('altimeter')
-    
+    with metar_lock:
+        current_time = datetime.now(timezone.utc)
+        if airport_icao in metar_data_cache:
+            cache_entry = metar_data_cache[airport_icao]
+            time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+            if time_since_cache < METAR_CACHE_DURATION:
+                # Return cached parsed altimeter if available
+                return cache_entry.get('altimeter')
+
     # Cache miss or expired - fetch METAR (which will parse and cache altimeter)
     metar = get_metar(airport_icao)
     if not metar:
         return None
-    
+
     # After get_metar, check cache again for parsed altimeter
-    if airport_icao in metar_data_cache:
-        return metar_data_cache[airport_icao].get('altimeter')
-    
+    with metar_lock:
+        if airport_icao in metar_data_cache:
+            return metar_data_cache[airport_icao].get('altimeter')
+
     # Fallback: parse directly if cache doesn't have it for some reason
     return parse_altimeter_from_metar(metar)
 

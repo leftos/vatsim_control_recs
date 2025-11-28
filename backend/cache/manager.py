@@ -1,10 +1,21 @@
 """
 Caching utilities for backend data.
+
+This module provides thread-safe caching for weather data, METAR, TAF,
+aircraft approach speeds, and ARTCC groupings.
 """
 
 import csv
+import threading
 from datetime import datetime, timezone
 from typing import Dict, Any, Set, Optional
+
+# Thread locks for cache synchronization
+_WIND_CACHE_LOCK = threading.Lock()
+_METAR_CACHE_LOCK = threading.Lock()
+_TAF_CACHE_LOCK = threading.Lock()
+_AIRCRAFT_SPEEDS_LOCK = threading.Lock()
+_ARTCC_GROUPINGS_LOCK = threading.Lock()
 
 # Cache for wind data
 _WIND_DATA_CACHE: Dict[str, Dict[str, Any]] = {}  # {airport_icao: {'wind_info': str, 'timestamp': datetime}}
@@ -25,78 +36,121 @@ _AIRCRAFT_APPROACH_SPEEDS: Optional[Dict[str, int]] = None
 _ARTCC_GROUPINGS: Optional[Dict[str, list]] = None
 
 
+def get_wind_cache_lock() -> threading.Lock:
+    """Get the lock for wind cache operations."""
+    return _WIND_CACHE_LOCK
+
+
+def get_metar_cache_lock() -> threading.Lock:
+    """Get the lock for METAR cache operations."""
+    return _METAR_CACHE_LOCK
+
+
+def get_taf_cache_lock() -> threading.Lock:
+    """Get the lock for TAF cache operations."""
+    return _TAF_CACHE_LOCK
+
+
 def get_wind_cache() -> tuple[Dict[str, Dict[str, Any]], Set[str]]:
-    """Get wind data cache and blacklist."""
+    """Get wind data cache and blacklist.
+
+    Note: Callers should use get_wind_cache_lock() to synchronize access
+    when modifying the cache from multiple threads.
+    """
     return _WIND_DATA_CACHE, _WIND_BLACKLIST
 
 
 def get_metar_cache() -> tuple[Dict[str, Dict[str, Any]], Set[str]]:
-    """Get METAR data cache and blacklist."""
+    """Get METAR data cache and blacklist.
+
+    Note: Callers should use get_metar_cache_lock() to synchronize access
+    when modifying the cache from multiple threads.
+    """
     return _METAR_DATA_CACHE, _METAR_BLACKLIST
 
 
 def get_taf_cache() -> tuple[Dict[str, Dict[str, Any]], Set[str]]:
-    """Get TAF data cache and blacklist."""
+    """Get TAF data cache and blacklist.
+
+    Note: Callers should use get_taf_cache_lock() to synchronize access
+    when modifying the cache from multiple threads.
+    """
     return _TAF_DATA_CACHE, _TAF_BLACKLIST
 
 
 def get_aircraft_speeds_cache() -> Optional[Dict[str, int]]:
-    """Get aircraft approach speeds cache."""
-    return _AIRCRAFT_APPROACH_SPEEDS
+    """Get aircraft approach speeds cache (thread-safe read)."""
+    with _AIRCRAFT_SPEEDS_LOCK:
+        return _AIRCRAFT_APPROACH_SPEEDS
 
 
 def set_aircraft_speeds_cache(speeds: Dict[str, int]) -> None:
-    """Set aircraft approach speeds cache."""
+    """Set aircraft approach speeds cache (thread-safe write)."""
     global _AIRCRAFT_APPROACH_SPEEDS
-    _AIRCRAFT_APPROACH_SPEEDS = speeds
+    with _AIRCRAFT_SPEEDS_LOCK:
+        _AIRCRAFT_APPROACH_SPEEDS = speeds
 
 
 def get_artcc_groupings_cache() -> Optional[Dict[str, list]]:
-    """Get ARTCC groupings cache."""
-    return _ARTCC_GROUPINGS
+    """Get ARTCC groupings cache (thread-safe read)."""
+    with _ARTCC_GROUPINGS_LOCK:
+        return _ARTCC_GROUPINGS
 
 
 def set_artcc_groupings_cache(groupings: Dict[str, list]) -> None:
-    """Set ARTCC groupings cache."""
+    """Set ARTCC groupings cache (thread-safe write)."""
     global _ARTCC_GROUPINGS
-    _ARTCC_GROUPINGS = groupings
+    with _ARTCC_GROUPINGS_LOCK:
+        _ARTCC_GROUPINGS = groupings
 
 
 def clear_wind_cache() -> None:
-    """Clear wind data cache."""
+    """Clear wind data cache (thread-safe)."""
     global _WIND_DATA_CACHE, _WIND_BLACKLIST
-    _WIND_DATA_CACHE = {}
-    _WIND_BLACKLIST = set()
+    with _WIND_CACHE_LOCK:
+        _WIND_DATA_CACHE = {}
+        _WIND_BLACKLIST = set()
 
 
 def clear_metar_cache() -> None:
-    """Clear METAR data cache."""
+    """Clear METAR data cache (thread-safe)."""
     global _METAR_DATA_CACHE, _METAR_BLACKLIST
-    _METAR_DATA_CACHE = {}
-    _METAR_BLACKLIST = set()
+    with _METAR_CACHE_LOCK:
+        _METAR_DATA_CACHE = {}
+        _METAR_BLACKLIST = set()
 
 
 def clear_taf_cache() -> None:
-    """Clear TAF data cache."""
+    """Clear TAF data cache (thread-safe)."""
     global _TAF_DATA_CACHE, _TAF_BLACKLIST
-    _TAF_DATA_CACHE = {}
-    _TAF_BLACKLIST = set()
+    with _TAF_CACHE_LOCK:
+        _TAF_DATA_CACHE = {}
+        _TAF_BLACKLIST = set()
 
 
 def clear_all_caches() -> None:
-    """Clear all caches."""
+    """Clear all caches (thread-safe)."""
     global _WIND_DATA_CACHE, _WIND_BLACKLIST, _METAR_DATA_CACHE, _METAR_BLACKLIST
     global _TAF_DATA_CACHE, _TAF_BLACKLIST
     global _AIRCRAFT_APPROACH_SPEEDS, _ARTCC_GROUPINGS
-    
-    _WIND_DATA_CACHE = {}
-    _WIND_BLACKLIST = set()
-    _METAR_DATA_CACHE = {}
-    _METAR_BLACKLIST = set()
-    _TAF_DATA_CACHE = {}
-    _TAF_BLACKLIST = set()
-    _AIRCRAFT_APPROACH_SPEEDS = None
-    _ARTCC_GROUPINGS = None
+
+    with _WIND_CACHE_LOCK:
+        _WIND_DATA_CACHE = {}
+        _WIND_BLACKLIST = set()
+
+    with _METAR_CACHE_LOCK:
+        _METAR_DATA_CACHE = {}
+        _METAR_BLACKLIST = set()
+
+    with _TAF_CACHE_LOCK:
+        _TAF_DATA_CACHE = {}
+        _TAF_BLACKLIST = set()
+
+    with _AIRCRAFT_SPEEDS_LOCK:
+        _AIRCRAFT_APPROACH_SPEEDS = None
+
+    with _ARTCC_GROUPINGS_LOCK:
+        _ARTCC_GROUPINGS = None
 
 
 def load_aircraft_approach_speeds(filename: str) -> Dict[str, int]:
