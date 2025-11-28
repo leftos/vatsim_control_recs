@@ -14,24 +14,46 @@ def _get_valid_icao_from_callsign(
 ) -> Optional[str]:
     """
     Attempts to resolve an ICAO candidate from a callsign, considering implied 'K' for US airports.
-    
+
+    Resolution order:
+    1. Check if icao_candidate is a valid 4-letter ICAO code in airports_data
+    2. For 3-letter codes, try prepending 'K' for US airports (e.g., SFO -> KSFO)
+
+    The K-prefix is only applied if:
+    - The original 3-letter code is not found in airports_data
+    - The K-prefixed code exists in airports_data
+    - The K-prefixed airport has country_code == 'US'
+
+    This prevents incorrectly converting non-US 3-letter codes like airport identifiers
+    from other regions.
+
     Args:
-        icao_candidate: Potential ICAO code from callsign
-        airports_data: Dictionary of airport data
-    
+        icao_candidate: Potential ICAO code from callsign (e.g., "KJFK" or "JFK")
+        airports_data: Dictionary of airport data with 'country_code' field
+
     Returns:
         Valid ICAO code or None if not found in airports_data
     """
+    # Normalize to uppercase for consistent comparison
+    icao_candidate = icao_candidate.upper()
+
     # 1. Check if the icao_candidate itself is a valid ICAO in our data
     if icao_candidate in airports_data:
         return icao_candidate
 
     # 2. If not found, try prepending 'K' for 3-letter US airport candidates
+    # Only do this if:
+    #    - The candidate is exactly 3 alphabetic characters
+    #    - The K-prefixed version exists in our data
+    #    - The K-prefixed airport is in the US
     if len(icao_candidate) == 3 and icao_candidate.isalpha():
         k_prefixed_icao = 'K' + icao_candidate
-        if k_prefixed_icao in airports_data and airports_data[k_prefixed_icao]['country_code'] == 'US':
-            return k_prefixed_icao
-            
+        if k_prefixed_icao in airports_data:
+            airport_data = airports_data[k_prefixed_icao]
+            # Verify it's actually a US airport before assuming the K prefix
+            if airport_data.get('country_code') == 'US':
+                return k_prefixed_icao
+
     return None
 
 
