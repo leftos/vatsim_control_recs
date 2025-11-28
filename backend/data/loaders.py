@@ -14,6 +14,8 @@ import json
 import os
 from typing import Dict, Any, Optional
 
+from ui import debug_logger
+
 def load_unified_airport_data(
     apt_base_path: str,
     airports_json_path: str,
@@ -71,9 +73,9 @@ def load_unified_airport_data(
                 }
         #print(f"  Loaded {len(airports)} airports from iata-icao.csv")
     except FileNotFoundError:
-        print(f"  Warning: {iata_icao_path} not found")
+        debug_logger.warning(f"Airport data file not found: {iata_icao_path}")
     except Exception as e:
-        print(f"  Warning: Error loading iata-icao.csv: {e}")
+        debug_logger.error(f"Error loading iata-icao.csv: {e}")
     
     # Step 2: Load airports.json (medium priority - additional details)
     try:
@@ -120,9 +122,9 @@ def load_unified_airport_data(
                     }
         #print(f"  Merged data from airports.json (now {len(airports)} airports)")
     except FileNotFoundError:
-        print(f"  Warning: {airports_json_path} not found")
+        debug_logger.warning(f"Airport data file not found: {airports_json_path}")
     except Exception as e:
-        print(f"  Warning: Error loading airports.json: {e}")
+        debug_logger.error(f"Error loading airports.json: {e}")
     
     # Step 3: Load APT_BASE.csv (highest priority - FAA official data with ARTCC)
     duplicate_codes = {}  # Track duplicate codes for conflict resolution
@@ -211,9 +213,9 @@ def load_unified_airport_data(
             #print(f"  Resolved {len(duplicate_codes)} duplicate codes (preferred US airports)")
             pass
     except FileNotFoundError:
-        print(f"  Warning: {apt_base_path} not found")
+        debug_logger.warning(f"Airport data file not found: {apt_base_path}")
     except Exception as e:
-        print(f"  Warning: Error loading APT_BASE.csv: {e}")
+        debug_logger.error(f"Error loading APT_BASE.csv: {e}")
     
     #print(f"✓ Unified airport data loaded: {len(airports)} airports\n")
     return airports

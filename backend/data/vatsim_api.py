@@ -7,6 +7,7 @@ import requests
 from typing import Dict, Any, List, Optional
 
 from backend.config.constants import VATSIM_DATA_URL
+from ui import debug_logger
 
 
 def download_vatsim_data(timeout: int = 10) -> Optional[Dict[str, Any]]:
@@ -25,13 +26,13 @@ def download_vatsim_data(timeout: int = 10) -> Optional[Dict[str, Any]]:
         response.raise_for_status()
         return response.json()
     except requests.Timeout:
-        print(f"Error downloading VATSIM data: Request timed out after {timeout} seconds")
+        debug_logger.warning(f"VATSIM API request timed out after {timeout} seconds")
         return None
     except requests.RequestException as e:
-        print(f"Error downloading VATSIM data: {e}")
+        debug_logger.error(f"Error downloading VATSIM data: {e}")
         return None
     except json.JSONDecodeError as e:
-        print(f"Error decoding VATSIM data JSON: {e}")
+        debug_logger.error(f"Error decoding VATSIM data JSON: {e}")
         return None
 
 

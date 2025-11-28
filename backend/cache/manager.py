@@ -14,6 +14,8 @@ from typing import Dict, Any, Set, Optional
 
 from cachetools import LRUCache
 
+from ui import debug_logger
+
 # Cache size limits
 MAX_WEATHER_CACHE_SIZE = 1000  # Max entries in weather data caches
 MAX_BLACKLIST_SIZE = 5000  # Max entries in blacklists (404 airports)
@@ -200,10 +202,10 @@ def load_aircraft_approach_speeds(filename: str) -> Dict[str, int]:
         set_aircraft_speeds_cache(approach_speeds)
         return approach_speeds
     except FileNotFoundError:
-        print(f"Warning: Aircraft data file '{filename}' not found. ETA calculations will not use approach speeds.")
+        debug_logger.warning(f"Aircraft data file '{filename}' not found. ETA calculations will not use approach speeds.")
         set_aircraft_speeds_cache({})
         return {}
     except Exception as e:
-        print(f"Warning: Error loading aircraft data from '{filename}': {e}. ETA calculations will not use approach speeds.")
+        debug_logger.error(f"Error loading aircraft data from '{filename}': {e}. ETA calculations will not use approach speeds.")
         set_aircraft_speeds_cache({})
         return {}
