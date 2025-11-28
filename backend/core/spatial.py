@@ -127,11 +127,15 @@ class SpatialIndex:
             if filter_fn and not filter_fn(airport):
                 continue
 
-            distance = haversine_distance_nm(
-                lat, lon,
-                airport['latitude'],
-                airport['longitude']
-            )
+            try:
+                distance = haversine_distance_nm(
+                    lat, lon,
+                    airport['latitude'],
+                    airport['longitude']
+                )
+            except ValueError:
+                # Skip airports with invalid coordinates
+                continue
 
             if distance < min_distance:
                 if max_distance_nm is None or distance <= max_distance_nm:
@@ -177,11 +181,15 @@ class SpatialIndex:
             if filter_fn and not filter_fn(airport):
                 continue
 
-            distance = haversine_distance_nm(
-                lat, lon,
-                airport['latitude'],
-                airport['longitude']
-            )
+            try:
+                distance = haversine_distance_nm(
+                    lat, lon,
+                    airport['latitude'],
+                    airport['longitude']
+                )
+            except ValueError:
+                # Skip airports with invalid coordinates
+                continue
 
             if distance <= max_distance_nm:
                 results.append((airport['icao'], distance))

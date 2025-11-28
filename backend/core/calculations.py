@@ -11,23 +11,36 @@ def haversine_distance_nm(lat1: float, lon1: float, lat2: float, lon2: float) ->
     """
     Calculate the great circle distance between two points
     on the earth (specified in decimal degrees).
-    
+
     Args:
-        lat1: Latitude of first point in decimal degrees
-        lon1: Longitude of first point in decimal degrees
-        lat2: Latitude of second point in decimal degrees
-        lon2: Longitude of second point in decimal degrees
-    
+        lat1: Latitude of first point in decimal degrees (-90 to 90)
+        lon1: Longitude of first point in decimal degrees (-180 to 180)
+        lat2: Latitude of second point in decimal degrees (-90 to 90)
+        lon2: Longitude of second point in decimal degrees (-180 to 180)
+
     Returns:
         Distance in nautical miles
+
+    Raises:
+        ValueError: If coordinates are outside valid ranges
     """
+    # Validate coordinate ranges to prevent invalid math operations
+    if not (-90 <= lat1 <= 90):
+        raise ValueError(f"lat1 must be between -90 and 90, got {lat1}")
+    if not (-90 <= lat2 <= 90):
+        raise ValueError(f"lat2 must be between -90 and 90, got {lat2}")
+    if not (-180 <= lon1 <= 180):
+        raise ValueError(f"lon1 must be between -180 and 180, got {lon1}")
+    if not (-180 <= lon2 <= 180):
+        raise ValueError(f"lon2 must be between -180 and 180, got {lon2}")
+
     # Convert decimal degrees to radians
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    
+    lat1_rad, lon1_rad, lat2_rad, lon2_rad = map(math.radians, [lat1, lon1, lat2, lon2])
+
     # Haversine formula
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    dlon = lon2_rad - lon1_rad
+    dlat = lat2_rad - lat1_rad
+    a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
     c = 2 * math.asin(math.sqrt(a))
     r = 3440.065  # Radius of earth in nautical miles
     return c * r

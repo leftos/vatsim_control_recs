@@ -121,12 +121,16 @@ def is_flight_flying_near_arrival(
             return False
 
         # Calculate distance to arrival airport
-        distance = haversine_distance_nm(
-            flight_lat,
-            flight_lon,
-            airport_lat,
-            airport_lon
-        )
+        try:
+            distance = haversine_distance_nm(
+                flight_lat,
+                flight_lon,
+                airport_lat,
+                airport_lon
+            )
+        except ValueError:
+            # Invalid coordinates
+            return False
 
         # Calculate estimated time of arrival (in hours)
         if groundspeed > 0:
