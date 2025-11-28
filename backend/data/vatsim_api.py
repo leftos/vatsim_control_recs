@@ -9,18 +9,24 @@ from typing import Dict, Any, List, Optional
 from backend.config.constants import VATSIM_DATA_URL
 
 
-def download_vatsim_data() -> Optional[Dict[str, Any]]:
+def download_vatsim_data(timeout: int = 10) -> Optional[Dict[str, Any]]:
     """
     Download VATSIM data from the API.
-    
+
+    Args:
+        timeout: Request timeout in seconds (default: 10)
+
     Returns:
         Dictionary containing VATSIM data (pilots, controllers, atis, etc.)
         or None if the download failed
     """
     try:
-        response = requests.get(VATSIM_DATA_URL)
+        response = requests.get(VATSIM_DATA_URL, timeout=timeout)
         response.raise_for_status()
         return response.json()
+    except requests.Timeout:
+        print(f"Error downloading VATSIM data: Request timed out after {timeout} seconds")
+        return None
     except requests.RequestException as e:
         print(f"Error downloading VATSIM data: {e}")
         return None
