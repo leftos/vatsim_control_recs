@@ -9,8 +9,7 @@ Caches use LRU eviction with size limits to prevent unbounded memory growth.
 
 import csv
 import threading
-from datetime import datetime, timezone
-from typing import Dict, Any, Set, Optional
+from typing import Dict, Optional
 
 from cachetools import LRUCache
 
