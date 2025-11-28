@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Tuple
 
 from backend.core.calculations import haversine_distance_nm, calculate_eta
+from backend.core.spatial import get_airport_spatial_index
 
 
 @dataclass
@@ -43,6 +44,8 @@ def get_nearest_airport_if_on_ground(
     Determine if a flight is on the ground at an airport.
     Based on distance from airport and groundspeed.
 
+    Uses spatial indexing for O(1) average case lookup instead of O(n) linear scan.
+
     Args:
         flight: Flight data dictionary
         airports: Dictionary of airport data
@@ -57,38 +60,24 @@ def get_nearest_airport_if_on_ground(
     if groundspeed is None or groundspeed > max_groundspeed:
         return None
 
-    # For flights with flight plans but not near departure or arrival
-    # or flights without flight plans, find the nearest airport
     flight_lat = flight.get('latitude')
     flight_lon = flight.get('longitude')
-    if flight_lat is not None and flight_lon is not None:
-        nearest_icao = None
-        min_distance = float('inf')
-        for icao, airport_data in airports.items():
-            # Skip airports with missing coordinates
-            airport_lat = airport_data.get('latitude')
-            airport_lon = airport_data.get('longitude')
-            if airport_lat is None or airport_lon is None:
-                continue
+    if flight_lat is None or flight_lon is None:
+        return None
 
-            # Calculate distance from airport
-            distance = haversine_distance_nm(
-                flight_lat,
-                flight_lon,
-                airport_lat,
-                airport_lon
-            )
+    # Use spatial index for efficient nearest airport lookup
+    spatial_index = get_airport_spatial_index(airports)
 
-            # Keep the minimum distance/airport
-            if distance < min_distance:
-                min_distance = distance
-                nearest_icao = icao
+    # Filter to only airports in our tracked set
+    def filter_tracked(airport: Dict[str, Any]) -> bool:
+        return airport['icao'] in airports
 
-        # If the nearest airport is within the threshold, consider the flight on ground there
-        if nearest_icao is not None and min_distance <= max_distance_nm:
-            return nearest_icao
-    
-    return None
+    return spatial_index.find_nearest(
+        flight_lat,
+        flight_lon,
+        max_distance_nm=max_distance_nm,
+        filter_fn=filter_tracked
+    )
 
 
 def is_flight_flying_near_arrival(
@@ -154,6 +143,8 @@ def find_nearest_airport(
     """
     Find the nearest airport to a flight's current position.
 
+    Uses spatial indexing for O(1) average case lookup instead of O(n) linear scan.
+
     Args:
         flight: Flight data dictionary
         airports: Dictionary of airport data
@@ -167,27 +158,18 @@ def find_nearest_airport(
     if flight_lat is None or flight_lon is None:
         return None
 
-    nearest_airport = None
-    min_distance = float('inf')
+    # Use spatial index for efficient lookup
+    spatial_index = get_airport_spatial_index(airports)
 
-    for icao, airport_data in airports.items():
-        airport_lat = airport_data.get('latitude')
-        airport_lon = airport_data.get('longitude')
-        if airport_lat is None or airport_lon is None:
-            continue
+    # Filter to only airports in our tracked set
+    def filter_tracked(airport: Dict[str, Any]) -> bool:
+        return airport['icao'] in airports
 
-        distance = haversine_distance_nm(
-            flight_lat,
-            flight_lon,
-            airport_lat,
-            airport_lon
-        )
-
-        if distance < min_distance:
-            min_distance = distance
-            nearest_airport = icao
-
-    return nearest_airport
+    return spatial_index.find_nearest(
+        flight_lat,
+        flight_lon,
+        filter_fn=filter_tracked
+    )
 
 
 def get_airport_flight_details(
