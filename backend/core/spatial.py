@@ -6,7 +6,7 @@ nearest neighbor lookups instead of O(n) linear scans.
 """
 
 import threading
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Callable
 from datetime import datetime, timezone
 
 from backend.core.calculations import haversine_distance_nm
@@ -16,7 +16,7 @@ from backend.core.calculations import haversine_distance_nm
 DEFAULT_CELL_SIZE = 1.0
 
 # Cache for spatial index
-_AIRPORT_SPATIAL_INDEX: Optional[Dict[str, Any]] = None
+_AIRPORT_SPATIAL_INDEX: Optional["SpatialIndex"] = None
 _AIRPORT_SPATIAL_INDEX_LOCK = threading.Lock()
 _AIRPORT_SPATIAL_INDEX_TIMESTAMP: Optional[datetime] = None
 _SPATIAL_INDEX_TTL_SECONDS = 300  # Rebuild every 5 minutes
@@ -91,7 +91,7 @@ class SpatialIndex:
         lat: float,
         lon: float,
         max_distance_nm: Optional[float] = None,
-        filter_fn: Optional[callable] = None
+        filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None
     ) -> Optional[str]:
         """
         Find the nearest airport to the given coordinates.
@@ -149,7 +149,7 @@ class SpatialIndex:
         lat: float,
         lon: float,
         max_distance_nm: float,
-        filter_fn: Optional[callable] = None
+        filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None
     ) -> List[Tuple[str, float]]:
         """
         Find all airports within a given distance.
@@ -232,6 +232,7 @@ def get_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Spati
             _AIRPORT_SPATIAL_INDEX = index
             _AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
 
+        assert _AIRPORT_SPATIAL_INDEX is not None
         return _AIRPORT_SPATIAL_INDEX
 
 

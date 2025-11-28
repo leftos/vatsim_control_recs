@@ -3,7 +3,7 @@ Flight analysis and tracking for VATSIM aircraft.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, cast
 
 from backend.core.calculations import haversine_distance_nm, calculate_eta
 from backend.core.spatial import get_airport_spatial_index
@@ -123,10 +123,10 @@ def is_flight_flying_near_arrival(
         # Calculate distance to arrival airport
         try:
             distance = haversine_distance_nm(
-                flight_lat,
-                flight_lon,
-                airport_lat,
-                airport_lon
+                cast(float, flight_lat),
+                cast(float, flight_lon),
+                cast(float, airport_lat),
+                cast(float, airport_lon)
             )
         except ValueError:
             # Invalid coordinates

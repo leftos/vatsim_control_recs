@@ -200,7 +200,11 @@ class VATSIMControlApp(App):
         # Set the terminal title using Textual's driver (bypasses stdout/stderr capture)
         try:
             # Use Textual's driver to write directly to the terminal
-            self.driver.write("\033]0;VATSIM Control Recommendations\007")
+            driver = getattr(self, '_driver', None)
+            if driver is not None and hasattr(driver, 'write'):
+                driver.write("\033]0;VATSIM Control Recommendations\007")
+            else:
+                set_terminal_title("VATSIM Control Recommendations")
         except (AttributeError, OSError, IOError):
             # Fallback to other methods if driver is unavailable or write fails
             set_terminal_title("VATSIM Control Recommendations")
