@@ -6,3 +6,6 @@ textual>=0.47.0
 
 # Natural Language Processing for airport name entity recognition
 spacy>=3.0.0
+
+# Thread-safe caching with TTL and size limits
+cachetools>=5.3.0

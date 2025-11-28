@@ -3,12 +3,20 @@ Caching utilities for backend data.
 
 This module provides thread-safe caching for weather data, METAR, TAF,
 aircraft approach speeds, and ARTCC groupings.
+
+Caches use LRU eviction with size limits to prevent unbounded memory growth.
 """
 
 import csv
 import threading
 from datetime import datetime, timezone
 from typing import Dict, Any, Set, Optional
+
+from cachetools import LRUCache
+
+# Cache size limits
+MAX_WEATHER_CACHE_SIZE = 1000  # Max entries in weather data caches
+MAX_BLACKLIST_SIZE = 5000  # Max entries in blacklists (404 airports)
 
 # Thread locks for cache synchronization
 _WIND_CACHE_LOCK = threading.Lock()
@@ -17,17 +25,20 @@ _TAF_CACHE_LOCK = threading.Lock()
 _AIRCRAFT_SPEEDS_LOCK = threading.Lock()
 _ARTCC_GROUPINGS_LOCK = threading.Lock()
 
-# Cache for wind data
-_WIND_DATA_CACHE: Dict[str, Dict[str, Any]] = {}  # {airport_icao: {'wind_info': str, 'timestamp': datetime}}
-_WIND_BLACKLIST: Set[str] = set()  # Set of airport ICAOs that don't have weather data available (404)
+# Cache for wind data - LRU with size limit
+# {airport_icao: {'wind_info': str, 'timestamp': datetime}}
+_WIND_DATA_CACHE: LRUCache = LRUCache(maxsize=MAX_WEATHER_CACHE_SIZE)
+_WIND_BLACKLIST: LRUCache = LRUCache(maxsize=MAX_BLACKLIST_SIZE)  # Keys are ICAOs, values are True
 
-# Cache for METAR data
-_METAR_DATA_CACHE: Dict[str, Dict[str, Any]] = {}  # {airport_icao: {'metar': str, 'timestamp': datetime}}
-_METAR_BLACKLIST: Set[str] = set()  # Set of airport ICAOs that don't have METAR data available
+# Cache for METAR data - LRU with size limit
+# {airport_icao: {'metar': str, 'timestamp': datetime}}
+_METAR_DATA_CACHE: LRUCache = LRUCache(maxsize=MAX_WEATHER_CACHE_SIZE)
+_METAR_BLACKLIST: LRUCache = LRUCache(maxsize=MAX_BLACKLIST_SIZE)  # Keys are ICAOs, values are True
 
-# Cache for TAF data
-_TAF_DATA_CACHE: Dict[str, Dict[str, Any]] = {}  # {airport_icao: {'taf': str, 'timestamp': datetime}}
-_TAF_BLACKLIST: Set[str] = set()  # Set of airport ICAOs that don't have TAF data available
+# Cache for TAF data - LRU with size limit
+# {airport_icao: {'taf': str, 'timestamp': datetime}}
+_TAF_DATA_CACHE: LRUCache = LRUCache(maxsize=MAX_WEATHER_CACHE_SIZE)
+_TAF_BLACKLIST: LRUCache = LRUCache(maxsize=MAX_BLACKLIST_SIZE)  # Keys are ICAOs, values are True
 
 # Cache for aircraft approach speeds
 _AIRCRAFT_APPROACH_SPEEDS: Optional[Dict[str, int]] = None
@@ -51,27 +62,30 @@ def get_taf_cache_lock() -> threading.Lock:
     return _TAF_CACHE_LOCK
 
 
-def get_wind_cache() -> tuple[Dict[str, Dict[str, Any]], Set[str]]:
+def get_wind_cache() -> tuple[LRUCache, LRUCache]:
     """Get wind data cache and blacklist.
 
+    Both caches are LRU with size limits to prevent unbounded memory growth.
     Note: Callers should use get_wind_cache_lock() to synchronize access
     when modifying the cache from multiple threads.
     """
     return _WIND_DATA_CACHE, _WIND_BLACKLIST
 
 
-def get_metar_cache() -> tuple[Dict[str, Dict[str, Any]], Set[str]]:
+def get_metar_cache() -> tuple[LRUCache, LRUCache]:
     """Get METAR data cache and blacklist.
 
+    Both caches are LRU with size limits to prevent unbounded memory growth.
     Note: Callers should use get_metar_cache_lock() to synchronize access
     when modifying the cache from multiple threads.
     """
     return _METAR_DATA_CACHE, _METAR_BLACKLIST
 
 
-def get_taf_cache() -> tuple[Dict[str, Dict[str, Any]], Set[str]]:
+def get_taf_cache() -> tuple[LRUCache, LRUCache]:
     """Get TAF data cache and blacklist.
 
+    Both caches are LRU with size limits to prevent unbounded memory growth.
     Note: Callers should use get_taf_cache_lock() to synchronize access
     when modifying the cache from multiple threads.
     """
@@ -106,45 +120,40 @@ def set_artcc_groupings_cache(groupings: Dict[str, list]) -> None:
 
 def clear_wind_cache() -> None:
     """Clear wind data cache (thread-safe)."""
-    global _WIND_DATA_CACHE, _WIND_BLACKLIST
     with _WIND_CACHE_LOCK:
-        _WIND_DATA_CACHE = {}
-        _WIND_BLACKLIST = set()
+        _WIND_DATA_CACHE.clear()
+        _WIND_BLACKLIST.clear()
 
 
 def clear_metar_cache() -> None:
     """Clear METAR data cache (thread-safe)."""
-    global _METAR_DATA_CACHE, _METAR_BLACKLIST
     with _METAR_CACHE_LOCK:
-        _METAR_DATA_CACHE = {}
-        _METAR_BLACKLIST = set()
+        _METAR_DATA_CACHE.clear()
+        _METAR_BLACKLIST.clear()
 
 
 def clear_taf_cache() -> None:
     """Clear TAF data cache (thread-safe)."""
-    global _TAF_DATA_CACHE, _TAF_BLACKLIST
     with _TAF_CACHE_LOCK:
-        _TAF_DATA_CACHE = {}
-        _TAF_BLACKLIST = set()
+        _TAF_DATA_CACHE.clear()
+        _TAF_BLACKLIST.clear()
 
 
 def clear_all_caches() -> None:
     """Clear all caches (thread-safe)."""
-    global _WIND_DATA_CACHE, _WIND_BLACKLIST, _METAR_DATA_CACHE, _METAR_BLACKLIST
-    global _TAF_DATA_CACHE, _TAF_BLACKLIST
     global _AIRCRAFT_APPROACH_SPEEDS, _ARTCC_GROUPINGS
 
     with _WIND_CACHE_LOCK:
-        _WIND_DATA_CACHE = {}
-        _WIND_BLACKLIST = set()
+        _WIND_DATA_CACHE.clear()
+        _WIND_BLACKLIST.clear()
 
     with _METAR_CACHE_LOCK:
-        _METAR_DATA_CACHE = {}
-        _METAR_BLACKLIST = set()
+        _METAR_DATA_CACHE.clear()
+        _METAR_BLACKLIST.clear()
 
     with _TAF_CACHE_LOCK:
-        _TAF_DATA_CACHE = {}
-        _TAF_BLACKLIST = set()
+        _TAF_DATA_CACHE.clear()
+        _TAF_BLACKLIST.clear()
 
     with _AIRCRAFT_SPEEDS_LOCK:
         _AIRCRAFT_APPROACH_SPEEDS = None

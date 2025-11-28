@@ -135,7 +135,7 @@ def get_wind_info_minute(airport_icao: str) -> str:
         if e.code == 404:
             # Station doesn't exist - blacklist it permanently
             with wind_lock:
-                wind_blacklist.add(airport_icao)
+                wind_blacklist[airport_icao] = True
             return ""
         # For other HTTP errors, return cached data if available
         with wind_lock:
@@ -196,7 +196,7 @@ def get_metar(airport_icao: str) -> str:
         if not metar_text or metar_text.startswith('No METAR') or metar_text.startswith('Error'):
             # No data available - blacklist it
             with metar_lock:
-                metar_blacklist.add(airport_icao)
+                metar_blacklist[airport_icao] = True
             return ""
 
         # Parse wind and altimeter from METAR for caching
@@ -219,7 +219,7 @@ def get_metar(airport_icao: str) -> str:
         if e.code == 404:
             # Station doesn't exist - blacklist it permanently
             with metar_lock:
-                metar_blacklist.add(airport_icao)
+                metar_blacklist[airport_icao] = True
             return ""
         # For other HTTP errors, return cached data if available (even if expired)
         with metar_lock:
@@ -290,7 +290,7 @@ def get_taf(airport_icao: str) -> str:
         if not taf_text or taf_text.startswith('No TAF') or taf_text.startswith('Error'):
             # No data available - blacklist it
             with taf_lock:
-                taf_blacklist.add(airport_icao)
+                taf_blacklist[airport_icao] = True
             return ""
 
         # Cache the result
@@ -307,7 +307,7 @@ def get_taf(airport_icao: str) -> str:
         if e.code == 404:
             # Station doesn't exist - blacklist it permanently
             with taf_lock:
-                taf_blacklist.add(airport_icao)
+                taf_blacklist[airport_icao] = True
             return ""
         # For other HTTP errors, return cached data if available
         with taf_lock:
