@@ -125,7 +125,7 @@ def analyze_flights_data(
             for other_group_name, other_group_airports in all_custom_groupings.items():
                 if other_group_name not in included_group_names:
                     # Resolve this grouping to see if it's a sub-grouping
-                    resolved_other_airports = resolve_grouping_recursively_for_display(other_group_name)
+                    resolved_other_airports = resolve_grouping_recursively(other_group_name, all_custom_groupings)
                     if resolved_other_airports and resolved_other_airports.issubset(resolved_supergroup_airports):
                         included_group_names.add(other_group_name)
             
@@ -329,7 +329,7 @@ def analyze_flights_data(
     if display_custom_groupings:
         for group_name, group_airports in display_custom_groupings.items():
             # Resolve the grouping to actual airports (handles nested groupings)
-            resolved_airports = resolve_grouping_recursively_for_display(group_name)
+            resolved_airports = resolve_grouping_recursively(group_name, all_custom_groupings)
             
             group_departing = sum(departure_counts.get(ap_icao, 0) for ap_icao in resolved_airports)
             group_arriving = sum(arrival_counts.get(ap_icao, 0) for ap_icao in resolved_airports)
