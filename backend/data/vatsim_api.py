@@ -3,6 +3,7 @@ VATSIM API client for fetching flight and controller data.
 """
 
 import json
+import time
 import requests
 from typing import Dict, Any, List, Optional
 
@@ -10,30 +11,42 @@ from backend.config.constants import VATSIM_DATA_URL
 from common import logger as debug_logger
 
 
-def download_vatsim_data(timeout: int = 10) -> Optional[Dict[str, Any]]:
+def download_vatsim_data(timeout: int = 10, max_retries: int = 3) -> Optional[Dict[str, Any]]:
     """
-    Download VATSIM data from the API.
+    Download VATSIM data from the API with retry logic.
 
     Args:
         timeout: Request timeout in seconds (default: 10)
+        max_retries: Maximum number of retry attempts (default: 3)
 
     Returns:
         Dictionary containing VATSIM data (pilots, controllers, atis, etc.)
-        or None if the download failed
+        or None if all retries failed
     """
-    try:
-        response = requests.get(VATSIM_DATA_URL, timeout=timeout)
-        response.raise_for_status()
-        return response.json()
-    except requests.Timeout:
-        debug_logger.warning(f"VATSIM API request timed out after {timeout} seconds")
-        return None
-    except requests.RequestException as e:
-        debug_logger.error(f"Error downloading VATSIM data: {e}")
-        return None
-    except json.JSONDecodeError as e:
-        debug_logger.error(f"Error decoding VATSIM data JSON: {e}")
-        return None
+    last_exception: Optional[Exception] = None
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(VATSIM_DATA_URL, timeout=timeout)
+            response.raise_for_status()
+            return response.json()
+        except requests.Timeout as e:
+            last_exception = e
+            debug_logger.warning(f"VATSIM API timeout (attempt {attempt + 1}/{max_retries})")
+        except requests.RequestException as e:
+            last_exception = e
+            debug_logger.warning(f"VATSIM API error (attempt {attempt + 1}/{max_retries}): {e}")
+        except json.JSONDecodeError as e:
+            last_exception = e
+            debug_logger.warning(f"VATSIM API JSON decode error (attempt {attempt + 1}/{max_retries}): {e}")
+
+        # Exponential backoff before next retry (0.5s, 1s, 2s)
+        if attempt < max_retries - 1:
+            sleep_time = (2 ** attempt) * 0.5
+            time.sleep(sleep_time)
+
+    debug_logger.error(f"VATSIM API failed after {max_retries} attempts: {last_exception}")
+    return None
 
 
 def filter_flights_by_airports(

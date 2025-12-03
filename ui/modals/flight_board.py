@@ -131,8 +131,8 @@ class FlightBoardScreen(ModalScreen):
         
         # Disable parent app activity tracking for the entire operation
         app = self.app
-        if hasattr(app, 'watch_for_user_activity'):
-            setattr(app, 'watch_for_user_activity', False)
+        if hasattr(app, '_disable_activity_watching'):
+            app._disable_activity_watching()
         
         try:
             # Run the blocking call in a thread pool
@@ -165,8 +165,8 @@ class FlightBoardScreen(ModalScreen):
                 self.call_after_refresh(self.populate_tables)
         finally:
             # Re-enable activity tracking
-            if hasattr(app, 'watch_for_user_activity'):
-                setattr(app, 'watch_for_user_activity', True)
+            if hasattr(app, '_enable_activity_watching'):
+                app._enable_activity_watching()
     
     def refresh_flight_data(self) -> None:
         """Refresh flight data (called by parent app)"""

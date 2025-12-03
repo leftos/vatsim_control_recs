@@ -8,11 +8,22 @@ from .config import DisambiguatorConfig
 
 class NameProcessor:
     """Handles airport name processing including shortening and word extraction."""
-    
+
     def __init__(self, config: DisambiguatorConfig):
         """Initialize with configuration."""
         self.config = config
-    
+
+    def _split_compound_word(self, word: str) -> List[str]:
+        """Split compound words on / and - delimiters."""
+        if '/' in word or '-' in word:
+            return [p for p in word.replace('-', '/').split('/') if p]
+        return [word]
+
+    def _word_matches_location(self, word: str, location_words: Set[str]) -> bool:
+        """Check if word or any compound part matches location words."""
+        parts = self._split_compound_word(word)
+        return any(part.lower() in location_words for part in parts)
+
     def shorten_name(self, name: str) -> str:
         """Shorten common airport name parts using the defined replacements."""
         for long, short in self.config.SHORTENING_REPLACEMENTS.items():
@@ -34,16 +45,13 @@ class NameProcessor:
         distinguishing_parts = []
         for word in name.split():
             word_lower = word.lower()
-            # Skip if it's a location word
+            # Skip if it's a location word or compound containing location words
             if word_lower in location_words:
                 continue
-            # Check if it's a compound word containing location words
-            if '/' in word or '-' in word:
-                parts = word.replace('-', '/').split('/')
-                if any(part.lower() in location_words for part in parts):
-                    continue
+            if self._word_matches_location(word, location_words):
+                continue
             distinguishing_parts.append(word)
-        
+
         return distinguishing_parts
     
     def find_first_high_priority_word(self, words: List[str]) -> Optional[str]:
@@ -63,16 +71,14 @@ class NameProcessor:
             return True
         if word.lower().capitalize() in self.config.HIGH_PRIORITY_WORDS:
             return True
-        
+
         # Check if word is a compound and any part is high-priority
-        if '/' in word or '-' in word:
-            parts = word.replace('-', '/').split('/')
-            for part in parts:
-                if part in self.config.HIGH_PRIORITY_WORDS:
-                    return True
-                if part.lower().capitalize() in self.config.HIGH_PRIORITY_WORDS:
-                    return True
-        
+        for part in self._split_compound_word(word):
+            if part in self.config.HIGH_PRIORITY_WORDS:
+                return True
+            if part.lower().capitalize() in self.config.HIGH_PRIORITY_WORDS:
+                return True
+
         return False
     
     def get_non_high_priority_prefix(self, airport_name: str, location: str) -> Optional[str]:
@@ -144,13 +150,12 @@ class NameProcessor:
             # Skip generic words
             if clean_word in self.config.GENERIC_WORDS_FOR_MILITARY:
                 continue
-            
+
             # Check if it's a compound word containing generic words
-            if '-' in word or '/' in word:
-                parts = word.replace('-', '/').split('/')
-                if any(part.lower() in self.config.GENERIC_WORDS_FOR_MILITARY for part in parts):
-                    continue
-            
+            if any(part.lower() in self.config.GENERIC_WORDS_FOR_MILITARY
+                   for part in self._split_compound_word(word)):
+                continue
+
             # Skip the military term itself (we'll add it at the end)
             if word == military_term:
                 continue

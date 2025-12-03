@@ -4,6 +4,7 @@ Weather data fetching for airports (METAR and wind information).
 
 import json
 import re
+import threading
 import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -232,12 +233,26 @@ def get_metar(airport_icao: str) -> str:
                     cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
                 return cache_entry['metar']
         return ""
-    except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError, Exception):
-        # On other errors, return cached data if available (even if expired), otherwise empty string
+    except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError) as e:
+        # Expected network/parsing errors - return cached data if available
+        from common import logger as debug_logger
+        debug_logger.debug(f"Expected error fetching METAR for {airport_icao}: {type(e).__name__}: {e}")
         with metar_lock:
             if airport_icao in metar_data_cache:
                 cache_entry = metar_data_cache[airport_icao]
-                # Update cache entry to be current if it doesn't have parsed data yet
+                if 'wind' not in cache_entry:
+                    metar_text = cache_entry['metar']
+                    cache_entry['wind'] = _parse_wind_from_metar(metar_text)
+                    cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
+                return cache_entry['metar']
+        return ""
+    except Exception as e:
+        # Unexpected errors - log with traceback for debugging
+        from common import logger as debug_logger
+        debug_logger.error(f"Unexpected error fetching METAR for {airport_icao}: {type(e).__name__}: {e}", exc_info=True)
+        with metar_lock:
+            if airport_icao in metar_data_cache:
+                cache_entry = metar_data_cache[airport_icao]
                 if 'wind' not in cache_entry:
                     metar_text = cache_entry['metar']
                     cache_entry['wind'] = _parse_wind_from_metar(metar_text)
@@ -314,8 +329,18 @@ def get_taf(airport_icao: str) -> str:
             if airport_icao in taf_data_cache:
                 return taf_data_cache[airport_icao]['taf']
         return ""
-    except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError, Exception):
-        # On other errors, return cached data if available (even if expired), otherwise empty string
+    except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError) as e:
+        # Expected network/parsing errors - return cached data if available
+        from common import logger as debug_logger
+        debug_logger.debug(f"Expected error fetching TAF for {airport_icao}: {type(e).__name__}: {e}")
+        with taf_lock:
+            if airport_icao in taf_data_cache:
+                return taf_data_cache[airport_icao]['taf']
+        return ""
+    except Exception as e:
+        # Unexpected errors - log with traceback for debugging
+        from common import logger as debug_logger
+        debug_logger.error(f"Unexpected error fetching TAF for {airport_icao}: {type(e).__name__}: {e}", exc_info=True)
         with taf_lock:
             if airport_icao in taf_data_cache:
                 return taf_data_cache[airport_icao]['taf']
@@ -557,6 +582,7 @@ def get_altimeter_setting(airport_icao: str) -> Optional[str]:
 _METAR_AIRPORT_SPATIAL_INDEX: Optional[Dict[str, Any]] = None
 _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP: Optional[datetime] = None
 _METAR_SPATIAL_INDEX_DURATION = 300  # 5 minutes cache
+_METAR_SPATIAL_INDEX_LOCK = threading.Lock()  # Lock for synchronizing spatial index rebuild
 
 
 def _build_metar_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
@@ -629,15 +655,27 @@ def find_nearest_airport_with_metar(
         Distance is in nautical miles
     """
     global _METAR_AIRPORT_SPATIAL_INDEX, _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP
-    
-    # Check if we need to build or rebuild the spatial index
+
+    # Check if we need to build or rebuild the spatial index (double-checked locking)
     current_time = datetime.now(timezone.utc)
-    if (_METAR_AIRPORT_SPATIAL_INDEX is None or
+
+    # First check without lock (fast path)
+    needs_rebuild = (
+        _METAR_AIRPORT_SPATIAL_INDEX is None or
         _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None or
-        (current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds() > _METAR_SPATIAL_INDEX_DURATION):
-        _METAR_AIRPORT_SPATIAL_INDEX = _build_metar_airport_spatial_index(airports_data)
-        _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
-    
+        (current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds() > _METAR_SPATIAL_INDEX_DURATION
+    )
+
+    if needs_rebuild:
+        with _METAR_SPATIAL_INDEX_LOCK:
+            # Re-check inside lock (another thread may have rebuilt)
+            current_time = datetime.now(timezone.utc)
+            if (_METAR_AIRPORT_SPATIAL_INDEX is None or
+                _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None or
+                (current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds() > _METAR_SPATIAL_INDEX_DURATION):
+                _METAR_AIRPORT_SPATIAL_INDEX = _build_metar_airport_spatial_index(airports_data)
+                _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
+
     spatial_index = _METAR_AIRPORT_SPATIAL_INDEX
     grid = spatial_index['grid']
     cell_size = spatial_index['cell_size']
@@ -701,5 +739,37 @@ def find_nearest_airport_with_metar(
         altimeter = get_altimeter_setting(icao)
         if altimeter:
             return (icao, altimeter, distance)
-    
+
     return None
+
+
+def clear_weather_caches() -> None:
+    """Clear all weather-related caches.
+
+    Call this when tracked airports change to ensure fresh data is fetched.
+    """
+    global _METAR_AIRPORT_SPATIAL_INDEX, _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP
+
+    # Clear module-level spatial index cache
+    with _METAR_SPATIAL_INDEX_LOCK:
+        _METAR_AIRPORT_SPATIAL_INDEX = None
+        _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = None
+
+    # Clear the shared caches from cache manager
+    wind_data_cache, wind_blacklist = get_wind_cache()
+    wind_lock = get_wind_cache_lock()
+    with wind_lock:
+        wind_data_cache.clear()
+        # Don't clear blacklist - those are permanent 404s
+
+    metar_data_cache, metar_blacklist = get_metar_cache()
+    metar_lock = get_metar_cache_lock()
+    with metar_lock:
+        metar_data_cache.clear()
+        # Don't clear blacklist - those are permanent 404s
+
+    taf_data_cache, taf_blacklist = get_taf_cache()
+    taf_lock = get_taf_cache_lock()
+    with taf_lock:
+        taf_data_cache.clear()
+        # Don't clear blacklist - those are permanent 404s

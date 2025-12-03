@@ -64,7 +64,7 @@ class FlightInfoScreen(ModalScreen):
     def __init__(self, flight_data: dict):
         """
         Initialize the flight info modal.
-        
+
         Args:
             flight_data: Dictionary containing flight information from VATSIM data
         """
@@ -72,6 +72,7 @@ class FlightInfoScreen(ModalScreen):
         self.flight_data = flight_data
         self.altimeter_info = None  # Will be populated asynchronously
         self.altimeter_loading = True
+        self._pending_tasks: list = []  # Track pending async tasks
     
     def compose(self) -> ComposeResult:
         with Container(id="flight-info-container"):
@@ -82,26 +83,38 @@ class FlightInfoScreen(ModalScreen):
     
     async def on_mount(self) -> None:
         """Load altimeter info asynchronously after modal is shown"""
-        # Start loading altimeter info in the background (don't await)
-        asyncio.create_task(self._load_altimeter_info())
+        # Start loading altimeter info in the background (tracked for cleanup)
+        task = asyncio.create_task(self._load_altimeter_info())
+        self._pending_tasks.append(task)
+
+    def on_unmount(self) -> None:
+        """Cancel pending tasks when modal is dismissed."""
+        for task in self._pending_tasks:
+            if not task.done():
+                task.cancel()
+        self._pending_tasks.clear()
     
     async def _load_altimeter_info(self) -> None:
         """Asynchronously fetch altimeter information"""
         loop = asyncio.get_event_loop()
-        
+
         # Run the blocking altimeter lookup in a thread pool
         try:
             self.altimeter_info = await loop.run_in_executor(
                 None,
                 self._get_altimeter_info_sync
             )
+        except asyncio.CancelledError:
+            return  # Clean exit on cancellation
         except Exception as e:
             print(f"Error loading altimeter info: {e}")
             self.altimeter_info = ""
         finally:
             self.altimeter_loading = False
-            
-            # Update the display with the loaded altimeter info
+
+            # Only update display if modal is still mounted
+            if not self._pending_tasks:  # Modal was dismissed
+                return
             try:
                 content_widget = self.query_one("#flight-info-content", Static)
                 content_widget.update(self._format_flight_info())

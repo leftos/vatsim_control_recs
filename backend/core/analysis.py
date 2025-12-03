@@ -111,24 +111,32 @@ def analyze_flights_data(
             # Display supergroupings and their sub-groupings
             included_group_names = set()
             resolved_supergroup_airports = set()
-            
+
+            # Cache for resolved groupings to avoid redundant resolution
+            resolved_cache: dict = {}
+
+            def get_resolved(name: str) -> set:
+                if name not in resolved_cache:
+                    resolved_cache[name] = resolve_grouping_recursively(name, all_custom_groupings)
+                return resolved_cache[name]
+
             for supergroup_name in supergroupings_allowlist:
                 if supergroup_name in all_custom_groupings:
                     included_group_names.add(supergroup_name)
-                    # Recursively resolve the supergrouping to all airports
-                    supergroup_airports = resolve_grouping_recursively(supergroup_name, all_custom_groupings)
+                    # Recursively resolve the supergrouping to all airports (using cache)
+                    supergroup_airports = get_resolved(supergroup_name)
                     resolved_supergroup_airports.update(supergroup_airports)
                 else:
                     print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json.")
-            
+
             # Find all sub-groupings that are subsets of the resolved supergrouping airports
-            for other_group_name, other_group_airports in all_custom_groupings.items():
+            for other_group_name in all_custom_groupings:
                 if other_group_name not in included_group_names:
-                    # Resolve this grouping to see if it's a sub-grouping
-                    resolved_other_airports = resolve_grouping_recursively(other_group_name, all_custom_groupings)
+                    # Resolve this grouping using cache
+                    resolved_other_airports = get_resolved(other_group_name)
                     if resolved_other_airports and resolved_other_airports.issubset(resolved_supergroup_airports):
                         included_group_names.add(other_group_name)
-            
+
             # Populate display groupings
             for name in included_group_names:
                 display_custom_groupings[name] = all_custom_groupings[name]

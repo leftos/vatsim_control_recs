@@ -98,22 +98,48 @@ def load_artcc_groupings(unified_data: Dict[str, Dict[str, Any]]) -> Dict[str, L
 def load_custom_groupings(filename: str) -> Optional[Dict[str, List[str]]]:
     """
     Load custom airport groupings from JSON file.
-    
+
     Args:
         filename: Path to the custom groupings JSON file
-    
+
     Returns:
         Dictionary mapping grouping names to lists of airport ICAOs
         or None if file not found or invalid
     """
+    from common import logger
+
     try:
         with open(filename, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+
+        # Validate structure
+        if not isinstance(data, dict):
+            logger.error(f"Custom groupings file must contain a JSON object, got {type(data).__name__}")
+            return None
+
+        validated: Dict[str, List[str]] = {}
+        for key, value in data.items():
+            if not isinstance(key, str):
+                logger.warning(f"Skipping non-string grouping key: {key}")
+                continue
+            if isinstance(value, str):
+                # Auto-convert single string to list
+                validated[key] = [value]
+                logger.warning(f"Grouping '{key}' has string value, converting to list")
+            elif isinstance(value, list):
+                # Ensure all elements are strings
+                validated[key] = [str(v) for v in value]
+            else:
+                logger.warning(f"Skipping grouping '{key}' with invalid value type: {type(value).__name__}")
+                continue
+
+        return validated
+
     except FileNotFoundError:
-        print(f"Error: Custom groupings file '{filename}' not found.")
+        logger.error(f"Custom groupings file '{filename}' not found.")
         return None
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from '{filename}'. Check file format.")
+    except json.JSONDecodeError as e:
+        logger.error(f"Could not decode JSON from '{filename}': {e}")
         return None
 
 

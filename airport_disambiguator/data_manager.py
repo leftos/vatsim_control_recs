@@ -4,6 +4,8 @@ import json
 from collections import defaultdict
 from typing import Any, Dict, Optional
 
+from common import logger
+
 
 class AirportDataManager:
     """Manages airport data loading, caching, and location mapping."""
@@ -51,9 +53,19 @@ class AirportDataManager:
         """Load airport data from JSON file."""
         try:
             with open(self.airports_file_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+                data = json.load(f)
+                logger.info(f"Loaded {len(data)} airports from {self.airports_file_path}")
+                return data
+        except FileNotFoundError:
+            logger.error(f"Airport data file not found: {self.airports_file_path}")
             return {}
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in airport data file: {self.airports_file_path}: {e}")
+            return {}
+
+    def is_loaded(self) -> bool:
+        """Check if airport data was successfully loaded."""
+        return bool(self.airports_data)
     
     def _build_location_mappings(self):
         """Build mappings between airports and their base locations."""

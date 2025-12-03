@@ -2,4 +2,6 @@
 Data access layer for VATSIM and airport data.
 """
 
-# Exports will be added as submodules are created
+from .weather import clear_weather_caches
+
+__all__ = ['clear_weather_caches']

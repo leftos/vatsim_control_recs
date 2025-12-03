@@ -86,14 +86,22 @@ def get_staffed_positions(
             continue
 
         parts = callsign.split('_')
-        if len(parts) > 0:
-            icao_candidate_prefix = parts[0]
-            position_suffix = parts[-1]
+        # Validate we have non-empty parts (split always returns at least [''])
+        if not parts or not parts[0]:
+            continue  # Skip empty or invalid callsigns
 
-            # Only consider non-ATIS positions for the 'controllers' array
-            allowed_positions = CONTROL_POSITION_ORDER.copy()
+        icao_candidate_prefix = parts[0]
 
-            if position_suffix in allowed_positions:
+        # Validate ICAO prefix has reasonable length (ICAO codes are 3-4 chars)
+        if len(icao_candidate_prefix) < 2 or len(icao_candidate_prefix) > 5:
+            continue  # Not a valid ICAO prefix
+
+        position_suffix = parts[-1] if len(parts) > 1 else ''
+
+        # Only consider non-ATIS positions for the 'controllers' array
+        allowed_positions = CONTROL_POSITION_ORDER.copy()
+
+        if position_suffix in allowed_positions:
                 valid_icao = _get_valid_icao_from_callsign(icao_candidate_prefix, airports_data)
                 
                 if valid_icao:
@@ -103,14 +111,22 @@ def get_staffed_positions(
     atis_list = data.get('atis', [])
     for atis_station in atis_list:
         callsign = atis_station.get('callsign', '')
-        
-        parts = callsign.split('_')
-        if len(parts) > 0:
-            icao_candidate_prefix = parts[0]
-            # The position suffix for ATIS is generally "ATIS"
-            position_suffix = parts[-1]
 
-            if position_suffix == "ATIS":
+        parts = callsign.split('_')
+        # Validate we have non-empty parts
+        if not parts or not parts[0]:
+            continue  # Skip empty or invalid callsigns
+
+        icao_candidate_prefix = parts[0]
+
+        # Validate ICAO prefix has reasonable length
+        if len(icao_candidate_prefix) < 2 or len(icao_candidate_prefix) > 5:
+            continue  # Not a valid ICAO prefix
+
+        # The position suffix for ATIS is generally "ATIS"
+        position_suffix = parts[-1] if len(parts) > 1 else ''
+
+        if position_suffix == "ATIS":
                 valid_icao = _get_valid_icao_from_callsign(icao_candidate_prefix, airports_data)
                 
                 if valid_icao:

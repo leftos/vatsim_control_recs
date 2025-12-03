@@ -141,52 +141,63 @@ class DisambiguationEngine:
         Uses a progressive approach to find unique suffixes.
         """
         resolved_names = {}
-        
+
+        # Pre-compute location words and distinguishing words for all airports (O(n) instead of O(n²))
+        location_words = self.name_processor.extract_location_words(location)
+
+        # Pre-compute distinguishing words and their lowercase set for each airport
+        all_distinguishing_parts: Dict[str, List[str]] = {}
+        all_distinguishing_sets: Dict[str, set] = {}
         for icao in icaos:
             name = airport_names[icao]
-            distinguishing_parts = self.name_processor.extract_distinguishing_words(name, location)
-            
+            parts = self.name_processor.extract_distinguishing_words(name, location)
+            all_distinguishing_parts[icao] = parts
+            all_distinguishing_sets[icao] = set(w.lower() for w in parts)
+
+        for icao in icaos:
+            distinguishing_parts = all_distinguishing_parts[icao]
+
             if not distinguishing_parts:
                 resolved_names[icao] = location
                 continue
-            
+
             # Score and sort words by priority
             scored_words = []
             for word in distinguishing_parts:
                 is_high_priority = self.name_processor._is_high_priority_word(word)
                 priority = 0 if is_high_priority else 1
                 scored_words.append((priority, word))
-            
+
             scored_words.sort(key=lambda x: (x[0], distinguishing_parts.index(x[1])))
-            
+
             # Try to find unique name
             found = False
-            
+
             # First, try single high-priority words
             for priority, word in scored_words:
                 if priority == 0:  # High priority
                     candidate = f"{location} {word}".strip()
-                    if self._is_unique_in_group(candidate, icao, icaos, location, airport_names):
+                    if self._is_unique_in_group_optimized(candidate, icao, icaos, location_words, all_distinguishing_sets):
                         resolved_names[icao] = candidate
                         found = True
                         break
-            
+
             # Try combinations with high-priority words
             if not found:
-                found = self._try_combinations_with_priority(
-                    icao, distinguishing_parts, location, icaos, airport_names, resolved_names
+                found = self._try_combinations_with_priority_optimized(
+                    icao, distinguishing_parts, location, icaos, location_words, all_distinguishing_sets, resolved_names
                 )
-            
+
             # Last resort: try sequential combinations
             if not found:
-                found = self._try_sequential_combinations(
-                    icao, distinguishing_parts, location, icaos, airport_names, resolved_names
+                found = self._try_sequential_combinations_optimized(
+                    icao, distinguishing_parts, location, icaos, location_words, all_distinguishing_sets, resolved_names
                 )
-            
+
             # Fallback if nothing works
             if not found:
                 resolved_names[icao] = airport_names[icao]
-        
+
         return resolved_names
     
     def _try_combinations_with_priority(self, icao: str, distinguishing_parts: List[str], 
@@ -225,29 +236,89 @@ class DisambiguationEngine:
         
         return False
     
-    def _is_unique_in_group(self, candidate_name: str, current_icao: str, 
-                           all_icaos: List[str], location: str, 
+    def _is_unique_in_group(self, candidate_name: str, current_icao: str,
+                           all_icaos: List[str], location: str,
                            airport_names: Dict[str, str]) -> bool:
         """Check if a candidate name is unique among all airports in the group."""
         # Extract just the distinguishing part from the candidate
         location_words = self.name_processor.extract_location_words(location)
         candidate_words = [word for word in candidate_name.split() if word.lower() not in location_words]
         candidate_suffix = " ".join(candidate_words).lower()
-        
+
         for other_icao in all_icaos:
             if current_icao == other_icao:
                 continue
-            
+
             # Get the other airport's distinguishing words
             other_name = airport_names[other_icao]
             other_dist_words = [
-                word for word in other_name.split() 
+                word for word in other_name.split()
                 if word.lower() not in location_words
             ]
             other_dist_suffix = " ".join(other_dist_words).lower()
-            
+
             # Check if the other airport's distinguishing parts start with our candidate
             if other_dist_suffix.startswith(candidate_suffix):
                 return False
-        
+
         return True
+
+    def _is_unique_in_group_optimized(self, candidate_name: str, current_icao: str,
+                                      all_icaos: List[str], location_words: set,
+                                      all_distinguishing_sets: Dict[str, set]) -> bool:
+        """Optimized uniqueness check using pre-computed data."""
+        # Extract candidate words (excluding location)
+        candidate_words = set(
+            word.lower() for word in candidate_name.split()
+            if word.lower() not in location_words
+        )
+
+        for other_icao in all_icaos:
+            if current_icao == other_icao:
+                continue
+
+            other_words = all_distinguishing_sets[other_icao]
+
+            # Check if candidate would conflict - if other's words contain all candidate words
+            if candidate_words and candidate_words.issubset(other_words):
+                return False
+
+        return True
+
+    def _try_combinations_with_priority_optimized(self, icao: str, distinguishing_parts: List[str],
+                                                  location: str, all_icaos: List[str],
+                                                  location_words: set,
+                                                  all_distinguishing_sets: Dict[str, set],
+                                                  resolved_names: Dict[str, str]) -> bool:
+        """Optimized version using pre-computed data."""
+        for num_words in range(2, len(distinguishing_parts) + 1):
+            for start_idx in range(len(distinguishing_parts) - num_words + 1):
+                candidate_words = distinguishing_parts[start_idx:start_idx + num_words]
+
+                # Check if this combination includes at least one high-priority word
+                has_high_priority = any(
+                    self.name_processor._is_high_priority_word(word)
+                    for word in candidate_words
+                )
+
+                if has_high_priority:
+                    candidate = f"{location} {' '.join(candidate_words)}".strip()
+                    if self._is_unique_in_group_optimized(candidate, icao, all_icaos, location_words, all_distinguishing_sets):
+                        resolved_names[icao] = candidate
+                        return True
+
+        return False
+
+    def _try_sequential_combinations_optimized(self, icao: str, distinguishing_parts: List[str],
+                                               location: str, all_icaos: List[str],
+                                               location_words: set,
+                                               all_distinguishing_sets: Dict[str, set],
+                                               resolved_names: Dict[str, str]) -> bool:
+        """Optimized version using pre-computed data."""
+        for i in range(1, len(distinguishing_parts) + 1):
+            candidate = f"{location} {' '.join(distinguishing_parts[:i])}".strip()
+            if self._is_unique_in_group_optimized(candidate, icao, all_icaos, location_words, all_distinguishing_sets):
+                resolved_names[icao] = candidate
+                return True
+
+        return False

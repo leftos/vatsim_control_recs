@@ -6,6 +6,7 @@ Contains the VATSIMControlApp Textual application class
 import asyncio
 import os
 import sys
+import threading
 from datetime import datetime, timezone
 from typing import List, Any
 from textual.app import App, ComposeResult
@@ -161,6 +162,7 @@ class VATSIMControlApp(App):
         self.airports_row_keys = []
         self.groupings_row_keys = []
         self.watch_for_user_activity = True  # Control whether to track user activity
+        self._activity_lock = threading.Lock()  # Lock for synchronizing watch_for_user_activity
         self.last_activity_source = ""  # Track what triggered the last activity
         self.initial_setup_complete = False  # Prevent timer resets during initial setup
         self.flight_board_open = False # Is a flight board currently open?
@@ -221,10 +223,20 @@ class VATSIMControlApp(App):
         # Mark initial setup as complete after all initialization events have settled
         # This prevents automatic events (tab activation, row highlights) from resetting the timer
         self.call_after_refresh(lambda: setattr(self, 'initial_setup_complete', True))
-    
+
+    def _disable_activity_watching(self) -> None:
+        """Safely disable user activity tracking with lock."""
+        with self._activity_lock:
+            self.watch_for_user_activity = False
+
+    def _enable_activity_watching(self) -> None:
+        """Safely enable user activity tracking with lock."""
+        with self._activity_lock:
+            self.watch_for_user_activity = True
+
     def populate_tables(self) -> None:
         """Populate or refresh the datatable contents."""
-        self.watch_for_user_activity = False  # Temporarily disable user activity tracking
+        self._disable_activity_watching()  # Temporarily disable user activity tracking
 
         max_eta = self.args.max_eta_hours if self.args else 1.0
         
@@ -251,8 +263,8 @@ class VATSIMControlApp(App):
         
         if self.groupings_data:
             self.groupings_manager.populate(self.groupings_data)
-                
-        self.watch_for_user_activity = True  # Re-enable user activity tracking
+
+        self._enable_activity_watching()  # Re-enable user activity tracking
     
     async def action_quit(self) -> None:
         """Quit the application."""
@@ -441,8 +453,8 @@ class VATSIMControlApp(App):
         airport_data, groupings_data, total_flights = await self.fetch_data_async()
         
         if airport_data is not None:
-            self.watch_for_user_activity = False  # Temporarily disable user activity tracking
-            
+            self._disable_activity_watching()  # Temporarily disable user activity tracking
+
             self.original_airport_data = list(airport_data)
             self.airport_data = list(airport_data)
             self.groupings_data = list(groupings_data) if groupings_data else []
@@ -492,8 +504,8 @@ class VATSIMControlApp(App):
                     airports_table.move_cursor(row=new_row_index)
                     # Restore scroll position with adjustment for row index change
                     airports_table.scroll_to(y=saved_scroll_offset + row_diff, animate=False)
-                    self.watch_for_user_activity = True  # Re-enable user activity tracking
-                    
+                    self._enable_activity_watching()  # Re-enable user activity tracking
+
             elif current_tab == "groupings" and self.groupings_data:
                 groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
                 old_row_index = saved_row_index
@@ -511,16 +523,16 @@ class VATSIMControlApp(App):
                 if len(self.groupings_data) > 0:
                     # Calculate the scroll adjustment
                     row_diff = new_row_index - old_row_index
-                    self.watch_for_user_activity = False  # Temporarily disable user activity tracking
+                    self._disable_activity_watching()  # Temporarily disable user activity tracking
                     # Move cursor to the new row
                     groupings_table.move_cursor(row=new_row_index)
                     # Restore scroll position with adjustment
                     groupings_table.scroll_to(y=saved_scroll_offset + row_diff, animate=False)
-                    self.watch_for_user_activity = True  # Re-enable user activity tracking
-            
+                    self._enable_activity_watching()  # Re-enable user activity tracking
+
             self.update_status_bar()
-            
-            self.watch_for_user_activity = True  # Re-enable user activity tracking
+
+            self._enable_activity_watching()  # Re-enable user activity tracking
         else:
             try:
                 status_bar = self.query_one("#status-bar", Static)
@@ -732,10 +744,14 @@ class VATSIMControlApp(App):
         if result is None:
             # User cancelled
             return
-        
+
         # Result is the updated airport allowlist
         self.airport_allowlist = result
-        
+
+        # Clear weather caches to ensure fresh data for changed airports
+        from backend.data import clear_weather_caches
+        clear_weather_caches()
+
         # Refresh data with new configuration
         self.action_refresh()
     

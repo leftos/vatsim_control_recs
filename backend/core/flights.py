@@ -232,22 +232,30 @@ def get_airport_flight_details(
     arrivals_list = []
     
     debug_logger.debug(f"[BACKEND] Processing {len(flights)} flights...")
-    
+
     for flight in flights:
-        callsign = flight['callsign']
+        # Safely extract required fields with defensive access
+        callsign = flight.get('callsign')
+        departure = flight.get('departure')
+        arrival = flight.get('arrival')
+
+        # Skip malformed flights missing callsign
+        if not callsign:
+            debug_logger.debug(f"[BACKEND] Skipping flight with missing callsign: {flight}")
+            continue
+
         nearest_airport_if_on_ground = get_nearest_airport_if_on_ground(flight, airports)
-        
+
         # Check if this is a local flight (departure == arrival)
-        is_local_flight = (flight['departure'] and flight['arrival'] and
-                          flight['departure'] == flight['arrival'])
-        
+        is_local_flight = (departure and arrival and departure == arrival)
+
         # Check if this is a departure (on ground at departure airport)
-        if flight['departure'] and flight['departure'] in airport_icao_list:
-            if nearest_airport_if_on_ground == flight['departure']:
+        if departure and departure in airport_icao_list:
+            if nearest_airport_if_on_ground == departure:
                 # Flight is on ground at one of our airports, preparing to depart
                 if is_local_flight:
                     # Local flight - show LOCAL for name and ---- for ICAO
-                    departure_airport_icao = flight['departure']
+                    departure_airport_icao = departure
                     pretty_departure_airport = disambiguator.get_pretty_name(departure_airport_icao) if disambiguator else departure_airport_icao
                     departures_list.append(DepartureInfo(
                         callsign=callsign,
@@ -255,16 +263,16 @@ def get_airport_flight_details(
                         departure=AirportInfo(pretty_name=pretty_departure_airport, icao_code=departure_airport_icao)
                     ))
                 else:
-                    destination = flight['arrival'] if flight['arrival'] else "----"
+                    destination = arrival if arrival else "----"
                     debug_logger.debug(f"[BACKEND] Departure {callsign}: destination={destination}, disambiguator={disambiguator is not None}")
                     if disambiguator and destination != "----":
                         pretty_destination = disambiguator.get_pretty_name(destination)
                         debug_logger.debug(f"[BACKEND] Departure {callsign}: got pretty_destination={pretty_destination}")
                     else:
                         pretty_destination = destination
-                    
+
                     # Add departure airport info for groupings
-                    departure_airport_icao = flight['departure']
+                    departure_airport_icao = departure
                     pretty_departure_airport = disambiguator.get_pretty_name(departure_airport_icao) if disambiguator else departure_airport_icao
                     
                     departures_list.append(DepartureInfo(
@@ -274,10 +282,10 @@ def get_airport_flight_details(
                     ))
         # Also handle flights with only arrival filed, on ground at one of our airports
         # But NOT if they're already at the arrival airport (those are arrivals, not departures)
-        elif not flight['departure'] and flight['arrival'] and nearest_airport_if_on_ground:
-            if nearest_airport_if_on_ground in airport_icao_list and nearest_airport_if_on_ground != flight['arrival']:
+        elif not departure and arrival and nearest_airport_if_on_ground:
+            if nearest_airport_if_on_ground in airport_icao_list and nearest_airport_if_on_ground != arrival:
                 # Flight is on ground at one of our airports (not the arrival) with only arrival in flight plan
-                destination = flight['arrival']
+                destination = arrival
                 pretty_destination = disambiguator.get_pretty_name(destination) if disambiguator else destination
                 
                 # Use nearest_airport as departure airport
@@ -290,13 +298,13 @@ def get_airport_flight_details(
                 ))
         
         # Check if this is an arrival (either on ground at arrival or flying nearby)
-        if flight['arrival'] and flight['arrival'] in airport_icao_list:
+        if arrival and arrival in airport_icao_list:
             # Skip if departure == arrival and aircraft is on ground (already added as departure)
-            if is_local_flight and nearest_airport_if_on_ground == flight['arrival']:
+            if is_local_flight and nearest_airport_if_on_ground == arrival:
                 pass  # Already handled as departure above
-            elif nearest_airport_if_on_ground == flight['arrival']:
+            elif nearest_airport_if_on_ground == arrival:
                 # Flight is on ground at arrival airport
-                arrival_airport_icao = flight['arrival']
+                arrival_airport_icao = arrival
                 pretty_arrival_airport = disambiguator.get_pretty_name(arrival_airport_icao) if disambiguator else arrival_airport_icao
                 
                 if is_local_flight:
@@ -309,7 +317,7 @@ def get_airport_flight_details(
                         arrival=AirportInfo(pretty_name=pretty_arrival_airport, icao_code=arrival_airport_icao)
                     ))
                 else:
-                    origin = flight['departure'] if flight['departure'] else "----"
+                    origin = departure if departure else "----"
                     pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
                     debug_logger.debug(f"[BACKEND] Arrival {callsign} LANDED: origin={origin}, pretty_origin={pretty_origin}")
                     arrivals_list.append(ArrivalInfo(
@@ -322,7 +330,7 @@ def get_airport_flight_details(
             # For in-flight arrivals, check if it's an arrival first, then calculate ETA
             # is_flight_flying_near_arrival uses max_eta_hours=0 to check ALL arrivals
             elif is_flight_flying_near_arrival(flight, all_airports_data, max_eta_hours=0):
-                arrival_airport_icao = flight['arrival']
+                arrival_airport_icao = arrival
                 pretty_arrival_airport = disambiguator.get_pretty_name(arrival_airport_icao) if disambiguator else arrival_airport_icao
                 
                 if is_local_flight:
@@ -338,7 +346,7 @@ def get_airport_flight_details(
                             arrival=AirportInfo(pretty_name=pretty_arrival_airport, icao_code=arrival_airport_icao)
                         ))
                 else:
-                    origin = flight['departure'] if flight['departure'] else "----"
+                    origin = departure if departure else "----"
                     pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
                     eta_display, eta_local_time, eta_hours = calculate_eta(flight, all_airports_data, aircraft_approach_speeds)
                     # Add to list if it meets the original max_eta_hours criteria
@@ -353,7 +361,7 @@ def get_airport_flight_details(
             else:
                 # Flight has arrival filed but is on ground (not at arrival airport, likely at departure)
                 # Show with ETA="----" to indicate they haven't departed yet
-                arrival_airport_icao = flight['arrival']
+                arrival_airport_icao = arrival
                 pretty_arrival_airport = disambiguator.get_pretty_name(arrival_airport_icao) if disambiguator else arrival_airport_icao
                 
                 if is_local_flight:
@@ -366,7 +374,7 @@ def get_airport_flight_details(
                         arrival=AirportInfo(pretty_name=pretty_arrival_airport, icao_code=arrival_airport_icao)
                     ))
                 else:
-                    origin = flight['departure'] if flight['departure'] else "----"
+                    origin = departure if departure else "----"
                     pretty_origin = disambiguator.get_pretty_name(origin) if disambiguator else origin
                     arrivals_list.append(ArrivalInfo(
                         callsign=callsign,
@@ -375,9 +383,9 @@ def get_airport_flight_details(
                         eta_local_time="----",
                         arrival=AirportInfo(pretty_name=pretty_arrival_airport, icao_code=arrival_airport_icao)
                     ))
-        
+
         # Handle flights on ground without flight plans
-        if not flight['departure'] and not flight['arrival'] and nearest_airport_if_on_ground:
+        if not departure and not arrival and nearest_airport_if_on_ground:
             if nearest_airport_if_on_ground in airport_icao_list:
                 # Count as departure with unknown destination
                 pretty_departure_airport = disambiguator.get_pretty_name(nearest_airport_if_on_ground) if disambiguator else nearest_airport_if_on_ground

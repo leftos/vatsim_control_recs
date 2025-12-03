@@ -3,6 +3,7 @@
 import re
 import subprocess
 import sys
+from collections import OrderedDict
 from typing import List, Optional, Tuple
 
 import spacy
@@ -12,16 +13,17 @@ from .config import DisambiguatorConfig
 
 class EntityExtractor:
     """Handles NLP-based entity extraction from airport names."""
-    
+
+    MAX_CACHE_SIZE = 1000  # Maximum number of cached entity extractions
+
     def __init__(self, config: DisambiguatorConfig):
         """Initialize with configuration."""
         self.config = config
         self._nlp = None
-        self._entity_cache = {}
+        self._entity_cache: OrderedDict = OrderedDict()  # Use OrderedDict for LRU behavior
     
-    @property
-    def nlp(self):
-        """Lazy load spaCy model, downloading it if necessary."""
+    def load(self) -> None:
+        """Explicitly load the spaCy model. Call during application startup for eager loading."""
         if self._nlp is None:
             try:
                 self._nlp = spacy.load("en_core_web_sm")
@@ -45,6 +47,12 @@ class EntityExtractor:
                 self._nlp = spacy.load("en_core_web_sm")
                 print("✓ Ready!\n")
                 sys.stdout.flush()
+
+    @property
+    def nlp(self):
+        """Lazy load spaCy model, downloading it if necessary."""
+        if self._nlp is None:
+            self.load()
         return self._nlp
     
     def extract_entities(self, airport_name: str, city: str = "", state: str = "") -> Tuple[List[str], List[str]]:
@@ -54,9 +62,11 @@ class EntityExtractor:
         Returns:
             Tuple of (person_entities, location_entities)
         """
-        # Check cache first
+        # Check cache first (LRU: move to end if found)
         cache_key = f"{airport_name}|{city}|{state}"
         if cache_key in self._entity_cache:
+            # Move to end (most recently used)
+            self._entity_cache.move_to_end(cache_key)
             return self._entity_cache[cache_key]
         
         # Clean the airport name for better NER
@@ -96,10 +106,12 @@ class EntityExtractor:
         # Remove duplicates while preserving order
         persons = list(dict.fromkeys(persons))
         locations = list(dict.fromkeys(locations))
-        
-        # Cache the results
+
+        # Cache the results with LRU eviction
         self._entity_cache[cache_key] = (persons, locations)
-        
+        if len(self._entity_cache) > self.MAX_CACHE_SIZE:
+            self._entity_cache.popitem(last=False)  # Remove oldest entry
+
         return persons, locations
     
     def _clean_name_for_ner(self, airport_name: str) -> str:

@@ -18,7 +18,7 @@ from .debug_logger import debug
 
 class TableManager:
     """Manages table population and updates with split-flap animations"""
-    
+
     def __init__(self, table: SplitFlapDataTable, config: TableConfig, row_keys: list,
                  progressive_load_chunk_size: int = 20):
         self.table = table
@@ -28,6 +28,23 @@ class TableManager:
         self.progressive_load_chunk_size = progressive_load_chunk_size
         self.progressive_load_active = False
         self.pending_removal_tasks = []  # Track pending async removal tasks
+        self._active_tasks: set = set()  # Track all active async tasks for cleanup
+
+    def _create_tracked_task(self, coro) -> asyncio.Task:
+        """Create a task and track it for cleanup."""
+        task = asyncio.create_task(coro)
+        self._active_tasks.add(task)
+        task.add_done_callback(self._active_tasks.discard)
+        return task
+
+    async def cancel_pending_tasks(self) -> None:
+        """Cancel all pending tasks."""
+        for task in self._active_tasks:
+            if not task.done():
+                task.cancel()
+        if self._active_tasks:
+            await asyncio.gather(*self._active_tasks, return_exceptions=True)
+        self._active_tasks.clear()
     
     async def _wait_and_remove_row(self, row_key) -> None:
         """Wait for the clearing animation to complete, then actually remove the row"""
@@ -124,7 +141,7 @@ class TableManager:
             if progressive and len(data) > self.progressive_load_chunk_size:
                 # Progressive loading: load in chunks
                 self.progressive_load_active = True
-                asyncio.create_task(self._populate_progressive(data, column_keys))
+                self._create_tracked_task(self._populate_progressive(data, column_keys))
             else:
                 # Standard loading: load all at once
                 self._add_rows_to_table(data, column_keys)
@@ -133,7 +150,7 @@ class TableManager:
         else:
             # Subsequent updates: efficiently update existing rows
             # Run as async task to await pending removals
-            asyncio.create_task(self._update_efficiently_async(data, column_keys, sorted_data=data))
+            self._create_tracked_task(self._update_efficiently_async(data, column_keys, sorted_data=data))
 
     def _add_rows_to_table(self, data: List[Any], column_keys: list) -> None:
         """Add rows to table with animations"""
