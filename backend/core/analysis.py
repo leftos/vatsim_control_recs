@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from backend.cache.manager import load_aircraft_approach_speeds
 from backend.data.loaders import load_unified_airport_data
 from backend.data.vatsim_api import download_vatsim_data, filter_flights_by_airports
-from backend.data.weather import get_wind_info, get_wind_info_batch, get_altimeter_setting
+from backend.data.weather import get_wind_info_batch, get_altimeter_setting
 from backend.core.controllers import get_staffed_positions
 from backend.core.calculations import format_eta_display, calculate_eta
 from backend.core.groupings import load_all_groupings, resolve_grouping_recursively
@@ -335,7 +335,7 @@ def analyze_flights_data(
     # Process custom groupings data
     grouped_data = []
     if display_custom_groupings:
-        for group_name, group_airports in display_custom_groupings.items():
+        for group_name, _group_airports in display_custom_groupings.items():
             # Resolve the grouping to actual airports (handles nested groupings)
             resolved_airports = resolve_grouping_recursively(group_name, all_custom_groupings)
             

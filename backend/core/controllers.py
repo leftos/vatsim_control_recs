@@ -3,7 +3,7 @@ Controller staffing analysis for VATSIM airports.
 """
 
 from collections import defaultdict
-from typing import Dict, Any, List, Set, Optional
+from typing import Dict, Any, List, Optional
 
 from backend.config.constants import CONTROL_POSITION_ORDER
 

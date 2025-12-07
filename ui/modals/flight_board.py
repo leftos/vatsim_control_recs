@@ -148,7 +148,7 @@ class FlightBoardScreen(ModalScreen):
         # Disable parent app activity tracking for the entire operation
         app = self.app
         if hasattr(app, '_disable_activity_watching'):
-            app._disable_activity_watching()
+            app._disable_activity_watching()  # type: ignore[attr-defined]
 
         try:
             # Run the blocking call in a thread pool
@@ -184,7 +184,7 @@ class FlightBoardScreen(ModalScreen):
         finally:
             # Re-enable activity tracking
             if hasattr(app, '_enable_activity_watching'):
-                app._enable_activity_watching()
+                app._enable_activity_watching()  # type: ignore[attr-defined]
 
     def _precache_flight_altimeters(self) -> None:
         """Precache METARs for airports near displayed flights.

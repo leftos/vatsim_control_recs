@@ -1,6 +1,6 @@
 """Core disambiguation logic for generating unique airport names."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from .config import DisambiguatorConfig
 from .entity_extractor import EntityExtractor
@@ -16,7 +16,7 @@ class DisambiguationEngine:
         self.name_processor = name_processor
         self.entity_extractor = entity_extractor
     
-    def disambiguate_single_airport(self, icao: str, airport_details: Dict, location: str) -> str:
+    def disambiguate_single_airport(self, _icao: str, airport_details: Dict, location: str) -> str:
         """
         Generate a pretty name for a single airport in a location.
         
@@ -99,7 +99,7 @@ class DisambiguationEngine:
         
         return result
     
-    def _disambiguate_non_location_start(self, icao: str, airport_details: Dict, location: str, shortened_name: str) -> str:
+    def _disambiguate_non_location_start(self, _icao: str, airport_details: Dict, location: str, shortened_name: str) -> str:
         """Disambiguate an airport whose name doesn't start with the location."""
         full_name = airport_details.get('name', '')
         city = airport_details.get('city', '')

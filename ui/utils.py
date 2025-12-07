@@ -3,7 +3,6 @@ UI Utility Functions
 Contains helper functions for sorting, logging, and data processing
 """
 
-from datetime import datetime
 from backend.core.flights import ArrivalInfo
 from . import debug_logger
 
@@ -33,10 +32,10 @@ def eta_sort_key(row):
         # Determine format and extract fields
         if len(row) == 7:
             # Grouping format: (callsign, origin_icao, origin_name, arrival_icao, arrival_name, eta, eta_local)
-            flight, origin_icao, origin_name, arrival_icao, arrival_name, eta, eta_local = row
+            flight, _origin_icao, _origin_name, _arrival_icao, _arrival_name, eta, _eta_local = row
         else:
             # Single airport format: (callsign, origin_icao, origin_name, eta, eta_local)
-            flight, origin_icao, origin_name, eta, eta_local = row
+            flight, _origin_icao, _origin_name, eta, _eta_local = row
         eta_str = str(eta).upper()
         flight_str = str(flight)
         non_eta_total = 0  # Not available in arrival rows

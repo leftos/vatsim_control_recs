@@ -49,10 +49,11 @@ class EntityExtractor:
                 sys.stdout.flush()
 
     @property
-    def nlp(self):
+    def nlp(self) -> spacy.language.Language:
         """Lazy load spaCy model, downloading it if necessary."""
         if self._nlp is None:
             self.load()
+        assert self._nlp is not None, "spaCy model failed to load"
         return self._nlp
     
     def extract_entities(self, airport_name: str, city: str = "", state: str = "") -> Tuple[List[str], List[str]]:

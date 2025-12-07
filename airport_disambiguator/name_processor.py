@@ -178,7 +178,6 @@ class NameProcessor:
         Location words within compound words (e.g., 'MEDFORD' in 'INTL/MEDFORD') 
         are not counted if they're the trailing part.
         """
-        airport_name_lower = airport_name.lower()
         name_words = airport_name.split()
         
         # Check if any word from the city name appears as a standalone word

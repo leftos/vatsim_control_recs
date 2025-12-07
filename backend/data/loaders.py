@@ -11,8 +11,7 @@ Conflict resolution: Prefer US/USA airports, otherwise first encountered
 
 import csv
 import json
-import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from common import logger as debug_logger
 

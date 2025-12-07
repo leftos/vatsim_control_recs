@@ -4,7 +4,6 @@ Provides structured data classes instead of fragile tuple-based access.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass

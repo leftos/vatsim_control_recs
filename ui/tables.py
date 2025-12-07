@@ -4,7 +4,7 @@ Contains TableManager class and table configuration builders
 """
 
 import asyncio
-from typing import Any, List, Union, Optional
+from typing import Any, List, Optional
 from widgets.split_flap_datatable import SplitFlapDataTable, NUMERIC_FLAP_CHARS
 from backend.core.models import AirportStats, GroupingStats
 from .config import (
@@ -213,7 +213,7 @@ class TableManager:
             debug(f"_update_efficiently_async: Waiting for {len(self.pending_removal_tasks)} pending removal tasks to complete")
             await asyncio.gather(*self.pending_removal_tasks, return_exceptions=True)
             self.pending_removal_tasks.clear()
-            debug(f"_update_efficiently_async: All pending removals completed")
+            debug("_update_efficiently_async: All pending removals completed")
         
         # Use sorted_data if provided, otherwise use new_data
         data_to_use = sorted_data if sorted_data is not None else new_data
@@ -240,7 +240,7 @@ class TableManager:
             table_row_keys = list(self.table.rows.keys())
             if table_row_keys != self.row_keys:
                 rows_reordered = True
-                debug(f"_update_efficiently: Row order has changed, rebuilding table")
+                debug("_update_efficiently: Row order has changed, rebuilding table")
         
         if rows_reordered or new_row_count != current_row_count:
             # Rebuild the table with rows in the correct order

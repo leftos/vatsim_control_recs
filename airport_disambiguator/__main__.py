@@ -45,7 +45,7 @@ Examples:
     
     try:
         # Load unified airport data from all three sources
-        print(f"Loading airport data from:")
+        print("Loading airport data from:")
         print(f"  - {args.apt_base}")
         print(f"  - {args.airports}")
         print(f"  - {args.iata_icao}")
@@ -62,7 +62,7 @@ Examples:
             unified_data=unified_data
         )
         
-        print(f"\nAirport Pretty Names:")
+        print("\nAirport Pretty Names:")
         print("=" * 80)
         
         for icao in args.icao_codes:

@@ -475,14 +475,14 @@ class SplitFlapDataTable(DataTable):
     
     def _get_row_index(self, row_label: str) -> int:
         """Get row index from row label"""
-        for idx, (key, row) in enumerate(self.rows.items()):
+        for idx, (_key, row) in enumerate(self.rows.items()):
             if row.label == row_label:
                 return idx
         raise ValueError(f"Row with label '{row_label}' not found")
-    
+
     def _get_column_index(self, column_label: str) -> int:
         """Get column index from column label"""
-        for idx, (key, column) in enumerate(self.columns.items()):
+        for idx, (_key, column) in enumerate(self.columns.items()):
             if str(column.label) == column_label:
                 return idx
         raise ValueError(f"Column with label '{column_label}' not found")

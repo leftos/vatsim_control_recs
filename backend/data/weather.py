@@ -423,7 +423,7 @@ def get_wind_from_metar(airport_icao: str) -> str:
     Returns:
         Wind string in format like "27005KT" or "27005G12KT" or "00000KT" or empty string if unavailable
     """
-    metar_data_cache, metar_blacklist = get_metar_cache()
+    metar_data_cache, _metar_blacklist = get_metar_cache()
     metar_lock = get_metar_cache_lock()
 
     # Check if we have cached parsed wind data
@@ -592,7 +592,7 @@ def get_altimeter_setting(airport_icao: str) -> Optional[str]:
     Returns:
         Altimeter string (e.g., "A2992" or "Q1013") or None if unavailable
     """
-    metar_data_cache, metar_blacklist = get_metar_cache()
+    metar_data_cache, _metar_blacklist = get_metar_cache()
     metar_lock = get_metar_cache_lock()
 
     # Check if we have cached parsed altimeter data
@@ -641,8 +641,8 @@ def _build_metar_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]])
     Returns:
         Dictionary with spatial index structure
     """
-    metar_data_cache, metar_blacklist = get_metar_cache()
-    
+    _metar_data_cache, metar_blacklist = get_metar_cache()
+
     # Build list of airports that might have METAR (not blacklisted)
     valid_airports = []
     for icao, data in airports_data.items():
@@ -717,6 +717,7 @@ def find_airports_near_position(
                 _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
 
     spatial_index = _METAR_AIRPORT_SPATIAL_INDEX
+    assert spatial_index is not None, "Spatial index should have been built"
     grid = spatial_index['grid']
 
     # Determine which cells to search
@@ -795,12 +796,13 @@ def find_nearest_airport_with_metar(
                 _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
 
     spatial_index = _METAR_AIRPORT_SPATIAL_INDEX
+    assert spatial_index is not None, "Spatial index should have been built"
     grid = spatial_index['grid']
 
     # Determine which cells to search (current cell + surrounding cells)
     lat_cell = int(latitude)
     lon_cell = int(longitude)
-    
+
     # Search current cell and adjacent cells (3x3 grid)
     search_cells = []
     for dlat in [-1, 0, 1]:
@@ -873,19 +875,19 @@ def clear_weather_caches() -> None:
         _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = None
 
     # Clear the shared caches from cache manager
-    wind_data_cache, wind_blacklist = get_wind_cache()
+    wind_data_cache, _wind_blacklist = get_wind_cache()
     wind_lock = get_wind_cache_lock()
     with wind_lock:
         wind_data_cache.clear()
         # Don't clear blacklist - those are permanent 404s
 
-    metar_data_cache, metar_blacklist = get_metar_cache()
+    metar_data_cache, _metar_blacklist = get_metar_cache()
     metar_lock = get_metar_cache_lock()
     with metar_lock:
         metar_data_cache.clear()
         # Don't clear blacklist - those are permanent 404s
 
-    taf_data_cache, taf_blacklist = get_taf_cache()
+    taf_data_cache, _taf_blacklist = get_taf_cache()
     taf_lock = get_taf_cache_lock()
     with taf_lock:
         taf_data_cache.clear()

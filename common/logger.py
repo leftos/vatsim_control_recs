@@ -77,9 +77,14 @@ def warning(message: str) -> None:
     _logger.warning(message)
 
 
-def error(message: str) -> None:
-    """Log an error message."""
-    _logger.error(message)
+def error(message: str, exc_info: bool = False) -> None:
+    """Log an error message.
+
+    Args:
+        message: The error message to log.
+        exc_info: If True, include exception traceback information.
+    """
+    _logger.error(message, exc_info=exc_info)
 
 
 def get_log_file_path() -> str:

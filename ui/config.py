@@ -3,9 +3,7 @@ UI Configuration and Constants
 Contains flap character sets, data classes, and module-level instances
 """
 
-import os
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Optional, Callable, Literal
 
 # Custom flap character sets for specific column types

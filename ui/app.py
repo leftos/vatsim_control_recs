@@ -19,7 +19,6 @@ from backend import analyze_flights_data
 from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
-from .config import UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
 from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen
 
@@ -41,7 +40,6 @@ def set_terminal_title(title: str) -> None:
     # Method 2: Write directly to the terminal file descriptor
     try:
         # Get the actual terminal file descriptor
-        import io
         if hasattr(sys.stdout, 'buffer'):
             # Use the underlying buffer
             os.write(sys.stdout.fileno(), f"\033]0;{title}\007".encode())
@@ -439,9 +437,9 @@ class VATSIMControlApp(App):
     
     async def refresh_worker(
         self,
-        old_airport_data,
-        old_groupings_data,
-        old_search_active,
+        _old_airport_data,
+        _old_groupings_data,
+        _old_search_active,
         saved_airport_icao,
         saved_grouping_name,
         saved_row_index,
@@ -593,11 +591,11 @@ class VATSIMControlApp(App):
         if event.key in ["up", "down", "left", "right", "pageup", "pagedown", "home", "end"]:
             self.record_user_activity(f"key:{event.key}")
     
-    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:  # noqa: ARG002
         """Handle tab changes."""
         self.record_user_activity(f"tab_change:{event.tab.id}")
     
-    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+    def on_data_table_row_highlighted(self, _event: DataTable.RowHighlighted) -> None:
         """Handle row navigation in tables."""
         # Don't record activity for automatic row highlights (e.g., on app init)
         # Only key presses (handled by on_key) will record user activity
