@@ -13,7 +13,10 @@ from ui import config
 
 class FlightInfoScreen(ModalScreen):
     """Modal screen showing detailed flight information"""
-    
+
+    # Refresh altimeter every 60 seconds for long-open modals
+    ALTIMETER_REFRESH_INTERVAL = 60
+
     CSS = """
     FlightInfoScreen {
         align: center middle;
@@ -73,6 +76,7 @@ class FlightInfoScreen(ModalScreen):
         self.altimeter_info = None  # Will be populated asynchronously
         self.altimeter_loading = True
         self._pending_tasks: list = []  # Track pending async tasks
+        self._refresh_timer = None  # Timer for periodic altimeter refresh
     
     def compose(self) -> ComposeResult:
         with Container(id="flight-info-container"):
@@ -87,12 +91,44 @@ class FlightInfoScreen(ModalScreen):
         task = asyncio.create_task(self._load_altimeter_info())
         self._pending_tasks.append(task)
 
+        # Start periodic refresh timer for long-open modals
+        self._refresh_timer = self.set_interval(
+            self.ALTIMETER_REFRESH_INTERVAL,
+            self._refresh_altimeter
+        )
+
     def on_unmount(self) -> None:
-        """Cancel pending tasks when modal is dismissed."""
+        """Cancel pending tasks and timers when modal is dismissed."""
+        # Stop the refresh timer
+        if self._refresh_timer:
+            self._refresh_timer.stop()
+            self._refresh_timer = None
+
+        # Cancel pending async tasks
         for task in self._pending_tasks:
             if not task.done():
                 task.cancel()
         self._pending_tasks.clear()
+
+    async def _refresh_altimeter(self) -> None:
+        """Periodically refresh altimeter data for long-open modals."""
+        # Don't refresh if already loading
+        if self.altimeter_loading:
+            return
+
+        self.altimeter_loading = True
+        self._update_display()
+
+        task = asyncio.create_task(self._load_altimeter_info())
+        self._pending_tasks.append(task)
+
+    def _update_display(self) -> None:
+        """Update the flight info display."""
+        try:
+            content_widget = self.query_one("#flight-info-content", Static)
+            content_widget.update(self._format_flight_info())
+        except Exception:
+            pass  # Widget may not be mounted
     
     async def _load_altimeter_info(self) -> None:
         """Asynchronously fetch altimeter information"""
@@ -282,9 +318,7 @@ class FlightInfoScreen(ModalScreen):
         # Check if we have position data
         latitude = self.flight_data.get('latitude')
         longitude = self.flight_data.get('longitude')
-        altitude = self.flight_data.get('altitude')
-        
-        # Debug: Check what data we have
+
         if latitude is None or longitude is None:
             return ""
         

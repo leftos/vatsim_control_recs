@@ -11,7 +11,7 @@ from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.events import Key
 
-from backend import get_wind_info, get_altimeter_setting
+from backend import get_wind_info, get_altimeter_setting, get_metar_batch, find_airports_near_position
 from backend.core.flights import get_airport_flight_details
 from backend.cache.manager import load_aircraft_approach_speeds
 from backend.data.vatsim_api import download_vatsim_data
@@ -25,7 +25,10 @@ from ui.modals.flight_info import FlightInfoScreen
 
 class FlightBoardScreen(ModalScreen):
     """Modal screen showing departure and arrivals board for an airport or grouping"""
-    
+
+    # Refresh altimeter cache every 30 seconds for flights on the board
+    CACHE_REFRESH_INTERVAL = 30
+
     CSS = """
     FlightBoardScreen {
         align: center middle;
@@ -102,6 +105,7 @@ class FlightBoardScreen(ModalScreen):
         self.departures_manager = None
         self.arrivals_manager = None
         self.vatsim_data = None  # Store VATSIM data for flight info lookup
+        self._cache_refresh_timer = None  # Timer for periodic cache refresh
     
     def compose(self) -> ComposeResult:
         # Build initial window title
@@ -124,30 +128,42 @@ class FlightBoardScreen(ModalScreen):
     async def on_mount(self) -> None:
         """Load and display flight data when the screen is mounted"""
         await self.load_flight_data()
-        # Note: Refresh is now triggered by parent app, not independent timer
+        # Note: Full data refresh is triggered by parent app, not independent timer
+
+        # Start periodic cache refresh for altimeter lookups
+        self._cache_refresh_timer = self.set_interval(
+            self.CACHE_REFRESH_INTERVAL,
+            self._refresh_altimeter_cache
+        )
+
+    def on_unmount(self) -> None:
+        """Clean up timers when modal is dismissed."""
+        if self._cache_refresh_timer:
+            self._cache_refresh_timer.stop()
+            self._cache_refresh_timer = None
     
     async def load_flight_data(self) -> None:
         """Load flight data from backend"""
-        
+
         # Disable parent app activity tracking for the entire operation
         app = self.app
         if hasattr(app, '_disable_activity_watching'):
             app._disable_activity_watching()
-        
+
         try:
             # Run the blocking call in a thread pool
             loop = asyncio.get_event_loop()
             # Prepare parameters for get_airport_flight_details
             aircraft_speeds = load_aircraft_approach_speeds(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'aircraft_data.csv'))
             vatsim_data = download_vatsim_data()
-            
+
             # Store vatsim_data for flight info lookup
             self.vatsim_data = vatsim_data
-            
+
             # Use the module-level instances
             unified_data_to_use = config.UNIFIED_AIRPORT_DATA
             disambiguator_to_use = config.DISAMBIGUATOR
-            
+
             result = await loop.run_in_executor(
                 None,
                 get_airport_flight_details,
@@ -158,16 +174,74 @@ class FlightBoardScreen(ModalScreen):
                 aircraft_speeds,
                 vatsim_data
             )
-            
+
             if result:
                 self.departures_data, self.arrivals_data = result
+                # Precache METARs for airports near displayed flights (for faster altimeter lookups)
+                await loop.run_in_executor(None, self._precache_flight_altimeters)
                 # Defer populate_tables until after the widget tree is fully mounted
                 self.call_after_refresh(self.populate_tables)
         finally:
             # Re-enable activity tracking
             if hasattr(app, '_enable_activity_watching'):
                 app._enable_activity_watching()
-    
+
+    def _precache_flight_altimeters(self) -> None:
+        """Precache METARs for airports near displayed flights.
+
+        This warms the cache so that when users click on a flight to see its info,
+        the altimeter lookup is nearly instant instead of requiring network calls.
+        """
+        if not self.vatsim_data or not config.UNIFIED_AIRPORT_DATA:
+            return
+
+        airports_to_cache = set()
+        pilots_by_callsign = {p.get('callsign'): p for p in self.vatsim_data.get('pilots', [])}
+
+        # For departures on the ground, use their departure airport
+        for dep in self.departures_data:
+            if dep.departure:
+                airports_to_cache.add(dep.departure.icao_code)
+            # Also add destination in case they need it
+            airports_to_cache.add(dep.destination.icao_code)
+
+        # For arrivals (in-flight or on ground), find airports near their current position
+        for arr in self.arrivals_data:
+            pilot = pilots_by_callsign.get(arr.callsign)
+            if pilot:
+                lat = pilot.get('latitude')
+                lon = pilot.get('longitude')
+                if lat is not None and lon is not None:
+                    # Find airports near this flight's position
+                    nearby = find_airports_near_position(
+                        lat, lon,
+                        config.UNIFIED_AIRPORT_DATA,
+                        radius_nm=75,  # Search within 75nm
+                        max_results=3   # Get closest 3 airports
+                    )
+                    airports_to_cache.update(nearby)
+
+            # Also add origin airport
+            airports_to_cache.add(arr.origin.icao_code)
+            if arr.arrival:
+                airports_to_cache.add(arr.arrival.icao_code)
+
+        # Batch fetch METARs to warm the cache
+        if airports_to_cache:
+            get_metar_batch(list(airports_to_cache), max_workers=10)
+
+    async def _refresh_altimeter_cache(self) -> None:
+        """Periodically refresh the altimeter cache for displayed flights.
+
+        This runs in the background to keep the cache warm as flights move,
+        ensuring fast altimeter lookups when users click on flight info.
+        """
+        if not self.vatsim_data or not self.arrivals_data:
+            return
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._precache_flight_altimeters)
+
     def refresh_flight_data(self) -> None:
         """Refresh flight data (called by parent app)"""
         self.run_worker(self.load_flight_data(), exclusive=True)

@@ -14,9 +14,11 @@ from backend.data.weather import (
     get_wind_info,
     get_wind_info_batch,
     get_metar,
+    get_metar_batch,
     get_taf,
     get_altimeter_setting,
-    find_nearest_airport_with_metar
+    find_nearest_airport_with_metar,
+    find_airports_near_position
 )
 
 # Import groupings functions
@@ -37,9 +39,11 @@ __all__ = [
     'get_wind_info',
     'get_wind_info_batch',
     'get_metar',
+    'get_metar_batch',
     'get_taf',
     'get_altimeter_setting',
     'find_nearest_airport_with_metar',
+    'find_airports_near_position',
     'load_all_groupings',
     'load_unified_airport_data',
     'WIND_SOURCE',

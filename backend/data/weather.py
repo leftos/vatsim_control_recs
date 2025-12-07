@@ -478,20 +478,20 @@ def get_wind_info(airport_icao: str, source: str = "metar") -> str:
 def get_wind_info_batch(airport_icaos: List[str], source: str = "metar", max_workers: int = 10) -> Dict[str, str]:
     """
     Fetch wind information for multiple airports in parallel.
-    
+
     This is much more efficient than calling get_wind_info() sequentially for many airports.
     Uses ThreadPoolExecutor to fetch wind data concurrently.
-    
+
     Args:
         airport_icaos: List of ICAO codes to fetch wind info for
         source: Wind data source - "metar" or "minute" (default: "metar")
         max_workers: Maximum number of concurrent threads (default: 10)
-        
+
     Returns:
         Dictionary mapping ICAO codes to wind strings (empty string if unavailable)
     """
     results = {}
-    
+
     # Use ThreadPoolExecutor to parallelize network requests
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit all tasks
@@ -499,7 +499,7 @@ def get_wind_info_batch(airport_icaos: List[str], source: str = "metar", max_wor
             executor.submit(get_wind_info, icao, source): icao
             for icao in airport_icaos
         }
-        
+
         # Collect results as they complete
         for future in as_completed(future_to_icao):
             icao = future_to_icao[future]
@@ -509,7 +509,48 @@ def get_wind_info_batch(airport_icaos: List[str], source: str = "metar", max_wor
             except Exception:
                 # If there's an error, just use empty string
                 results[icao] = ""
-    
+
+    return results
+
+
+def get_metar_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str, str]:
+    """
+    Fetch METAR data for multiple airports in parallel.
+
+    This is much more efficient than calling get_metar() sequentially for many airports.
+    Uses ThreadPoolExecutor to fetch METAR data concurrently. Also warms the cache
+    for altimeter and wind data since those are parsed from METAR.
+
+    Args:
+        airport_icaos: List of ICAO codes to fetch METAR for
+        max_workers: Maximum number of concurrent threads (default: 10)
+
+    Returns:
+        Dictionary mapping ICAO codes to METAR strings (empty string if unavailable)
+    """
+    results = {}
+
+    if not airport_icaos:
+        return results
+
+    # Use ThreadPoolExecutor to parallelize network requests
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_icao = {
+            executor.submit(get_metar, icao): icao
+            for icao in airport_icaos
+        }
+
+        # Collect results as they complete
+        for future in as_completed(future_to_icao):
+            icao = future_to_icao[future]
+            try:
+                metar = future.result()
+                results[icao] = metar
+            except Exception:
+                # If there's an error, just use empty string
+                results[icao] = ""
+
     return results
 
 
@@ -632,6 +673,83 @@ def _build_metar_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]])
     }
 
 
+def find_airports_near_position(
+    latitude: float,
+    longitude: float,
+    airports_data: Dict[str, Dict[str, Any]],
+    radius_nm: float = 50.0,
+    max_results: int = 5
+) -> List[str]:
+    """
+    Find airports near a given position for METAR precaching.
+
+    Uses the spatial index for efficient lookup. Returns airport ICAO codes
+    sorted by distance, limited to max_results.
+
+    Args:
+        latitude: Latitude in decimal degrees
+        longitude: Longitude in decimal degrees
+        airports_data: Dictionary of all airport data
+        radius_nm: Search radius in nautical miles (default: 50)
+        max_results: Maximum number of airports to return (default: 5)
+
+    Returns:
+        List of airport ICAO codes sorted by distance (closest first)
+    """
+    global _METAR_AIRPORT_SPATIAL_INDEX, _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP
+
+    # Ensure spatial index is built
+    current_time = datetime.now(timezone.utc)
+
+    needs_rebuild = (
+        _METAR_AIRPORT_SPATIAL_INDEX is None or
+        _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None or
+        (current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds() > _METAR_SPATIAL_INDEX_DURATION
+    )
+
+    if needs_rebuild:
+        with _METAR_SPATIAL_INDEX_LOCK:
+            current_time = datetime.now(timezone.utc)
+            if (_METAR_AIRPORT_SPATIAL_INDEX is None or
+                _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None or
+                (current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds() > _METAR_SPATIAL_INDEX_DURATION):
+                _METAR_AIRPORT_SPATIAL_INDEX = _build_metar_airport_spatial_index(airports_data)
+                _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
+
+    spatial_index = _METAR_AIRPORT_SPATIAL_INDEX
+    grid = spatial_index['grid']
+
+    # Determine which cells to search
+    lat_cell = int(latitude)
+    lon_cell = int(longitude)
+
+    # Search current cell and adjacent cells (3x3 grid)
+    search_cells = []
+    for dlat in [-1, 0, 1]:
+        for dlon in [-1, 0, 1]:
+            search_cells.append((lat_cell + dlat, lon_cell + dlon))
+
+    # Find airports within radius
+    candidates = []
+
+    for cell_key in search_cells:
+        if cell_key not in grid:
+            continue
+
+        for airport in grid[cell_key]:
+            distance = haversine_distance_nm(
+                latitude, longitude,
+                airport['lat'], airport['lon']
+            )
+
+            if distance <= radius_nm:
+                candidates.append((distance, airport['icao']))
+
+    # Sort by distance and return top results
+    candidates.sort(key=lambda x: x[0])
+    return [icao for _, icao in candidates[:max_results]]
+
+
 def find_nearest_airport_with_metar(
     latitude: float,
     longitude: float,
@@ -678,8 +796,7 @@ def find_nearest_airport_with_metar(
 
     spatial_index = _METAR_AIRPORT_SPATIAL_INDEX
     grid = spatial_index['grid']
-    cell_size = spatial_index['cell_size']
-    
+
     # Determine which cells to search (current cell + surrounding cells)
     lat_cell = int(latitude)
     lon_cell = int(longitude)
