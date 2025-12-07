@@ -3,17 +3,28 @@ VATSIM API client for fetching flight and controller data.
 """
 
 import json
+import threading
 import time
-import requests
 from typing import Dict, Any, List, Optional
+
+import requests
 
 from backend.config.constants import VATSIM_DATA_URL
 from common import logger as debug_logger
 
+# Cache for VATSIM data to avoid redundant API calls within refresh window
+_VATSIM_DATA_CACHE: Optional[Dict[str, Any]] = None
+_VATSIM_DATA_CACHE_TIME: float = 0
+_VATSIM_DATA_CACHE_LOCK = threading.Lock()
+VATSIM_CACHE_DURATION = 15  # seconds - matches typical refresh interval
+
 
 def download_vatsim_data(timeout: int = 10, max_retries: int = 3) -> Optional[Dict[str, Any]]:
     """
-    Download VATSIM data from the API with retry logic.
+    Download VATSIM data from the API with retry logic and caching.
+
+    Data is cached for 15 seconds to avoid redundant API calls when multiple
+    components request data within the same refresh window.
 
     Args:
         timeout: Request timeout in seconds (default: 10)
@@ -23,13 +34,32 @@ def download_vatsim_data(timeout: int = 10, max_retries: int = 3) -> Optional[Di
         Dictionary containing VATSIM data (pilots, controllers, atis, etc.)
         or None if all retries failed
     """
+    global _VATSIM_DATA_CACHE, _VATSIM_DATA_CACHE_TIME
+
+    current_time = time.time()
+
+    # Check cache first (with lock for thread safety)
+    with _VATSIM_DATA_CACHE_LOCK:
+        if _VATSIM_DATA_CACHE is not None:
+            cache_age = current_time - _VATSIM_DATA_CACHE_TIME
+            if cache_age < VATSIM_CACHE_DURATION:
+                return _VATSIM_DATA_CACHE
+
+    # Cache miss or expired - fetch fresh data
     last_exception: Optional[Exception] = None
 
     for attempt in range(max_retries):
         try:
             response = requests.get(VATSIM_DATA_URL, timeout=timeout)
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+
+            # Update cache
+            with _VATSIM_DATA_CACHE_LOCK:
+                _VATSIM_DATA_CACHE = data
+                _VATSIM_DATA_CACHE_TIME = time.time()
+
+            return data
         except requests.Timeout as e:
             last_exception = e
             debug_logger.warning(f"VATSIM API timeout (attempt {attempt + 1}/{max_retries})")
@@ -46,6 +76,13 @@ def download_vatsim_data(timeout: int = 10, max_retries: int = 3) -> Optional[Di
             time.sleep(sleep_time)
 
     debug_logger.error(f"VATSIM API failed after {max_retries} attempts: {last_exception}")
+
+    # On failure, return stale cache if available
+    with _VATSIM_DATA_CACHE_LOCK:
+        if _VATSIM_DATA_CACHE is not None:
+            debug_logger.info("Returning stale VATSIM cache after API failure")
+            return _VATSIM_DATA_CACHE
+
     return None
 
 

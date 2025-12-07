@@ -8,14 +8,15 @@ from textual.binding import Binding
 from textual.app import ComposeResult
 from backend import find_nearest_airport_with_metar
 from backend.core.flights import get_nearest_airport_if_on_ground
+from backend.data.vatsim_api import download_vatsim_data
 from ui import config
 
 
 class FlightInfoScreen(ModalScreen):
     """Modal screen showing detailed flight information"""
 
-    # Refresh altimeter every 60 seconds for long-open modals
-    ALTIMETER_REFRESH_INTERVAL = 60
+    # Refresh flight data every 15 seconds to match VATSIM cache duration
+    FLIGHT_DATA_REFRESH_INTERVAL = 15
 
     CSS = """
     FlightInfoScreen {
@@ -73,10 +74,11 @@ class FlightInfoScreen(ModalScreen):
         """
         super().__init__()
         self.flight_data = flight_data
+        self.callsign = flight_data.get('callsign', '')  # Store callsign for refresh lookups
         self.altimeter_info = None  # Will be populated asynchronously
         self.altimeter_loading = True
         self._pending_tasks: list = []  # Track pending async tasks
-        self._refresh_timer = None  # Timer for periodic altimeter refresh
+        self._refresh_timer = None  # Timer for periodic refresh
     
     def compose(self) -> ComposeResult:
         with Container(id="flight-info-container"):
@@ -91,10 +93,10 @@ class FlightInfoScreen(ModalScreen):
         task = asyncio.create_task(self._load_altimeter_info())
         self._pending_tasks.append(task)
 
-        # Start periodic refresh timer for long-open modals
+        # Start periodic refresh timer to keep flight data current
         self._refresh_timer = self.set_interval(
-            self.ALTIMETER_REFRESH_INTERVAL,
-            self._refresh_altimeter
+            self.FLIGHT_DATA_REFRESH_INTERVAL,
+            self._refresh_flight_data
         )
 
     def on_unmount(self) -> None:
@@ -110,8 +112,13 @@ class FlightInfoScreen(ModalScreen):
                 task.cancel()
         self._pending_tasks.clear()
 
-    async def _refresh_altimeter(self) -> None:
-        """Periodically refresh altimeter data for long-open modals."""
+    async def _refresh_flight_data(self) -> None:
+        """Periodically refresh all flight data for long-open modals.
+
+        Fetches fresh VATSIM data to update the aircraft's position,
+        altitude, groundspeed, and then refreshes the altimeter based
+        on the new position.
+        """
         # Don't refresh if already loading
         if self.altimeter_loading:
             return
@@ -119,8 +126,52 @@ class FlightInfoScreen(ModalScreen):
         self.altimeter_loading = True
         self._update_display()
 
-        task = asyncio.create_task(self._load_altimeter_info())
+        # Fetch fresh flight data and altimeter in background
+        task = asyncio.create_task(self._load_fresh_flight_data())
         self._pending_tasks.append(task)
+
+    async def _load_fresh_flight_data(self) -> None:
+        """Fetch fresh VATSIM data and update flight info."""
+        loop = asyncio.get_event_loop()
+
+        try:
+            # Fetch fresh VATSIM data and look up this flight
+            fresh_data = await loop.run_in_executor(None, self._fetch_fresh_pilot_data)
+
+            if fresh_data:
+                self.flight_data = fresh_data
+
+            # Now fetch altimeter for the (potentially new) position
+            self.altimeter_info = await loop.run_in_executor(
+                None,
+                self._get_altimeter_info_sync
+            )
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            pass  # Keep existing data on error
+        finally:
+            self.altimeter_loading = False
+            self._update_display()
+
+    def _fetch_fresh_pilot_data(self) -> dict | None:
+        """Fetch fresh VATSIM data and find this pilot by callsign."""
+        if not self.callsign:
+            return None
+
+        try:
+            vatsim_data = download_vatsim_data()
+            if not vatsim_data:
+                return None
+
+            pilots = vatsim_data.get('pilots', [])
+            for pilot in pilots:
+                if pilot.get('callsign') == self.callsign:
+                    return pilot
+        except Exception:
+            pass
+
+        return None
 
     def _update_display(self) -> None:
         """Update the flight info display."""
