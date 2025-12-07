@@ -161,6 +161,68 @@ The global `backend.config.constants.WIND_SOURCE` controls which source is used.
 - `data/aircraft_data.csv` - Aircraft approach speeds for ETA calculation
 - `data/custom_groupings.json` - User-defined airport groupings
 
+## VATSIM Data Structure
+
+### Working with Test Data
+
+The file `data/test-vatsim-data.json` contains sample VATSIM API responses but is too large (~2MB) to read directly. To explore the data structure:
+
+**Option 1: Load via Python**
+```python
+import json
+with open('data/test-vatsim-data.json') as f:
+    data = json.load(f)
+
+# Explore structure
+data.keys()                          # Top-level keys: 'general', 'pilots', 'controllers', 'atis', etc.
+data['pilots'][0].keys()             # Fields available on a pilot
+data['pilots'][0]['flight_plan'].keys()  # Flight plan fields
+data['pilots'][0]                    # Full pilot record example
+```
+
+**Option 2: Use grep for quick searches**
+```bash
+# Find available fields
+grep -o '"[a-z_]*":' data/test-vatsim-data.json | sort -u | head -30
+
+# Search for specific field values
+grep -o '"assigned_transponder":"[^"]*"' data/test-vatsim-data.json | head -5
+```
+
+### Pilot Data Fields
+
+The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
+
+**Identification:**
+- `cid` - VATSIM Client ID
+- `callsign` - Flight callsign (e.g., "AAL123")
+- `name` - Pilot name
+
+**Position:**
+- `latitude`, `longitude` - Current position
+- `altitude` - Current altitude (feet)
+- `heading` - Current heading (degrees)
+- `groundspeed` - Current groundspeed (knots)
+
+**Transponder & Pressure:**
+- `transponder` - Current transponder code being squawked
+- `assigned_transponder` - ATC-assigned squawk code (empty string if none assigned)
+- `qnh_i_hg`, `qnh_mb` - Altimeter settings
+
+**Flight Plan** (`flight_plan` nested object):
+- `departure`, `arrival`, `alternate` - ICAO codes
+- `aircraft_short` - Aircraft type (e.g., "B738")
+- `aircraft`, `aircraft_faa` - Full aircraft codes with equipment
+- `flight_rules` - "I" (IFR) or "V" (VFR)
+- `altitude` - Filed cruise altitude
+- `route` - Filed route string
+- `remarks` - Pilot remarks
+- `deptime`, `enroute_time`, `fuel_time` - Time fields (HHMM format)
+
+**Session:**
+- `logon_time`, `last_updated` - ISO 8601 timestamps
+- `server` - Connected server
+
 ## Debugging
 
 Debug logs are written to `debug_logs/debug_YYYYMMDD.log`. Logs older than 7 days are automatically cleaned on startup. Use `ui.debug_logger.debug()` for UI debugging.
