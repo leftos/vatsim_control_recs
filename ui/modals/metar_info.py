@@ -2,7 +2,7 @@
 
 import re
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 from textual.screen import ModalScreen
 from textual.widgets import Static, Input
 from textual.containers import Container
@@ -11,6 +11,174 @@ from textual.app import ComposeResult
 
 from backend import get_metar, get_taf
 from ui import config
+
+
+def _parse_visibility_sm(metar: str) -> Optional[float]:
+    """
+    Parse visibility in statute miles from METAR.
+
+    Args:
+        metar: Raw METAR string
+
+    Returns:
+        Visibility in statute miles, or None if not found
+    """
+    if not metar:
+        return None
+
+    # Handle visibility patterns in order of specificity:
+    # 1. Fractional visibility: "1/2SM", "1 1/2SM", "M1/4SM" (M = less than)
+    # 2. Whole number visibility: "10SM", "3SM"
+    # 3. Meters visibility (convert to SM): "9999" means 10+ km, "0800" = 800m
+
+    # Pattern for mixed fraction like "1 1/2SM" or "2 1/4SM"
+    mixed_frac_match = re.search(r'\b(\d+)\s+(\d+)/(\d+)SM\b', metar)
+    if mixed_frac_match:
+        whole = int(mixed_frac_match.group(1))
+        num = int(mixed_frac_match.group(2))
+        den = int(mixed_frac_match.group(3))
+        return whole + (num / den)
+
+    # Pattern for "M1/4SM" (less than 1/4 mile)
+    less_than_frac_match = re.search(r'\bM(\d+)/(\d+)SM\b', metar)
+    if less_than_frac_match:
+        num = int(less_than_frac_match.group(1))
+        den = int(less_than_frac_match.group(2))
+        # Return slightly less than the fraction for "less than" indicator
+        return (num / den) - 0.01
+
+    # Pattern for simple fraction like "1/2SM", "3/4SM"
+    frac_match = re.search(r'\b(\d+)/(\d+)SM\b', metar)
+    if frac_match:
+        num = int(frac_match.group(1))
+        den = int(frac_match.group(2))
+        return num / den
+
+    # Pattern for whole number like "10SM", "3SM", "P6SM" (P = plus/more than 6)
+    whole_match = re.search(r'\b[PM]?(\d+)SM\b', metar)
+    if whole_match:
+        vis = int(whole_match.group(1))
+        # P6SM means greater than 6 miles - treat as good visibility
+        if 'P' in metar and f'P{vis}SM' in metar:
+            return vis + 1  # Slightly more than indicated
+        return float(vis)
+
+    # Pattern for meters (4-digit): "9999" = 10km+, "0800" = 800m
+    # This appears after the wind in METAR, before clouds
+    meters_match = re.search(r'\b(\d{4})\b(?!\d)', metar)
+    if meters_match:
+        # Make sure it's not a time or other number
+        meters_str = meters_match.group(1)
+        meters = int(meters_str)
+        # Visibility in meters is typically 0000-9999
+        # 9999 means visibility >= 10km
+        if meters == 9999:
+            return 7.0  # Greater than 6 SM
+        # Convert meters to statute miles (1 SM = 1609.34 meters)
+        return meters / 1609.34
+
+    return None
+
+
+def _parse_ceiling_feet(metar: str) -> Optional[int]:
+    """
+    Parse ceiling (lowest BKN or OVC layer) from METAR.
+
+    Args:
+        metar: Raw METAR string
+
+    Returns:
+        Ceiling in feet AGL, or None if clear/no ceiling
+    """
+    if not metar:
+        return None
+
+    # Cloud layer patterns: FEW015, SCT025, BKN035, OVC050, VV003 (vertical visibility)
+    # Heights are in hundreds of feet AGL
+    # Ceiling is the lowest BKN (broken), OVC (overcast), or VV (vertical visibility/obscured)
+
+    cloud_pattern = r'\b(BKN|OVC|VV)(\d{3})\b'
+    matches = re.findall(cloud_pattern, metar)
+
+    if not matches:
+        return None  # No ceiling (clear, few, or scattered only)
+
+    # Find the lowest ceiling layer
+    lowest_ceiling = None
+    for _layer_type, height_str in matches:
+        height_feet = int(height_str) * 100
+        if lowest_ceiling is None or height_feet < lowest_ceiling:
+            lowest_ceiling = height_feet
+
+    return lowest_ceiling
+
+
+def get_flight_category(metar: str) -> Tuple[str, str]:
+    """
+    Determine flight category from METAR conditions.
+
+    FAA Flight Categories:
+    - VFR: Ceiling > 3000 ft AND visibility > 5 SM
+    - MVFR: Ceiling 1000-3000 ft AND/OR visibility 3-5 SM
+    - IFR: Ceiling 500-999 ft AND/OR visibility 1-<3 SM
+    - LIFR: Ceiling < 500 ft AND/OR visibility < 1 SM
+
+    Args:
+        metar: Raw METAR string
+
+    Returns:
+        Tuple of (category, color) where category is VFR/MVFR/IFR/LIFR
+        and color is the rich text color for display
+    """
+    if not metar:
+        return ("UNK", "white")
+
+    visibility = _parse_visibility_sm(metar)
+    ceiling = _parse_ceiling_feet(metar)
+
+    # Determine category based on most restrictive condition
+    # Start with VFR and downgrade based on conditions
+
+    vis_category = "VFR"
+    if visibility is not None:
+        if visibility < 1:
+            vis_category = "LIFR"
+        elif visibility < 3:
+            vis_category = "IFR"
+        elif visibility <= 5:
+            vis_category = "MVFR"
+        else:
+            vis_category = "VFR"
+
+    ceil_category = "VFR"
+    if ceiling is not None:
+        if ceiling < 500:
+            ceil_category = "LIFR"
+        elif ceiling < 1000:
+            ceil_category = "IFR"
+        elif ceiling <= 3000:
+            ceil_category = "MVFR"
+        else:
+            ceil_category = "VFR"
+
+    # Use the most restrictive category
+    category_priority = {"LIFR": 0, "IFR": 1, "MVFR": 2, "VFR": 3}
+
+    if category_priority.get(vis_category, 3) < category_priority.get(ceil_category, 3):
+        final_category = vis_category
+    else:
+        final_category = ceil_category
+
+    # Color mapping
+    colors = {
+        "VFR": "green",
+        "MVFR": "blue",
+        "IFR": "red",
+        "LIFR": "magenta",
+        "UNK": "white"
+    }
+
+    return (final_category, colors.get(final_category, "white"))
 
 
 class MetarInfoScreen(ModalScreen):
@@ -243,14 +411,14 @@ class MetarInfoScreen(ModalScreen):
         
         # Get pretty name if available
         pretty_name = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
-        
-        # Build the display string
-        result_lines = [f"{pretty_name} ({icao})", ""]
-        
-        # Add METAR
+
+        # Build the display string with flight category on same line
         if metar:
+            category, color = get_flight_category(metar)
+            result_lines = [f"{pretty_name} ({icao}) // [{color} bold]{category}[/{color} bold]", ""]
             result_lines.append(metar)
         else:
+            result_lines = [f"{pretty_name} ({icao})", ""]
             result_lines.append("METAR: No data available")
         
         result_lines.append("")  # Add blank line between METAR and TAF
