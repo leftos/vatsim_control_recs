@@ -256,9 +256,9 @@ class FlightInfoScreen(ModalScreen):
                         line += f"{altitude} // "
                 line += "IFR" if flight_rules.upper() == 'I' else "VFR" if flight_rules.upper() == 'V' else "?"
 
-            # Assigned squawk code (if available)
-            assigned_squawk = self.flight_data.get('assigned_transponder', '')
-            if assigned_squawk:
+            # Assigned squawk code (if available - "0000" means not assigned)
+            assigned_squawk = flight_plan.get('assigned_transponder', '')
+            if assigned_squawk and assigned_squawk != '0000':
                 line += f" // SQ: {assigned_squawk}"
 
             lines.append(line)

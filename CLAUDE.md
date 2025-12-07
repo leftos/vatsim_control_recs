@@ -206,7 +206,6 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 
 **Transponder & Pressure:**
 - `transponder` - Current transponder code being squawked
-- `assigned_transponder` - ATC-assigned squawk code (empty string if none assigned)
 - `qnh_i_hg`, `qnh_mb` - Altimeter settings
 
 **Flight Plan** (`flight_plan` nested object):
@@ -218,6 +217,7 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 - `route` - Filed route string
 - `remarks` - Pilot remarks
 - `deptime`, `enroute_time`, `fuel_time` - Time fields (HHMM format)
+- `assigned_transponder` - ATC-assigned squawk code ("0000" means not assigned)
 
 **Session:**
 - `logon_time`, `last_updated` - ISO 8601 timestamps
