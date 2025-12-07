@@ -240,18 +240,21 @@ class FlightInfoScreen(ModalScreen):
             aircraft_short = flight_plan.get('aircraft_short', flight_plan.get('aircraft', '----'))
             line += f"{aircraft_short} // "
                         
-            # Filed altitude
+            # Filed altitude and flight rules
             altitude = flight_plan.get('altitude', '----')
-            if altitude != '----':
-                try:
-                    line += f"{int(altitude):,} // "
-                except ValueError:
-                    # Altitude is not numeric (e.g., 'VFR'), display as-is
-                    line += f"{altitude} // "
-            
-            # Flight rules
             flight_rules = flight_plan.get('flight_rules', '?')
-            line += "IFR" if flight_rules.upper() == 'I' else "VFR" if flight_rules.upper() == 'V' else "?"
+
+            # "VFR" in altitude field means VFR flight, regardless of flight_rules
+            # Could be "VFR" or "VFR/105" (VFR at 10,500 feet)
+            if str(altitude).upper().startswith('VFR'):
+                line += altitude  # Display as filed (e.g., "VFR" or "VFR/105")
+            else:
+                if altitude != '----':
+                    try:
+                        line += f"{int(altitude):,} // "
+                    except ValueError:
+                        line += f"{altitude} // "
+                line += "IFR" if flight_rules.upper() == 'I' else "VFR" if flight_rules.upper() == 'V' else "?"
 
             # Assigned squawk code (if available)
             assigned_squawk = self.flight_data.get('assigned_transponder', '')
