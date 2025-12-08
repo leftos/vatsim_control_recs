@@ -289,10 +289,10 @@ class FlightInfoScreen(ModalScreen):
             Empty list if no suitable airports found within range.
         """
         if not origin_icao:
-            debug(f"[VFR_ALT] No origin_icao provided")
+            debug("[VFR_ALT] No origin_icao provided")
             return []
         if not config.UNIFIED_AIRPORT_DATA:
-            debug(f"[VFR_ALT] UNIFIED_AIRPORT_DATA is None/empty")
+            debug("[VFR_ALT] UNIFIED_AIRPORT_DATA is None/empty")
             return []
 
         origin_data = config.UNIFIED_AIRPORT_DATA.get(origin_icao)
