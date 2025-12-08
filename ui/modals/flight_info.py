@@ -6,10 +6,19 @@ from textual.widgets import Static
 from textual.containers import Container, Vertical
 from textual.binding import Binding
 from textual.app import ComposeResult
-from backend import find_nearest_airport_with_metar
+from backend import (
+    find_nearest_airport_with_metar,
+    find_airports_near_position,
+    get_metar,
+    haversine_distance_nm,
+    calculate_bearing,
+    bearing_to_compass
+)
 from backend.core.flights import get_nearest_airport_if_on_ground
 from backend.data.vatsim_api import download_vatsim_data
 from ui import config
+from ui.debug_logger import debug
+from ui.modals.metar_info import get_flight_category, _extract_flight_rules_weather
 
 
 class FlightInfoScreen(ModalScreen):
@@ -77,6 +86,14 @@ class FlightInfoScreen(ModalScreen):
         self.callsign = flight_data.get('callsign', '')  # Store callsign for refresh lookups
         self.altimeter_info = None  # Will be populated asynchronously
         self.altimeter_loading = True
+        # Weather info: (category, color, visibility_sm, ceiling_ft)
+        self.departure_weather = None
+        self.arrival_weather = None
+        # Alternate airports: list of (icao, category, color, distance_nm, direction)
+        # None = not yet searched, [] = searched but none found
+        self.departure_alternates = None
+        self.arrival_alternates = None
+        self.alternates_searched = False  # Track if we've completed the search
         self._pending_tasks: list = []  # Track pending async tasks
         self._refresh_timer = None  # Timer for periodic refresh
     
@@ -146,6 +163,46 @@ class FlightInfoScreen(ModalScreen):
                 None,
                 self._get_altimeter_info_sync
             )
+
+            # Refresh airport weather for VFR flights
+            if self._is_vfr_flight():
+                flight_plan = self.flight_data.get('flight_plan')
+                if flight_plan:
+                    departure = flight_plan.get('departure')
+                    arrival = flight_plan.get('arrival')
+
+                    if departure:
+                        self.departure_weather = await loop.run_in_executor(
+                            None,
+                            self._get_airport_weather_sync,
+                            departure
+                        )
+                    if arrival:
+                        self.arrival_weather = await loop.run_in_executor(
+                            None,
+                            self._get_airport_weather_sync,
+                            arrival
+                        )
+
+                    # Refresh alternate airports if departure/arrival has IFR/LIFR
+                    if self.departure_weather and self.departure_weather[0] in ('IFR', 'LIFR'):
+                        self.departure_alternates = await loop.run_in_executor(
+                            None,
+                            self._find_vfr_alternates_sync,
+                            departure
+                        )
+                    else:
+                        self.departure_alternates = None
+
+                    if self.arrival_weather and self.arrival_weather[0] in ('IFR', 'LIFR'):
+                        self.arrival_alternates = await loop.run_in_executor(
+                            None,
+                            self._find_vfr_alternates_sync,
+                            arrival
+                        )
+                    else:
+                        self.arrival_alternates = None
+                    self.alternates_searched = True
         except asyncio.CancelledError:
             return
         except Exception:
@@ -180,9 +237,132 @@ class FlightInfoScreen(ModalScreen):
             content_widget.update(self._format_flight_info())
         except Exception:
             pass  # Widget may not be mounted
-    
+
+    def _is_vfr_flight(self) -> bool:
+        """Check if this is a VFR flight."""
+        flight_plan = self.flight_data.get('flight_plan')
+        if not flight_plan:
+            return False
+
+        altitude = flight_plan.get('altitude', '')
+        flight_rules = flight_plan.get('flight_rules', '')
+
+        # VFR if altitude starts with "VFR" or flight_rules is "V"
+        return str(altitude).upper().startswith('VFR') or flight_rules.upper() == 'V'
+
+    def _get_airport_weather_sync(self, icao: str) -> tuple | None:
+        """
+        Get flight category and weather details for an airport.
+
+        Returns:
+            Tuple of (category, color, visibility_str, ceiling_str) or None
+            where visibility_str and ceiling_str are verbatim from METAR
+            (e.g., "2SM", "BKN004")
+        """
+        if not icao or icao == '----':
+            return None
+        try:
+            metar = get_metar(icao)
+            if metar:
+                category, color = get_flight_category(metar)
+                visibility_str, ceiling_str = _extract_flight_rules_weather(metar)
+                return (category, color, visibility_str, ceiling_str)
+        except Exception:
+            pass
+        return None
+
+    # Constants for alternate airport search
+    MAX_ALTERNATE_SEARCH_RADIUS_NM = 100.0
+
+    def _find_vfr_alternates_sync(self, origin_icao: str, max_results: int = 3) -> list:
+        """
+        Find nearby airports with VFR or MVFR conditions within 100nm.
+
+        Args:
+            origin_icao: ICAO code of the origin airport
+            max_results: Maximum number of alternates to return
+
+        Returns:
+            List of (icao, category, color, distance_nm, compass_direction) tuples.
+            Empty list if no suitable airports found within range.
+        """
+        if not origin_icao:
+            debug(f"[VFR_ALT] No origin_icao provided")
+            return []
+        if not config.UNIFIED_AIRPORT_DATA:
+            debug(f"[VFR_ALT] UNIFIED_AIRPORT_DATA is None/empty")
+            return []
+
+        origin_data = config.UNIFIED_AIRPORT_DATA.get(origin_icao)
+        if not origin_data:
+            debug(f"[VFR_ALT] {origin_icao} not in UNIFIED_AIRPORT_DATA")
+            return []
+
+        origin_lat = origin_data.get('latitude')
+        origin_lon = origin_data.get('longitude')
+        if origin_lat is None or origin_lon is None:
+            debug(f"[VFR_ALT] {origin_icao} has no coordinates")
+            return []
+
+        debug(f"[VFR_ALT] Searching near {origin_icao} ({origin_lat:.2f}, {origin_lon:.2f})")
+
+        # Find ALL airports within 100nm radius, sorted by distance
+        # We'll check them in order until we find enough VFR/MVFR alternates
+        nearby_all = find_airports_near_position(
+            origin_lat, origin_lon,
+            config.UNIFIED_AIRPORT_DATA,
+            radius_nm=self.MAX_ALTERNATE_SEARCH_RADIUS_NM,
+            max_results=500  # Get all airports within range
+        )
+
+        # Filter to airports likely to have METAR (standard ICAO codes)
+        # Real airports with METAR have 4-letter codes with no digits (KSMF, KSAC, etc.)
+        # Private strips often have digits (27CL, CA22, L36, etc.)
+        nearby = [
+            icao for icao in nearby_all
+            if len(icao) == 4 and icao.isalpha()  # All letters, no digits
+        ]
+
+        debug(f"[VFR_ALT] Found {len(nearby)} METAR-capable airports within {self.MAX_ALTERNATE_SEARCH_RADIUS_NM}nm: {nearby[:10]}...")
+
+        alternates = []
+        for icao in nearby:
+            if icao == origin_icao:
+                continue
+
+            # Get weather for this airport
+            metar = get_metar(icao)
+            if not metar:
+                debug(f"[VFR_ALT] {icao} has no METAR")
+                continue
+
+            category, color = get_flight_category(metar)
+            debug(f"[VFR_ALT] {icao} is {category}")
+            if category not in ('VFR', 'MVFR'):
+                continue
+
+            # Calculate distance and direction from origin
+            apt_data = config.UNIFIED_AIRPORT_DATA.get(icao, {})
+            apt_lat = apt_data.get('latitude')
+            apt_lon = apt_data.get('longitude')
+            if apt_lat is None or apt_lon is None:
+                continue
+
+            distance = haversine_distance_nm(origin_lat, origin_lon, apt_lat, apt_lon)
+            bearing = calculate_bearing(origin_lat, origin_lon, apt_lat, apt_lon)
+            direction = bearing_to_compass(bearing)
+
+            alternates.append((icao, category, color, distance, direction))
+            debug(f"[VFR_ALT] Added {icao} as alternate ({category}, {distance:.0f}nm {direction})")
+
+            if len(alternates) >= max_results:
+                break
+
+        debug(f"[VFR_ALT] Returning {len(alternates)} alternates")
+        return alternates
+
     async def _load_altimeter_info(self) -> None:
-        """Asynchronously fetch altimeter information"""
+        """Asynchronously fetch altimeter and airport weather information"""
         loop = asyncio.get_event_loop()
 
         # Run the blocking altimeter lookup in a thread pool
@@ -191,22 +371,58 @@ class FlightInfoScreen(ModalScreen):
                 None,
                 self._get_altimeter_info_sync
             )
+
+            # Update display immediately with altimeter info
+            self.altimeter_loading = False
+            self._update_display()
+
+            # For VFR flights, fetch departure/arrival weather for warnings
+            if self._is_vfr_flight():
+                flight_plan = self.flight_data.get('flight_plan')
+                if flight_plan:
+                    departure = flight_plan.get('departure')
+                    arrival = flight_plan.get('arrival')
+
+                    if departure:
+                        self.departure_weather = await loop.run_in_executor(
+                            None,
+                            self._get_airport_weather_sync,
+                            departure
+                        )
+                    if arrival:
+                        self.arrival_weather = await loop.run_in_executor(
+                            None,
+                            self._get_airport_weather_sync,
+                            arrival
+                        )
+
+                    # Update display with weather info before searching alternates
+                    self._update_display()
+
+                    # Find alternate airports if departure/arrival has IFR/LIFR
+                    if self.departure_weather and self.departure_weather[0] in ('IFR', 'LIFR'):
+                        self.departure_alternates = await loop.run_in_executor(
+                            None,
+                            self._find_vfr_alternates_sync,
+                            departure
+                        )
+                    if self.arrival_weather and self.arrival_weather[0] in ('IFR', 'LIFR'):
+                        self.arrival_alternates = await loop.run_in_executor(
+                            None,
+                            self._find_vfr_alternates_sync,
+                            arrival
+                        )
+                    self.alternates_searched = True
+
+                    # Final update with alternates
+                    self._update_display()
         except asyncio.CancelledError:
             return  # Clean exit on cancellation
         except Exception as e:
             print(f"Error loading altimeter info: {e}")
             self.altimeter_info = ""
-        finally:
             self.altimeter_loading = False
-
-            # Only update display if modal is still mounted
-            if not self._pending_tasks:  # Modal was dismissed
-                return
-            try:
-                content_widget = self.query_one("#flight-info-content", Static)
-                content_widget.update(self._format_flight_info())
-            except Exception:
-                pass
+            self._update_display()
     
     def _format_title(self) -> str:
         """Format the modal title with callsign"""
@@ -274,7 +490,55 @@ class FlightInfoScreen(ModalScreen):
                 for route_line in route_lines:
                     lines.append(f"  {route_line}")
                 lines.append("")
-        
+
+            # VFR weather warning - show if VFR flight has non-VFR conditions
+            if self._is_vfr_flight():
+                groundspeed = self.flight_data.get('groundspeed', 0)
+                is_on_ground = groundspeed <= 40
+                warning_lines = []
+
+                # Departure weather warning (only show alternates if still on ground)
+                if self.departure_weather and self.departure_weather[0] != 'VFR':
+                    cat, color, vis, ceil = self.departure_weather
+                    # Build weather details string
+                    details = self._format_weather_details(vis, ceil)
+                    warning_lines.append(f"  {departure} is [{color} bold]{cat}[/{color} bold]{details}")
+
+                    # Show alternate departure airports only if still on ground
+                    if is_on_ground and cat in ('IFR', 'LIFR'):
+                        if self.departure_alternates:
+                            alt_strs = []
+                            for alt_icao, _, alt_color, dist, direction in self.departure_alternates:
+                                alt_strs.append(f"[{alt_color}]{alt_icao}[/{alt_color}] ({dist:.0f}nm {direction})")
+                            warning_lines.append(f"    Consider: {', '.join(alt_strs)}")
+                        elif self.alternates_searched:
+                            warning_lines.append("    [dim]No VFR/MVFR alternates within 100nm[/dim]")
+                        else:
+                            warning_lines.append("    [dim]Searching for alternates...[/dim]")
+
+                # Arrival weather warning (only show alternates if not yet landed)
+                if self.arrival_weather and self.arrival_weather[0] != 'VFR':
+                    cat, color, vis, ceil = self.arrival_weather
+                    details = self._format_weather_details(vis, ceil)
+                    warning_lines.append(f"  {arrival} is [{color} bold]{cat}[/{color} bold]{details}")
+
+                    # Show alternate arrival airports only if still in flight
+                    if not is_on_ground and cat in ('IFR', 'LIFR'):
+                        if self.arrival_alternates:
+                            alt_strs = []
+                            for alt_icao, _, alt_color, dist, direction in self.arrival_alternates:
+                                alt_strs.append(f"[{alt_color}]{alt_icao}[/{alt_color}] ({dist:.0f}nm {direction})")
+                            warning_lines.append(f"    Consider: {', '.join(alt_strs)}")
+                        elif self.alternates_searched:
+                            warning_lines.append("    [dim]No VFR/MVFR alternates within 100nm[/dim]")
+                        else:
+                            warning_lines.append("    [dim]Searching for alternates...[/dim]")
+
+                if warning_lines:
+                    lines.append("[bold]VFR WEATHER WARNING[/bold]")
+                    lines.extend(warning_lines)
+                    lines.append("")
+
             # Altimeter section (display first, above flight plan)
             if self.altimeter_loading:
                 lines.append("[dim]Loading nearest altimeter...[/dim]")
@@ -330,7 +594,7 @@ class FlightInfoScreen(ModalScreen):
         lines = []
         current_line = []
         current_length = 0
-        
+
         for word in words:
             word_length = len(word)
             if current_length + word_length + len(current_line) <= width:
@@ -341,11 +605,27 @@ class FlightInfoScreen(ModalScreen):
                     lines.append(" ".join(current_line))
                 current_line = [word]
                 current_length = word_length
-        
+
         if current_line:
             lines.append(" ".join(current_line))
-        
+
         return lines
+
+    def _format_weather_details(self, visibility_str: str | None, ceiling_str: str | None) -> str:
+        """
+        Format visibility and ceiling into a METAR-style details string.
+
+        Args:
+            visibility_str: Visibility string from METAR (e.g., "2SM", "1/2SM"), or None
+            ceiling_str: Ceiling string from METAR (e.g., "BKN004"), or None
+
+        Returns:
+            Formatted string like " (2SM BKN004)" or "" if no data
+        """
+        parts = [p for p in (visibility_str, ceiling_str) if p]
+        if parts:
+            return f" ({' '.join(parts)})"
+        return ""
     
     def _format_time(self, time_str: str) -> str:
         """Format departure time (HHMM format)"""

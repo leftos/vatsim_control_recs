@@ -139,3 +139,43 @@ def calculate_eta(
         
         return eta_display, eta_local_time, eta_hours
     return "----", "----", float('inf')
+
+
+def calculate_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate initial bearing from point 1 to point 2.
+
+    Args:
+        lat1: Latitude of first point in decimal degrees
+        lon1: Longitude of first point in decimal degrees
+        lat2: Latitude of second point in decimal degrees
+        lon2: Longitude of second point in decimal degrees
+
+    Returns:
+        Bearing in degrees (0-360, where 0=N, 90=E, 180=S, 270=W)
+    """
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lon = math.radians(lon2 - lon1)
+
+    x = math.sin(delta_lon) * math.cos(lat2_rad)
+    y = (math.cos(lat1_rad) * math.sin(lat2_rad) -
+         math.sin(lat1_rad) * math.cos(lat2_rad) * math.cos(delta_lon))
+
+    bearing = math.atan2(x, y)
+    return (math.degrees(bearing) + 360) % 360
+
+
+def bearing_to_compass(bearing: float) -> str:
+    """
+    Convert bearing in degrees to compass direction.
+
+    Args:
+        bearing: Bearing in degrees (0-360)
+
+    Returns:
+        Compass direction string (N, NE, E, SE, S, SW, W, NW)
+    """
+    directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+    index = round(bearing / 45) % 8
+    return directions[index]

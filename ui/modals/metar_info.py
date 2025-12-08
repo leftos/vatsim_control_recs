@@ -113,6 +113,90 @@ def _parse_ceiling_feet(metar: str) -> Optional[int]:
     return lowest_ceiling
 
 
+def _parse_ceiling_layer(metar: str) -> Optional[str]:
+    """
+    Parse ceiling layer from METAR and return in METAR format.
+
+    Args:
+        metar: Raw METAR string
+
+    Returns:
+        Ceiling layer string (e.g., "BKN004", "OVC010", "VV002") or None if no ceiling
+    """
+    if not metar:
+        return None
+
+    # Cloud layer patterns: BKN035, OVC050, VV003 (vertical visibility)
+    cloud_pattern = r'\b(BKN|OVC|VV)(\d{3})\b'
+    matches = re.findall(cloud_pattern, metar)
+
+    if not matches:
+        return None
+
+    # Find the lowest ceiling layer
+    lowest_layer = None
+    lowest_height = None
+    for layer_type, height_str in matches:
+        height_feet = int(height_str) * 100
+        if lowest_height is None or height_feet < lowest_height:
+            lowest_height = height_feet
+            lowest_layer = f"{layer_type}{height_str}"
+
+    return lowest_layer
+
+
+def _extract_visibility_str(metar: str) -> Optional[str]:
+    """
+    Extract the visibility string verbatim from METAR.
+
+    Args:
+        metar: Raw METAR string
+
+    Returns:
+        Visibility string as it appears in METAR (e.g., "2SM", "1/2SM", "M1/4SM", "P6SM")
+        or None if not found
+    """
+    if not metar:
+        return None
+
+    # Match visibility patterns in order of specificity:
+    # Mixed fraction: "1 1/2SM", "2 1/4SM"
+    mixed_match = re.search(r'\b(\d+\s+\d+/\d+SM)\b', metar)
+    if mixed_match:
+        return mixed_match.group(1)
+
+    # Less than fraction: "M1/4SM"
+    less_than_match = re.search(r'\b(M\d+/\d+SM)\b', metar)
+    if less_than_match:
+        return less_than_match.group(1)
+
+    # Simple fraction: "1/2SM", "3/4SM"
+    frac_match = re.search(r'\b(\d+/\d+SM)\b', metar)
+    if frac_match:
+        return frac_match.group(1)
+
+    # Whole number with optional P prefix: "10SM", "P6SM"
+    whole_match = re.search(r'\b(P?\d+SM)\b', metar)
+    if whole_match:
+        return whole_match.group(1)
+
+    return None
+
+
+def _extract_flight_rules_weather(metar: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extract visibility and ceiling strings relevant to flight rules from METAR.
+
+    Args:
+        metar: Raw METAR string
+
+    Returns:
+        Tuple of (visibility_str, ceiling_str) as they appear in METAR,
+        e.g., ("2SM", "BKN004"). Either may be None if not present.
+    """
+    return (_extract_visibility_str(metar), _parse_ceiling_layer(metar))
+
+
 def get_flight_category(metar: str) -> Tuple[str, str]:
     """
     Determine flight category from METAR conditions.
@@ -169,9 +253,9 @@ def get_flight_category(metar: str) -> Tuple[str, str]:
     else:
         final_category = ceil_category
 
-    # Color mapping
+    # Color mapping (#00ff00 bright green for better contrast on dark backgrounds)
     colors = {
-        "VFR": "green",
+        "VFR": "#00ff00",
         "MVFR": "blue",
         "IFR": "red",
         "LIFR": "magenta",

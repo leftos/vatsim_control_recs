@@ -30,6 +30,13 @@ from backend.data.loaders import load_unified_airport_data
 # Import configuration
 from backend.config.constants import WIND_SOURCE
 
+# Import calculation utilities
+from backend.core.calculations import (
+    haversine_distance_nm,
+    calculate_bearing,
+    bearing_to_compass
+)
+
 __version__ = "1.0.0"
 
 # Export public API
@@ -47,4 +54,7 @@ __all__ = [
     'load_all_groupings',
     'load_unified_airport_data',
     'WIND_SOURCE',
+    'haversine_distance_nm',
+    'calculate_bearing',
+    'bearing_to_compass',
 ]
