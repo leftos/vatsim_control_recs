@@ -96,6 +96,7 @@ class FlightInfoScreen(ModalScreen):
         self.alternates_searched = False  # Track if we've completed the search
         self._pending_tasks: list = []  # Track pending async tasks
         self._refresh_timer = None  # Timer for periodic refresh
+        self._refresh_in_progress = False  # Track if a background refresh is running
     
     def compose(self) -> ComposeResult:
         with Container(id="flight-info-container"):
@@ -136,12 +137,13 @@ class FlightInfoScreen(ModalScreen):
         altitude, groundspeed, and then refreshes the altimeter based
         on the new position.
         """
-        # Don't refresh if already loading
-        if self.altimeter_loading:
+        # Don't refresh if initial load is in progress or already refreshing
+        if self.altimeter_loading or self._refresh_in_progress:
             return
 
-        self.altimeter_loading = True
-        self._update_display()
+        # Mark refresh in progress but don't update display yet -
+        # keep showing existing data while fetching new data
+        self._refresh_in_progress = True
 
         # Fetch fresh flight data and altimeter in background
         task = asyncio.create_task(self._load_fresh_flight_data())
@@ -208,7 +210,7 @@ class FlightInfoScreen(ModalScreen):
         except Exception:
             pass  # Keep existing data on error
         finally:
-            self.altimeter_loading = False
+            self._refresh_in_progress = False
             self._update_display()
 
     def _fetch_fresh_pilot_data(self) -> dict | None:
