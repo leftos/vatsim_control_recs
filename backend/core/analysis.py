@@ -360,7 +360,9 @@ def analyze_flights_data(
             staffed_airports = [ap_icao for ap_icao in resolved_airports if ap_icao in staffed_positions and any(pos != "ATIS" for pos in staffed_positions[ap_icao])]
             staffed_display = ", ".join(staffed_airports) if staffed_airports else ""
             
-            if group_total > 0:  # Only include groupings with activity
+            # Include groupings with activity, or with any arrivals when include_all_arriving is set
+            if (group_total > 0 or
+                (group_arriving_all > 0 and include_all_arriving)):
                 stats = GroupingStats(
                     name=group_name,
                     total=group_total,
