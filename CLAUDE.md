@@ -42,9 +42,13 @@ Track custom groupings:
 python main.py --groupings "Bay Area" --supergroupings "California"
 ```
 
-All available options:
+Additional useful options:
 ```bash
-python main.py --help
+python main.py --include-all-staffed    # Include airports with zero planes if staffed
+python main.py --disable-animations     # Disable split-flap animations
+python main.py --hide-wind              # Hide wind column
+python main.py --include-all-arriving   # Include airports with any arrivals filed
+python main.py --help                   # All available options
 ```
 
 ## Architecture
@@ -222,6 +226,18 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 **Session:**
 - `logon_time`, `last_updated` - ISO 8601 timestamps
 - `server` - Connected server
+
+## UI Keyboard Shortcuts
+
+- **Ctrl+C**: Quit
+- **Ctrl+R**: Manually refresh data
+- **Ctrl+Space**: Pause/Resume auto-refresh
+- **Ctrl+F**: Open search box (airports tab only)
+- **Ctrl+W**: Wind information lookup
+- **Ctrl+E**: METAR lookup
+- **Ctrl+T**: Tracked Airports Manager (add/remove tracked airports)
+- **Enter**: Open flight board for selected airport/grouping
+- **Escape**: Close modals or cancel search
 
 ## Debugging
 
