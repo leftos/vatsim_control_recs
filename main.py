@@ -5,16 +5,116 @@ Analyzes VATSIM flight data and controller staffing recommendations
 """
 
 import argparse
+import importlib
 import os
+import re
+import subprocess
 import sys
 
-from backend import analyze_flights_data, load_unified_airport_data
-from backend.config import constants as backend_constants
-from backend.core.groupings import load_all_groupings, resolve_grouping_recursively
-from airport_disambiguator import AirportDisambiguator
-from ui import VATSIMControlApp, expand_countries_to_airports
-from ui import config as ui_config
-from ui import debug_logger  # Import to trigger log cleanup on bootup
+
+def parse_requirements(requirements_path):
+    """Parse requirements.txt and return list of package names."""
+    packages = []
+    with open(requirements_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            # Skip comments and empty lines
+            if not line or line.startswith('#'):
+                continue
+            # Extract package name (before any version specifier)
+            match = re.match(r'^([a-zA-Z0-9_-]+)', line)
+            if match:
+                packages.append(match.group(1))
+    return packages
+
+
+def ensure_requirements_installed():
+    """Check if requirements are installed, and install them if not."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    requirements_path = os.path.join(script_dir, 'requirements.txt')
+
+    if not os.path.exists(requirements_path):
+        print("Error: requirements.txt not found")
+        return False
+
+    # Parse requirements and check each package
+    packages = parse_requirements(requirements_path)
+    missing = []
+    for package in packages:
+        try:
+            importlib.import_module(package)
+        except ImportError:
+            missing.append(package)
+
+    if not missing:
+        return True
+
+    # Requirements not installed, try to install them
+    print(f"Missing dependencies: {', '.join(missing)}")
+    print("Installing required dependencies...")
+    try:
+        subprocess.check_call([
+            sys.executable, '-m', 'pip', 'install',
+            '--prefer-binary',  # Prefer pre-built wheels to avoid compilation issues
+            '-r', requirements_path
+        ])
+        print("Dependencies installed successfully.")
+        return True
+    except subprocess.CalledProcessError:
+        print("\nError: Failed to install dependencies automatically.")
+        print("\nThis often happens because spaCy requires native code compilation.")
+        print("Try one of these solutions:\n")
+        print("1. Upgrade to Python 3.10+ (recommended - has pre-built wheels):")
+        print("   https://www.python.org/downloads/\n")
+        print("2. Or install manually with upgraded pip:")
+        print("   pip install --upgrade pip")
+        print(f"   pip install -r {requirements_path}\n")
+        print("3. On Windows, you may need Visual Studio Build Tools:")
+        print("   https://visualstudio.microsoft.com/visual-cpp-build-tools/")
+        return False
+
+
+def ensure_spacy_model_installed():
+    """Check if the spaCy language model is installed, and download if not."""
+    try:
+        import spacy
+        try:
+            spacy.load('en_core_web_sm')
+            return True
+        except OSError:
+            pass
+    except ImportError:
+        return False  # spacy not installed, will be handled by ensure_requirements_installed
+
+    # Model not installed, try to download it
+    print("Downloading spaCy language model (en_core_web_sm)...")
+    try:
+        subprocess.check_call([
+            sys.executable, '-m', 'spacy', 'download', 'en_core_web_sm'
+        ])
+        print("Language model downloaded successfully.")
+        return True
+    except subprocess.CalledProcessError:
+        print("\nError: Failed to download spaCy language model automatically.")
+        print("Please download it manually by running:")
+        print("  python -m spacy download en_core_web_sm")
+        return False
+
+
+# Ensure dependencies are installed before importing them
+if not ensure_requirements_installed():
+    sys.exit(1)
+
+if not ensure_spacy_model_installed():
+    sys.exit(1)
+
+from backend import analyze_flights_data, load_unified_airport_data  # noqa: E402
+from backend.config import constants as backend_constants  # noqa: E402
+from backend.core.groupings import load_all_groupings, resolve_grouping_recursively  # noqa: E402
+from airport_disambiguator import AirportDisambiguator  # noqa: E402
+from ui import VATSIMControlApp, expand_countries_to_airports  # noqa: E402
+from ui import config as ui_config  # noqa: E402
+from ui import debug_logger  # noqa: E402  # Import to trigger log cleanup on bootup
 
 
 def main():
