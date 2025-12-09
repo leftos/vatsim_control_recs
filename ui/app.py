@@ -20,7 +20,7 @@ from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, VfrAlternativesScreen
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, VfrAlternativesScreen, HelpScreen, CommandPaletteScreen
 
 
 def set_terminal_title(title: str) -> None:
@@ -124,17 +124,22 @@ class VATSIMControlApp(App):
     """
     
     BINDINGS = [
+        # Visible in footer (compact labels)
         Binding("ctrl+c", "quit", "Quit", priority=True),
         Binding("ctrl+r", "refresh", "Refresh", priority=True),
-        Binding("ctrl+p", "toggle_pause", "Pause/Resume", priority=True),
-        Binding("ctrl+f", "toggle_search", "Find", priority=True),
-        Binding("ctrl+l", "show_flight_lookup", "Flight Lookup", priority=True),
-        Binding("ctrl+w", "show_wind_lookup", "Wind Lookup", priority=True),
-        Binding("ctrl+e", "show_metar_lookup", "METAR Lookup", priority=True),
-        Binding("ctrl+a", "show_vfr_alternatives", "VFR Alternatives", priority=True),
-        Binding("ctrl+t", "show_airport_tracking", "Tracked Airports", priority=True),
-        Binding("escape", "cancel_search", "Cancel Search", show=False),
-        Binding("enter", "open_flight_board", "Flight Board"),
+        Binding("f1", "show_help", "Help", priority=True),
+        Binding("f2", "show_command_palette", "Cmds", priority=True),
+        # Hidden from footer (accessed via shortcuts or command palette)
+        Binding("?", "show_help", "Help", show=False, priority=True),
+        Binding("ctrl+p", "toggle_pause", "Pause", show=False, priority=True),
+        Binding("ctrl+f", "toggle_search", "Find", show=False, priority=True),
+        Binding("ctrl+l", "show_flight_lookup", "Flt Lkp", show=False, priority=True),
+        Binding("ctrl+w", "show_wind_lookup", "Wind Lkp", show=False, priority=True),
+        Binding("ctrl+e", "show_metar_lookup", "METAR Lkp", show=False, priority=True),
+        Binding("ctrl+a", "show_vfr_alternatives", "VFR Alts", show=False, priority=True),
+        Binding("ctrl+t", "show_airport_tracking", "Tracked", show=False, priority=True),
+        Binding("escape", "cancel_search", "Cancel", show=False),
+        Binding("enter", "open_flight_board", "Flt Board", show=False),
     ]
     
     def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None, airport_allowlist=None):
@@ -791,3 +796,11 @@ class VATSIMControlApp(App):
         """Show the flight lookup modal"""
         flight_lookup_screen = FlightLookupScreen()
         self.push_screen(flight_lookup_screen)
+
+    def action_show_help(self) -> None:
+        """Show the help modal with keyboard shortcuts"""
+        self.push_screen(HelpScreen())
+
+    def action_show_command_palette(self) -> None:
+        """Show the command palette for searchable commands"""
+        self.push_screen(CommandPaletteScreen())
