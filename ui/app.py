@@ -728,8 +728,25 @@ class VATSIMControlApp(App):
         self.push_screen(wind_screen)
     
     def action_show_metar_lookup(self) -> None:
-        """Show the METAR lookup modal"""
-        metar_screen = MetarInfoScreen()
+        """Show the METAR lookup modal.
+
+        If an airport is selected in the airports tab, pre-fill that airport.
+        """
+        initial_icao = None
+
+        # Check if we're on the airports tab with a selected row
+        tabs = self.query_one("#tabs", TabbedContent)
+        if tabs.active == "airports":
+            airports_table = self.query_one("#airports-table", SplitFlapDataTable)
+            if airports_table.cursor_row is not None and airports_table.row_count > 0:
+                try:
+                    from .utils import airport_grouping_sort_key
+                    sorted_airports = sorted(self.airport_data, key=airport_grouping_sort_key)
+                    initial_icao = sorted_airports[airports_table.cursor_row].icao
+                except (IndexError, KeyError):
+                    pass
+
+        metar_screen = MetarInfoScreen(initial_icao=initial_icao)
         self.push_screen(metar_screen)
 
     def action_show_vfr_alternatives(self) -> None:

@@ -1,5 +1,6 @@
 """METAR and TAF Information Modal Screen"""
 
+import asyncio
 import re
 from datetime import datetime, timezone
 from typing import Optional, Tuple
@@ -311,11 +312,18 @@ class MetarInfoScreen(ModalScreen):
         Binding("enter", "fetch_metar", "Fetch METAR", priority=True),
     ]
 
-    def __init__(self):
+    def __init__(self, initial_icao: str | None = None):
+        """
+        Initialize the METAR lookup modal.
+
+        Args:
+            initial_icao: Optional ICAO code to pre-fill and auto-fetch
+        """
         super().__init__()
         self.metar_result = ""
+        self.initial_icao = initial_icao
         self.current_icao: str | None = None  # Track current airport for VFR alternatives (used by global Ctrl+A)
-    
+
     def compose(self) -> ComposeResult:
         with Container(id="metar-container"):
             yield Static("METAR & TAF Lookup", id="metar-title")
@@ -323,11 +331,17 @@ class MetarInfoScreen(ModalScreen):
                 yield Input(placeholder="Enter airport ICAO code (e.g., KSFO)", id="metar-input")
             yield Static("", id="metar-result", markup=True)
             yield Static("Press Enter to fetch, Escape to close", id="metar-hint")
-    
+
     def on_mount(self) -> None:
-        """Focus the input when mounted"""
+        """Focus the input when mounted, and auto-fetch if initial_icao provided"""
         metar_input = self.query_one("#metar-input", Input)
-        metar_input.focus()
+
+        if self.initial_icao:
+            # Pre-fill and auto-fetch
+            metar_input.value = self.initial_icao
+            self.action_fetch_metar()
+        else:
+            metar_input.focus()
     
     def _parse_taf_time(self, time_str: str, current_month: int, current_year: int) -> Optional[datetime]:
         """
@@ -493,14 +507,25 @@ class MetarInfoScreen(ModalScreen):
         # Track current airport
         self.current_icao = icao
 
-        # Fetch full METAR and TAF
-        metar = get_metar(icao)
-        taf = get_taf(icao)
-
-        result_widget = self.query_one("#metar-result", Static)
-
         # Get pretty name if available
         pretty_name = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
+
+        # Show loading indicator
+        result_widget = self.query_one("#metar-result", Static)
+        result_widget.update(f"[bold]{pretty_name} ({icao})[/bold]\n\n[dim]Loading METAR & TAF...[/dim]")
+
+        # Fetch asynchronously
+        asyncio.create_task(self._fetch_metar_async(icao, pretty_name))
+
+    async def _fetch_metar_async(self, icao: str, pretty_name: str) -> None:
+        """Fetch METAR and TAF asynchronously"""
+        loop = asyncio.get_event_loop()
+
+        # Fetch METAR and TAF in executor to avoid blocking
+        metar = await loop.run_in_executor(None, get_metar, icao)
+        taf = await loop.run_in_executor(None, get_taf, icao)
+
+        result_widget = self.query_one("#metar-result", Static)
 
         # Build the display string with flight category on same line
         if metar:
