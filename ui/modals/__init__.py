@@ -1,6 +1,6 @@
 """
 Modal Screens Package
-Contains all modal dialog screens (Wind, METAR, FlightBoard, Airport Tracking, Flight Info, Flight Lookup)
+Contains all modal dialog screens (Wind, METAR, FlightBoard, Airport Tracking, Flight Info, Flight Lookup, VFR Alternatives)
 """
 
 from .wind_info import WindInfoScreen
@@ -11,6 +11,7 @@ from .tracked_airports import TrackedAirportsModal
 from .flight_board import FlightBoardScreen
 from .flight_info import FlightInfoScreen
 from .flight_lookup import FlightLookupScreen
+from .vfr_alternatives import VfrAlternativesScreen
 
 __all__ = [
     'WindInfoScreen',
@@ -21,4 +22,5 @@ __all__ = [
     'FlightBoardScreen',
     'FlightInfoScreen',
     'FlightLookupScreen',
+    'VfrAlternativesScreen',
 ]

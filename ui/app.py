@@ -20,7 +20,7 @@ from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, VfrAlternativesScreen
 
 
 def set_terminal_title(title: str) -> None:
@@ -131,6 +131,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+l", "show_flight_lookup", "Flight Lookup", priority=True),
         Binding("ctrl+w", "show_wind_lookup", "Wind Lookup", priority=True),
         Binding("ctrl+e", "show_metar_lookup", "METAR Lookup", priority=True),
+        Binding("ctrl+a", "show_vfr_alternatives", "VFR Alternatives", priority=True),
         Binding("ctrl+t", "show_airport_tracking", "Tracked Airports", priority=True),
         Binding("escape", "cancel_search", "Cancel Search", show=False),
         Binding("enter", "open_flight_board", "Flight Board"),
@@ -730,7 +731,23 @@ class VATSIMControlApp(App):
         """Show the METAR lookup modal"""
         metar_screen = MetarInfoScreen()
         self.push_screen(metar_screen)
-    
+
+    def action_show_vfr_alternatives(self) -> None:
+        """Show the VFR alternatives finder modal.
+
+        If a METAR modal is open with a looked-up airport, pre-fill that airport.
+        """
+        initial_icao = None
+
+        # Check if MetarInfoScreen is open and has a current airport
+        for screen in self.screen_stack:
+            if screen.__class__.__name__ == 'MetarInfoScreen':
+                initial_icao = getattr(screen, 'current_icao', None)
+                break
+
+        vfr_screen = VfrAlternativesScreen(initial_icao=initial_icao)
+        self.push_screen(vfr_screen)
+
     def action_show_airport_tracking(self) -> None:
         """Show the tracked airports manager modal"""
         from . import config

@@ -310,10 +310,11 @@ class MetarInfoScreen(ModalScreen):
         Binding("escape", "close", "Close", priority=True),
         Binding("enter", "fetch_metar", "Fetch METAR", priority=True),
     ]
-    
+
     def __init__(self):
         super().__init__()
         self.metar_result = ""
+        self.current_icao: str | None = None  # Track current airport for VFR alternatives (used by global Ctrl+A)
     
     def compose(self) -> ComposeResult:
         with Container(id="metar-container"):
@@ -481,18 +482,23 @@ class MetarInfoScreen(ModalScreen):
         """Fetch METAR and TAF for the entered airport"""
         metar_input = self.query_one("#metar-input", Input)
         icao = metar_input.value.strip().upper()
-        
+
         if not icao:
             result_widget = self.query_one("#metar-result", Static)
             result_widget.update("Please enter an airport ICAO code")
+            self.current_icao = None
+            self._update_hint(None)
             return
-        
+
+        # Track current airport
+        self.current_icao = icao
+
         # Fetch full METAR and TAF
         metar = get_metar(icao)
         taf = get_taf(icao)
-        
+
         result_widget = self.query_one("#metar-result", Static)
-        
+
         # Get pretty name if available
         pretty_name = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
 
@@ -501,21 +507,32 @@ class MetarInfoScreen(ModalScreen):
             category, color = get_flight_category(metar)
             result_lines = [f"{pretty_name} ({icao}) // [{color} bold]{category}[/{color} bold]", ""]
             result_lines.append(metar)
+            # Show VFR alternatives hint for IFR/LIFR conditions
+            self._update_hint(category)
         else:
             result_lines = [f"{pretty_name} ({icao})", ""]
             result_lines.append("METAR: No data available")
-        
+            self._update_hint(None)
+
         result_lines.append("")  # Add blank line between METAR and TAF
-        
+
         # Add TAF with colorization
         if taf:
             colorized_taf = self._colorize_taf(taf)
             result_lines.append(colorized_taf)
         else:
             result_lines.append("TAF: No data available")
-        
+
         result_widget.update("\n".join(result_lines))
-    
+
+    def _update_hint(self, category: str | None) -> None:
+        """Update the hint text based on current flight category"""
+        hint_widget = self.query_one("#metar-hint", Static)
+        if category in ('IFR', 'LIFR'):
+            hint_widget.update("Press Enter to fetch, [bold]Ctrl+A[/bold] for VFR alternatives, Escape to close")
+        else:
+            hint_widget.update("Press Enter to fetch, Escape to close")
+
     def action_close(self) -> None:
         """Close the modal"""
         self.dismiss()
