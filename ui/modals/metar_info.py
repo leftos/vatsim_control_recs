@@ -257,7 +257,7 @@ def get_flight_category(metar: str) -> Tuple[str, str]:
     # Color mapping (#00ff00 bright green for better contrast on dark backgrounds)
     colors = {
         "VFR": "#00ff00",
-        "MVFR": "blue",
+        "MVFR": "#5599ff",
         "IFR": "red",
         "LIFR": "magenta",
         "UNK": "white"
