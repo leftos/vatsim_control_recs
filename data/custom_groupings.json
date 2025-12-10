@@ -109,5 +109,34 @@
     "PAFA",
     "PAFB",
     "PAEI"
+  ],
+  "P80": [
+    "KPDX",
+    "KHIO",
+    "KTTD",
+    "KUAO"
+  ],
+  "S46":[
+    "KSEA",
+    "KBFI",
+    "KRNT",
+    "KTIW",
+    "KPAE",
+    "KGRF",
+    "KTCM",
+    "KOLM"
+  ],
+  "EUG_APP":[
+    "KEUG",
+    "KMFR"
+  ],
+  "GEG_APP":[
+    "KGEG",
+    "KYKM",
+    "KALW",
+    "KPDT",
+    "KSFF",
+    "KSKA",
+    "KCOE"
   ]
 }
