@@ -7,7 +7,10 @@ from typing import Dict, FrozenSet
 @dataclass(frozen=True)
 class DisambiguatorConfig:
     """Configuration settings for airport disambiguation."""
-    
+
+    # Maximum length for pretty names before abbreviation is applied
+    MAX_NAME_LENGTH: int = 25
+
     # Multi-word phrases that should always be included (check these first)
     ALWAYS_INCLUDE_PHRASES: FrozenSet[str] = frozenset({
         'Coast Guard'

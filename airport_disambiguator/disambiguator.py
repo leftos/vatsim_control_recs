@@ -100,12 +100,17 @@ class AirportDisambiguator:
                 pretty_name = self.disambiguation_engine.disambiguate_single_airport(
                     icao, airport_details, location
                 )
+                # Apply abbreviation for long names
+                pretty_name = self.name_processor.abbreviate_long_name(pretty_name)
                 self.icao_to_pretty_name[icao] = pretty_name
         else:
             # Multiple airports in this location
             disambiguated = self.disambiguation_engine.disambiguate_multiple_airports(
                 icaos, self.data_manager.airports_data, location
             )
+            # Apply abbreviation for long names
+            for icao, name in disambiguated.items():
+                disambiguated[icao] = self.name_processor.abbreviate_long_name(name)
             self.icao_to_pretty_name.update(disambiguated)
     
     def _process_location(self, location: str):

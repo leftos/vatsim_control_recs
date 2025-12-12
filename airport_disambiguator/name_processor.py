@@ -214,5 +214,60 @@ class NameProcessor:
                     for i, part in enumerate(parts):
                         if part.lower() == state_lower and i < len(parts) - 1:
                             return True
-        
+
         return False
+
+    def abbreviate_long_name(self, name: str) -> str:
+        """
+        Abbreviate a name if it exceeds the configured maximum length.
+
+        For names with " - " separator (e.g., "Mexico City - Licenciado Benito Juarez"),
+        abbreviates the part after the dash by converting all but the last word to initials.
+        Example: "Mexico City - Licenciado Benito Juarez" → "Mexico City - L. B. Juarez"
+
+        Args:
+            name: The pretty name to potentially abbreviate
+
+        Returns:
+            The abbreviated name if it was too long, otherwise the original name
+        """
+        if len(name) <= self.config.MAX_NAME_LENGTH:
+            return name
+
+        # Check if name has a " - " separator
+        if " - " not in name:
+            return name
+
+        parts = name.split(" - ", 1)
+        if len(parts) != 2:
+            return name
+
+        location_part = parts[0]
+        entity_part = parts[1]
+
+        # Split the entity part into words
+        entity_words = entity_part.split()
+        if len(entity_words) <= 1:
+            return name
+
+        # Abbreviate all words except the last one
+        abbreviated_words = []
+        for i, word in enumerate(entity_words):
+            if i < len(entity_words) - 1:
+                # Abbreviate to first letter + period
+                if word and word[0].isalpha():
+                    abbreviated_words.append(f"{word[0].upper()}.")
+                else:
+                    abbreviated_words.append(word)
+            else:
+                # Keep the last word intact
+                abbreviated_words.append(word)
+
+        abbreviated_entity = " ".join(abbreviated_words)
+        abbreviated_name = f"{location_part} - {abbreviated_entity}"
+
+        # Only use abbreviated form if it's actually shorter
+        if len(abbreviated_name) < len(name):
+            return abbreviated_name
+
+        return name
