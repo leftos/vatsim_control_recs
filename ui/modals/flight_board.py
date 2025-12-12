@@ -9,7 +9,6 @@ from textual.widgets.data_table import RowDoesNotExist
 from textual.containers import Container, Vertical, Horizontal
 from textual.binding import Binding
 from textual.app import ComposeResult
-from textual.events import Key
 
 from backend import get_wind_info, get_altimeter_setting, get_metar_batch, find_airports_near_position
 from backend.core.flights import get_airport_flight_details
@@ -101,7 +100,6 @@ class FlightBoardScreen(ModalScreen):
     BINDINGS = [
         Binding("escape", "close_board", "Close", priority=True),
         Binding("q", "close_board", "Close"),
-        Binding("enter", "show_flight_info", "Flight Info", show=True),
     ]
 
     def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float, refresh_interval: int = 15, disambiguator=None, enable_animations: bool = True):
@@ -137,12 +135,12 @@ class FlightBoardScreen(ModalScreen):
                 yield Static("Loading flight data...", id="loading-indicator")
                 with Vertical(classes="board-section", id="departures-section"):
                     yield Static("DEPARTURES", classes="section-title")
-                    departures_table = SplitFlapDataTable(classes="board-table", id="departures-table", enable_animations=self.enable_animations)
+                    departures_table = SplitFlapDataTable(classes="board-table", id="departures-table", enable_animations=self.enable_animations, on_select=self.action_show_flight_info)
                     departures_table.cursor_type = "row"
                     yield departures_table
                 with Vertical(classes="board-section", id="arrivals-section"):
                     yield Static("ARRIVALS", classes="section-title")
-                    arrivals_table = SplitFlapDataTable(classes="board-table", id="arrivals-table", enable_animations=self.enable_animations)
+                    arrivals_table = SplitFlapDataTable(classes="board-table", id="arrivals-table", enable_animations=self.enable_animations, on_select=self.action_show_flight_info)
                     arrivals_table.cursor_type = "row"
                     yield arrivals_table
 
@@ -457,19 +455,6 @@ class FlightBoardScreen(ModalScreen):
             setattr(app, 'active_flight_board', None)
 
         self.dismiss()
-
-    def on_key(self, event: Key) -> None:
-        """Handle key events."""
-        # Handle Enter key for opening flight info when a DataTable has focus
-        if event.key == "enter":
-            # Check if focused widget is one of our DataTables
-            focused = self.focused
-            if focused and focused.id in ["departures-table", "arrivals-table"]:
-                # Let the action handle the rest of the logic
-                self.action_show_flight_info()
-                event.prevent_default()
-                event.stop()
-                return
 
     def action_show_flight_info(self) -> None:
         """Show detailed flight information for the selected flight"""

@@ -139,7 +139,6 @@ class VATSIMControlApp(App):
         Binding("ctrl+a", "show_vfr_alternatives", "VFR Alts", show=False, priority=True),
         Binding("ctrl+t", "show_airport_tracking", "Tracked", show=False, priority=True),
         Binding("escape", "cancel_search", "Cancel", show=False),
-        Binding("enter", "open_flight_board", "Flt Board", show=False),
     ]
     
     def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None, airport_allowlist=None):
@@ -188,13 +187,13 @@ class VATSIMControlApp(App):
         with TabbedContent(initial="airports", id="tabs"):
             with TabPane("Individual Airports", id="airports"):
                 enable_anims = not self.args.disable_animations if self.args else True
-                airports_table = SplitFlapDataTable(id="airports-table", enable_animations=enable_anims)
+                airports_table = SplitFlapDataTable(id="airports-table", enable_animations=enable_anims, on_select=self.action_open_flight_board)
                 airports_table.cursor_type = "row"
                 yield airports_table
-                
+
             with TabPane("Custom Groupings", id="groupings"):
                 enable_anims = not self.args.disable_animations if self.args else True
-                groupings_table = SplitFlapDataTable(id="groupings-table", enable_animations=enable_anims)
+                groupings_table = SplitFlapDataTable(id="groupings-table", enable_animations=enable_anims, on_select=self.action_open_flight_board)
                 groupings_table.cursor_type = "row"
                 yield groupings_table
         
@@ -579,20 +578,6 @@ class VATSIMControlApp(App):
     
     def on_key(self, event: Key) -> None:
         """Handle key events to detect user activity."""
-        # Handle Enter key for opening flight board when a DataTable has focus
-        # and no modal screen is active (to allow command palette and other modals to work)
-        if event.key == "enter":
-            # Check if any modal screen is active (command palette, flight board, etc.)
-            if len(self.screen_stack) == 1:  # Only main app screen is active
-                # Check if focused widget is one of our DataTables
-                focused = self.focused
-                if focused and isinstance(focused, SplitFlapDataTable):
-                    # Let the action handle the rest of the logic
-                    self.action_open_flight_board()
-                    event.prevent_default()
-                    event.stop()
-                    return
-        
         # Record activity for navigation keys
         if event.key in ["up", "down", "left", "right", "pageup", "pagedown", "home", "end"]:
             self.record_user_activity(f"key:{event.key}")

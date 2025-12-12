@@ -4,7 +4,7 @@ Split-Flap DataTable Widget for Textual
 A reusable DataTable widget with split-flap animation effects
 """
 
-from typing import Any, Optional, Literal
+from typing import Any, Optional, Literal, Callable
 from textual.widgets import DataTable
 from textual.widgets._data_table import RowKey, ColumnKey
 from rich.text import Text
@@ -189,17 +189,19 @@ class SplitFlapDataTable(DataTable):
         stagger_delay: int = 1,
         enable_animations: bool = True,
         zebra_stripes: bool = True,
+        on_select: Optional[Callable[[], None]] = None,
         **kwargs
     ):
         """
         Initialize the split-flap DataTable.
-        
+
         Args:
             animation_speed: Time in seconds between animation frames (default: 0.05)
             default_flap_chars: Default character set for animations
             stagger_delay: Number of frames to stagger between cell animations (default: 1)
             enable_animations: Whether to enable split-flap animations (default: True).
                              If False, all updates will be instant.
+            on_select: Optional callback function called when a row is selected (double-click or Enter)
             **kwargs: Additional arguments passed to DataTable
         """
         super().__init__(**kwargs, zebra_stripes=zebra_stripes)
@@ -207,6 +209,7 @@ class SplitFlapDataTable(DataTable):
         self.default_flap_chars = default_flap_chars
         self.stagger_delay = stagger_delay
         self.enable_animations = enable_animations
+        self.on_select_callback = on_select
         self.animated_cells: dict[tuple[int, int], AnimatedCell] = {}
         self.column_flap_chars: dict[int, str] = {}  # Map column index to flap chars
         self.column_alignment: dict[int, Literal["left", "center", "right"]] = {}  # Map column index to alignment
@@ -683,10 +686,10 @@ class SplitFlapDataTable(DataTable):
             self.move_cursor(row=next_row)
     
     async def _on_click(self, event):
-        """Handle click events, preventing clicks on empty rows"""
+        """Handle click events, preventing clicks on empty rows and handling double-click"""
         # Let parent handle the click first
         await super()._on_click(event)
-        
+
         # After click, if cursor landed on empty row, move to nearest visible
         if self.cursor_row is not None:
             row_keys = list(self.rows.keys())
@@ -697,17 +700,22 @@ class SplitFlapDataTable(DataTable):
                     next_row = self._get_next_visible_row(self.cursor_row - 1, direction=1)
                     if next_row is None:
                         next_row = self._get_next_visible_row(self.cursor_row, direction=-1)
-                    
+
                     if next_row is not None:
                         self.move_cursor(row=next_row)
+
+        # Handle double-click by calling the callback
+        if event.chain == 2 and self.on_select_callback is not None:
+            debug("Double-click detected, calling on_select_callback")
+            self.on_select_callback()
     
     def clear(self, columns: bool = False):
         """
         Clear the table and reset animated cells.
-        
+
         Args:
             columns: Whether to also clear columns
-            
+
         Returns:
             The DataTable instance for method chaining
         """
@@ -720,3 +728,13 @@ class SplitFlapDataTable(DataTable):
             self.column_flap_chars.clear()
             self.column_alignment.clear()
         return result
+
+    def action_select_cursor(self) -> None:
+        """Handle row selection (Enter key or double-click)."""
+        debug(f"SplitFlapDataTable.action_select_cursor called, callback={self.on_select_callback}")
+        super().action_select_cursor()
+        if self.on_select_callback is not None:
+            debug("Calling on_select_callback")
+            self.on_select_callback()
+        else:
+            debug("No callback set")
