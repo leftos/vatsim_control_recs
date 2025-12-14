@@ -12,7 +12,6 @@ from backend import (
     find_nearest_airport_with_metar,
     find_airports_near_position,
     get_metar,
-    get_metar_batch,
     haversine_distance_nm,
     calculate_bearing,
     bearing_to_compass,
@@ -196,21 +195,16 @@ class FlightInfoScreen(ModalScreen):
                         )
 
                     # Refresh alternate airports if departure/arrival has IFR/LIFR
+                    # Use async method for progressive updates
                     if self.departure_weather and self.departure_weather[0] in ('IFR', 'LIFR'):
-                        self.departure_alternates = await loop.run_in_executor(
-                            None,
-                            self._find_vfr_alternates_sync,
-                            departure
-                        )
+                        self.departure_alternates = []  # Clear before searching
+                        await self._find_vfr_alternates_async(departure, 'departure_alternates')
                     else:
                         self.departure_alternates = None
 
                     if self.arrival_weather and self.arrival_weather[0] in ('IFR', 'LIFR'):
-                        self.arrival_alternates = await loop.run_in_executor(
-                            None,
-                            self._find_vfr_alternates_sync,
-                            arrival
-                        )
+                        self.arrival_alternates = []  # Clear before searching
+                        await self._find_vfr_alternates_async(arrival, 'arrival_alternates')
                     else:
                         self.arrival_alternates = None
                     self.alternates_searched = True
@@ -285,23 +279,22 @@ class FlightInfoScreen(ModalScreen):
     # Constants for alternate airport search
     MAX_ALTERNATE_SEARCH_RADIUS_NM = 100.0
 
-    def _find_vfr_alternates_sync(self, origin_icao: str, max_results: int = 3) -> list:
+    async def _find_vfr_alternates_async(
+        self,
+        origin_icao: str,
+        target_attr: str,
+        max_results: int = 3
+    ) -> None:
         """
-        Find nearby airports with VFR or MVFR conditions within 100nm.
-
-        Uses batch METAR fetching for performance and caches results for 60 seconds.
+        Find VFR alternates asynchronously, updating display as results are found.
 
         Args:
             origin_icao: ICAO code of the origin airport
+            target_attr: Attribute name to store results ('departure_alternates' or 'arrival_alternates')
             max_results: Maximum number of alternates to return
-
-        Returns:
-            List of (icao, category, color, distance_nm, compass_direction) tuples.
-            Empty list if no suitable airports found within range.
         """
         if not origin_icao:
-            debug("[VFR_ALT] No origin_icao provided")
-            return []
+            return
 
         # Check cache first
         current_time = datetime.now(timezone.utc)
@@ -310,101 +303,87 @@ class FlightInfoScreen(ModalScreen):
             time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
             if time_since_cache < _VFR_ALTERNATES_CACHE_DURATION:
                 debug(f"[VFR_ALT] Cache hit for {origin_icao}")
-                return cache_entry['result']
+                setattr(self, target_attr, cache_entry['result'])
+                self._update_display()
+                return
 
         if not config.UNIFIED_AIRPORT_DATA:
-            debug("[VFR_ALT] UNIFIED_AIRPORT_DATA is None/empty")
-            return []
+            return
 
         origin_data = config.UNIFIED_AIRPORT_DATA.get(origin_icao)
         if not origin_data:
-            debug(f"[VFR_ALT] {origin_icao} not in UNIFIED_AIRPORT_DATA")
-            return []
+            return
 
         origin_lat = origin_data.get('latitude')
         origin_lon = origin_data.get('longitude')
         if origin_lat is None or origin_lon is None:
-            debug(f"[VFR_ALT] {origin_icao} has no coordinates")
-            return []
+            return
 
-        debug(f"[VFR_ALT] Searching near {origin_icao} ({origin_lat:.2f}, {origin_lon:.2f})")
-
-        # Find ALL airports within 100nm radius, sorted by distance
+        # Find nearby airports
         nearby_all = find_airports_near_position(
             origin_lat, origin_lon,
             config.UNIFIED_AIRPORT_DATA,
             radius_nm=self.MAX_ALTERNATE_SEARCH_RADIUS_NM,
-            max_results=500  # Get all airports within range
+            max_results=500
         )
 
-        # Filter to airports likely to have METAR (standard ICAO codes)
-        # Real airports with METAR have 4-letter codes with no digits (KSMF, KSAC, etc.)
-        # Private strips often have digits (27CL, CA22, L36, etc.)
         nearby = [
             icao for icao in nearby_all
             if len(icao) == 4 and icao.isalpha() and icao != origin_icao
         ]
 
-        debug(f"[VFR_ALT] Found {len(nearby)} METAR-capable airports within {self.MAX_ALTERNATE_SEARCH_RADIUS_NM}nm: {nearby[:10]}...")
-
         if not nearby:
-            # Cache empty result
+            setattr(self, target_attr, [])
             _VFR_ALTERNATES_CACHE[origin_icao] = {
                 'result': [],
                 'timestamp': current_time
             }
-            return []
+            return
 
-        # Batch fetch METARs in chunks, processing closest airports first (inside-out)
-        # Stop once we have enough VFR/MVFR results
-        BATCH_SIZE = 15
+        loop = asyncio.get_event_loop()
         alternates = []
 
-        for i in range(0, len(nearby), BATCH_SIZE):
-            batch = nearby[i:i + BATCH_SIZE]
-            debug(f"[VFR_ALT] Batch fetching METARs for airports {i+1}-{i+len(batch)} of {len(nearby)}")
-            metar_results = get_metar_batch(batch)
-
-            # Process this batch's results
-            for icao in batch:
-                metar = metar_results.get(icao, '')
-                if not metar:
-                    continue
-
-                category, color = get_flight_category(metar)
-                if category not in ('VFR', 'MVFR'):
-                    continue
-
-                # Calculate distance and direction from origin
-                apt_data = config.UNIFIED_AIRPORT_DATA.get(icao, {})
-                apt_lat = apt_data.get('latitude')
-                apt_lon = apt_data.get('longitude')
-                if apt_lat is None or apt_lon is None:
-                    continue
-
-                distance = haversine_distance_nm(origin_lat, origin_lon, apt_lat, apt_lon)
-                bearing = calculate_bearing(origin_lat, origin_lon, apt_lat, apt_lon)
-                direction = bearing_to_compass(bearing)
-
-                alternates.append((icao, category, color, distance, direction))
-                debug(f"[VFR_ALT] Added {icao} as alternate ({category}, {distance:.0f}nm {direction})")
-
-                if len(alternates) >= max_results:
-                    break
-
-            # Stop fetching more batches if we have enough results
+        # Search airports one at a time, updating display as we find VFR/MVFR
+        for icao in nearby:
             if len(alternates) >= max_results:
                 break
 
-        debug(f"[VFR_ALT] Returning {len(alternates)} alternates")
+            try:
+                metar = await loop.run_in_executor(None, get_metar, icao)
+            except asyncio.CancelledError:
+                return
 
-        # Cache the result
+            if not metar:
+                continue
+
+            category, color = get_flight_category(metar)
+            if category not in ('VFR', 'MVFR'):
+                continue
+
+            # Calculate distance and direction
+            apt_data = config.UNIFIED_AIRPORT_DATA.get(icao, {})
+            apt_lat = apt_data.get('latitude')
+            apt_lon = apt_data.get('longitude')
+            if apt_lat is None or apt_lon is None:
+                continue
+
+            distance = haversine_distance_nm(origin_lat, origin_lon, apt_lat, apt_lon)
+            bearing = calculate_bearing(origin_lat, origin_lon, apt_lat, apt_lon)
+            direction = bearing_to_compass(bearing)
+
+            alternates.append((icao, category, color, distance, direction))
+
+            # Update display immediately with new result
+            setattr(self, target_attr, alternates.copy())
+            self._update_display()
+
+        # Cache the final result
         _VFR_ALTERNATES_CACHE[origin_icao] = {
             'result': alternates,
-            'timestamp': current_time
+            'timestamp': datetime.now(timezone.utc)
         }
 
-        return alternates
+        setattr(self, target_attr, alternates)
 
     async def _load_altimeter_info(self) -> None:
         """Asynchronously fetch altimeter and airport weather information"""
@@ -445,18 +424,11 @@ class FlightInfoScreen(ModalScreen):
                     self._update_display()
 
                     # Find alternate airports if departure/arrival has IFR/LIFR
+                    # Use async method to update display progressively as alternates are found
                     if self.departure_weather and self.departure_weather[0] in ('IFR', 'LIFR'):
-                        self.departure_alternates = await loop.run_in_executor(
-                            None,
-                            self._find_vfr_alternates_sync,
-                            departure
-                        )
+                        await self._find_vfr_alternates_async(departure, 'departure_alternates')
                     if self.arrival_weather and self.arrival_weather[0] in ('IFR', 'LIFR'):
-                        self.arrival_alternates = await loop.run_in_executor(
-                            None,
-                            self._find_vfr_alternates_sync,
-                            arrival
-                        )
+                        await self._find_vfr_alternates_async(arrival, 'arrival_alternates')
                     self.alternates_searched = True
 
                     # Final update with alternates
