@@ -37,20 +37,30 @@ class NameProcessor:
     def extract_distinguishing_words(self, airport_name: str, location: str) -> List[str]:
         """
         Extract distinguishing words from airport name by removing location words.
-        Preserves original casing.
+        Preserves original casing. For compound words (e.g., "RENO/STEAD"),
+        extracts non-location parts (e.g., "STEAD").
         """
         name = self.shorten_name(airport_name)
         location_words = self.extract_location_words(location)
-        
+
         distinguishing_parts = []
         for word in name.split():
             word_lower = word.lower()
-            # Skip if it's a location word or compound containing location words
+            # Skip if it's exactly a location word
             if word_lower in location_words:
                 continue
-            if self._word_matches_location(word, location_words):
-                continue
-            distinguishing_parts.append(word)
+
+            # Check if it's a compound word
+            if '/' in word or '-' in word:
+                # Extract non-location parts from the compound word
+                parts = self._split_compound_word(word)
+                non_location_parts = [p for p in parts if p.lower() not in location_words]
+                if non_location_parts:
+                    # Join back with original delimiter and add as distinguishing
+                    delimiter = '/' if '/' in word else '-'
+                    distinguishing_parts.append(delimiter.join(non_location_parts))
+            else:
+                distinguishing_parts.append(word)
 
         return distinguishing_parts
     
