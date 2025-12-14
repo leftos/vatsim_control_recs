@@ -151,14 +151,73 @@ def get_wind_info_minute(airport_icao: str) -> str:
         return ""
 
 
+def _fetch_metar_from_aviationweather(airport_icao: str) -> Optional[str]:
+    """
+    Fetch METAR from aviationweather.gov API.
+
+    Returns:
+        METAR string, empty string if no data, or None on error
+    """
+    try:
+        url = f"https://aviationweather.gov/api/data/metar?ids={airport_icao}&format=raw"
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            metar_text = response.read().decode('utf-8').strip()
+
+        if not metar_text:
+            # Empty response (e.g., HTTP 204) - return empty to trigger fallback
+            return ""
+
+        if metar_text.startswith('No METAR') or metar_text.startswith('Error'):
+            # Explicit error - return None to indicate blacklist
+            return None
+
+        return metar_text
+
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None  # Station doesn't exist - blacklist
+        return ""  # Other HTTP errors - try fallback
+    except (urllib.error.URLError, TimeoutError):
+        return ""  # Network error - try fallback
+    except Exception:
+        return ""  # Other errors - try fallback
+
+
+def _fetch_metar_from_vatsim(airport_icao: str) -> Optional[str]:
+    """
+    Fetch METAR from VATSIM METAR API (fallback).
+
+    Returns:
+        METAR string or empty string if unavailable
+    """
+    try:
+        url = f"https://metar.vatsim.net/{airport_icao}"
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            metar_text = response.read().decode('utf-8').strip()
+
+        if not metar_text or metar_text.startswith('No METAR'):
+            return ""
+
+        return metar_text
+
+    except Exception:
+        return ""
+
+
 def get_metar(airport_icao: str) -> str:
     """
-    Fetch current METAR from aviationweather.gov API with caching.
+    Fetch current METAR with caching.
 
+    Uses aviationweather.gov as primary source, with VATSIM METAR API as fallback.
     METAR data is cached for 60 seconds to avoid excessive API calls.
     When fetching METAR, wind and altimeter are also parsed and cached
     to avoid redundant parsing when both values are needed.
-    Airports returning 404 or no data are blacklisted and never queried again in this session.
 
     This function is thread-safe.
 
@@ -185,80 +244,41 @@ def get_metar(airport_icao: str) -> str:
                 return cache_entry['metar']
 
     # Cache miss or expired - fetch new data (outside lock to avoid blocking)
-    try:
-        url = f"https://aviationweather.gov/api/data/metar?ids={airport_icao}&format=raw"
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+    # Try primary source first
+    metar_text = _fetch_metar_from_aviationweather(airport_icao)
 
-        with urllib.request.urlopen(req, timeout=5) as response:
-            metar_text = response.read().decode('utf-8').strip()
-
-        # Check if we got valid data (not empty and not an error message)
-        if not metar_text or metar_text.startswith('No METAR') or metar_text.startswith('Error'):
-            # No data available - blacklist it
-            with metar_lock:
-                metar_blacklist[airport_icao] = True
-            return ""
-
-        # Parse wind and altimeter from METAR for caching
-        parsed_wind = _parse_wind_from_metar(metar_text)
-        parsed_altimeter = parse_altimeter_from_metar(metar_text)
-
-        # Cache the result with parsed values
-        current_time = datetime.now(timezone.utc)
+    if metar_text is None:
+        # Station doesn't exist - blacklist it permanently
         with metar_lock:
-            metar_data_cache[airport_icao] = {
-                'metar': metar_text,
-                'wind': parsed_wind,
-                'altimeter': parsed_altimeter,
-                'timestamp': current_time
-            }
+            metar_blacklist[airport_icao] = True
+        return ""
 
-        return metar_text
+    # If primary returned empty, try VATSIM fallback
+    if metar_text == "":
+        metar_text = _fetch_metar_from_vatsim(airport_icao)
 
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            # Station doesn't exist - blacklist it permanently
-            with metar_lock:
-                metar_blacklist[airport_icao] = True
-            return ""
-        # For other HTTP errors, return cached data if available (even if expired)
+    # If still empty, return cached data if available or empty string
+    if not metar_text:
         with metar_lock:
             if airport_icao in metar_data_cache:
-                cache_entry = metar_data_cache[airport_icao]
-                # Update cache entry to be current if it doesn't have parsed data yet
-                if 'wind' not in cache_entry:
-                    metar_text = cache_entry['metar']
-                    cache_entry['wind'] = _parse_wind_from_metar(metar_text)
-                    cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
-                return cache_entry['metar']
+                return metar_data_cache[airport_icao]['metar']
         return ""
-    except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError) as e:
-        # Expected network/parsing errors - return cached data if available
-        from common import logger as debug_logger
-        debug_logger.debug(f"Expected error fetching METAR for {airport_icao}: {type(e).__name__}: {e}")
-        with metar_lock:
-            if airport_icao in metar_data_cache:
-                cache_entry = metar_data_cache[airport_icao]
-                if 'wind' not in cache_entry:
-                    metar_text = cache_entry['metar']
-                    cache_entry['wind'] = _parse_wind_from_metar(metar_text)
-                    cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
-                return cache_entry['metar']
-        return ""
-    except Exception as e:
-        # Unexpected errors - log with traceback for debugging
-        from common import logger as debug_logger
-        debug_logger.error(f"Unexpected error fetching METAR for {airport_icao}: {type(e).__name__}: {e}", exc_info=True)
-        with metar_lock:
-            if airport_icao in metar_data_cache:
-                cache_entry = metar_data_cache[airport_icao]
-                if 'wind' not in cache_entry:
-                    metar_text = cache_entry['metar']
-                    cache_entry['wind'] = _parse_wind_from_metar(metar_text)
-                    cache_entry['altimeter'] = parse_altimeter_from_metar(metar_text)
-                return cache_entry['metar']
-        return ""
+
+    # Parse wind and altimeter from METAR for caching
+    parsed_wind = _parse_wind_from_metar(metar_text)
+    parsed_altimeter = parse_altimeter_from_metar(metar_text)
+
+    # Cache the result with parsed values
+    current_time = datetime.now(timezone.utc)
+    with metar_lock:
+        metar_data_cache[airport_icao] = {
+            'metar': metar_text,
+            'wind': parsed_wind,
+            'altimeter': parsed_altimeter,
+            'timestamp': current_time
+        }
+
+    return metar_text
 
 
 def get_taf(airport_icao: str) -> str:
@@ -302,8 +322,12 @@ def get_taf(airport_icao: str) -> str:
             taf_text = response.read().decode('utf-8').strip()
 
         # Check if we got valid data (not empty and not an error message)
-        if not taf_text or taf_text.startswith('No TAF') or taf_text.startswith('Error'):
-            # No data available - blacklist it
+        if not taf_text:
+            # Empty response (e.g., HTTP 204 No Content) - temporary, don't blacklist
+            return ""
+
+        if taf_text.startswith('No TAF') or taf_text.startswith('Error'):
+            # Explicit error message - station likely doesn't report TAF, blacklist it
             with taf_lock:
                 taf_blacklist[airport_icao] = True
             return ""
@@ -324,13 +348,14 @@ def get_taf(airport_icao: str) -> str:
             with taf_lock:
                 taf_blacklist[airport_icao] = True
             return ""
-        # For other HTTP errors, return cached data if available
+        # For other HTTP errors (500, 502, 503, 504, etc.) - temporary, don't blacklist
+        # Return cached data if available
         with taf_lock:
             if airport_icao in taf_data_cache:
                 return taf_data_cache[airport_icao]['taf']
         return ""
     except (urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError, TimeoutError) as e:
-        # Expected network/parsing errors - return cached data if available
+        # Expected network/parsing errors - temporary, don't blacklist
         from common import logger as debug_logger
         debug_logger.debug(f"Expected error fetching TAF for {airport_icao}: {type(e).__name__}: {e}")
         with taf_lock:
