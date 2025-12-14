@@ -20,7 +20,7 @@ from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, VfrAlternativesScreen, HelpScreen, CommandPaletteScreen
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen
 
 
 def set_terminal_title(title: str) -> None:
@@ -138,6 +138,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+e", "show_metar_lookup", "METAR Lkp", show=False, priority=True),
         Binding("ctrl+a", "show_vfr_alternatives", "VFR Alts", show=False, priority=True),
         Binding("ctrl+t", "show_airport_tracking", "Tracked", show=False, priority=True),
+        Binding("ctrl+s", "show_historical_stats", "Hist Stats", show=False, priority=True),
         Binding("escape", "cancel_search", "Cancel", show=False),
     ]
     
@@ -754,6 +755,15 @@ class VATSIMControlApp(App):
 
         vfr_screen = VfrAlternativesScreen(initial_icao=initial_icao)
         self.push_screen(vfr_screen)
+
+    def action_show_historical_stats(self) -> None:
+        """Show the historical flight statistics modal"""
+        from . import config
+        stats_screen = HistoricalStatsScreen(
+            tracked_airports=self.airport_allowlist,
+            disambiguator=config.DISAMBIGUATOR
+        )
+        self.push_screen(stats_screen)
 
     def action_show_airport_tracking(self) -> None:
         """Show the tracked airports manager modal"""
