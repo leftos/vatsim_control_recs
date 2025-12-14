@@ -1,6 +1,8 @@
 """Flight Information Modal Screen"""
 
 import asyncio
+from datetime import datetime, timezone
+from typing import Dict, Any
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.containers import Container, Vertical
@@ -10,6 +12,7 @@ from backend import (
     find_nearest_airport_with_metar,
     find_airports_near_position,
     get_metar,
+    get_metar_batch,
     haversine_distance_nm,
     calculate_bearing,
     bearing_to_compass,
@@ -20,6 +23,11 @@ from backend.data.vatsim_api import download_vatsim_data
 from ui import config
 from ui.debug_logger import debug
 from ui.modals.metar_info import get_flight_category, _extract_flight_rules_weather
+
+
+# Cache for VFR alternate results: {origin_icao: {'result': [...], 'timestamp': datetime}}
+_VFR_ALTERNATES_CACHE: Dict[str, Dict[str, Any]] = {}
+_VFR_ALTERNATES_CACHE_DURATION = 60  # 60 seconds (matches METAR cache)
 
 
 class FlightInfoScreen(ModalScreen):
@@ -281,6 +289,8 @@ class FlightInfoScreen(ModalScreen):
         """
         Find nearby airports with VFR or MVFR conditions within 100nm.
 
+        Uses batch METAR fetching for performance and caches results for 60 seconds.
+
         Args:
             origin_icao: ICAO code of the origin airport
             max_results: Maximum number of alternates to return
@@ -292,6 +302,16 @@ class FlightInfoScreen(ModalScreen):
         if not origin_icao:
             debug("[VFR_ALT] No origin_icao provided")
             return []
+
+        # Check cache first
+        current_time = datetime.now(timezone.utc)
+        if origin_icao in _VFR_ALTERNATES_CACHE:
+            cache_entry = _VFR_ALTERNATES_CACHE[origin_icao]
+            time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+            if time_since_cache < _VFR_ALTERNATES_CACHE_DURATION:
+                debug(f"[VFR_ALT] Cache hit for {origin_icao}")
+                return cache_entry['result']
+
         if not config.UNIFIED_AIRPORT_DATA:
             debug("[VFR_ALT] UNIFIED_AIRPORT_DATA is None/empty")
             return []
@@ -310,7 +330,6 @@ class FlightInfoScreen(ModalScreen):
         debug(f"[VFR_ALT] Searching near {origin_icao} ({origin_lat:.2f}, {origin_lon:.2f})")
 
         # Find ALL airports within 100nm radius, sorted by distance
-        # We'll check them in order until we find enough VFR/MVFR alternates
         nearby_all = find_airports_near_position(
             origin_lat, origin_lon,
             config.UNIFIED_AIRPORT_DATA,
@@ -323,24 +342,33 @@ class FlightInfoScreen(ModalScreen):
         # Private strips often have digits (27CL, CA22, L36, etc.)
         nearby = [
             icao for icao in nearby_all
-            if len(icao) == 4 and icao.isalpha()  # All letters, no digits
+            if len(icao) == 4 and icao.isalpha() and icao != origin_icao
         ]
 
         debug(f"[VFR_ALT] Found {len(nearby)} METAR-capable airports within {self.MAX_ALTERNATE_SEARCH_RADIUS_NM}nm: {nearby[:10]}...")
 
+        if not nearby:
+            # Cache empty result
+            _VFR_ALTERNATES_CACHE[origin_icao] = {
+                'result': [],
+                'timestamp': current_time
+            }
+            return []
+
+        # Batch fetch METARs for all nearby airports in parallel
+        # Limit to first 30 airports to avoid excessive API calls
+        airports_to_check = nearby[:30]
+        debug(f"[VFR_ALT] Batch fetching METARs for {len(airports_to_check)} airports")
+        metar_results = get_metar_batch(airports_to_check)
+
+        # Process results and find VFR/MVFR airports
         alternates = []
         for icao in nearby:
-            if icao == origin_icao:
-                continue
-
-            # Get weather for this airport
-            metar = get_metar(icao)
+            metar = metar_results.get(icao, '')
             if not metar:
-                debug(f"[VFR_ALT] {icao} has no METAR")
                 continue
 
             category, color = get_flight_category(metar)
-            debug(f"[VFR_ALT] {icao} is {category}")
             if category not in ('VFR', 'MVFR'):
                 continue
 
@@ -362,6 +390,13 @@ class FlightInfoScreen(ModalScreen):
                 break
 
         debug(f"[VFR_ALT] Returning {len(alternates)} alternates")
+
+        # Cache the result
+        _VFR_ALTERNATES_CACHE[origin_icao] = {
+            'result': alternates,
+            'timestamp': current_time
+        }
+
         return alternates
 
     async def _load_altimeter_info(self) -> None:
