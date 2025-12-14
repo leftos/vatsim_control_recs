@@ -1,7 +1,6 @@
 """Flight Information Modal Screen"""
 
 import asyncio
-import os
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.containers import Container, Vertical
@@ -17,7 +16,6 @@ from backend import (
     calculate_eta
 )
 from backend.core.flights import get_nearest_airport_if_on_ground
-from backend.cache.manager import load_aircraft_approach_speeds
 from backend.data.vatsim_api import download_vatsim_data
 from ui import config
 from ui.debug_logger import debug
@@ -700,17 +698,10 @@ class FlightInfoScreen(ModalScreen):
             'flight_plan': flight_plan
         }
 
-        # Load aircraft approach speeds for accurate ETA calculation
-        aircraft_data_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            'data', 'aircraft_data.csv'
-        )
-        aircraft_speeds = load_aircraft_approach_speeds(aircraft_data_path)
-
         eta_display, eta_local_time, eta_hours = calculate_eta(
             flight_for_eta,
             config.UNIFIED_AIRPORT_DATA,
-            aircraft_speeds
+            config.AIRCRAFT_APPROACH_SPEEDS
         )
 
         if eta_display and eta_display not in ('----', ''):

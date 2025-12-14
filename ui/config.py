@@ -17,6 +17,7 @@ ALTIMETER_FLAP_CHARS = "0123456789AQ "  # For altimeter: A/Q prefix, digits
 # Module-level instances for the UI - initialized when data is first loaded
 UNIFIED_AIRPORT_DATA = None
 DISAMBIGUATOR = None
+AIRCRAFT_APPROACH_SPEEDS = None
 
 
 @dataclass

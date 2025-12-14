@@ -1,7 +1,6 @@
 """Flight Board Modal Screen"""
 
 import asyncio
-import os
 
 from textual.screen import ModalScreen
 from textual.widgets import Static
@@ -12,7 +11,6 @@ from textual.app import ComposeResult
 
 from backend import get_wind_info, get_altimeter_setting, get_metar_batch, find_airports_near_position
 from backend.core.flights import get_airport_flight_details
-from backend.cache.manager import load_aircraft_approach_speeds
 from backend.data.vatsim_api import download_vatsim_data
 from backend.config import constants as backend_constants
 
@@ -175,12 +173,11 @@ class FlightBoardScreen(ModalScreen):
             # Use the module-level instances
             unified_data_to_use = config.UNIFIED_AIRPORT_DATA
             disambiguator_to_use = config.DISAMBIGUATOR
-            aircraft_data_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'aircraft_data.csv')
+            aircraft_speeds_to_use = config.AIRCRAFT_APPROACH_SPEEDS
 
             # Helper function to run all blocking operations in one executor call
             def fetch_and_process_flights():
                 """Fetch VATSIM data and process flights - runs in thread pool."""
-                aircraft_speeds = load_aircraft_approach_speeds(aircraft_data_path)
                 vatsim_data = download_vatsim_data()
                 if not vatsim_data:
                     return None, None, None
@@ -190,7 +187,7 @@ class FlightBoardScreen(ModalScreen):
                     0,  # Always show all arrivals on the flight board
                     disambiguator_to_use,
                     unified_data_to_use,
-                    aircraft_speeds,
+                    aircraft_speeds_to_use,
                     vatsim_data
                 )
                 return vatsim_data, result[0] if result else [], result[1] if result else []

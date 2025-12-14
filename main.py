@@ -111,6 +111,7 @@ if not ensure_spacy_model_installed():
 from backend import analyze_flights_data, load_unified_airport_data  # noqa: E402
 from backend.config import constants as backend_constants  # noqa: E402
 from backend.core.groupings import load_all_groupings, resolve_grouping_recursively  # noqa: E402
+from backend.cache.manager import load_aircraft_approach_speeds  # noqa: E402
 from airport_disambiguator import AirportDisambiguator  # noqa: E402
 from ui import VATSIMControlApp, expand_countries_to_airports  # noqa: E402
 from ui import config as ui_config  # noqa: E402
@@ -157,9 +158,14 @@ def main():
     debug_logger.info("Application starting")
     
     print("Loading VATSIM data...")
-    
-    # Load unified airport data if we need to expand countries, groupings, or supergroupings
+
+    # Load aircraft approach speeds for ETA calculations
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    ui_config.AIRCRAFT_APPROACH_SPEEDS = load_aircraft_approach_speeds(
+        os.path.join(script_dir, 'data', 'aircraft_data.csv')
+    )
+
+    # Load unified airport data if we need to expand countries, groupings, or supergroupings
     if args.countries or args.groupings or args.supergroupings:
         ui_config.UNIFIED_AIRPORT_DATA = load_unified_airport_data(
             apt_base_path=os.path.join(script_dir, 'data', 'APT_BASE.csv'),
