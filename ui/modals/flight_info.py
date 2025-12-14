@@ -12,7 +12,8 @@ from backend import (
     get_metar,
     haversine_distance_nm,
     calculate_bearing,
-    bearing_to_compass
+    bearing_to_compass,
+    calculate_eta
 )
 from backend.core.flights import get_nearest_airport_if_on_ground
 from backend.data.vatsim_api import download_vatsim_data
@@ -479,10 +480,15 @@ class FlightInfoScreen(ModalScreen):
             if assigned_squawk and assigned_squawk != '0000':
                 line += f" // SQ: {assigned_squawk}"
 
+            # Add ETA for arrivals (in-flight or landed)
+            eta_info = self._get_eta_info()
+            if eta_info:
+                line += f" // {eta_info}"
+
             lines.append(line)
             lines.append("")
             line = ""
-            
+
             # Filed route
             route = flight_plan.get('route', '')
             if route:
@@ -628,7 +634,80 @@ class FlightInfoScreen(ModalScreen):
         if parts:
             return f" ({' '.join(parts)})"
         return ""
-    
+
+    def _get_eta_info(self) -> str | None:
+        """
+        Calculate and format ETA information for the flight.
+
+        Returns:
+            Formatted ETA string like "ETA 45m (14:30)" for in-flight,
+            "LANDED" if on ground at arrival, or None if not applicable.
+        """
+        flight_plan = self.flight_data.get('flight_plan')
+        if not flight_plan:
+            return None
+
+        arrival = flight_plan.get('arrival')
+        if not arrival or arrival == '----':
+            return None
+
+        groundspeed = self.flight_data.get('groundspeed', 0)
+        latitude = self.flight_data.get('latitude')
+        longitude = self.flight_data.get('longitude')
+
+        if latitude is None or longitude is None:
+            return None
+
+        if config.UNIFIED_AIRPORT_DATA is None:
+            return None
+
+        # Check if the arrival airport exists in our data
+        arrival_airport = config.UNIFIED_AIRPORT_DATA.get(arrival)
+        if not arrival_airport:
+            return None
+
+        arrival_lat = arrival_airport.get('latitude')
+        arrival_lon = arrival_airport.get('longitude')
+        if arrival_lat is None or arrival_lon is None:
+            return None
+
+        # Calculate distance to arrival airport
+        try:
+            distance_to_arrival = haversine_distance_nm(
+                latitude, longitude, arrival_lat, arrival_lon
+            )
+        except ValueError:
+            return None
+
+        # Check if on ground (groundspeed <= 40 knots)
+        if groundspeed <= 40:
+            # On ground - check if near arrival airport (within 5nm)
+            if distance_to_arrival <= 5.0:
+                return "LANDED"
+            else:
+                # On ground but not at arrival - probably at departure, no ETA needed
+                return None
+
+        # In-flight - calculate ETA
+        # Prepare flight dict for calculate_eta (it expects 'arrival' at top level)
+        flight_for_eta = {
+            'arrival': arrival,
+            'latitude': latitude,
+            'longitude': longitude,
+            'groundspeed': groundspeed,
+            'flight_plan': flight_plan
+        }
+
+        eta_display, eta_local_time, eta_hours = calculate_eta(
+            flight_for_eta,
+            config.UNIFIED_AIRPORT_DATA
+        )
+
+        if eta_display and eta_display not in ('----', ''):
+            return f"ETA {eta_display} ({eta_local_time} LT)"
+
+        return None
+
     def _format_time(self, time_str: str) -> str:
         """Format departure time (HHMM format)"""
         if not time_str or time_str == '----':

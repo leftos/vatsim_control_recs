@@ -34,7 +34,8 @@ from backend.config.constants import WIND_SOURCE
 from backend.core.calculations import (
     haversine_distance_nm,
     calculate_bearing,
-    bearing_to_compass
+    bearing_to_compass,
+    calculate_eta
 )
 
 __version__ = "1.0.0"
@@ -57,4 +58,5 @@ __all__ = [
     'haversine_distance_nm',
     'calculate_bearing',
     'bearing_to_compass',
+    'calculate_eta',
 ]
