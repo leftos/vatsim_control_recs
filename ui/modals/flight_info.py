@@ -355,37 +355,44 @@ class FlightInfoScreen(ModalScreen):
             }
             return []
 
-        # Batch fetch METARs for all nearby airports in parallel
-        # Limit to first 30 airports to avoid excessive API calls
-        airports_to_check = nearby[:30]
-        debug(f"[VFR_ALT] Batch fetching METARs for {len(airports_to_check)} airports")
-        metar_results = get_metar_batch(airports_to_check)
-
-        # Process results and find VFR/MVFR airports
+        # Batch fetch METARs in chunks, processing closest airports first (inside-out)
+        # Stop once we have enough VFR/MVFR results
+        BATCH_SIZE = 15
         alternates = []
-        for icao in nearby:
-            metar = metar_results.get(icao, '')
-            if not metar:
-                continue
 
-            category, color = get_flight_category(metar)
-            if category not in ('VFR', 'MVFR'):
-                continue
+        for i in range(0, len(nearby), BATCH_SIZE):
+            batch = nearby[i:i + BATCH_SIZE]
+            debug(f"[VFR_ALT] Batch fetching METARs for airports {i+1}-{i+len(batch)} of {len(nearby)}")
+            metar_results = get_metar_batch(batch)
 
-            # Calculate distance and direction from origin
-            apt_data = config.UNIFIED_AIRPORT_DATA.get(icao, {})
-            apt_lat = apt_data.get('latitude')
-            apt_lon = apt_data.get('longitude')
-            if apt_lat is None or apt_lon is None:
-                continue
+            # Process this batch's results
+            for icao in batch:
+                metar = metar_results.get(icao, '')
+                if not metar:
+                    continue
 
-            distance = haversine_distance_nm(origin_lat, origin_lon, apt_lat, apt_lon)
-            bearing = calculate_bearing(origin_lat, origin_lon, apt_lat, apt_lon)
-            direction = bearing_to_compass(bearing)
+                category, color = get_flight_category(metar)
+                if category not in ('VFR', 'MVFR'):
+                    continue
 
-            alternates.append((icao, category, color, distance, direction))
-            debug(f"[VFR_ALT] Added {icao} as alternate ({category}, {distance:.0f}nm {direction})")
+                # Calculate distance and direction from origin
+                apt_data = config.UNIFIED_AIRPORT_DATA.get(icao, {})
+                apt_lat = apt_data.get('latitude')
+                apt_lon = apt_data.get('longitude')
+                if apt_lat is None or apt_lon is None:
+                    continue
 
+                distance = haversine_distance_nm(origin_lat, origin_lon, apt_lat, apt_lon)
+                bearing = calculate_bearing(origin_lat, origin_lon, apt_lat, apt_lon)
+                direction = bearing_to_compass(bearing)
+
+                alternates.append((icao, category, color, distance, direction))
+                debug(f"[VFR_ALT] Added {icao} as alternate ({category}, {distance:.0f}nm {direction})")
+
+                if len(alternates) >= max_results:
+                    break
+
+            # Stop fetching more batches if we have enough results
             if len(alternates) >= max_results:
                 break
 
