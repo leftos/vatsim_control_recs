@@ -751,17 +751,23 @@ class FlightInfoScreen(ModalScreen):
 
         if latitude is None or longitude is None:
             return ""
-        
+
         if config.UNIFIED_AIRPORT_DATA is None:
             return ""
-        
+
         try:
-            # Find nearest airport with METAR
+            # Get heading and groundspeed to bias search towards airports ahead
+            heading = self.flight_data.get('heading')
+            groundspeed = self.flight_data.get('groundspeed')
+
+            # Find nearest airport with METAR (biased towards direction of flight)
             result = find_nearest_airport_with_metar(
                 latitude,
                 longitude,
                 config.UNIFIED_AIRPORT_DATA,
-                max_distance_nm=100.0
+                max_distance_nm=100.0,
+                aircraft_heading=heading,
+                aircraft_groundspeed=groundspeed
             )
             
             if result:

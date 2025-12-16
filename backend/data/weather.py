@@ -16,7 +16,7 @@ from backend.cache.manager import (
     get_wind_cache_lock, get_metar_cache_lock, get_taf_cache_lock
 )
 from backend.config.constants import WIND_CACHE_DURATION, METAR_CACHE_DURATION
-from backend.core.calculations import haversine_distance_nm
+from backend.core.calculations import haversine_distance_nm, calculate_bearing
 
 
 def _parse_wind_from_observation(properties: dict) -> Tuple[bool, str]:
@@ -885,7 +885,9 @@ def find_nearest_airport_with_metar(
     latitude: float,
     longitude: float,
     airports_data: Dict[str, Dict[str, Any]],
-    max_distance_nm: float = 100.0
+    max_distance_nm: float = 100.0,
+    aircraft_heading: Optional[float] = None,
+    aircraft_groundspeed: Optional[float] = None
 ) -> Optional[Tuple[str, str, float]]:
     """
     Find the nearest airport with METAR data to given coordinates.
@@ -894,11 +896,17 @@ def find_nearest_airport_with_metar(
     every 5 minutes to account for new METAR blacklists. Results are also cached
     based on rounded position (~6nm grid) for 1 minute.
 
+    When aircraft_heading is provided and groundspeed > 40kt, airports ahead
+    of the aircraft are preferred over those behind. The scoring uses a heading
+    penalty that makes airports behind appear farther than they actually are.
+
     Args:
         latitude: Latitude in decimal degrees
         longitude: Longitude in decimal degrees
         airports_data: Dictionary of all airport data
         max_distance_nm: Maximum search radius in nautical miles (default: 100)
+        aircraft_heading: Optional aircraft heading in degrees (0-360)
+        aircraft_groundspeed: Optional aircraft groundspeed in knots
 
     Returns:
         Tuple of (icao_code, altimeter_setting, distance_nm) or None if no airport found
@@ -957,7 +965,14 @@ def find_nearest_airport_with_metar(
         for dlon in range(-cell_radius, cell_radius + 1):
             search_cells.add((lat_cell + dlat, lon_cell + dlon))
 
-    # Find all airports within search radius, sorted by distance
+    # Determine if we should apply heading bias
+    # Only apply if in flight (groundspeed > 40kt) and heading is provided
+    use_heading_bias = (
+        aircraft_heading is not None and
+        (aircraft_groundspeed is None or aircraft_groundspeed > 40)
+    )
+
+    # Find all airports within search radius, scored by distance and heading
     candidates = []
     tried_icaos = set()
 
@@ -976,16 +991,34 @@ def find_nearest_airport_with_metar(
             )
 
             if distance <= max_distance_nm:
-                candidates.append((distance, airport['icao']))
+                # Calculate score with optional heading bias
+                if use_heading_bias and distance > 0 and aircraft_heading is not None:
+                    # Calculate bearing from aircraft to airport
+                    bearing_to_airport = calculate_bearing(
+                        latitude, longitude,
+                        airport['lat'], airport['lon']
+                    )
+                    # Calculate angular difference (0-180 degrees)
+                    heading_diff = abs(bearing_to_airport - aircraft_heading)
+                    if heading_diff > 180:
+                        heading_diff = 360 - heading_diff
+                    # Calculate penalty: 0.7 (ahead) to 1.5 (behind)
+                    # Formula: 0.7 + 0.8 * (heading_diff / 180)
+                    heading_penalty = 0.7 + 0.8 * (heading_diff / 180.0)
+                    score = distance * heading_penalty
+                else:
+                    score = distance
 
-    # Sort by distance (closest first)
+                candidates.append((score, distance, airport['icao']))
+
+    # Sort by score (lowest first - closest/most ahead)
     candidates.sort(key=lambda x: x[0])
 
-    # Try airports in order of distance until we find one with METAR
+    # Try airports in order of score until we find one with METAR
     MAX_ATTEMPTS = 20  # Limit attempts to prevent excessive API calls
     result = None
 
-    for distance, icao in candidates[:MAX_ATTEMPTS]:
+    for _score, distance, icao in candidates[:MAX_ATTEMPTS]:
         altimeter = get_altimeter_setting(icao)
         if altimeter:
             result = (icao, altimeter, distance)
