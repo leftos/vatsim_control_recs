@@ -154,20 +154,19 @@ class TableManager:
 
     def _add_rows_to_table(self, data: List[Any], column_keys: list) -> None:
         """Add rows to table with animations"""
+        # Signal start of bulk update for optimized staggering
+        self.table.begin_bulk_update()
+
         for row_obj in data:
             # Convert object to tuple if needed
             row_data = self._to_tuple(row_obj)
-            
-            # Add row with blank values, then animate to actual values
-            blank_row = tuple(" " * len(str(cell)) for cell in row_data)
-            row_key = self.table.add_row(*blank_row)
+
+            # Use animate=True for efficient single-pass animation setup
+            row_key = self.table.add_row(*row_data, animate=True)
             self.row_keys.append(row_key)
-            
-            # Animate each cell to its target value
-            for col_idx, cell_value in enumerate(row_data):
-                col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
-                update_width = col_config.update_width if col_config else False
-                self.table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
+
+        # Signal end of bulk update to start animations
+        self.table.end_bulk_update()
     
     async def _populate_progressive(self, data: List[Any], column_keys: list) -> None:
         """Populate table progressively in chunks for better perceived performance"""
@@ -245,23 +244,22 @@ class TableManager:
         if rows_reordered or new_row_count != current_row_count:
             # Rebuild the table with rows in the correct order
             debug(f"_update_efficiently: Rebuilding table (reordered={rows_reordered}, count_changed={new_row_count != current_row_count})")
-            
+
             # Clear the table but keep the rows
             self.table.clear(columns=False)
             self.row_keys.clear()
-            
-            # Re-add all rows in the correct sorted order
+
+            # Signal start of bulk update for optimized staggering
+            self.table.begin_bulk_update()
+
+            # Re-add all rows in the correct sorted order using efficient animate=True
             for row_obj in new_data:
                 row_data = self._to_tuple(row_obj)
-                blank_row = tuple(" " * len(str(cell)) for cell in row_data)
-                row_key = self.table.add_row(*blank_row)
+                row_key = self.table.add_row(*row_data, animate=True)
                 self.row_keys.append(row_key)
-                
-                for col_idx, cell_value in enumerate(row_data):
-                    if col_idx < len(column_keys):
-                        col_config = self.config.columns[col_idx] if col_idx < len(self.config.columns) else None
-                        update_width = col_config.update_width if col_config else False
-                        self.table.update_cell_animated(row_key, column_keys[col_idx], cell_value, update_width=update_width)
+
+            # Signal end of bulk update to start animations
+            self.table.end_bulk_update()
         else:
             # Rows are in the same order, just update cell values
             cells_updated = 0
