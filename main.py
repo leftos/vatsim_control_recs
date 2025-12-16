@@ -12,6 +12,44 @@ import subprocess
 import sys
 
 
+def show_help_and_exit():
+    """Show help message and exit immediately without any setup."""
+    parser = argparse.ArgumentParser(description="Analyze VATSIM flight data and controller staffing")
+    parser.add_argument("--max-eta-hours", type=float, default=1.0,
+                        help="Maximum ETA in hours for arrival filter (default: 1.0)")
+    parser.add_argument("--refresh-interval", type=int, default=15,
+                        help="Auto-refresh interval in seconds (default: 15)")
+    parser.add_argument("--airports", nargs="+",
+                        help="List of airport ICAO codes to include in analysis (default: all)")
+    parser.add_argument("--countries", nargs="+",
+                        help="List of country codes (e.g., US DE) to include all airports from those countries")
+    parser.add_argument("--groupings", nargs="+",
+                        help="List of custom grouping names to include in analysis (default: all)")
+    parser.add_argument("--supergroupings", nargs="+",
+                        help="List of custom grouping names to use as supergroupings. This will include all airports in these supergroupings and any detected sub-groupings.")
+    parser.add_argument("--include-all-staffed", action="store_true",
+                        help="Include airports with zero planes if they are staffed (default: False)")
+    parser.add_argument("--disable-animations", action="store_true",
+                        help="Disable split-flap animations for instant text updates (default: False)")
+    parser.add_argument("--progressive-load", action="store_true",
+                        help="Enable progressive loading for faster perceived startup (default: auto for 50+ airports)")
+    parser.add_argument("--progressive-chunk-size", type=int, default=20,
+                        help="Number of rows to load per chunk in progressive mode (default: 20)")
+    parser.add_argument("--wind-source", choices=["metar", "minute"], default="metar",
+                        help="Wind data source: 'metar' for METAR from aviationweather.gov (default), 'minute' for up-to-the-minute from weather.gov")
+    parser.add_argument("--hide-wind", action="store_true",
+                        help="Hide the wind column from the main view (default: False)")
+    parser.add_argument("--include-all-arriving", action="store_true",
+                        help="Include airports with any arrivals filed, regardless of max-eta-hours (default: False)")
+    parser.print_help()
+    sys.exit(0)
+
+
+# Check for --help or -h before any setup to provide instant help
+if '--help' in sys.argv or '-h' in sys.argv:
+    show_help_and_exit()
+
+
 def is_running_in_venv():
     """Check if we're running inside a virtual environment."""
     # Check for venv/virtualenv (real_prefix is set by virtualenv, base_prefix by venv)
