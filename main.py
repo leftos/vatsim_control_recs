@@ -12,6 +12,76 @@ import subprocess
 import sys
 
 
+def is_running_in_venv():
+    """Check if we're running inside a virtual environment."""
+    # Check for venv/virtualenv (real_prefix is set by virtualenv, base_prefix by venv)
+    return (hasattr(sys, 'real_prefix') or
+            (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
+
+
+def get_venv_python(venv_path):
+    """Get the path to the Python executable in the venv."""
+    if sys.platform == 'win32':
+        return os.path.join(venv_path, 'Scripts', 'python.exe')
+    return os.path.join(venv_path, 'bin', 'python')
+
+
+def ensure_venv_and_restart():
+    """
+    Ensure we're running in a virtual environment.
+    If not, create one, ensure pip is installed, and restart the script within it.
+    Returns True if already in venv, otherwise restarts and never returns.
+    """
+    if is_running_in_venv():
+        return True
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    venv_path = os.path.join(script_dir, '.venv')
+    venv_python = get_venv_python(venv_path)
+
+    # Create venv if it doesn't exist
+    if not os.path.exists(venv_python):
+        print("Virtual environment not found. Creating one...")
+        try:
+            # Use venv module to create virtual environment
+            subprocess.check_call([sys.executable, '-m', 'venv', venv_path])
+            print(f"Virtual environment created at: {venv_path}")
+        except subprocess.CalledProcessError:
+            print("\nError: Failed to create virtual environment.")
+            print("You may need to install the venv module:")
+            print("  - On Ubuntu/Debian: sudo apt install python3-venv")
+            print("  - On other systems: ensure Python was installed with venv support")
+            sys.exit(1)
+
+    # Ensure pip is available in the venv
+    print("Ensuring pip is available in virtual environment...")
+    try:
+        # First try ensurepip to bootstrap pip if missing
+        subprocess.call(
+            [venv_python, '-m', 'ensurepip', '--upgrade'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except Exception:
+        pass
+
+    # Upgrade pip to latest version
+    try:
+        subprocess.check_call(
+            [venv_python, '-m', 'pip', 'install', '--upgrade', 'pip'],
+            stdout=subprocess.DEVNULL
+        )
+    except subprocess.CalledProcessError:
+        print("Warning: Could not upgrade pip, continuing anyway...")
+
+    # Re-execute this script using the venv Python, passing all arguments
+    print("Restarting in virtual environment...\n")
+
+    # Use subprocess.call and sys.exit for cross-platform compatibility
+    result = subprocess.call([venv_python] + sys.argv)
+    sys.exit(result)
+
+
 def parse_requirements(requirements_path):
     """Parse requirements.txt and return list of package names."""
     packages = []
@@ -100,6 +170,9 @@ def ensure_spacy_model_installed():
         print("  python -m spacy download en_core_web_sm")
         return False
 
+
+# Ensure we're running in a virtual environment (creates one if needed)
+ensure_venv_and_restart()
 
 # Ensure dependencies are installed before importing them
 if not ensure_requirements_installed():
