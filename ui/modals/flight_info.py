@@ -469,8 +469,14 @@ class FlightInfoScreen(ModalScreen):
                 line += f" (Altn: {alternate})"
             line += " // "
             
-            # Aircraft
+            # Aircraft with equipment suffix (e.g., B738/L, C172/G)
             aircraft_short = flight_plan.get('aircraft_short', flight_plan.get('aircraft', '----'))
+            aircraft_faa = flight_plan.get('aircraft_faa', '')
+            # Extract equipment suffix from FAA format (e.g., "H/B738/L" -> "L")
+            if aircraft_faa and '/' in aircraft_faa:
+                equipment_suffix = aircraft_faa.rsplit('/', 1)[-1]
+                if equipment_suffix:
+                    aircraft_short = f"{aircraft_short}/{equipment_suffix}"
             line += f"{aircraft_short} // "
                         
             # Filed altitude and flight rules
