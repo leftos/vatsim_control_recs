@@ -538,14 +538,16 @@ class FlightInfoScreen(ModalScreen):
                         else:
                             warning_lines.append("    [dim]Searching for alternates...[/dim]")
 
-                # Arrival weather warning (only show alternates if not yet landed)
+                # Arrival weather warning (show alternates unless already landed at arrival)
                 if self.arrival_weather and self.arrival_weather[0] != 'VFR':
                     cat, color, vis, ceil = self.arrival_weather
                     details = self._format_weather_details(vis, ceil)
                     warning_lines.append(f"  {arrival} is [{color} bold]{cat}[/{color} bold]{details}")
 
-                    # Show alternate arrival airports only if still in flight
-                    if not is_on_ground and cat in ('IFR', 'LIFR'):
+                    # Show alternate arrival airports (useful for planning before departure too)
+                    # Skip only if already landed at the arrival airport
+                    landed_at_arrival = is_on_ground and self._get_eta_info() == "LANDED"
+                    if not landed_at_arrival and cat in ('IFR', 'LIFR'):
                         if self.arrival_alternates:
                             alt_strs = []
                             for alt_icao, _, alt_color, dist, direction in self.arrival_alternates:
