@@ -17,6 +17,7 @@ COMMANDS = [
     {"name": "Wind Lookup", "shortcut": "Ctrl+W", "action": "show_wind_lookup"},
     {"name": "METAR Lookup", "shortcut": "Ctrl+E", "action": "show_metar_lookup"},
     {"name": "VFR Alternatives", "shortcut": "Ctrl+A", "action": "show_vfr_alternatives"},
+    {"name": "Historical Stats", "shortcut": "Ctrl+S", "action": "show_historical_stats"},
     {"name": "Tracked Airports", "shortcut": "Ctrl+T", "action": "show_airport_tracking"},
     {"name": "Open Flight Board", "shortcut": "Enter", "action": "open_flight_board"},
     {"name": "Show Help", "shortcut": "?/F1", "action": "show_help"},
