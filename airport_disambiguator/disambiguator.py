@@ -43,8 +43,10 @@ class AirportDisambiguator:
             self.config, self.name_processor, self.entity_extractor
         )
         
-        # Cache for pretty names
+        # Cache for pretty names (abbreviated to max length)
         self.icao_to_pretty_name = {}
+        # Cache for full names (no length limit)
+        self.icao_to_full_name = {}
         self._processed_locations = set()
         
         # Process all airports upfront if not lazy loading
@@ -97,17 +99,21 @@ class AirportDisambiguator:
             icao = icaos[0]
             airport_details = self.data_manager.get_airport_details(icao)
             if airport_details:
-                pretty_name = self.disambiguation_engine.disambiguate_single_airport(
+                full_name = self.disambiguation_engine.disambiguate_single_airport(
                     icao, airport_details, location
                 )
+                # Store full name before abbreviation
+                self.icao_to_full_name[icao] = full_name
                 # Apply abbreviation for long names
-                pretty_name = self.name_processor.abbreviate_long_name(pretty_name)
+                pretty_name = self.name_processor.abbreviate_long_name(full_name)
                 self.icao_to_pretty_name[icao] = pretty_name
         else:
             # Multiple airports in this location
             disambiguated = self.disambiguation_engine.disambiguate_multiple_airports(
                 icaos, self.data_manager.airports_data, location
             )
+            # Store full names before abbreviation
+            self.icao_to_full_name.update(disambiguated)
             # Apply abbreviation for long names
             for icao, name in disambiguated.items():
                 disambiguated[icao] = self.name_processor.abbreviate_long_name(name)
@@ -172,7 +178,56 @@ class AirportDisambiguator:
         
         # Return the pretty names
         return {icao: self.icao_to_pretty_name.get(icao, icao) for icao in icaos}
-    
+
+    def get_full_name(self, icao: str) -> str:
+        """
+        Get the full disambiguated name for an airport (without length limit).
+
+        Args:
+            icao: The ICAO code of the airport
+
+        Returns:
+            The full disambiguated name, or the ICAO code if not found
+        """
+        # If lazy loading is enabled and this location hasn't been processed yet
+        if self.lazy_load:
+            location = self.data_manager.get_location_for_airport(icao)
+            if location and location not in self._processed_locations:
+                self._process_location(location)
+
+        return self.icao_to_full_name.get(icao, icao)
+
+    def get_full_names_batch(self, icaos: list[str]) -> dict[str, str]:
+        """
+        Get full names for multiple airports efficiently (without length limit).
+
+        This method processes all unique locations at once, which is much more efficient
+        than calling get_full_name() individually for many airports in the same location.
+
+        Args:
+            icaos: List of ICAO codes to get full names for
+
+        Returns:
+            Dictionary mapping ICAO codes to full names
+        """
+        # If not lazy loading, all names are already computed
+        if not self.lazy_load:
+            return {icao: self.icao_to_full_name.get(icao, icao) for icao in icaos}
+
+        # For lazy loading, find all unprocessed locations
+        locations_to_process = set()
+        for icao in icaos:
+            location = self.data_manager.get_location_for_airport(icao)
+            if location and location not in self._processed_locations:
+                locations_to_process.add(location)
+
+        # Process all locations at once
+        for location in locations_to_process:
+            self._process_location(location)
+
+        # Return the full names
+        return {icao: self.icao_to_full_name.get(icao, icao) for icao in icaos}
+
     # Properties for backwards compatibility with original implementation
     @property
     def nlp(self):

@@ -283,7 +283,7 @@ class FlightBoardScreen(ModalScreen):
         window_title: str
         if self.disambiguator and isinstance(self.airport_icao_or_list, str):
             # For individual airports, get the full name
-            full_name = self.disambiguator.get_pretty_name(self.airport_icao_or_list)
+            full_name = self.disambiguator.get_full_name(self.airport_icao_or_list)
 
             # Fetch wind information using the current global wind source
             wind_info = get_wind_info(self.airport_icao_or_list, source=backend_constants.WIND_SOURCE)
@@ -333,7 +333,7 @@ class FlightBoardScreen(ModalScreen):
         loop = asyncio.get_event_loop()
 
         # Get full name synchronously (uses cache, no network)
-        full_name = self.disambiguator.get_pretty_name(icao)
+        full_name = self.disambiguator.get_full_name(icao)
 
         # Run network calls in thread pool to avoid blocking UI
         def fetch_weather_data():

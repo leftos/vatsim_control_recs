@@ -293,8 +293,8 @@ def analyze_flights_data(
     
     if airports_to_fetch:
         print(f"Processing airport names for {len(airports_to_fetch)} airports...")
-    # Batch fetch pretty names only for airports that will be displayed (processes locations efficiently)
-    pretty_names_batch = disambiguator.get_pretty_names_batch(airports_to_fetch) if disambiguator and airports_to_fetch else {}
+    # Batch fetch full names (no length limit) for airports that will be displayed (processes locations efficiently)
+    pretty_names_batch = disambiguator.get_full_names_batch(airports_to_fetch) if disambiguator and airports_to_fetch else {}
     
     # Second pass: build airport_data with fetched information
     airport_data = []

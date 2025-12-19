@@ -165,8 +165,8 @@ class VfrAlternativesScreen(ModalScreen):
             result_widget.update(f"[red]No coordinates for {icao}[/red]")
             return
 
-        # Get pretty name if available
-        pretty_name = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
+        # Get full name if available (no length limit)
+        pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
 
         # Build header lines
         header_lines = [f"[bold]{pretty_name} ({icao})[/bold]", ""]
@@ -248,8 +248,8 @@ class VfrAlternativesScreen(ModalScreen):
             bearing = calculate_bearing(origin_lat, origin_lon, apt_lat, apt_lon)
             direction = bearing_to_compass(bearing)
 
-            # Get pretty name
-            alt_name = config.DISAMBIGUATOR.get_pretty_name(apt_icao) if config.DISAMBIGUATOR else apt_icao
+            # Get full name (no length limit)
+            alt_name = config.DISAMBIGUATOR.get_full_name(apt_icao) if config.DISAMBIGUATOR else apt_icao
 
             alternates.append({
                 'icao': apt_icao,

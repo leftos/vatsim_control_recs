@@ -507,8 +507,8 @@ class MetarInfoScreen(ModalScreen):
         # Track current airport
         self.current_icao = icao
 
-        # Get pretty name if available
-        pretty_name = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
+        # Get full name if available (no length limit)
+        pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
 
         # Show loading indicator
         result_widget = self.query_one("#metar-result", Static)

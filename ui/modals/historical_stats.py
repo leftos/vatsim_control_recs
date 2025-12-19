@@ -348,9 +348,9 @@ class HistoricalStatsScreen(ModalScreen):
 
         # Add rows
         for icao, stats in sorted_results:
-            # Get pretty name
+            # Get full name (no length limit)
             if self.disambiguator:
-                name = self.disambiguator.get_pretty_name(icao)
+                name = self.disambiguator.get_full_name(icao)
             else:
                 name = icao
 
@@ -398,7 +398,7 @@ class HistoricalStatsScreen(ModalScreen):
         # Data rows
         for icao, stats in sorted_results:
             if self.disambiguator:
-                name = self.disambiguator.get_pretty_name(icao)
+                name = self.disambiguator.get_full_name(icao)
             else:
                 name = icao
 

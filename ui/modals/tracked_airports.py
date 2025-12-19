@@ -116,7 +116,7 @@ class TrackedAirportsModal(ModalScreen):
             return
         
         for icao in self.airport_allowlist:
-            pretty_name = self.disambiguator.get_pretty_name(icao) if self.disambiguator else icao
+            pretty_name = self.disambiguator.get_full_name(icao) if self.disambiguator else icao
             display_text = f"{icao} - {pretty_name}"
             if icao in self.selected_airports:
                 display_text = f"[✓] {display_text}"

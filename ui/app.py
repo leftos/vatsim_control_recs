@@ -639,8 +639,8 @@ class VATSIMControlApp(App):
                     
                     # Now we can safely index with cursor_row
                     icao: str = sorted_airports[airports_table.cursor_row].icao
-                    # Use the pretty name as the title instead of just the ICAO
-                    title: str = config.DISAMBIGUATOR.get_pretty_name(icao) if config.DISAMBIGUATOR else icao
+                    # Use the full name as the title instead of just the ICAO
+                    title: str = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
                      
                     # Open the flight board and store reference
                     self.flight_board_open = True
