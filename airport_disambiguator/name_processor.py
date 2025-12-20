@@ -39,28 +39,36 @@ class NameProcessor:
         Extract distinguishing words from airport name by removing location words.
         Preserves original casing. For compound words (e.g., "RENO/STEAD"),
         extracts non-location parts (e.g., "STEAD").
+        Also handles parenthetical annotations like "(DAUGHERTY FLD)" by stripping
+        parentheses and treating contents as regular words.
         """
         name = self.shorten_name(airport_name)
         location_words = self.extract_location_words(location)
 
         distinguishing_parts = []
         for word in name.split():
-            word_lower = word.lower()
+            # Strip leading/trailing parentheses from words
+            # e.g., "(DAUGHERTY" -> "DAUGHERTY", "FLD)" -> "FLD"
+            cleaned_word = word.strip('()')
+            if not cleaned_word:
+                continue
+
+            word_lower = cleaned_word.lower()
             # Skip if it's exactly a location word
             if word_lower in location_words:
                 continue
 
             # Check if it's a compound word
-            if '/' in word or '-' in word:
+            if '/' in cleaned_word or '-' in cleaned_word:
                 # Extract non-location parts from the compound word
-                parts = self._split_compound_word(word)
+                parts = self._split_compound_word(cleaned_word)
                 non_location_parts = [p for p in parts if p.lower() not in location_words]
                 if non_location_parts:
                     # Join back with original delimiter and add as distinguishing
-                    delimiter = '/' if '/' in word else '-'
+                    delimiter = '/' if '/' in cleaned_word else '-'
                     distinguishing_parts.append(delimiter.join(non_location_parts))
             else:
-                distinguishing_parts.append(word)
+                distinguishing_parts.append(cleaned_word)
 
         return distinguishing_parts
     

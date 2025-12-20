@@ -161,21 +161,30 @@ class DisambiguationEngine:
                 resolved_names[icao] = location
                 continue
 
-            # Score and sort words by priority
-            scored_words = []
+            # Categorize words into proper names vs generic descriptors
+            # Proper names (non-high-priority) are more informative than generic terms like "Fld", "Rgnl"
+            proper_names = []
+            generic_descriptors = []
             for word in distinguishing_parts:
-                is_high_priority = self.name_processor._is_high_priority_word(word)
-                priority = 0 if is_high_priority else 1
-                scored_words.append((priority, word))
-
-            scored_words.sort(key=lambda x: (x[0], distinguishing_parts.index(x[1])))
+                if self.name_processor._is_high_priority_word(word):
+                    generic_descriptors.append(word)
+                else:
+                    proper_names.append(word)
 
             # Try to find unique name
             found = False
 
-            # First, try single high-priority words
-            for priority, word in scored_words:
-                if priority == 0:  # High priority
+            # First, try proper names (more descriptive, e.g., "Daugherty" instead of "Fld")
+            for word in proper_names:
+                candidate = f"{location} {word}".strip()
+                if self._is_unique_in_group_optimized(candidate, icao, icaos, location_words, all_distinguishing_sets):
+                    resolved_names[icao] = candidate
+                    found = True
+                    break
+
+            # Then try generic descriptors if no proper name worked
+            if not found:
+                for word in generic_descriptors:
                     candidate = f"{location} {word}".strip()
                     if self._is_unique_in_group_optimized(candidate, icao, icaos, location_words, all_distinguishing_sets):
                         resolved_names[icao] = candidate
