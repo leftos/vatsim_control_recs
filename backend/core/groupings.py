@@ -9,6 +9,33 @@ from typing import Dict, List, Any, Optional, Set
 from backend.cache.manager import get_artcc_groupings_cache, set_artcc_groupings_cache
 
 
+def find_grouping_case_insensitive(
+    name: str,
+    all_groupings: Dict[str, List[str]]
+) -> Optional[str]:
+    """
+    Find a grouping name case-insensitively.
+
+    Args:
+        name: The grouping name to find (case-insensitive)
+        all_groupings: Dictionary of all available groupings
+
+    Returns:
+        The actual grouping name from the dictionary if found, None otherwise
+    """
+    # First try exact match
+    if name in all_groupings:
+        return name
+
+    # Try case-insensitive match
+    name_lower = name.lower()
+    for key in all_groupings:
+        if key.lower() == name_lower:
+            return key
+
+    return None
+
+
 def resolve_grouping_recursively(
     grouping_name: str,
     all_groupings: Dict[str, List[str]],

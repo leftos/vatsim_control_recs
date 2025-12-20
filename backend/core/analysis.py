@@ -12,7 +12,7 @@ from backend.data.vatsim_api import download_vatsim_data, filter_flights_by_airp
 from backend.data.weather import get_wind_info_batch, get_altimeter_setting
 from backend.core.controllers import get_staffed_positions
 from backend.core.calculations import format_eta_display, calculate_eta
-from backend.core.groupings import load_all_groupings, resolve_grouping_recursively
+from backend.core.groupings import load_all_groupings, resolve_grouping_recursively, find_grouping_case_insensitive
 from backend.core.flights import get_nearest_airport_if_on_ground, is_flight_flying_near_arrival
 from backend.core.models import AirportStats, GroupingStats
 from backend.config.constants import WIND_SOURCE
@@ -121,10 +121,11 @@ def analyze_flights_data(
                 return resolved_cache[name]
 
             for supergroup_name in supergroupings_allowlist:
-                if supergroup_name in all_custom_groupings:
-                    included_group_names.add(supergroup_name)
+                actual_name = find_grouping_case_insensitive(supergroup_name, all_custom_groupings)
+                if actual_name:
+                    included_group_names.add(actual_name)
                     # Recursively resolve the supergrouping to all airports (using cache)
-                    supergroup_airports = get_resolved(supergroup_name)
+                    supergroup_airports = get_resolved(actual_name)
                     resolved_supergroup_airports.update(supergroup_airports)
                 else:
                     print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json.")
@@ -144,8 +145,9 @@ def analyze_flights_data(
         elif groupings_allowlist:
             # Display only the specified groupings
             for group_name in groupings_allowlist:
-                if group_name in all_custom_groupings:
-                    display_custom_groupings[group_name] = all_custom_groupings[group_name]
+                actual_name = find_grouping_case_insensitive(group_name, all_custom_groupings)
+                if actual_name:
+                    display_custom_groupings[actual_name] = all_custom_groupings[actual_name]
                 else:
                     print(f"Warning: Custom grouping '{group_name}' not found in custom_groupings.json.")
         else:

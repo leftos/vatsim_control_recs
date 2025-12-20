@@ -221,7 +221,7 @@ if not ensure_spacy_model_installed():
 
 from backend import analyze_flights_data, load_unified_airport_data  # noqa: E402
 from backend.config import constants as backend_constants  # noqa: E402
-from backend.core.groupings import load_all_groupings, resolve_grouping_recursively  # noqa: E402
+from backend.core.groupings import load_all_groupings, resolve_grouping_recursively, find_grouping_case_insensitive  # noqa: E402
 from backend.cache.manager import load_aircraft_approach_speeds  # noqa: E402
 from airport_disambiguator import AirportDisambiguator  # noqa: E402
 from ui import VATSIMControlApp, expand_countries_to_airports  # noqa: E402
@@ -309,9 +309,10 @@ def main():
         # Handle supergroupings (includes sub-groupings)
         if args.supergroupings:
             for supergroup_name in args.supergroupings:
-                if supergroup_name in all_groupings:
+                actual_name = find_grouping_case_insensitive(supergroup_name, all_groupings)
+                if actual_name:
                     # Recursively resolve the supergrouping to all airports
-                    resolved_airports = resolve_grouping_recursively(supergroup_name, all_groupings)
+                    resolved_airports = resolve_grouping_recursively(actual_name, all_groupings)
                     grouping_airports.update(resolved_airports)
                 else:
                     print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json")
@@ -319,8 +320,9 @@ def main():
         # Handle regular groupings
         if args.groupings:
             for group_name in args.groupings:
-                if group_name in all_groupings:
-                    grouping_airports.update(all_groupings[group_name])
+                actual_name = find_grouping_case_insensitive(group_name, all_groupings)
+                if actual_name:
+                    grouping_airports.update(all_groupings[actual_name])
                 else:
                     print(f"Warning: Grouping '{group_name}' not found in custom_groupings.json")
 
