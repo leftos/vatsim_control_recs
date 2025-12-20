@@ -376,7 +376,6 @@ class VATSIMControlApp(App):
             self.args.max_eta_hours if self.args else 1.0,
             self.airport_allowlist,  # Use stored airport_allowlist (includes country expansions)
             self.args.groupings if self.args else None,
-            self.args.supergroupings if self.args else None,
             self.include_all_staffed,
             self.hide_wind,
             self.include_all_arriving,

@@ -37,9 +37,9 @@ Track airports by country:
 python main.py --countries US DE
 ```
 
-Track custom groupings:
+Track custom groupings (recursively expanded to include all airports and sub-groupings):
 ```bash
-python main.py --groupings "Bay Area" --supergroupings "California"
+python main.py --groupings "Bay Area" "California"
 ```
 
 Additional useful options:
@@ -87,7 +87,7 @@ The codebase is organized into distinct layers:
 1. **Initial Load** (`main.py`):
    - Parse command-line arguments
    - Load unified airport data (APT_BASE.csv, airports.json, iata-icao.csv)
-   - Expand groupings/supergroupings/countries to individual airport ICAOs
+   - Expand groupings/countries to individual airport ICAOs
    - Call `analyze_flights_data()` to fetch and process initial data
 
 2. **Analysis Pipeline** (`backend/core/analysis.py`):
@@ -126,8 +126,7 @@ The codebase is organized into distinct layers:
 **Airport Tracking**: The application operates on a list of tracked airports (`airport_allowlist`) which can be specified via:
 - `--airports` (explicit ICAO codes)
 - `--countries` (expanded to all airports in those countries)
-- `--groupings` (expanded to member airports)
-- `--supergroupings` (recursively expanded to include sub-groupings)
+- `--groupings` (recursively expanded to all airports and sub-groupings)
 
 All tracking happens at the individual airport level; groupings are only used for display organization.
 

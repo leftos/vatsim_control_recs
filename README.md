@@ -2,7 +2,7 @@
 
 ```text
 usage: main.py [-h] [--max-eta-hours MAX_ETA_HOURS] [--refresh-interval REFRESH_INTERVAL] [--airports AIRPORTS [AIRPORTS ...]] [--countries COUNTRIES [COUNTRIES ...]] [--groupings GROUPINGS [GROUPINGS ...]]
-               [--supergroupings SUPERGROUPINGS [SUPERGROUPINGS ...]] [--include-all-staffed] [--disable-animations] [--progressive-load] [--progressive-chunk-size PROGRESSIVE_CHUNK_SIZE] [--wind-source {metar,minute}]
+               [--include-all-staffed] [--disable-animations] [--progressive-load] [--progressive-chunk-size PROGRESSIVE_CHUNK_SIZE] [--wind-source {metar,minute}]
 
 Analyze VATSIM flight data and controller staffing
 
@@ -17,9 +17,7 @@ options:
   --countries COUNTRIES [COUNTRIES ...]
                         List of country codes (e.g., US DE) to include all airports from those countries
   --groupings GROUPINGS [GROUPINGS ...]
-                        List of custom grouping names to track. All airports in these groupings will be tracked. Groupings are shown in the Groupings tab.
-  --supergroupings SUPERGROUPINGS [SUPERGROUPINGS ...]
-                        List of supergrouping names to track. All airports in these supergroupings and their sub-groupings will be tracked. Groupings are shown in the Groupings tab.
+                        List of custom grouping names to include in analysis. Groupings are recursively expanded to include all airports and sub-groupings. (default: all)
   --include-all-staffed
                         Include airports with zero planes if they are staffed (default: False)
   --disable-animations  Disable split-flap animations for instant text updates (default: False)
@@ -71,7 +69,7 @@ Within the Tracked Airports Manager, you can press 'A' to open a quick dialog fo
 
 The app will automatically refresh with the updated airport list after applying changes.
 
-**Note:** When you use `--groupings` or `--supergroupings` command-line options, all airports within those groupings are automatically tracked. The groupings are used for display purposes in the Groupings tab, but all tracking and analysis works at the individual airport level.
+**Note:** When you use `--groupings` command-line options, all airports within those groupings are automatically tracked. Groupings are recursively expanded to include all airports and sub-groupings. The groupings are used for display purposes in the Groupings tab, but all tracking and analysis works at the individual airport level.
 
 **This project includes IATA/ICAO List data available from <http://www.ip2location.com>.**
 

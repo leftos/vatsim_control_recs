@@ -47,7 +47,6 @@ def analyze_flights_data(
     max_eta_hours: float = 1.0,
     airport_allowlist: Optional[List[str]] = None,
     groupings_allowlist: Optional[List[str]] = None,
-    supergroupings_allowlist: Optional[List[str]] = None,
     include_all_staffed: bool = True,
     hide_wind: bool = False,
     include_all_arriving: bool = False,
@@ -56,18 +55,17 @@ def analyze_flights_data(
 ) -> Tuple[Optional[List[AirportStats]], Optional[List[GroupingStats]], int, Dict[str, Dict[str, Any]], Optional[AirportDisambiguator]]:
     """
     Main function to analyze VATSIM flights and controller staffing - returns data structures.
-    
+
     Args:
         max_eta_hours: Maximum ETA in hours for arrival filter (default: 1.0)
-        airport_allowlist: Optional list of airport ICAOs to include (already expanded from groupings/supergroupings)
+        airport_allowlist: Optional list of airport ICAOs to include (already expanded from groupings)
         groupings_allowlist: Optional list of custom grouping names to display (for display purposes only)
-        supergroupings_allowlist: Optional list of supergrouping names to display (for display purposes only)
         include_all_staffed: Whether to include airports with zero planes if staffed (default: True)
         hide_wind: Whether to hide the wind column from the main view (default: False)
         include_all_arriving: Whether to include airports with any arrivals filed, regardless of max_eta_hours (default: False)
         unified_airport_data: Optional pre-loaded unified airport data
         disambiguator: Optional pre-created disambiguator instance
-    
+
     Returns:
         Tuple of (airport_data, grouped_data, total_flights, unified_airport_data, disambiguator):
         - airport_data: List of AirportStats objects with airport statistics
@@ -103,14 +101,14 @@ def analyze_flights_data(
     )
     
     # Determine which groupings to display (for the groupings tab)
-    # Note: The airport_allowlist already contains all airports from groupings/supergroupings
+    # Note: The airport_allowlist already contains all airports from groupings
     display_custom_groupings = {}
 
     if all_custom_groupings:
-        if supergroupings_allowlist:
-            # Display supergroupings and their sub-groupings
+        if groupings_allowlist:
+            # Display specified groupings and their sub-groupings
             included_group_names = set()
-            resolved_supergroup_airports = set()
+            resolved_grouping_airports = set()
 
             # Cache for resolved groupings to avoid redundant resolution
             resolved_cache: dict = {}
@@ -120,38 +118,29 @@ def analyze_flights_data(
                     resolved_cache[name] = resolve_grouping_recursively(name, all_custom_groupings)
                 return resolved_cache[name]
 
-            for supergroup_name in supergroupings_allowlist:
-                actual_name = find_grouping_case_insensitive(supergroup_name, all_custom_groupings)
+            for group_name in groupings_allowlist:
+                actual_name = find_grouping_case_insensitive(group_name, all_custom_groupings)
                 if actual_name:
                     included_group_names.add(actual_name)
-                    # Recursively resolve the supergrouping to all airports (using cache)
-                    supergroup_airports = get_resolved(actual_name)
-                    resolved_supergroup_airports.update(supergroup_airports)
+                    # Recursively resolve the grouping to all airports (using cache)
+                    group_airports = get_resolved(actual_name)
+                    resolved_grouping_airports.update(group_airports)
                 else:
-                    print(f"Warning: Supergrouping '{supergroup_name}' not found in custom_groupings.json.")
+                    print(f"Warning: Grouping '{group_name}' not found in custom_groupings.json.")
 
-            # Find all sub-groupings that are subsets of the resolved supergrouping airports
+            # Find all sub-groupings that are subsets of the resolved grouping airports
             for other_group_name in all_custom_groupings:
                 if other_group_name not in included_group_names:
                     # Resolve this grouping using cache
                     resolved_other_airports = get_resolved(other_group_name)
-                    if resolved_other_airports and resolved_other_airports.issubset(resolved_supergroup_airports):
+                    if resolved_other_airports and resolved_other_airports.issubset(resolved_grouping_airports):
                         included_group_names.add(other_group_name)
 
             # Populate display groupings
             for name in included_group_names:
                 display_custom_groupings[name] = all_custom_groupings[name]
-
-        elif groupings_allowlist:
-            # Display only the specified groupings
-            for group_name in groupings_allowlist:
-                actual_name = find_grouping_case_insensitive(group_name, all_custom_groupings)
-                if actual_name:
-                    display_custom_groupings[actual_name] = all_custom_groupings[actual_name]
-                else:
-                    print(f"Warning: Custom grouping '{group_name}' not found in custom_groupings.json.")
         else:
-            # If no groupings_allowlist and no supergrouping, display all groupings
+            # If no groupings_allowlist, display all groupings
             display_custom_groupings = all_custom_groupings
     else:
         display_custom_groupings = {}
