@@ -32,10 +32,10 @@ class FlightBoardScreen(ModalScreen):
     }
     
     #board-container {
-        width: 90%;
-        height: 85%;
+        width: 100%;
+        height: 100%;
         background: $surface;
-        border: thick $primary;
+        border: none;
     }
     
     #board-header {
