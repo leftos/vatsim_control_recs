@@ -387,13 +387,44 @@ class MetarInfoScreen(ModalScreen):
         except (ValueError, TypeError):
             return None
     
+    def _highlight_flight_category_components(self, metar: str) -> str:
+        """
+        Highlight visibility and ceiling components in METAR that determine flight category.
+
+        Args:
+            metar: Raw METAR string
+
+        Returns:
+            METAR string with rich text markup highlighting flight category components
+        """
+        if not metar:
+            return metar
+
+        # Get flight category and color
+        _category, color = get_flight_category(metar)
+
+        # Extract visibility and ceiling strings
+        vis_str, ceiling_str = _extract_flight_rules_weather(metar)
+
+        highlighted = metar
+
+        # Highlight visibility if present using the flight category color
+        if vis_str:
+            highlighted = highlighted.replace(vis_str, f"[bold underline {color}]{vis_str}[/bold underline {color}]", 1)
+
+        # Highlight ceiling if present using the flight category color
+        if ceiling_str:
+            highlighted = highlighted.replace(ceiling_str, f"[bold underline {color}]{ceiling_str}[/bold underline {color}]", 1)
+
+        return highlighted
+
     def _colorize_taf(self, taf: str) -> str:
         """
         Colorize the TAF entry applicable to the current Zulu time.
-        
+
         Args:
             taf: Raw TAF string
-            
+
         Returns:
             TAF string with rich text markup for the current period
         """
@@ -531,7 +562,11 @@ class MetarInfoScreen(ModalScreen):
         if metar:
             category, color = get_flight_category(metar)
             result_lines = [f"{pretty_name} ({icao}) // [{color} bold]{category}[/{color} bold]", ""]
-            result_lines.append(metar)
+
+            # Highlight the visibility and ceiling components that determine flight category
+            highlighted_metar = self._highlight_flight_category_components(metar)
+            result_lines.append(highlighted_metar)
+
             # Show VFR alternatives hint for IFR/LIFR conditions
             self._update_hint(category)
         else:
