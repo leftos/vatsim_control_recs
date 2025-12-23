@@ -95,13 +95,28 @@ def calculate_eta(
     """
     if flight['arrival'] in airports_data and flight.get('groundspeed', 0) > 40:
         arrival_airport = airports_data[flight['arrival']]
-        distance = haversine_distance_nm(
+        lateral_distance = haversine_distance_nm(
             flight['latitude'],
             flight['longitude'],
             arrival_airport['latitude'],
             arrival_airport['longitude']
         )
-        
+
+        # Account for altitude: aircraft need distance to descend
+        # Using the 3:1 rule: 3nm per 1000ft of altitude to lose
+        APPROACH_AGL = 2500  # Target altitude AGL for approach (feet)
+        DESCENT_GRADIENT = 3.0  # nm per 1000 feet of altitude loss
+
+        current_altitude = flight.get('altitude', 0) or 0
+        airport_elevation = arrival_airport.get('elevation', 0) or 0
+
+        target_altitude = airport_elevation + APPROACH_AGL
+        altitude_to_lose = max(0, current_altitude - target_altitude)
+        descent_distance_required = (altitude_to_lose / 1000) * DESCENT_GRADIENT
+
+        # Effective distance is the greater of lateral or descent requirement
+        distance = max(lateral_distance, descent_distance_required)
+
         # Default: use current groundspeed for entire distance
         groundspeed = flight['groundspeed']
         eta_hours = distance / groundspeed
