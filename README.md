@@ -1,5 +1,7 @@
 # VATSIM Control Recommendations
 
+[Discord](https://discord.gg/TR3FSpzvvp)
+
 ```text
 usage: main.py [-h] [--max-eta-hours MAX_ETA_HOURS] [--refresh-interval REFRESH_INTERVAL] [--airports AIRPORTS [AIRPORTS ...]] [--countries COUNTRIES [COUNTRIES ...]] [--groupings GROUPINGS [GROUPINGS ...]]
                [--include-all-staffed] [--disable-animations] [--progressive-load] [--progressive-chunk-size PROGRESSIVE_CHUNK_SIZE] [--wind-source {metar,minute}]
