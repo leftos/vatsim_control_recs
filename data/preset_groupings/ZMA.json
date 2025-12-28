@@ -1,0 +1,42 @@
+{
+  "MIA Miami Sector": [
+    "KMIA",
+    "KTMB",
+    "KHST"
+  ],
+  "MIA Fort Lauderdale Sector": [
+    "KMIA",
+    "KFLL",
+    "KOPF",
+    "KFXE",
+    "KPMP",
+    "KHWO"
+  ],
+  "TPA Tampa": [
+    "KTPA",
+    "KSRQ",
+    "KPIE",
+    "KLAL",
+    "KSPG",
+    "KBKV",
+    "KBOW",
+    "KMCF"
+  ],
+  "PBI Palm Beach": [
+    "KPBI",
+    "KFPR",
+    "KSUA",
+    "KVRB",
+    "KBCT"
+  ],
+  "RSW Fort Myers": [
+    "KRSW",
+    "KPGD",
+    "KAPF",
+    "KFMY"
+  ],
+  "NQX Navy Key West": [
+    "KEYW",
+    "KNQX"
+  ]
+}

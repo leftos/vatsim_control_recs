@@ -1,0 +1,171 @@
+{
+  "AUS TRACON": [
+    "3R9",
+    "3T5",
+    "50R",
+    "84R",
+    "88R",
+    "KAUS",
+    "KEDC",
+    "KGTU",
+    "KGYB",
+    "KHYI",
+    "KRYW",
+    "T20",
+    "T74",
+    "T91"
+  ],
+  "I90 Beaumont": [
+    "KBPT",
+    "KBMT",
+    "KORG"
+  ],
+  "I90 College Station": [
+    "KCLL",
+    "KCFD",
+    "KELA"
+  ],
+  "I90 Consolidated": [
+    "11R",
+    "45R",
+    "54T",
+    "60R",
+    "6R3",
+    "KARM",
+    "KAXH",
+    "KBMT",
+    "KBPT",
+    "KBYY",
+    "KCFD",
+    "KCLL",
+    "KCXO",
+    "KDWH",
+    "KEFD",
+    "KELA",
+    "KGLS",
+    "KHOU",
+    "KHPY",
+    "KIAH",
+    "KIWS",
+    "KLBX",
+    "KLVJ",
+    "KORG",
+    "KRCK",
+    "KRWV",
+    "KSGR",
+    "T00",
+    "T35",
+    "T41",
+    "T51",
+    "T78",
+    "KTME"
+  ],
+  "SAT TRACON": [
+    "5C1",
+    "KBAZ",
+    "KCVB",
+    "KPEZ",
+    "KRND",
+    "KSAT",
+    "KSKF",
+    "KSSF"
+  ],
+  "DLF DLF RAPCON": [
+    "5T9",
+    "KDLF",
+    "KDRT",
+    "KECU",
+    "T70"
+  ],
+  "NQI NQI RATCF": [
+    "07R",
+    "67T",
+    "KALI",
+    "KBKS",
+    "KIKG",
+    "KNOG",
+    "KNQI"
+  ],
+  "LCH TRACON": [
+    "3R7",
+    "5R8",
+    "6R1",
+    "KCWF",
+    "KLCH",
+    "KUXL"
+  ],
+  "CRP Corpus TRACON": [
+    "KCRP",
+    "KNGP",
+    "KNWL",
+    "KNGW"
+  ],
+  "CRP Valley TRACON": [
+    "KBRO",
+    "KMFE",
+    "KHRL"
+  ],
+  "LFT TRACON": [
+    "3R2",
+    "4R7",
+    "KARA",
+    "KIYA",
+    "KLFT",
+    "KOPL"
+  ],
+  "GPT TRACON": [
+    "5R2",
+    "KBIX",
+    "KGPT",
+    "KHSA",
+    "M13",
+    "M24",
+    "KMJD"
+  ],
+  "MOB TRACON": [
+    "1R8",
+    "KBFM",
+    "KCQF",
+    "KJKA",
+    "KMOB",
+    "KPQL"
+  ],
+  "BTR TRACON": [
+    "7L9",
+    "KBTR",
+    "KHZR",
+    "KREG"
+  ],
+  "POE POE ARAC": [
+    "3R4",
+    "KACP",
+    "KAEX",
+    "KDRI",
+    "KESF",
+    "KIER",
+    "KMKV",
+    "KPOE"
+  ],
+  "MSY TRACON": [
+    "KAPS",
+    "KASD",
+    "KHDC",
+    "KHUM",
+    "KMSY",
+    "KNBG",
+    "KNEW",
+    "KPTN"
+  ],
+  "I90 Towers": [
+    "KIAH",
+    "KHOU",
+    "KEFD",
+    "KDWH",
+    "KCLL",
+    "KBPT",
+    "KGLS",
+    "KCXO",
+    "KTME",
+    "KSGR"
+  ]
+}

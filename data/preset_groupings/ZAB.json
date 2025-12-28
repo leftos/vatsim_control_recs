@@ -1,0 +1,119 @@
+{
+  "P50 P50 Arrivals": [
+    "KCHD",
+    "KDVT",
+    "KFFZ",
+    "KFLG",
+    "KGEU",
+    "KGXF",
+    "KGYR",
+    "KIWA",
+    "KLUF",
+    "KPHX",
+    "KPRC",
+    "KSDL",
+    "KSEZ",
+    "P19",
+    "KCMR"
+  ],
+  "P50 P50 Departures": [
+    "KCHD",
+    "KDVT",
+    "KFFZ",
+    "KGEU",
+    "KGXF",
+    "KGYR",
+    "KIWA",
+    "KLUF",
+    "KPHX",
+    "KSDL",
+    "P19"
+  ],
+  "P50 P50 Satellite": [
+    "KCHD",
+    "KDVT",
+    "KFFZ",
+    "KFLG",
+    "KGEU",
+    "KGXF",
+    "KGYR",
+    "KIWA",
+    "KLUF",
+    "KPHX",
+    "KPRC",
+    "KSDL",
+    "KSEZ",
+    "P19",
+    "KCMR"
+  ],
+  "P50 P50 NAA JEROME": [
+    "KPRC",
+    "KFLG",
+    "KSEZ",
+    "KCMR"
+  ],
+  "U90": [
+    "KDMA",
+    "KRYN",
+    "KTUS",
+    "KAVQ",
+    "KOLS"
+  ],
+  "ABQ": [
+    "KABQ",
+    "KAEG",
+    "KBRG",
+    "E98"
+  ],
+  "ELP": [
+    "KBIF",
+    "KELP",
+    "KDNA"
+  ],
+  "AMA": [
+    "KAMA",
+    "KHRX",
+    "KBGD",
+    "KTDW",
+    "H81",
+    "T45"
+  ],
+  "CVS": [
+    "KCVS",
+    "KCVN"
+  ],
+  "HMN": [
+    "KHMN",
+    "KALM"
+  ],
+  "LUF Combined": [
+    "KGEU",
+    "KGXF",
+    "KGYR",
+    "KLUF"
+  ],
+  "LUF TAC": [
+    "KLUF",
+    "KGXF"
+  ],
+  "LUF LUF Deltas": [
+    "KGEU",
+    "KGXF",
+    "KGYR"
+  ],
+  "P50 Towers": [
+    "KPHX",
+    "KSDL",
+    "KCHD",
+    "KDVT",
+    "KFFZ",
+    "KIWA",
+    "KFLG",
+    "KPRC"
+  ],
+  "U90 Towers": [
+    "KDMA",
+    "KRYN",
+    "KTUS"
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "D21 Detroit TRACON": [
+    "KARB",
+    "KDET",
+    "KDTW",
+    "KPTK",
+    "KYIP",
+    "CYQG"
+  ],
+  "CLE Cleveland TRACON": [
+    "KCLE",
+    "KBKL",
+    "KCGF",
+    "KCAK",
+    "KMFD"
+  ],
+  "BUF Buffalo TRACON": [
+    "KBUF",
+    "KERI",
+    "KIAG"
+  ],
+  "PIT Pittsburgh TRACON": [
+    "KAGC",
+    "KBVI",
+    "KHLG",
+    "KPIT"
+  ],
+  "LAN Great Lakes TRACON": [
+    "KLAN",
+    "KFNT",
+    "KMBS",
+    "KJXN"
+  ],
+  "CKB Clarksburg TRACON": [
+    "KCKB",
+    "KMGW"
+  ],
+  "YNG Youngstown TRACON": [
+    "KYNG",
+    "KFKL"
+  ],
+  "JST Johnstown RAPCON": [
+    "2G9",
+    "6P7",
+    "9G8",
+    "KAOO",
+    "KCBE",
+    "KHMZ",
+    "KIDI",
+    "KJST",
+    "KLBE"
+  ],
+  "D21 Towers": [
+    "KDTW",
+    "KYIP",
+    "KARB",
+    "KDET",
+    "KPTK"
+  ]
+}

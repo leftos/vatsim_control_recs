@@ -1,12 +1,17 @@
 """
-Airport groupings management (custom groupings and ARTCC-based groupings).
+Airport groupings management (custom groupings, preset groupings, and ARTCC-based groupings).
 """
 
 import json
+import os
 from collections import defaultdict
+from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
 
 from backend.cache.manager import get_artcc_groupings_cache, set_artcc_groupings_cache
+
+# Path to preset groupings directory
+PRESET_GROUPINGS_DIR = Path(__file__).parent.parent.parent / "data" / "preset_groupings"
 
 
 def find_grouping_case_insensitive(
@@ -170,31 +175,74 @@ def load_custom_groupings(filename: str) -> Optional[Dict[str, List[str]]]:
         return None
 
 
+def load_preset_groupings() -> Dict[str, List[str]]:
+    """
+    Load all preset groupings from the preset_groupings directory.
+    Each JSON file in the directory represents one ARTCC's groupings.
+
+    Returns:
+        Dictionary mapping grouping names to lists of airport codes
+    """
+    from common import logger
+
+    all_preset_groupings: Dict[str, List[str]] = {}
+
+    if not PRESET_GROUPINGS_DIR.exists():
+        return all_preset_groupings
+
+    for json_file in PRESET_GROUPINGS_DIR.glob("*.json"):
+        try:
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            if not isinstance(data, dict):
+                logger.warning(f"Preset groupings file '{json_file.name}' must contain a JSON object")
+                continue
+
+            for key, value in data.items():
+                if not isinstance(key, str):
+                    continue
+                if isinstance(value, list):
+                    # Ensure all elements are strings
+                    all_preset_groupings[key] = [str(v) for v in value]
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"Could not decode JSON from preset groupings file '{json_file.name}': {e}")
+        except Exception as e:
+            logger.warning(f"Error loading preset groupings file '{json_file.name}': {e}")
+
+    return all_preset_groupings
+
+
 def load_all_groupings(
     custom_groupings_filename: str,
     unified_data: Dict[str, Dict[str, Any]]
 ) -> Dict[str, List[str]]:
     """
-    Load and merge custom groupings and ARTCC groupings.
-    Custom groupings take precedence over ARTCC groupings if there's a name conflict.
-    
+    Load and merge all groupings sources in order of precedence:
+    1. ARTCC groupings (lowest priority - from unified airport data)
+    2. Preset groupings (from data/preset_groupings/*.json files)
+    3. Custom groupings (highest priority - user-defined)
+
     Args:
         custom_groupings_filename: Path to the custom groupings JSON file
         unified_data: Unified airport data dictionary
-    
+
     Returns:
         Merged dictionary of all groupings
     """
-    # Load ARTCC groupings first
+    # Load ARTCC groupings first (lowest priority)
     artcc_groupings = load_artcc_groupings(unified_data)
-    
-    # Load custom groupings
+
+    # Load preset groupings (medium priority)
+    preset_groupings = load_preset_groupings()
+
+    # Load custom groupings (highest priority)
     custom_groupings = load_custom_groupings(custom_groupings_filename)
-    
-    # Merge them (custom groupings override ARTCC groupings if there's a conflict)
+
+    # Merge them in order of precedence (later entries override earlier)
+    all_groupings = {**artcc_groupings, **preset_groupings}
     if custom_groupings:
-        all_groupings = {**artcc_groupings, **custom_groupings}
-    else:
-        all_groupings = artcc_groupings
-    
+        all_groupings.update(custom_groupings)
+
     return all_groupings

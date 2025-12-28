@@ -1,0 +1,179 @@
+{
+  "ACT": [
+    "68F",
+    "7F7",
+    "KACT",
+    "KCNW",
+    "KGOP",
+    "KHLR",
+    "KINJ",
+    "KLXY",
+    "KPWG",
+    "T15"
+  ],
+  "GGG": [
+    "07F",
+    "F51",
+    "KGGG",
+    "KJDD",
+    "KJSO",
+    "KJXI",
+    "KRFI",
+    "KTYR"
+  ],
+  "SHV": [
+    "3F3",
+    "3F4",
+    "4F2",
+    "KASL",
+    "KBAD",
+    "KDTN",
+    "KMNE",
+    "KSHV",
+    "KSPH"
+  ],
+  "MLU": [
+    "KBQP",
+    "F88",
+    "M79",
+    "KMLU",
+    "KRSN"
+  ],
+  "D10": [
+    "1F7",
+    "25XS",
+    "2TE2",
+    "30F",
+    "4T2",
+    "4TX2",
+    "50F",
+    "52F",
+    "7TX4",
+    "9F9",
+    "KADS",
+    "KAFW",
+    "KCPT",
+    "KDAL",
+    "KDFW",
+    "KDTO",
+    "F41",
+    "F46",
+    "F69",
+    "KFTW",
+    "KFWS",
+    "KGKY",
+    "KGPM",
+    "KHQZ",
+    "KJWY",
+    "KLNC",
+    "KLUD",
+    "KNFW",
+    "KRBD",
+    "T31",
+    "T56",
+    "T67",
+    "KTKI",
+    "KWEA"
+  ],
+  "D10 AFW": [
+    "KAFW",
+    "7TX4"
+  ],
+  "D10 DTO": [
+    "KDTO",
+    "74T",
+    "4TX8"
+  ],
+  "D10 ADS": [
+    "KADS",
+    "F69"
+  ],
+  "OKC": [
+    "KOKC",
+    "KTIK",
+    "KPWA",
+    "KOUN",
+    "KHSD",
+    "1K4",
+    "KSNL",
+    "KHMY",
+    "KRQO",
+    "KCHK",
+    "KGOK",
+    "KRCE",
+    "3O3"
+  ],
+  "FSI Fort Sill": [
+    "KDUC",
+    "KFSI",
+    "KLAW"
+  ],
+  "ABI": [
+    "3F2",
+    "77F",
+    "KABI",
+    "KDYS",
+    "F56",
+    "KGZN",
+    "KSWW",
+    "T23"
+  ],
+  "LBB": [
+    "2F4",
+    "41F",
+    "5F1",
+    "8F3",
+    "KBFE",
+    "F49",
+    "F83",
+    "KLBB",
+    "KLIU",
+    "KLLN",
+    "KPVW"
+  ],
+  "MAF": [
+    "E11",
+    "E30",
+    "KMAF",
+    "KMDD",
+    "KODO",
+    "KSJT"
+  ],
+  "SPS": [
+    "KCWC",
+    "F14",
+    "KSPS"
+  ],
+  "LTS": [
+    "2K4",
+    "KAXS",
+    "F05",
+    "KFDR",
+    "KHBR",
+    "KLTS",
+    "O35"
+  ],
+  "GRK": [
+    "KGRK",
+    "KHLR",
+    "KILE",
+    "KLZZ",
+    "KMNZ",
+    "KTPL"
+  ],
+  "D10 Towers": [
+    "KDFW",
+    "KDAL",
+    "KADS",
+    "KTKI",
+    "KDTO",
+    "KAFW",
+    "KFTW",
+    "KFWS",
+    "KGKY",
+    "KGPM",
+    "KRBD",
+    "KHQZ",
+    "KNFW"
+  ]
+}

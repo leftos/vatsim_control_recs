@@ -1,73 +1,7 @@
 {
-  "NCT Combined": [
-    "KSJC",
-    "KMRY",
-    "KSNS",
-    "KRHV",
-    "KPAO",
-    "KSQL",
-    "KNUQ",
-    "KSFO",
-    "KOAK",
-    "KHWD",
-    "KLVK",
-    "KMOD",
-    "KSCK",
-    "KMER",
-    "KSMF",
-    "KSAC",
-    "KMHR",
-    "KBAB",
-    "KRNO"
-  ],
-  "NCT Area A": [
-    "KSJC",
-    "KMRY",
-    "KSNS",
-    "KRHV",
-    "KPAO",
-    "KSQL",
-    "KNUQ"
-  ],
-  "NCT Area B": [
-    "KSFO",
-    "KSQL"
-  ],
-  "NCT Area C": [
-    "KOAK",
-    "KHWD",
-    "KLVK",
-    "KMOD",
-    "KSCK",
-    "KMER"
-  ],
-  "NCT Area D": [
-    "KSFO",
-    "KOAK"
-  ],
-  "NCT Area E": [
-    "KSMF",
-    "KSAC",
-    "KO88",
-    "KMHR",
-    "KAUN",
-    "KBAB",
-    "KGOO",
-    "KLHM",
-    "KMCC",
-    "KMYV",
-    "KOVE",
-    "KPVF"
-  ],
-  "NCT Area R": [
-    "KRNO",
-    "KRTS",
-    "KCXP",
-    "KMEV"
-  ],
-  "NCT Areas E+R": [
-    "NCT Area E",
-    "NCT Area R"
+  "NCT E+R": [
+    "NCT E",
+    "NCT R"
   ],
   "FAT_APP": [
     "KFAT",
@@ -81,15 +15,6 @@
     "E79",
     "KVIS",
     "1Q1"
-  ],
-  "ZOA Combined": [
-    "NCT Area A",
-    "NCT Area B",
-    "NCT Area C",
-    "NCT Area D",
-    "NCT Area E",
-    "NCT Area R",
-    "FAT_APP"
   ],
   "HNL_APP": [
     "PHNL",

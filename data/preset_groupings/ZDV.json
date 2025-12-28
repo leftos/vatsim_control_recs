@@ -1,0 +1,78 @@
+{
+  "D01 Denver": [
+    "KDEN",
+    "KAPA",
+    "KBJC",
+    "KBDU",
+    "KLMO",
+    "18V",
+    "KCFO",
+    "KFNL",
+    "KGXY"
+  ],
+  "D01 Pueblo": [
+    "KPUB",
+    "1V6",
+    "7CO8",
+    "80CO",
+    "99CO",
+    "46CO",
+    "CO80"
+  ],
+  "D01 Junction": [
+    "KGJT",
+    "10CO"
+  ],
+  "D01 Hidden": [
+    "KDEN",
+    "KAPA",
+    "KBJC",
+    "KBDU",
+    "KLMO",
+    "18V",
+    "KCFO",
+    "KFNL",
+    "KGXY"
+  ],
+  "COS": [
+    "KCOS",
+    "KFLY",
+    "KFCS",
+    "KAFF",
+    "CO4",
+    "CO90",
+    "5V4"
+  ],
+  "CPR": [
+    "KCPR",
+    "KHAD",
+    "45WY"
+  ],
+  "RCA": [
+    "KRAP",
+    "KRCA",
+    "49B",
+    "KSPF",
+    "KCUT",
+    "6V4",
+    "3SD2"
+  ],
+  "CYS Cheyenne": [
+    "KCYS",
+    "KFEW",
+    "WY46",
+    "WY05",
+    "WY45",
+    "82V"
+  ],
+  "D01 Towers": [
+    "KGJT",
+    "KDEN",
+    "KAPA",
+    "KBJC",
+    "KPUB",
+    "KCFO",
+    "KFNL",
+    "KBKF"
+  ]
+}

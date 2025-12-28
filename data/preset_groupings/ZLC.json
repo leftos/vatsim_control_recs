@@ -1,0 +1,70 @@
+{
+  "BIL TRACON": [
+    "00U",
+    "03MT",
+    "0MT5",
+    "16MT",
+    "1MT2",
+    "1MT9",
+    "35MT",
+    "3MT3",
+    "44MT",
+    "49MT",
+    "50MT",
+    "5U7",
+    "63MT",
+    "6S1",
+    "6S3",
+    "6S8",
+    "80S",
+    "96MT",
+    "KBIL",
+    "MT13",
+    "MT25",
+    "MT40",
+    "MT55",
+    "MT57"
+  ],
+  "BOI RADAR": [
+    "KMAN",
+    "KEUL"
+  ],
+  "BZN RADAR": [
+    "K6S0",
+    "9S5",
+    "KBZN",
+    "KEKS",
+    "KLVM",
+    "KWYS",
+    "MT36",
+    "3MT6",
+    "MT34",
+    "9U1",
+    "MT41",
+    "2MT8",
+    "MT42",
+    "MT48",
+    "MT94",
+    "2MT5",
+    "23MT",
+    "21MT"
+  ],
+  "MUO Range Control": [
+    "KMUO",
+    "U91",
+    "3U0",
+    "08U",
+    "10U",
+    "U89"
+  ],
+  "MSO Approach": [
+    "32S",
+    "52S"
+  ],
+  "S56 Towers": [
+    "KOGD",
+    "KPVU",
+    "KSLC",
+    "KHIF"
+  ]
+}
