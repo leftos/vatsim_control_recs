@@ -152,3 +152,8 @@ Thumbs.db
 *.temp
 
 .claude/
+
+# Data files downloaded at boot
+data/runways_metadata.txt
+data/runways.csv
+data/cifp/FAACIFP*

@@ -218,6 +218,7 @@ if not ensure_spacy_model_installed():
     sys.exit(1)
 
 from backend import analyze_flights_data, load_unified_airport_data  # noqa: E402
+from backend import ensure_cifp_data, ensure_runway_data, cleanup_old_cifp_caches  # noqa: E402
 from backend.config import constants as backend_constants  # noqa: E402
 from backend.core.groupings import load_all_groupings, resolve_grouping_recursively, find_grouping_case_insensitive  # noqa: E402
 from backend.cache.manager import load_aircraft_approach_speeds  # noqa: E402
@@ -263,7 +264,24 @@ def main():
     
     # Log cleanup happens automatically when debug_logger is imported
     debug_logger.info("Application starting")
-    
+
+    # Ensure CIFP data is available (downloads from FAA if needed)
+    # This happens once per AIRAC cycle (28 days)
+    cifp_result = ensure_cifp_data(quiet=False)
+    if cifp_result:
+        debug_logger.info(f"CIFP data ready: {cifp_result}")
+        # Cleanup old CIFP caches (keep current + 1 previous)
+        cleanup_old_cifp_caches(keep_cycles=2)
+    else:
+        debug_logger.warning("CIFP data unavailable - approach data will not be shown")
+
+    # Ensure runway data is available (downloads from OurAirports if needed/outdated)
+    runway_result = ensure_runway_data(quiet=False)
+    if runway_result:
+        debug_logger.info("Runway data ready")
+    else:
+        debug_logger.warning("Runway data unavailable - runway lengths will not be shown")
+
     print("Loading VATSIM data...")
 
     # Load aircraft approach speeds for ETA calculations

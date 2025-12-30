@@ -38,6 +38,32 @@ from backend.core.calculations import (
     calculate_eta
 )
 
+# Import diversion-related functions
+from backend.core.diversions import (
+    find_suitable_diversions,
+    DiversionOption,
+    DiversionFilters
+)
+from backend.core.aircraft_performance import (
+    get_required_runway_length,
+    can_land_at_runway
+)
+from backend.data.cifp import (
+    ensure_cifp_data,
+    get_approaches_for_airport,
+    get_approach_list_for_airport,
+    has_instrument_approaches,
+    get_current_airac_cycle,
+    cleanup_old_airac_caches as cleanup_old_cifp_caches
+)
+from backend.data.runways import (
+    ensure_runway_data,
+    download_runway_data,
+    get_longest_runway,
+    get_runways,
+    get_runway_summary
+)
+
 __version__ = "1.0.0"
 
 # Export public API
@@ -59,4 +85,23 @@ __all__ = [
     'calculate_bearing',
     'bearing_to_compass',
     'calculate_eta',
+    # Diversion-related
+    'find_suitable_diversions',
+    'DiversionOption',
+    'DiversionFilters',
+    'get_required_runway_length',
+    'can_land_at_runway',
+    # CIFP data
+    'ensure_cifp_data',
+    'get_approaches_for_airport',
+    'get_approach_list_for_airport',
+    'has_instrument_approaches',
+    'get_current_airac_cycle',
+    'cleanup_old_cifp_caches',
+    # Runway data
+    'ensure_runway_data',
+    'download_runway_data',
+    'get_longest_runway',
+    'get_runways',
+    'get_runway_summary',
 ]

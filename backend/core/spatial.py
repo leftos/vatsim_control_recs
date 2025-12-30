@@ -15,10 +15,11 @@ from backend.core.calculations import haversine_distance_nm
 # Default grid cell size in degrees (approximately 60nm at equator)
 DEFAULT_CELL_SIZE = 1.0
 
-# Cache for spatial index
+# Cache for spatial index - keyed by dataset size to handle different airport sets
 _AIRPORT_SPATIAL_INDEX: Optional["SpatialIndex"] = None
 _AIRPORT_SPATIAL_INDEX_LOCK = threading.Lock()
 _AIRPORT_SPATIAL_INDEX_TIMESTAMP: Optional[datetime] = None
+_AIRPORT_SPATIAL_INDEX_SIZE: int = 0  # Track size of dataset used to build index
 _SPATIAL_INDEX_TTL_SECONDS = 300  # Rebuild every 5 minutes
 
 
@@ -163,16 +164,26 @@ class SpatialIndex:
         Returns:
             List of (ICAO code, distance) tuples, sorted by distance
         """
+        import math
+
         results = []
 
         # Get candidate airports from neighboring cells
-        # For larger distances, we may need to check more cells
-        cells_to_check = max(1, int(max_distance_nm / 60) + 1)  # ~60nm per degree
+        # For latitude: ~60nm per degree
+        # For longitude: ~60nm * cos(lat) per degree (shrinks at higher latitudes)
+        cells_lat = max(1, int(max_distance_nm / 60) + 1)
+
+        # Longitude degrees are shorter at higher latitudes
+        # Add extra buffer (+1) for edge effects
+        cos_lat = math.cos(math.radians(abs(lat))) if abs(lat) < 89 else 0.02
+        nm_per_lon_degree = 60 * cos_lat
+        cells_lon = max(1, int(max_distance_nm / nm_per_lon_degree) + 1)
+
         center = self._get_cell_key(lat, lon)
 
         candidates = []
-        for dlat in range(-cells_to_check, cells_to_check + 1):
-            for dlon in range(-cells_to_check, cells_to_check + 1):
+        for dlat in range(-cells_lat, cells_lat + 1):
+            for dlon in range(-cells_lon, cells_lon + 1):
                 cell_key = (center[0] + dlat, center[1] + dlon)
                 if cell_key in self.grid:
                     candidates.extend(self.grid[cell_key])
@@ -204,7 +215,8 @@ def get_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Spati
     Get or build the cached airport spatial index.
 
     The index is cached globally and rebuilt every 5 minutes to pick up
-    any changes to airport data.
+    any changes to airport data. It also rebuilds if a larger dataset is
+    passed (e.g., switching from tracked airports to full database).
 
     This function is thread-safe.
 
@@ -214,16 +226,19 @@ def get_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Spati
     Returns:
         SpatialIndex instance
     """
-    global _AIRPORT_SPATIAL_INDEX, _AIRPORT_SPATIAL_INDEX_TIMESTAMP
+    global _AIRPORT_SPATIAL_INDEX, _AIRPORT_SPATIAL_INDEX_TIMESTAMP, _AIRPORT_SPATIAL_INDEX_SIZE
 
     current_time = datetime.now(timezone.utc)
+    current_size = len(airports_data) if airports_data else 0
 
     with _AIRPORT_SPATIAL_INDEX_LOCK:
         # Check if we need to build or rebuild the index
+        # Rebuild if: no index, TTL expired, OR larger dataset requested
         needs_rebuild = (
             _AIRPORT_SPATIAL_INDEX is None or
             _AIRPORT_SPATIAL_INDEX_TIMESTAMP is None or
-            (current_time - _AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds() > _SPATIAL_INDEX_TTL_SECONDS
+            (current_time - _AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds() > _SPATIAL_INDEX_TTL_SECONDS or
+            current_size > _AIRPORT_SPATIAL_INDEX_SIZE  # Rebuild for larger datasets
         )
 
         if needs_rebuild:
@@ -231,6 +246,7 @@ def get_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Spati
             index.build(airports_data)
             _AIRPORT_SPATIAL_INDEX = index
             _AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
+            _AIRPORT_SPATIAL_INDEX_SIZE = current_size
 
         assert _AIRPORT_SPATIAL_INDEX is not None
         return _AIRPORT_SPATIAL_INDEX
@@ -238,8 +254,9 @@ def get_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Spati
 
 def clear_spatial_index_cache() -> None:
     """Clear the spatial index cache (thread-safe)."""
-    global _AIRPORT_SPATIAL_INDEX, _AIRPORT_SPATIAL_INDEX_TIMESTAMP
+    global _AIRPORT_SPATIAL_INDEX, _AIRPORT_SPATIAL_INDEX_TIMESTAMP, _AIRPORT_SPATIAL_INDEX_SIZE
 
     with _AIRPORT_SPATIAL_INDEX_LOCK:
         _AIRPORT_SPATIAL_INDEX = None
         _AIRPORT_SPATIAL_INDEX_TIMESTAMP = None
+        _AIRPORT_SPATIAL_INDEX_SIZE = 0

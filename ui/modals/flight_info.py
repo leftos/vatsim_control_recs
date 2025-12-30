@@ -80,6 +80,7 @@ class FlightInfoScreen(ModalScreen):
     BINDINGS = [
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
+        Binding("d", "show_diversions", "Find Diversions", priority=True),
     ]
     
     def __init__(self, flight_data: dict):
@@ -113,7 +114,7 @@ class FlightInfoScreen(ModalScreen):
             yield Static(self._format_title(), id="flight-info-title")
             with Vertical():
                 yield Static(self._format_flight_info(), classes="info-section", id="flight-info-content")
-            yield Static("Press Escape or Q to close", id="flight-info-hint")
+            yield Static("D: Find Diversions | Escape/Q: Close", id="flight-info-hint")
     
     async def on_mount(self) -> None:
         """Load altimeter info and member stats asynchronously after modal is shown"""
@@ -853,3 +854,18 @@ class FlightInfoScreen(ModalScreen):
     def action_close(self) -> None:
         """Close the modal"""
         self.dismiss()
+
+    def action_show_diversions(self) -> None:
+        """Open the diversion finder modal for this flight"""
+        from .diversion_modal import DiversionModal
+
+        # Get the current VATSIM data from the app if available
+        vatsim_data = None
+        if hasattr(self.app, 'vatsim_data'):
+            vatsim_data = self.app.vatsim_data
+
+        diversion_modal = DiversionModal(
+            flight_data=self.flight_data,
+            vatsim_data=vatsim_data,
+        )
+        self.app.push_screen(diversion_modal)
