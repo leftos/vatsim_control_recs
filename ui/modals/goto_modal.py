@@ -93,6 +93,43 @@ class GoToScreen(ModalScreen):
         self.query_one("#goto-input", Input).focus()
         self._load_worker = self.run_worker(self._load_data(), exclusive=True)
 
+    def on_key(self, event) -> None:
+        """Handle key events for navigation between input and list"""
+        option_list = self.query_one("#goto-list", OptionList)
+        input_widget = self.query_one("#goto-input", Input)
+
+        # Check which widget has focus
+        input_focused = input_widget.has_focus
+        list_focused = option_list.has_focus
+
+        if input_focused:
+            if event.key == "down":
+                # Move from input to first item in list
+                if option_list.option_count > 0:
+                    option_list.focus()
+                    option_list.highlighted = 0
+                    event.prevent_default()
+                    event.stop()
+            elif event.key == "up":
+                # Move from input to last item in list
+                if option_list.option_count > 0:
+                    option_list.focus()
+                    option_list.highlighted = option_list.option_count - 1
+                    event.prevent_default()
+                    event.stop()
+
+        elif list_focused:
+            if event.key == "up" and option_list.highlighted == 0:
+                # At first item, cycle to input
+                input_widget.focus()
+                event.prevent_default()
+                event.stop()
+            elif event.key == "down" and option_list.highlighted == option_list.option_count - 1:
+                # At last item, cycle to input
+                input_widget.focus()
+                event.prevent_default()
+                event.stop()
+
     def on_unmount(self) -> None:
         """Cancel any pending workers when modal is closed"""
         if self._load_worker and not self._load_worker.is_finished:
