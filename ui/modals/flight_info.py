@@ -493,7 +493,7 @@ class FlightInfoScreen(ModalScreen):
             if parts:
                 stats_str = f" ({' / '.join(parts)})"
 
-        return f"Flight Info: {callsign} - {pilot_name}{stats_str}"
+        return f"{callsign} - {pilot_name}{stats_str}"
     
     def _format_flight_info(self) -> str:
         """Format all flight information for display"""
