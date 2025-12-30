@@ -194,8 +194,9 @@ class GoToScreen(ModalScreen):
         if item_type == 'airport':
             return f"@ {identifier} - {data}"
         elif item_type == 'grouping':
-            # Show airport count for groupings to distinguish from flights
-            airport_count = len(self.all_groupings.get(identifier, []))
+            # Show recursively expanded airport count to distinguish from flights
+            resolved_airports = resolve_grouping_recursively(identifier, self.all_groupings)
+            airport_count = len(resolved_airports)
             return f"$ {identifier} ({airport_count} airports)"
         elif item_type == 'flight':
             fp = data.get('flight_plan') or {}
