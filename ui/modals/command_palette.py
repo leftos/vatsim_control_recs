@@ -13,7 +13,7 @@ COMMANDS = [
     {"name": "Refresh Data", "shortcut": "Ctrl+R", "action": "refresh"},
     {"name": "Pause/Resume Auto-refresh", "shortcut": "Ctrl+P", "action": "toggle_pause"},
     {"name": "Find Airport", "shortcut": "Ctrl+F", "action": "toggle_search"},
-    {"name": "Flight Lookup", "shortcut": "Ctrl+L", "action": "show_flight_lookup"},
+    {"name": "Go To", "shortcut": "Ctrl+G", "action": "show_goto"},
     {"name": "Wind Lookup", "shortcut": "Ctrl+W", "action": "show_wind_lookup"},
     {"name": "METAR Lookup", "shortcut": "Ctrl+E", "action": "show_metar_lookup"},
     {"name": "VFR Alternatives", "shortcut": "Ctrl+A", "action": "show_vfr_alternatives"},

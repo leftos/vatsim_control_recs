@@ -20,7 +20,7 @@ from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, GoToScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen
 
 
 def set_terminal_title(title: str) -> None:
@@ -133,7 +133,8 @@ class VATSIMControlApp(App):
         Binding("?", "show_help", "Help", show=False, priority=True),
         Binding("ctrl+p", "toggle_pause", "Pause", show=False, priority=True),
         Binding("ctrl+f", "toggle_search", "Find", show=False, priority=True),
-        Binding("ctrl+l", "show_flight_lookup", "Flt Lkp", show=False, priority=True),
+        Binding("ctrl+g", "show_goto", "Go To", show=False, priority=True),
+        Binding("ctrl+l", "show_goto", "Go To", show=False, priority=True),
         Binding("ctrl+w", "show_wind_lookup", "Wind Lkp", show=False, priority=True),
         Binding("ctrl+e", "show_metar_lookup", "METAR Lkp", show=False, priority=True),
         Binding("ctrl+a", "show_vfr_alternatives", "VFR Alts", show=False, priority=True),
@@ -790,6 +791,11 @@ class VATSIMControlApp(App):
         """Show the flight lookup modal"""
         flight_lookup_screen = FlightLookupScreen()
         self.push_screen(flight_lookup_screen)
+
+    def action_show_goto(self) -> None:
+        """Show the unified Go To modal for airports, groupings, and flights"""
+        goto_screen = GoToScreen()
+        self.push_screen(goto_screen)
 
     def action_show_help(self) -> None:
         """Show the help modal with keyboard shortcuts"""

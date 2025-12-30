@@ -21,7 +21,7 @@ LEFT_COLUMN = """\
 
 RIGHT_COLUMN = """\
 [bold]Lookups[/bold]
- Ctrl+L   Flight lookup
+ Ctrl+G   Go To
  Ctrl+W   Wind info
  Ctrl+E   METAR
  Ctrl+A   VFR alternatives
