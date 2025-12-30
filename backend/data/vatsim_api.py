@@ -18,6 +18,13 @@ _VATSIM_DATA_CACHE_TIME: float = 0
 _VATSIM_DATA_CACHE_LOCK = threading.Lock()
 VATSIM_CACHE_DURATION = 15  # seconds - matches typical refresh interval
 
+# Cache for member stats (longer duration since stats don't change frequently)
+_MEMBER_STATS_CACHE: Dict[int, Dict[str, Any]] = {}
+_MEMBER_STATS_CACHE_TIME: Dict[int, float] = {}
+_MEMBER_STATS_CACHE_LOCK = threading.Lock()
+MEMBER_STATS_CACHE_DURATION = 300  # 5 minutes - stats don't change frequently
+VATSIM_API_BASE_URL = "https://api.vatsim.net/v2"
+
 
 def download_vatsim_data(timeout: int = 10, max_retries: int = 3) -> Optional[Dict[str, Any]]:
     """
@@ -84,6 +91,53 @@ def download_vatsim_data(timeout: int = 10, max_retries: int = 3) -> Optional[Di
             return _VATSIM_DATA_CACHE
 
     return None
+
+
+def get_member_stats(cid: int, timeout: int = 5) -> Optional[Dict[str, Any]]:
+    """
+    Fetch member statistics from the VATSIM API.
+
+    Args:
+        cid: VATSIM Client ID (numeric)
+        timeout: Request timeout in seconds (default: 5)
+
+    Returns:
+        Dictionary containing member stats with 'pilot' and 'atc' hours,
+        or None if the request failed or member not found.
+        Example: {'id': 934876, 'pilot': 123.5, 'atc': 45.2, ...}
+    """
+    global _MEMBER_STATS_CACHE, _MEMBER_STATS_CACHE_TIME
+
+    current_time = time.time()
+
+    # Check cache first
+    with _MEMBER_STATS_CACHE_LOCK:
+        if cid in _MEMBER_STATS_CACHE:
+            cache_age = current_time - _MEMBER_STATS_CACHE_TIME.get(cid, 0)
+            if cache_age < MEMBER_STATS_CACHE_DURATION:
+                return _MEMBER_STATS_CACHE[cid]
+
+    # Fetch from API
+    url = f"{VATSIM_API_BASE_URL}/members/{cid}/stats"
+    try:
+        response = requests.get(url, timeout=timeout)
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        data = response.json()
+
+        # Update cache
+        with _MEMBER_STATS_CACHE_LOCK:
+            _MEMBER_STATS_CACHE[cid] = data
+            _MEMBER_STATS_CACHE_TIME[cid] = time.time()
+
+        return data
+    except requests.RequestException as e:
+        debug_logger.warning(f"Failed to fetch member stats for CID {cid}: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        debug_logger.warning(f"Failed to parse member stats for CID {cid}: {e}")
+        return None
 
 
 def filter_flights_by_airports(

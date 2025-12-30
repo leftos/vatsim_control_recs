@@ -18,7 +18,7 @@ from backend import (
     calculate_eta
 )
 from backend.core.flights import get_nearest_airport_if_on_ground
-from backend.data.vatsim_api import download_vatsim_data
+from backend.data.vatsim_api import download_vatsim_data, get_member_stats
 from ui import config
 from ui.debug_logger import debug
 from ui.modals.metar_info import get_flight_category, _extract_flight_rules_weather
@@ -92,8 +92,10 @@ class FlightInfoScreen(ModalScreen):
         super().__init__()
         self.flight_data = flight_data
         self.callsign = flight_data.get('callsign', '')  # Store callsign for refresh lookups
+        self.cid = flight_data.get('cid')  # VATSIM Client ID for member stats
         self.altimeter_info = None  # Will be populated asynchronously
         self.altimeter_loading = True
+        self.member_stats = None  # Will be populated asynchronously (pilot/ATC hours)
         # Weather info: (category, color, visibility_sm, ceiling_ft)
         self.departure_weather = None
         self.arrival_weather = None
@@ -114,10 +116,15 @@ class FlightInfoScreen(ModalScreen):
             yield Static("Press Escape or Q to close", id="flight-info-hint")
     
     async def on_mount(self) -> None:
-        """Load altimeter info asynchronously after modal is shown"""
+        """Load altimeter info and member stats asynchronously after modal is shown"""
         # Start loading altimeter info in the background (tracked for cleanup)
         task = asyncio.create_task(self._load_altimeter_info())
         self._pending_tasks.append(task)
+
+        # Start loading member stats in parallel
+        if self.cid:
+            stats_task = asyncio.create_task(self._load_member_stats())
+            self._pending_tasks.append(stats_task)
 
         # Start periodic refresh timer to keep flight data current
         self._refresh_timer = self.set_interval(
@@ -234,6 +241,33 @@ class FlightInfoScreen(ModalScreen):
             pass
 
         return None
+
+    async def _load_member_stats(self) -> None:
+        """Asynchronously fetch member statistics (pilot/ATC hours)."""
+        if not self.cid:
+            return
+
+        loop = asyncio.get_event_loop()
+        try:
+            self.member_stats = await loop.run_in_executor(
+                None,
+                get_member_stats,
+                self.cid
+            )
+            # Update title with member stats
+            self._update_title()
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            pass  # Silently fail - stats are optional
+
+    def _update_title(self) -> None:
+        """Update the title widget with member stats."""
+        try:
+            title_widget = self.query_one("#flight-info-title", Static)
+            title_widget.update(self._format_title())
+        except Exception:
+            pass  # Widget may not be mounted
 
     def _update_display(self) -> None:
         """Update the flight info display."""
@@ -442,10 +476,24 @@ class FlightInfoScreen(ModalScreen):
             self._update_display()
     
     def _format_title(self) -> str:
-        """Format the modal title with callsign"""
+        """Format the modal title with callsign and member stats"""
         callsign = self.flight_data.get('callsign', 'Unknown')
         pilot_name = self.flight_data.get('name', 'Unknown Pilot')
-        return f"Flight Info: {callsign} - {pilot_name}"
+
+        # Add pilot/ATC hours if available (hide if 0)
+        stats_str = ""
+        if self.member_stats:
+            pilot_hours = self.member_stats.get('pilot', 0)
+            atc_hours = self.member_stats.get('atc', 0)
+            parts = []
+            if pilot_hours:
+                parts.append(f"P:{pilot_hours:,.0f}h")
+            if atc_hours:
+                parts.append(f"C:{atc_hours:,.0f}h")
+            if parts:
+                stats_str = f" ({' / '.join(parts)})"
+
+        return f"Flight Info: {callsign} - {pilot_name}{stats_str}"
     
     def _format_flight_info(self) -> str:
         """Format all flight information for display"""
