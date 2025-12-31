@@ -175,6 +175,9 @@ class VATSIMControlApp(App):
         # TableManagers will be initialized after tables are created
         self.airports_manager = None
         self.groupings_manager = None
+        # Cached data for Go To modal (warmed up on mount, kept fresh)
+        self.cached_pilots: List[dict] = []
+        self.cached_groupings: dict = {}
         
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -228,6 +231,27 @@ class VATSIMControlApp(App):
         # Mark initial setup as complete after all initialization events have settled
         # This prevents automatic events (tab activation, row highlights) from resetting the timer
         self.call_after_refresh(lambda: setattr(self, 'initial_setup_complete', True))
+
+        # Warm up caches for Go To modal in background
+        self.run_worker(self._warm_up_goto_cache(), exclusive=False)
+
+    async def _warm_up_goto_cache(self) -> None:
+        """Warm up caches for Go To modal so it opens quickly."""
+        from backend.data.vatsim_api import download_vatsim_data
+        from . import config
+
+        # Load groupings (file I/O)
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.cached_groupings = load_all_groupings(
+            os.path.join(script_dir, 'data', 'custom_groupings.json'),
+            config.UNIFIED_AIRPORT_DATA or {}
+        )
+
+        # Load pilots data (network call)
+        loop = asyncio.get_event_loop()
+        vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
+        if vatsim_data:
+            self.cached_pilots = vatsim_data.get('pilots', [])
 
     def _disable_activity_watching(self) -> None:
         """Safely disable user activity tracking with lock."""
@@ -455,7 +479,14 @@ class VATSIMControlApp(App):
         """Worker to fetch data asynchronously and update tables efficiently."""
         # Fetch fresh data
         airport_data, groupings_data, total_flights = await self.fetch_data_async()
-        
+
+        # Update pilots cache (uses VATSIM API's internal 15s cache, so no extra network call)
+        from backend.data.vatsim_api import download_vatsim_data
+        loop = asyncio.get_event_loop()
+        vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
+        if vatsim_data:
+            self.cached_pilots = vatsim_data.get('pilots', [])
+
         if airport_data is not None:
             self._disable_activity_watching()  # Temporarily disable user activity tracking
 

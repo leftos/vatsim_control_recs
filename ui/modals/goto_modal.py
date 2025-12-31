@@ -136,27 +136,35 @@ class GoToScreen(ModalScreen):
             self._load_worker.cancel()
 
     async def _load_data(self) -> None:
-        """Load all data sources asynchronously"""
+        """Load all data sources, using cached data when available for instant responsiveness"""
         # Access app data
         self.tracked_airports = list(self.vatsim_app.airport_allowlist or [])
 
-        # Load all available groupings (custom + ARTCC + preset)
-        script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.all_groupings = load_all_groupings(
-            os.path.join(script_dir, 'data', 'custom_groupings.json'),
-            config.UNIFIED_AIRPORT_DATA or {}
-        )
+        # Use cached groupings from app if available (warmed up on mount)
+        if self.vatsim_app.cached_groupings:
+            self.all_groupings = self.vatsim_app.cached_groupings
+        else:
+            # Fallback: load groupings (file I/O)
+            script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            self.all_groupings = load_all_groupings(
+                os.path.join(script_dir, 'data', 'custom_groupings.json'),
+                config.UNIFIED_AIRPORT_DATA or {}
+            )
 
-        # Load VATSIM data in background
-        try:
-            loop = asyncio.get_event_loop()
-            vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
+        # Use cached pilots from app if available (kept fresh by refresh cycle)
+        if self.vatsim_app.cached_pilots:
+            self.pilots = self.vatsim_app.cached_pilots
+        else:
+            # Fallback: load VATSIM data in background (first invocation before cache is ready)
+            try:
+                loop = asyncio.get_event_loop()
+                vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
 
-            if vatsim_data:
-                self.pilots = vatsim_data.get('pilots', [])
-        except Exception:
-            # If VATSIM data fails, continue with just airports and groupings
-            pass
+                if vatsim_data:
+                    self.pilots = vatsim_data.get('pilots', [])
+            except Exception:
+                # If VATSIM data fails, continue with just airports and groupings
+                pass
 
         # Build initial results
         self._build_all_results()
