@@ -20,7 +20,7 @@ from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, GoToScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, GoToScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen, FlightInfoScreen, DiversionModal
 
 
 def set_terminal_title(title: str) -> None:
@@ -752,14 +752,54 @@ class VATSIMControlApp(App):
     def action_show_metar_lookup(self) -> None:
         """Show the METAR lookup modal.
 
-        If a flight board is open with a selected row, pre-fill the departure airport
-        (for departures) or arrival airport (for arrivals).
-        Otherwise, if an airport is selected in the airports tab, pre-fill that airport.
+        Pre-fills airport based on context (checked in priority order):
+        1. DiversionModal: Selected diversion airport
+        2. FlightInfoScreen: Departure (if on ground) or arrival (if in flight)
+        3. FlightBoardScreen: Departure/arrival airport from selected row
+        4. Airports tab: Currently selected airport
         """
         initial_icao = None
 
-        # Check if a flight board is open
+        # Check modal screens in priority order (most specific first)
         for screen in self.screen_stack:
+            # DiversionModal: Use selected diversion airport
+            if isinstance(screen, DiversionModal):
+                try:
+                    table = screen.query_one("#diversion-table", SplitFlapDataTable)
+                    if table.cursor_row >= 0:
+                        row_data = table.get_row_at(table.cursor_row)
+                        # First column is a Text object with "ICAO name" format
+                        airport_text = str(row_data[0])
+                        # Extract ICAO (first 4 characters before space)
+                        initial_icao = airport_text.split()[0].strip()
+                except Exception:
+                    pass
+                break
+
+            # FlightInfoScreen: Use departure (on ground at departure) or arrival (in flight/landed)
+            if isinstance(screen, FlightInfoScreen):
+                flight_data = screen.flight_data
+                flight_plan = flight_data.get('flight_plan')
+                if flight_plan:
+                    # Use the screen's _get_eta_info to determine flight state:
+                    # - Returns "LANDED" if on ground at arrival airport
+                    # - Returns None if on ground at departure (or no valid ETA)
+                    # - Returns "ETA ..." if in flight
+                    eta_info = screen._get_eta_info()
+                    groundspeed = flight_data.get('groundspeed', 0)
+
+                    if eta_info == "LANDED" or (eta_info and eta_info.startswith("ETA")):
+                        # Landed at arrival or in flight - use arrival airport
+                        initial_icao = flight_plan.get('arrival')
+                    elif groundspeed <= 40:
+                        # On ground but not at arrival - use departure airport
+                        initial_icao = flight_plan.get('departure')
+                    else:
+                        # Fallback: in flight, use arrival
+                        initial_icao = flight_plan.get('arrival')
+                break
+
+            # FlightBoardScreen: Use departure/arrival from selected row
             if isinstance(screen, FlightBoardScreen):
                 departures_table = screen.query_one("#departures-table", SplitFlapDataTable)
                 arrivals_table = screen.query_one("#arrivals-table", SplitFlapDataTable)
@@ -792,7 +832,7 @@ class VATSIMControlApp(App):
                         initial_icao = screen.airport_icao_or_list
                 break
 
-        # Fall back to airports tab selection if no flight board selection
+        # Fall back to airports tab selection if no modal selection
         if initial_icao is None:
             tabs = self.query_one("#tabs", TabbedContent)
             if tabs.active == "airports":
