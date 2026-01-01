@@ -323,6 +323,7 @@ class MetarInfoScreen(ModalScreen):
         self.metar_result = ""
         self.initial_icao = initial_icao
         self.current_icao: str | None = None  # Track current airport for VFR alternatives (used by global Ctrl+A)
+        self._autofill_clear_available = initial_icao is not None  # First backspace clears autofilled input
 
     def compose(self) -> ComposeResult:
         with Container(id="metar-container"):
@@ -342,6 +343,20 @@ class MetarInfoScreen(ModalScreen):
             self.action_fetch_metar()
         else:
             metar_input.focus()
+
+    def on_key(self, event) -> None:
+        """Handle key events, including special backspace behavior for autofilled input."""
+        if event.key == "backspace" and self._autofill_clear_available:
+            # Clear the entire input on first backspace after autofill
+            metar_input = self.query_one("#metar-input", Input)
+            metar_input.value = ""
+            metar_input.focus()
+            self._autofill_clear_available = False
+            event.prevent_default()
+            event.stop()
+        elif self._autofill_clear_available and event.is_printable:
+            # User is typing - disable the clear-on-backspace behavior
+            self._autofill_clear_available = False
     
     def _parse_taf_time(self, time_str: str, current_month: int, current_year: int) -> Optional[datetime]:
         """

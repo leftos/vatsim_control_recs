@@ -752,21 +752,58 @@ class VATSIMControlApp(App):
     def action_show_metar_lookup(self) -> None:
         """Show the METAR lookup modal.
 
-        If an airport is selected in the airports tab, pre-fill that airport.
+        If a flight board is open with a selected row, pre-fill the departure airport
+        (for departures) or arrival airport (for arrivals).
+        Otherwise, if an airport is selected in the airports tab, pre-fill that airport.
         """
         initial_icao = None
 
-        # Check if we're on the airports tab with a selected row
-        tabs = self.query_one("#tabs", TabbedContent)
-        if tabs.active == "airports":
-            airports_table = self.query_one("#airports-table", SplitFlapDataTable)
-            if airports_table.cursor_row is not None and airports_table.row_count > 0:
-                try:
-                    from .utils import airport_grouping_sort_key
-                    sorted_airports = sorted(self.airport_data, key=airport_grouping_sort_key)
-                    initial_icao = sorted_airports[airports_table.cursor_row].icao
-                except (IndexError, KeyError):
-                    pass
+        # Check if a flight board is open
+        for screen in self.screen_stack:
+            if isinstance(screen, FlightBoardScreen):
+                departures_table = screen.query_one("#departures-table", SplitFlapDataTable)
+                arrivals_table = screen.query_one("#arrivals-table", SplitFlapDataTable)
+
+                is_grouping = isinstance(screen.airport_icao_or_list, list) and len(screen.airport_icao_or_list) > 1
+
+                # Determine which table has focus/selection
+                focused_table = None
+                if departures_table.has_focus:
+                    focused_table = departures_table
+                elif arrivals_table.has_focus:
+                    focused_table = arrivals_table
+                else:
+                    # If neither has focus, try to use whichever has a cursor
+                    if departures_table.cursor_row >= 0:
+                        focused_table = departures_table
+                    elif arrivals_table.cursor_row >= 0:
+                        focused_table = arrivals_table
+
+                if focused_table and focused_table.cursor_row >= 0:
+                    if is_grouping:
+                        # For groupings, column 1 has the departure/arrival airport ICAO
+                        try:
+                            row_data = focused_table.get_row_at(focused_table.cursor_row)
+                            initial_icao = str(row_data[1]).strip()
+                        except Exception:
+                            pass
+                    else:
+                        # For single airport, the board airport is the departure/arrival airport
+                        initial_icao = screen.airport_icao_or_list
+                break
+
+        # Fall back to airports tab selection if no flight board selection
+        if initial_icao is None:
+            tabs = self.query_one("#tabs", TabbedContent)
+            if tabs.active == "airports":
+                airports_table = self.query_one("#airports-table", SplitFlapDataTable)
+                if airports_table.cursor_row is not None and airports_table.row_count > 0:
+                    try:
+                        from .utils import airport_grouping_sort_key
+                        sorted_airports = sorted(self.airport_data, key=airport_grouping_sort_key)
+                        initial_icao = sorted_airports[airports_table.cursor_row].icao
+                    except (IndexError, KeyError):
+                        pass
 
         metar_screen = MetarInfoScreen(initial_icao=initial_icao)
         self.push_screen(metar_screen)
