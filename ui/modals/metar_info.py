@@ -12,7 +12,7 @@ from textual.app import ComposeResult
 
 from backend import get_metar, get_taf
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
-from backend.data.atis_filter import filter_atis_text
+from backend.data.atis_filter import filter_atis_text, colorize_atis_text
 from ui import config
 from ui.config import CATEGORY_COLORS
 
@@ -626,7 +626,7 @@ class MetarInfoScreen(ModalScreen):
             result_lines.append(f"{pretty_name} ({icao})")
             result_lines.append("")
 
-        # ATIS (filtered to remove METAR-duplicated info, letter highlighted in cyan)
+        # ATIS (filtered to remove METAR-duplicated info, with colorized runway/approach info)
         if vatsim_data:
             atis_info = self._get_atis_for_airport(vatsim_data, icao)
             if atis_info:
@@ -635,14 +635,9 @@ class MetarInfoScreen(ModalScreen):
                 # Filter out METAR-duplicated info
                 filtered_text = filter_atis_text(raw_text)
                 if filtered_text:
-                    # Highlight the ATIS letter in cyan
-                    if atis_code:
-                        filtered_text = re.sub(
-                            rf'\b(INFORMATION|INFO|ATIS)\s+{re.escape(atis_code)}\b',
-                            rf'\1 [bold cyan]{atis_code}[/bold cyan]',
-                            filtered_text
-                        )
-                    result_lines.append(f"[dim]{filtered_text}[/dim]")
+                    # Colorize ATIS: letter in cyan, approaches/runways in yellow
+                    colorized_text = colorize_atis_text(filtered_text, atis_code)
+                    result_lines.append(f"[dim]{colorized_text}[/dim]")
                     result_lines.append("")
 
         # METAR with highlighted flight category components

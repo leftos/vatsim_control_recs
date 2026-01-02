@@ -16,7 +16,7 @@ from textual.app import ComposeResult
 
 from backend import get_metar_batch, get_taf_batch
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
-from backend.data.atis_filter import filter_atis_text
+from backend.data.atis_filter import filter_atis_text, colorize_atis_text
 from ui import config
 from ui.config import CATEGORY_COLORS, CATEGORY_ORDER
 from ui.modals.metar_info import (
@@ -196,166 +196,6 @@ def _format_taf_relative_time(time_str: str) -> str:
 
     except (ValueError, AttributeError):
         return ""
-
-
-def _colorize_atis_text(text: str, atis_code: str) -> str:
-    """
-    Colorize ATIS text with highlighted approach types and ATIS letter.
-
-    Args:
-        text: Filtered ATIS text
-        atis_code: ATIS letter (e.g., "K", "L")
-
-    Returns:
-        Rich markup string with colorized elements
-    """
-    result = text
-
-    # Colorize ATIS letter references (e.g., "INFORMATION KILO", "INFO K", "ATIS K")
-    if atis_code:
-        # NATO phonetic alphabet mapping
-        phonetic = {
-            'A': 'ALFA', 'B': 'BRAVO', 'C': 'CHARLIE', 'D': 'DELTA',
-            'E': 'ECHO', 'F': 'FOXTROT', 'G': 'GOLF', 'H': 'HOTEL',
-            'I': 'INDIA', 'J': 'JULIET', 'K': 'KILO', 'L': 'LIMA',
-            'M': 'MIKE', 'N': 'NOVEMBER', 'O': 'OSCAR', 'P': 'PAPA',
-            'Q': 'QUEBEC', 'R': 'ROMEO', 'S': 'SIERRA', 'T': 'TANGO',
-            'U': 'UNIFORM', 'V': 'VICTOR', 'W': 'WHISKEY', 'X': 'XRAY',
-            'Y': 'YANKEE', 'Z': 'ZULU'
-        }
-        letter = atis_code.upper()
-        phonetic_word = phonetic.get(letter, '')
-
-        # Replace phonetic word (e.g., "KILO" -> cyan)
-        if phonetic_word:
-            result = re.sub(
-                rf'\b({phonetic_word})\b',
-                r'[cyan bold]\1[/cyan bold]',
-                result,
-                flags=re.IGNORECASE
-            )
-        # Also highlight standalone letter after INFO/INFORMATION/ATIS
-        result = re.sub(
-            rf'\b(INFORMATION|INFO|ATIS)\s+({letter})\b',
-            rf'\1 [cyan bold]\2[/cyan bold]',
-            result,
-            flags=re.IGNORECASE
-        )
-
-    # Pattern 1: Approach type + optional variant + optional comma + RWY + runway numbers
-    # e.g., "ILS Z RWY 22R", "RNAV-Y RWY 35", "ILS RWYS 16R AND 16L", "ILS, RWY 12"
-    result = re.sub(
-        r'\b(ILS|RNAV|VISUAL|VIS|LOC|VOR|NDB|GPS|LDA|SDF|RNP)[-\s]?([XYZWUK])?,?\s*'
-        r'(RWYS?|RUNWAYS?)?\s*'
-        r'(\d{1,2}[LRC]?(?:\s*(?:AND|&|,)\s*\d{1,2}[LRC]?)*)\b',
-        r'[yellow]\g<0>[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    # Pattern 2: Approach type + APCH/APPROACH + RWY + runway numbers
-    # e.g., "ILS APCH RWY 35L", "VISUAL APPROACH RWY 26R", "VIS APCH RWYS 17L, 17R"
-    result = re.sub(
-        r'\b(ILS|RNAV|VISUAL|VIS|LOC|VOR|NDB|GPS|LDA|SDF|RNP|INSTR?)[-\s]?([XYZWUK])?\s*'
-        r'(APCHS?|APPROACH(?:ES)?|APPS?)\s*'
-        r'((?:TO\s+)?(?:RWYS?|RUNWAYS?)?\s*\d{1,2}[LRC]?(?:\s*(?:AND|&|,)\s*\d{1,2}[LRC]?)*)?',
-        r'[yellow]\g<0>[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    # Pattern 3: APCH + approach type (Canadian/other style)
-    # e.g., "APCH ILS OR RNAV RWY 27"
-    result = re.sub(
-        r'\b(APCH)\s+((?:ILS|RNAV|VISUAL|VIS|LOC|VOR)(?:\s+OR\s+(?:ILS|RNAV|VISUAL|VIS|LOC|VOR))*)'
-        r'(\s+RWYS?\s*\d{1,2}[LRC]?(?:\s*(?:AND|&)\s*\d{1,2}[LRC]?)*)?',
-        r'[yellow]\g<0>[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    # Pattern 4: Standalone approach mentions
-    # e.g., "ILS APPROACHES", "VISUAL APCHS IN USE", "INST APCHS"
-    result = re.sub(
-        r'\b(ILS|RNAV|VISUAL|VIS|LOC|VOR|NDB|GPS|LDA|SDF|RNP|INSTR?)\s+'
-        r'(APCHS?|APPROACH(?:ES)?|APPS?)\b',
-        r'[yellow]\1 \2[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    # Pattern 5: EXPECT/EXP + approach type
-    # e.g., "EXPECT ILS APPROACH", "EXP VIS APCH", "EXPT PROC ILS"
-    result = re.sub(
-        r'\b(EXPECT|EXPT?|EXPECTED)\s+(?:PROC\s+)?'
-        r'(ILS|RNAV|VISUAL|VIS|LOC|VOR|NDB|GPS|LDA|SDF|RNP|INSTR?)[-\s]?([XYZWUK])?\b',
-        r'[yellow]\g<0>[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    # Pattern 6: Compound LDG/DEPTG or LDG AND DEPTG format - must come before Pattern 7
-    # e.g., "LDG/DEPTG 4/8", "LNDG AND DEPG RWY 17R, 17L", "LDG AND DEPTG RWY 27"
-    result = re.sub(
-        r'\b((?:LDG|LNDG|LANDING)\s*(?:/|AND)\s*(?:DEPTG?|DEPG|DEPARTING))\s*'
-        r'((?:RWYS?|RUNWAYS?)\s*)?'
-        r'(\d{1,2}[LRC]?(?:\s*(?:AND|&|,|/)\s*\d{1,2}[LRC]?)*)\b',
-        r'[yellow]\g<0>[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    # Pattern 6b: ARR/DEP compound format
-    # e.g., "ARR/DEP RWY 36", "ARR AND DEP RWY 30"
-    result = re.sub(
-        r'\b(ARR(?:IVING)?\s*(?:/|AND)\s*DEP(?:ARTING)?)\s*'
-        r'((?:RWYS?|RUNWAYS?)\s*)?'
-        r'(\d{1,2}[LRC]?(?:\s*(?:AND|&|,|/)\s*\d{1,2}[LRC]?)*)\b',
-        r'[yellow]\g<0>[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    # Pattern 7: Runway assignments (LDG/ARR/DEP + RWY + numbers)
-    # e.g., "LDG RWY 16L", "DEPTG RWYS 26L, 27R", "LANDING RUNWAY 27", "DEPARTING RWY 18"
-    # Also handles DEPG (common variant), DEPARTURE
-    # Handles spoken forms: "17R AND LEFT", "28L AND RIGHT"
-    # Uses negative lookbehind to avoid matching after "/" or "AND " (already handled by Pattern 6)
-    result = re.sub(
-        r'(?<!/)\b(?<!AND )(LANDING|LDG|LNDG|ARRIVING|ARR|DEPARTING|DEPARTURES?|DEPTG?|DEPG|DEP)\s+'
-        r'((?:RWYS?|RUNWAYS?)\s*)?'
-        r'(\d{1,2}[LRC]?(?:\s*(?:AND|&|,|/)\s*(?:\d{1,2}[LRC]?|LEFT|RIGHT|CENTER))*)\b',
-        r'[yellow]\g<0>[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    # Pattern 8: INSTR DEPARTURES IN PROG + RWYS (LAX style)
-    # e.g., "INSTR DEPARTURES IN PROG RWYS 24 AND 25"
-    result = re.sub(
-        r'\b(INSTR?|SIMUL?(?:TANEOUS)?)\s+'
-        r'(DEPARTURES?|ARRIVALS?|DEPS?|ARRS?)\s+'
-        r'(?:IN\s+(?:PROG(?:RESS)?|USE|EFFECT)\s+)?'
-        r'((?:RWYS?|RUNWAYS?)\s*)?'
-        r'(\d{1,2}[LRC]?(?:\s*(?:AND|&|,)\s*\d{1,2}[LRC]?)*)\b',
-        r'[yellow]\g<0>[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    # Pattern 9: RWY XX FOR ARR/DEP (Australian/international style)
-    # e.g., "RWY 03 FOR ARR", "RWY 06 FOR DEP", "RWY 03 FOR ALL DEP"
-    result = re.sub(
-        r'\b(RWYS?|RUNWAYS?)\s*'
-        r'(\d{1,2}[LRC]?)\s+'
-        r'FOR\s+(?:ALL\s+(?:OTHER\s+)?)?'
-        r'(ARR(?:IVALS?)?|DEP(?:ARTURES?)?)\b',
-        r'[yellow]\g<0>[/yellow]',
-        result,
-        flags=re.IGNORECASE
-    )
-
-    return result
 
 
 class WeatherBriefingScreen(ModalScreen):
@@ -614,7 +454,7 @@ class WeatherBriefingScreen(ModalScreen):
             filtered_text = filter_atis_text(raw_text)
             if filtered_text:
                 # Colorize ATIS letter if present
-                display_text = _colorize_atis_text(filtered_text, atis_code)
+                display_text = colorize_atis_text(filtered_text, atis_code)
                 lines.append(f"  [dim]{display_text}[/dim]")
 
         return "\n".join(lines)
