@@ -1,85 +1,28 @@
 """
 ARTCC Boundary Data Fetcher
 
-Fetches ARTCC boundary data from FAA NASR subscription.
-Caches data locally and only re-downloads when a new subscription is available.
+Fetches ARTCC boundary data from VATSIM vNAS API.
+Caches data locally for performance.
 """
 
 import json
-import os
-import re
-import zipfile
 from datetime import datetime, date
-from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
-# NASR subscription page (for finding current date)
-NASR_INDEX_URL = "https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/"
-# Actual download base URL (different domain)
-NASR_DOWNLOAD_URL = "https://nfdc.faa.gov/webContent/28DaySub/"
-
-
-def get_current_subscription_date() -> Optional[str]:
-    """
-    Determine the current NASR subscription date.
-
-    NASR subscriptions are released every 28 days. This function calculates
-    which subscription should currently be active.
-
-    Returns:
-        Date string in YYYY-MM-DD format, or None if unable to determine
-    """
-    try:
-        # Fetch the main subscription page to find available dates
-        req = Request(NASR_INDEX_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urlopen(req, timeout=30) as response:
-            html = response.read().decode('utf-8')
-
-        # Parse available subscription dates from directory listing
-        # Pattern matches href="./../NASR_Subscription/YYYY-MM-DD" or similar paths
-        date_pattern = r'NASR_Subscription/(\d{4}-\d{2}-\d{2})'
-        dates = re.findall(date_pattern, html)
-
-        if not dates:
-            print("  Warning: No subscription dates found on NASR page")
-            return None
-
-        # Sort dates and find the most recent one that is not in the future
-        today = date.today()
-        valid_dates = []
-
-        for date_str in dates:
-            try:
-                sub_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-                if sub_date <= today:
-                    valid_dates.append(date_str)
-            except ValueError:
-                continue
-
-        if not valid_dates:
-            # If all dates are in the future, use the earliest one
-            return sorted(dates)[0]
-
-        # Return the most recent valid date
-        return sorted(valid_dates, reverse=True)[0]
-
-    except (URLError, HTTPError) as e:
-        print(f"  Warning: Could not fetch NASR subscription page: {e}")
-        return None
+# VATSIM vNAS ARTCC boundaries GeoJSON
+VNAS_BOUNDARIES_URL = "https://data-api.vnas.vatsim.net/Files/ArtccBoundaries.geojson"
 
 
 def download_artcc_boundaries(
-    subscription_date: str,
     cache_dir: Path,
 ) -> Optional[Dict[str, List[List[Tuple[float, float]]]]]:
     """
-    Download and parse ARTCC boundary data from NASR subscription.
+    Download and parse ARTCC boundary data from VATSIM vNAS API.
 
     Args:
-        subscription_date: Subscription date in YYYY-MM-DD format
         cache_dir: Directory to cache downloaded data
 
     Returns:
@@ -87,9 +30,10 @@ def download_artcc_boundaries(
         where each polygon is a list of (lat, lon) tuples
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_file = cache_dir / f"artcc_boundaries_{subscription_date}.json"
+    today = date.today().isoformat()
+    cache_file = cache_dir / f"artcc_boundaries_{today}.json"
 
-    # Check cache first
+    # Check cache first (valid for today)
     if cache_file.exists():
         try:
             with open(cache_file, 'r') as f:
@@ -97,57 +41,58 @@ def download_artcc_boundaries(
         except Exception:
             pass  # Re-download if cache is corrupt
 
-    # Download the ARB.zip file from nfdc.faa.gov
-    zip_url = f"{NASR_DOWNLOAD_URL}{subscription_date}/ARB.zip"
-
-    print(f"  Downloading ARTCC boundaries from {zip_url}...")
+    print(f"  Downloading ARTCC boundaries from vNAS API...")
 
     try:
-        req = Request(zip_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urlopen(req, timeout=120) as response:
-            zip_data = BytesIO(response.read())
+        req = Request(VNAS_BOUNDARIES_URL, headers={'User-Agent': 'VATSIM-Weather-Briefings/1.0'})
+        with urlopen(req, timeout=30) as response:
+            geojson = json.loads(response.read().decode('utf-8'))
     except (URLError, HTTPError) as e:
-        print(f"  Error downloading NASR data: {e}")
+        print(f"  Error downloading vNAS boundaries: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"  Error parsing vNAS GeoJSON: {e}")
         return None
 
-    # Extract and parse the ARTCC boundary file
+    # Parse GeoJSON features into boundary polygons
     boundaries: Dict[str, List[List[Tuple[float, float]]]] = {}
 
-    try:
-        with zipfile.ZipFile(zip_data) as zf:
-            # List all files in the ZIP
-            file_list = zf.namelist()
-            print(f"    ZIP contains: {file_list}")
+    features = geojson.get('features', [])
+    for feature in features:
+        properties = feature.get('properties', {})
+        artcc_id = properties.get('id', '').upper()
 
-            # Look for ARB.txt file
-            arb_file = None
-            for name in file_list:
-                if name.upper() == 'ARB.TXT' or name.upper().endswith('/ARB.TXT'):
-                    arb_file = name
-                    break
+        if not artcc_id:
+            continue
 
-            if not arb_file:
-                # Try any .txt file
-                for name in file_list:
-                    if name.endswith('.txt'):
-                        arb_file = name
-                        break
+        geometry = feature.get('geometry', {})
+        geom_type = geometry.get('type', '')
+        coordinates = geometry.get('coordinates', [])
 
-            if not arb_file:
-                print("  Warning: Could not find ARB.txt in ZIP file")
-                return get_embedded_boundaries()
+        if geom_type == 'Polygon' and coordinates:
+            # Polygon: coordinates is [ring, ...] where ring is [[lon, lat], ...]
+            polygons = []
+            for ring in coordinates:
+                # Convert from GeoJSON [lon, lat] to our (lat, lon) format
+                polygon = [(coord[1], coord[0]) for coord in ring]
+                if len(polygon) >= 3:
+                    polygons.append(polygon)
+            if polygons:
+                boundaries[artcc_id] = polygons
 
-            print(f"    Parsing {arb_file}...")
-            with zf.open(arb_file) as f:
-                content = f.read().decode('latin-1')
-                boundaries = parse_arb_file(content)
-
-    except zipfile.BadZipFile:
-        print("  Error: Invalid ZIP file from NASR")
-        return get_embedded_boundaries()
+        elif geom_type == 'MultiPolygon' and coordinates:
+            # MultiPolygon: coordinates is [polygon, ...] where polygon is [ring, ...]
+            polygons = []
+            for poly_coords in coordinates:
+                for ring in poly_coords:
+                    polygon = [(coord[1], coord[0]) for coord in ring]
+                    if len(polygon) >= 3:
+                        polygons.append(polygon)
+            if polygons:
+                boundaries[artcc_id] = polygons
 
     if not boundaries:
-        print("  Warning: No boundaries parsed, using embedded data")
+        print("  Warning: No boundaries parsed from vNAS GeoJSON")
         return get_embedded_boundaries()
 
     print(f"    Parsed boundaries for {len(boundaries)} ARTCCs")
@@ -167,175 +112,13 @@ def download_artcc_boundaries(
     return boundaries
 
 
-def parse_arb_file(content: str) -> Dict[str, List[List[Tuple[float, float]]]]:
-    """
-    Parse FAA ARB (ARTCC Boundary) file format.
-
-    Fixed-width format (397 chars per record):
-    - Position 1-3: ARTCC ID (3 chars, part of 12-char identifier)
-    - Position 4-12: Altitude structure code + point designator
-    - Position 13-52: Center name (40 chars)
-    - Position 53-62: Altitude structure decode (10 chars)
-    - Position 63-76: Latitude (14 chars)
-    - Position 77-90: Longitude (14 chars)
-    - Position 91-390: Boundary description (300 chars)
-    - Position 391-396: Sequence number (6 chars)
-    - Position 397: NAS-only flag (1 char)
-
-    Args:
-        content: Raw file content
-
-    Returns:
-        Dict mapping ARTCC codes to boundary polygons
-    """
-    boundaries: Dict[str, List[List[Tuple[float, float]]]] = {}
-
-    # Track points by ARTCC and altitude structure
-    artcc_points: Dict[str, Dict[str, List[Tuple[int, float, float]]]] = {}
-
-    # Use splitlines() to properly handle different line endings (CRLF, LF)
-    for line in content.splitlines():
-        # Skip empty lines and short lines
-        if len(line) < 90:
-            continue
-
-        # Extract fields using fixed positions (0-indexed)
-        artcc_id = line[0:3].strip().upper()
-
-        # Skip if not a valid ARTCC ID (should be 3 uppercase letters starting with Z or K)
-        if not artcc_id or len(artcc_id) != 3:
-            continue
-
-        # Only process continental US ARTCCs (start with Z)
-        # Also include ZAN (Alaska), ZHN (Honolulu), ZSU (San Juan)
-        if not artcc_id.startswith('Z'):
-            continue
-
-        # Extract airspace type: *H* = HIGH, *L* = LOW
-        # Format is " *H*" starting at position 3, so H/L is at position 5
-        airspace_type = line[5:6] if len(line) > 6 else 'H'  # Default to HIGH
-
-        # Extract sequence number from positions 390-396 (end of record)
-        # This is used to sort points in the correct order around the boundary
-        try:
-            seq_str = line[390:397].strip()
-            seq_num = int(seq_str) if seq_str.isdigit() else 0
-        except (ValueError, IndexError):
-            seq_num = 0
-
-        # Extract latitude (positions 63-76, 1-indexed = 62-75 0-indexed)
-        lat_str = line[62:76].strip()
-
-        # Extract longitude (positions 77-90, 1-indexed = 76-89 0-indexed)
-        lon_str = line[76:90].strip()
-
-        # Parse coordinates
-        lat = parse_nasr_coordinate(lat_str)
-        lon = parse_nasr_coordinate(lon_str)
-
-        if lat is None or lon is None:
-            continue
-
-        # Store point by ARTCC and airspace type (H=HIGH, L=LOW)
-        if artcc_id not in artcc_points:
-            artcc_points[artcc_id] = {}
-
-        if airspace_type not in artcc_points[artcc_id]:
-            artcc_points[artcc_id][airspace_type] = []
-
-        artcc_points[artcc_id][airspace_type].append((seq_num, lat, lon))
-
-    # Convert to boundary polygons
-    # Priority order for airspace types:
-    # H = HIGH (main en-route boundary)
-    # L = LOW (lower altitude boundary)
-    # B = Base/Boundary (used by some facilities like ZHN, ZSU)
-    # F = FIR (oceanic boundaries)
-    for artcc_id, airspace_types in artcc_points.items():
-        for airspace_type in ['H', 'L', 'B', 'F']:
-            if airspace_type not in airspace_types:
-                continue
-
-            points = airspace_types[airspace_type]
-            if not points:
-                continue
-
-            # Sort by sequence number
-            points.sort(key=lambda p: p[0])
-
-            # Extract just lat/lon
-            polygon = [(lat, lon) for _, lat, lon in points]
-
-            # Only include polygons with enough points
-            if len(polygon) >= 3:
-                # Close the polygon if not already closed
-                if polygon[0] != polygon[-1]:
-                    polygon.append(polygon[0])
-                boundaries[artcc_id] = [polygon]
-                break  # Use first valid airspace type
-
-    return boundaries
-
-
-def parse_nasr_coordinate(coord_str: str) -> Optional[float]:
-    """
-    Parse NASR coordinate format.
-
-    NASR uses formatted coordinates like:
-    - "40-25-30.000N" (DMS format with dashes)
-    - "074-10-20.000W"
-
-    Args:
-        coord_str: Coordinate string from NASR file
-
-    Returns:
-        Decimal degrees or None if parsing fails
-    """
-    if not coord_str:
-        return None
-
-    # Pattern for DMS with dashes: DD-MM-SS.sssH
-    match = re.match(r'(\d{2,3})-(\d{2})-(\d{2}(?:\.\d+)?)\s*([NSEW])', coord_str)
-    if match:
-        degrees = int(match.group(1))
-        minutes = int(match.group(2))
-        seconds = float(match.group(3))
-        hemisphere = match.group(4)
-
-        decimal = degrees + minutes / 60 + seconds / 3600
-
-        if hemisphere in ('S', 'W'):
-            decimal = -decimal
-
-        return decimal
-
-    # Try pattern without dashes: DDMMSS.sssH
-    match = re.match(r'(\d{2,3})(\d{2})(\d{2}(?:\.\d+)?)\s*([NSEW])', coord_str)
-    if match:
-        degrees = int(match.group(1))
-        minutes = int(match.group(2))
-        seconds = float(match.group(3))
-        hemisphere = match.group(4)
-
-        decimal = degrees + minutes / 60 + seconds / 3600
-
-        if hemisphere in ('S', 'W'):
-            decimal = -decimal
-
-        return decimal
-
-    return None
-
-
 def get_embedded_boundaries() -> Dict[str, List[List[Tuple[float, float]]]]:
     """
     Return embedded ARTCC boundary approximations.
 
     These are simplified polygon approximations for each ARTCC.
-    Used as a fallback when NASR data is unavailable.
+    Used as a fallback when vNAS API is unavailable.
     """
-    # Simplified center points for each ARTCC
-    # In production, these would be full boundary polygons
     return {
         "ZAB": [[
             (36.5, -109.0), (36.5, -103.5), (32.0, -103.5), (31.0, -106.0),
@@ -405,6 +188,9 @@ def get_embedded_boundaries() -> Dict[str, List[List[Tuple[float, float]]]]:
         "ZTL": [[
             (36.5, -87.0), (36.5, -81.0), (32.0, -81.0), (32.0, -87.0), (36.5, -87.0)
         ]],
+        "ZHN": [[
+            (26.0, -164.0), (26.0, -150.0), (17.0, -150.0), (17.0, -164.0), (26.0, -164.0)
+        ]],
     }
 
 
@@ -424,7 +210,7 @@ def get_artcc_center(boundaries: List[List[Tuple[float, float]]]) -> Tuple[float
 
 def get_artcc_boundaries(cache_dir: Path) -> Dict[str, List[List[Tuple[float, float]]]]:
     """
-    Get ARTCC boundaries, downloading from NASR if needed.
+    Get ARTCC boundaries, downloading from vNAS API if needed.
 
     Args:
         cache_dir: Directory to cache downloaded data
@@ -432,13 +218,9 @@ def get_artcc_boundaries(cache_dir: Path) -> Dict[str, List[List[Tuple[float, fl
     Returns:
         Dict mapping ARTCC codes to boundary polygons
     """
-    # Try to get current subscription date
-    sub_date = get_current_subscription_date()
-
-    if sub_date:
-        boundaries = download_artcc_boundaries(sub_date, cache_dir)
-        if boundaries:
-            return boundaries
+    boundaries = download_artcc_boundaries(cache_dir)
+    if boundaries:
+        return boundaries
 
     # Fall back to embedded boundaries
     print("  Using embedded ARTCC boundaries")
