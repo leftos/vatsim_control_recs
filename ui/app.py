@@ -8,7 +8,7 @@ import os
 import sys
 import threading
 from datetime import datetime, timezone
-from typing import List, Any
+from typing import List, Any, Tuple
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, TabbedContent, TabPane, Footer, Input, Static
 from textual.binding import Binding
@@ -179,6 +179,9 @@ class VATSIMControlApp(App):
         # Cached data for Go To modal (warmed up on mount, kept fresh)
         self.cached_pilots: List[dict] = []
         self.cached_groupings: dict = {}
+        # Pre-built results list for Go To modal (list of (type, identifier, data) tuples)
+        self.cached_goto_results: List[Tuple[str, str, Any]] = []
+        self.goto_cache_ready = False
         
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -241,18 +244,55 @@ class VATSIMControlApp(App):
         from backend.data.vatsim_api import download_vatsim_data
         from . import config
 
-        # Load groupings (file I/O)
+        loop = asyncio.get_event_loop()
+
+        # Load groupings in executor (file I/O - don't block event loop)
         script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.cached_groupings = load_all_groupings(
+        self.cached_groupings = await loop.run_in_executor(
+            None,
+            load_all_groupings,
             os.path.join(script_dir, 'data', 'custom_groupings.json'),
             config.UNIFIED_AIRPORT_DATA or {}
         )
 
         # Load pilots data (network call)
-        loop = asyncio.get_event_loop()
         vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
         if vatsim_data:
             self.cached_pilots = vatsim_data.get('pilots', [])
+
+        # Pre-build the Go To results list in executor (includes disambiguator warmup)
+        await loop.run_in_executor(None, self._build_goto_results)
+
+    def _build_goto_results(self) -> None:
+        """Build the Go To results list (runs in thread executor)."""
+        from . import config
+
+        results: List[Tuple[str, str, Any]] = []
+        tracked_airports = list(self.airport_allowlist or [])
+
+        # Pre-warm disambiguator for all tracked airports at once (batch is more efficient)
+        if config.DISAMBIGUATOR and tracked_airports:
+            airport_names = config.DISAMBIGUATOR.get_full_names_batch(tracked_airports)
+        else:
+            airport_names = {}
+
+        # Add airports with their pre-fetched names
+        for icao in sorted(tracked_airports):
+            pretty_name = airport_names.get(icao, icao)
+            results.append(('airport', icao, pretty_name))
+
+        # Add all available groupings
+        for name in sorted(self.cached_groupings.keys()):
+            results.append(('grouping', name, None))
+
+        # Add flights (sorted by callsign)
+        for pilot in sorted(self.cached_pilots, key=lambda p: p.get('callsign', '')):
+            callsign = pilot.get('callsign', '')
+            if callsign:
+                results.append(('flight', callsign, pilot))
+
+        self.cached_goto_results = results
+        self.goto_cache_ready = True
 
     def _disable_activity_watching(self) -> None:
         """Safely disable user activity tracking with lock."""
@@ -487,6 +527,8 @@ class VATSIMControlApp(App):
         vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
         if vatsim_data:
             self.cached_pilots = vatsim_data.get('pilots', [])
+            # Rebuild Go To results in background to keep cache warm
+            await loop.run_in_executor(None, self._build_goto_results)
 
         if airport_data is not None:
             self._disable_activity_watching()  # Temporarily disable user activity tracking

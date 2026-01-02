@@ -162,6 +162,32 @@ class GoToScreen(ModalScreen):
 
     async def _load_data(self) -> None:
         """Load all data sources, using cached data when available for instant responsiveness"""
+        # Check if app has pre-built results cache ready (fastest path)
+        if self.vatsim_app.goto_cache_ready:
+            # Use pre-built cache directly
+            self.all_groupings = self.vatsim_app.cached_groupings
+            self.tracked_airports = list(self.vatsim_app.airport_allowlist or [])
+            self.pilots = self.vatsim_app.cached_pilots
+
+            if self.filter_type is None:
+                # No filter - use cache as-is
+                self.all_results = list(self.vatsim_app.cached_goto_results)
+            else:
+                # Filter the cached results by type
+                self.all_results = [
+                    (item_type, identifier, data)
+                    for item_type, identifier, data in self.vatsim_app.cached_goto_results
+                    if item_type == self.filter_type or (self.filter_type == "$" and item_type == "grouping")
+                ]
+
+            self.filtered_results = list(self.all_results)
+            self.data_loaded = True
+            self._update_option_list()
+            return
+
+        # Fallback path: build results manually (for filtered modals or before cache is ready)
+        loop = asyncio.get_event_loop()
+
         # Access app data
         self.tracked_airports = list(self.vatsim_app.airport_allowlist or [])
 
@@ -169,9 +195,11 @@ class GoToScreen(ModalScreen):
         if self.vatsim_app.cached_groupings:
             self.all_groupings = self.vatsim_app.cached_groupings
         else:
-            # Fallback: load groupings (file I/O)
+            # Fallback: load groupings in executor (file I/O)
             script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            self.all_groupings = load_all_groupings(
+            self.all_groupings = await loop.run_in_executor(
+                None,
+                load_all_groupings,
                 os.path.join(script_dir, 'data', 'custom_groupings.json'),
                 config.UNIFIED_AIRPORT_DATA or {}
             )
@@ -180,9 +208,8 @@ class GoToScreen(ModalScreen):
         if self.vatsim_app.cached_pilots:
             self.pilots = self.vatsim_app.cached_pilots
         else:
-            # Fallback: load VATSIM data in background (first invocation before cache is ready)
+            # Fallback: load VATSIM data in executor (first invocation before cache is ready)
             try:
-                loop = asyncio.get_event_loop()
                 vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
 
                 if vatsim_data:
@@ -191,8 +218,8 @@ class GoToScreen(ModalScreen):
                 # If VATSIM data fails, continue with just airports and groupings
                 pass
 
-        # Build initial results
-        self._build_all_results()
+        # Build initial results in executor (don't block event loop)
+        await loop.run_in_executor(None, self._build_all_results)
         self.filtered_results = list(self.all_results)
         self.data_loaded = True
 
