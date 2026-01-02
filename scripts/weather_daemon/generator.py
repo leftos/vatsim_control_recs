@@ -1199,6 +1199,44 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
 
         briefing_progress.update()
 
+    # Generate ARTCC-wide briefings (all airports in each ARTCC)
+    artcc_all_airports: Dict[str, Set[str]] = {}
+    for grouping_name, (airports, artcc) in groupings_to_process.items():
+        if artcc != "custom":
+            if artcc not in artcc_all_airports:
+                artcc_all_airports[artcc] = set()
+            artcc_all_airports[artcc].update(airports)
+
+    if artcc_all_airports:
+        print(f"  Generating {len(artcc_all_airports)} ARTCC-wide briefings...")
+        logger.info(f"Generating {len(artcc_all_airports)} ARTCC-wide briefings")
+
+        for artcc, airports in artcc_all_airports.items():
+            from .config import ARTCC_NAMES
+            display_name = ARTCC_NAMES.get(artcc, artcc)
+            grouping_name = f"All {display_name} Airports"
+
+            generator = WeatherBriefingGenerator(
+                grouping_name=grouping_name,
+                airports=list(airports),
+                unified_airport_data=unified_airport_data,
+                disambiguator=disambiguator,
+            )
+
+            generator.fetch_weather_data(metars, tafs, atis_data)
+            html_content = generator.generate_html()
+
+            # Write to ARTCC directory as _all.html
+            artcc_dir = config.output_dir / artcc
+            artcc_dir.mkdir(parents=True, exist_ok=True)
+            output_path = artcc_dir / "_all.html"
+
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+
+            generated_files[str(output_path)] = grouping_name
+            logger.debug(f"Generated ARTCC briefing: {output_path}")
+
     # Generate index if enabled
     if config.generate_index:
         from .index_generator import generate_index_page
@@ -1534,6 +1572,43 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
             artcc_groupings_map[artcc].append(grouping_info)
 
         briefing_progress.update()
+
+    # Generate ARTCC-wide briefings (all airports in each ARTCC)
+    artcc_all_airports: Dict[str, Set[str]] = {}
+    for grouping_name, (airports, artcc) in groupings_to_process.items():
+        if artcc != "custom":
+            if artcc not in artcc_all_airports:
+                artcc_all_airports[artcc] = set()
+            artcc_all_airports[artcc].update(airports)
+
+    if artcc_all_airports:
+        print(f"  Generating {len(artcc_all_airports)} ARTCC-wide briefings...")
+        logger.info(f"Generating {len(artcc_all_airports)} ARTCC-wide briefings")
+
+        for artcc, airports in artcc_all_airports.items():
+            from .config import ARTCC_NAMES
+            display_name = ARTCC_NAMES.get(artcc, artcc)
+            grouping_name = f"All {display_name} Airports"
+
+            generator = WeatherBriefingGenerator(
+                grouping_name=grouping_name,
+                airports=list(airports),
+                unified_airport_data=unified_airport_data,
+                disambiguator=disambiguator,
+            )
+
+            generator.fetch_weather_data(metars, tafs, atis_data)
+            html_content = generator.generate_html()
+
+            artcc_dir = config.output_dir / artcc
+            artcc_dir.mkdir(parents=True, exist_ok=True)
+            output_path = artcc_dir / "_all.html"
+
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+
+            generated_files[str(output_path)] = grouping_name
+            logger.debug(f"Generated ARTCC briefing: {output_path}")
 
     # Generate index if enabled
     if config.generate_index:

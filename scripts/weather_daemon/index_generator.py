@@ -502,6 +502,121 @@ def generate_html(
             background: #1a2a4e;
         }}
 
+        .artcc-briefing-link {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            margin: 4px 0 8px 0;
+            background: linear-gradient(135deg, #0f3460 0%, #1a4a8e 100%);
+            border-radius: 4px;
+            text-decoration: none;
+            color: #e0e0e0;
+            transition: background 0.2s, transform 0.1s;
+            border: 1px solid #2a5a9e;
+            font-weight: 600;
+        }}
+
+        .artcc-briefing-link:hover {{
+            background: linear-gradient(135deg, #1a4a8e 0%, #2a6ace 100%);
+            transform: translateX(3px);
+        }}
+
+        .artcc-briefing-link .icon {{
+            font-size: 1.1rem;
+        }}
+
+        /* Modal/Popup styles */
+        .modal-overlay {{
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }}
+
+        .modal-overlay.active {{
+            display: flex;
+        }}
+
+        .modal-container {{
+            position: relative;
+            width: 90%;
+            height: 90%;
+            max-width: 1200px;
+            background: #16213e;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }}
+
+        .modal-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: #0f3460;
+            border-bottom: 2px solid #1a4a8e;
+        }}
+
+        .modal-title {{
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #e0e0e0;
+        }}
+
+        .modal-close {{
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: color 0.2s, background 0.2s;
+        }}
+
+        .modal-close:hover {{
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+        }}
+
+        .modal-actions {{
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }}
+
+        .modal-open-tab {{
+            background: #1a4a8e;
+            color: #e0e0e0;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }}
+
+        .modal-open-tab:hover {{
+            background: #2a6ace;
+        }}
+
+        .modal-body {{
+            height: calc(100% - 56px);
+        }}
+
+        .modal-iframe {{
+            width: 100%;
+            height: 100%;
+            border: none;
+        }}
+
         /* Leaflet customizations */
         .leaflet-container {{
             background: #1a1a2e;
@@ -567,6 +682,22 @@ def generate_html(
     </style>
 </head>
 <body>
+    <!-- Modal Overlay -->
+    <div id="briefing-modal" class="modal-overlay">
+        <div class="modal-container">
+            <div class="modal-header">
+                <span class="modal-title" id="modal-title">Weather Briefing</span>
+                <div class="modal-actions">
+                    <button class="modal-open-tab" id="modal-open-tab">Open in New Tab</button>
+                    <button class="modal-close" id="modal-close">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <iframe id="modal-iframe" class="modal-iframe"></iframe>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <div id="map"></div>
         <div class="sidebar">
@@ -796,6 +927,61 @@ def generate_html(
             }}
             map.closePopup();
         }}
+
+        // Modal functionality
+        const modal = document.getElementById('briefing-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalIframe = document.getElementById('modal-iframe');
+        const modalClose = document.getElementById('modal-close');
+        const modalOpenTab = document.getElementById('modal-open-tab');
+        let currentBriefingUrl = '';
+
+        function openBriefingModal(url, title) {{
+            currentBriefingUrl = url;
+            modalTitle.textContent = title;
+            modalIframe.src = url;
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }}
+
+        function closeBriefingModal() {{
+            modal.classList.remove('active');
+            modalIframe.src = '';
+            currentBriefingUrl = '';
+            document.body.style.overflow = '';
+        }}
+
+        // Close modal handlers
+        modalClose.addEventListener('click', closeBriefingModal);
+
+        modal.addEventListener('click', (e) => {{
+            if (e.target === modal) {{
+                closeBriefingModal();
+            }}
+        }});
+
+        document.addEventListener('keydown', (e) => {{
+            if (e.key === 'Escape' && modal.classList.contains('active')) {{
+                closeBriefingModal();
+            }}
+        }});
+
+        // Open in new tab handler
+        modalOpenTab.addEventListener('click', () => {{
+            if (currentBriefingUrl) {{
+                window.open(currentBriefingUrl, '_blank');
+            }}
+        }});
+
+        // Intercept grouping link clicks to open in modal
+        document.querySelectorAll('.grouping-link, .artcc-briefing-link').forEach(link => {{
+            link.addEventListener('click', (e) => {{
+                e.preventDefault();
+                const url = link.getAttribute('href');
+                const title = link.querySelector('.grouping-name, .artcc-briefing-name')?.textContent || 'Weather Briefing';
+                openBriefingModal(url, title);
+            }});
+        }});
     </script>
 </body>
 </html>'''
@@ -833,6 +1019,16 @@ def build_sidebar_html(
         if stats.get("VFR", 0) > 0:
             stats_html += f'<span class="stat stat-vfr">{stats["VFR"]}</span>'
 
+        # Count total airports in this ARTCC
+        total_airports = stats.get('total', 0)
+
+        # ARTCC-wide briefing link at the top
+        artcc_briefing_html = f'''
+                <a href="{artcc}/_all.html" class="artcc-briefing-link">
+                    <span class="artcc-briefing-name">All {display_name} Airports</span>
+                    <span class="icon">📋</span>
+                </a>'''
+
         # Build grouping links
         groupings_html = ""
         for g in sorted(groupings, key=lambda x: x['name']):
@@ -858,6 +1054,7 @@ def build_sidebar_html(
                     <div class="artcc-stats">{stats_html}</div>
                 </div>
                 <div class="groupings-list">
+                    {artcc_briefing_html}
                     {groupings_html}
                 </div>
             </div>''')
