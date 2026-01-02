@@ -1,0 +1,40 @@
+{
+  "HNL TRACON": [
+    "PHNL",
+    "PHJR",
+    "PHHI",
+    "PHNG"
+  ],
+  "OGG TRACON": [
+    "PHOG",
+    "PHJH",
+    "PHMK",
+    "PHNY",
+    "PHLU"
+  ],
+  "ITO TRACON": [
+    "PHTO",
+    "PHKO",
+    "PHSF",
+    "PHMU",
+    "PHUP"
+  ],
+  "LIH TRACON": [
+    "PHLI",
+    "PHBK",
+    "PHPA"
+  ],
+  "ZHN Towers": [
+    "PHNL",
+    "PHOG",
+    "PHTO",
+    "PHKO",
+    "PHLI",
+    "PHMK",
+    "PHJR",
+    "PHHI",
+    "PHNG",
+    "PHBK",
+    "PHSF"
+  ]
+}
