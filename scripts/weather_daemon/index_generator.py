@@ -1043,7 +1043,6 @@ def generate_html(
                     <h3>${{props.name}} (${{props.artcc}})</h3>
                     ${{statsHtml}}
                     <div>${{props.groupings}} grouping(s) available</div>
-                    <a href="#" onclick="scrollToArtcc('${{props.artcc}}'); return false;">View Briefings</a>
                 </div>
             `;
 
