@@ -1,9 +1,13 @@
 """Weather Briefing Modal Screen - Consolidated weather for a grouping/sector"""
 
 import asyncio
+import os
 import re
+import tempfile
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
+from rich.console import Console
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.containers import Container, VerticalScroll
@@ -409,6 +413,7 @@ class WeatherBriefingScreen(ModalScreen):
     BINDINGS = [
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
+        Binding("p", "print", "Print"),
     ]
 
     def __init__(self, grouping_name: str, airports: List[str]):
@@ -432,7 +437,7 @@ class WeatherBriefingScreen(ModalScreen):
                 yield Static("Loading weather data...", id="briefing-summary")
             with VerticalScroll(id="briefing-scroll"):
                 yield Static("", id="briefing-content", markup=True)
-            yield Static("Escape/Q: Close", id="briefing-hint")
+            yield Static("Escape/Q: Close | P: Print", id="briefing-hint")
 
     async def on_mount(self) -> None:
         """Load weather data asynchronously after modal is shown"""
@@ -617,3 +622,92 @@ class WeatherBriefingScreen(ModalScreen):
     def action_close(self) -> None:
         """Close the modal"""
         self.dismiss()
+
+    def action_print(self) -> None:
+        """Export weather briefing as HTML and open in browser"""
+        if not self.weather_data:
+            self.notify("No weather data to export", severity="warning")
+            return
+
+        # Build the content using Rich Console for HTML export
+        # Use wide width to prevent Rich from wrapping - let CSS handle wrapping instead
+        console = Console(record=True, force_terminal=True, width=500)
+
+        # Title and timestamp
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+        console.print(f"[bold]Weather Briefing: {self.grouping_name}[/bold]")
+        console.print(f"Generated: {timestamp}\n")
+
+        # Summary
+        category_counts = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0, "UNK": 0}
+        for data in self.weather_data.values():
+            cat = data.get('category', 'UNK')
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+
+        summary_parts = []
+        if category_counts["LIFR"] > 0:
+            summary_parts.append(f"[magenta]{category_counts['LIFR']} LIFR[/magenta]")
+        if category_counts["IFR"] > 0:
+            summary_parts.append(f"[red]{category_counts['IFR']} IFR[/red]")
+        if category_counts["MVFR"] > 0:
+            summary_parts.append(f"[#5599ff]{category_counts['MVFR']} MVFR[/#5599ff]")
+        if category_counts["VFR"] > 0:
+            summary_parts.append(f"[#00ff00]{category_counts['VFR']} VFR[/#00ff00]")
+        if category_counts["UNK"] > 0:
+            summary_parts.append(f"[dim]{category_counts['UNK']} UNK[/dim]")
+
+        if summary_parts:
+            console.print(" | ".join(summary_parts))
+        console.print()
+
+        # Group airports by category
+        airports_by_category: Dict[str, list] = {cat: [] for cat in CATEGORY_ORDER}
+        for icao, data in self.weather_data.items():
+            cat = data.get('category', 'UNK')
+            size_priority = self._get_airport_size_priority(icao)
+            airports_by_category[cat].append((icao, data, size_priority))
+
+        for cat in airports_by_category:
+            airports_by_category[cat].sort(key=lambda x: (x[2], x[0]))
+
+        # Build content with category sections
+        for cat in CATEGORY_ORDER:
+            airports = airports_by_category[cat]
+            if not airports:
+                continue
+
+            color = CATEGORY_COLORS.get(cat, 'white')
+            console.print(f"[{color} bold]━━━ {cat} ({len(airports)}) ━━━[/{color} bold]")
+
+            for icao, data, _size in airports:
+                card = self._build_airport_card(icao, data)
+                console.print(card)
+            console.print()
+
+        # Export to HTML
+        html_content = console.export_html(inline_styles=True)
+
+        # Add CSS for better printing - remove default padding/margins, wrap long lines
+        html_content = html_content.replace(
+            '</style>',
+            '''pre { margin: 0; padding: 0; white-space: pre-wrap; word-wrap: break-word; max-width: 100ch; }
+body { margin: 20px; }
+</style>'''
+        )
+        # Remove HTML indentation that causes left padding
+        html_content = html_content.replace('<body>\n    <pre', '<body>\n<pre')
+
+        # Write to temp file and open in browser
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            suffix='.html',
+            prefix=f'weather_briefing_{self.grouping_name}_',
+            delete=False,
+            encoding='utf-8'
+        ) as f:
+            f.write(html_content)
+            temp_path = f.name
+
+        # Open in default browser
+        webbrowser.open(f'file://{temp_path}')
+        self.notify(f"Opened in browser: {os.path.basename(temp_path)}")
