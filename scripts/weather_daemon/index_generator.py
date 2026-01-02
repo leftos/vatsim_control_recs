@@ -64,6 +64,108 @@ def compute_convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, 
     return lower[:-1] + upper[:-1]
 
 
+def point_in_polygon(point: Tuple[float, float], polygon: List[Tuple[float, float]]) -> bool:
+    """
+    Check if a point is inside a polygon using ray casting algorithm.
+
+    Args:
+        point: (lat, lon) tuple
+        polygon: List of (lat, lon) tuples forming the polygon
+
+    Returns:
+        True if point is inside polygon
+    """
+    x, y = point
+    n = len(polygon)
+    inside = False
+
+    j = n - 1
+    for i in range(n):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+
+        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+
+    return inside
+
+
+def generate_weather_regions(
+    artcc_boundary: List[Tuple[float, float]],
+    airport_points: List[Dict],
+    grid_resolution: float = 0.25,  # degrees
+) -> List[Dict]:
+    """
+    Generate Voronoi-style weather regions within an ARTCC boundary.
+
+    Uses a grid-based approach: divides the ARTCC into small cells,
+    assigns each cell to the nearest airport, then outputs colored regions.
+
+    Args:
+        artcc_boundary: List of (lat, lon) tuples forming the ARTCC polygon
+        airport_points: List of {icao, lat, lon, category} dicts
+        grid_resolution: Size of grid cells in degrees
+
+    Returns:
+        List of {coords: [[lon, lat], ...], category: str} for each region
+    """
+    if not airport_points or not artcc_boundary:
+        return []
+
+    # Get bounding box of ARTCC
+    lats = [p[0] for p in artcc_boundary]
+    lons = [p[1] for p in artcc_boundary]
+    min_lat, max_lat = min(lats), max(lats)
+    min_lon, max_lon = min(lons), max(lons)
+
+    # Create grid and assign each cell to nearest airport
+    grid_cells = []  # [(center_lat, center_lon, nearest_airport_idx)]
+
+    lat = min_lat + grid_resolution / 2
+    while lat < max_lat:
+        lon = min_lon + grid_resolution / 2
+        while lon < max_lon:
+            # Check if cell center is inside ARTCC
+            if point_in_polygon((lat, lon), artcc_boundary):
+                # Find nearest airport
+                min_dist = float('inf')
+                nearest_idx = 0
+                for idx, ap in enumerate(airport_points):
+                    dist = (lat - ap['lat'])**2 + (lon - ap['lon'])**2
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest_idx = idx
+                grid_cells.append((lat, lon, nearest_idx))
+            lon += grid_resolution
+        lat += grid_resolution
+
+    if not grid_cells:
+        return []
+
+    # Group cells by airport and create region polygons
+    # For simplicity, output individual cell polygons (they'll merge visually)
+    half_res = grid_resolution / 2
+    regions = []
+
+    for lat, lon, airport_idx in grid_cells:
+        category = airport_points[airport_idx].get('category', 'UNK')
+        # Create cell polygon (GeoJSON format: [lon, lat])
+        cell_coords = [
+            [lon - half_res, lat - half_res],
+            [lon + half_res, lat - half_res],
+            [lon + half_res, lat + half_res],
+            [lon - half_res, lat + half_res],
+            [lon - half_res, lat - half_res],  # Close polygon
+        ]
+        regions.append({
+            'coords': cell_coords,
+            'category': category,
+        })
+
+    return regions
+
+
 def add_buffer_to_polygon(points: List[Tuple[float, float]], buffer_nm: float = 20) -> List[Tuple[float, float]]:
     """
     Add a buffer around a polygon by expanding it outward.
@@ -224,14 +326,41 @@ def generate_html(
                 if icao:
                     artcc_airport_points[artcc][icao] = point
 
-    # Flatten to list for JSON
-    all_weather_points = []
-    for artcc, points in artcc_airport_points.items():
-        for point in points.values():
-            all_weather_points.append(point)
+    # Generate weather region GeoJSON features (Voronoi-style grid cells)
+    # Each ARTCC is divided into a grid, with each cell colored by nearest airport's weather
+    weather_region_features = []
+    for artcc, polys in boundaries.items():
+        if artcc not in CONUS_ARTCCS:
+            continue
+        airport_points = list(artcc_airport_points.get(artcc, {}).values())
+        if not airport_points:
+            continue
+
+        # Use the first (main) polygon for the ARTCC
+        if polys:
+            artcc_boundary = polys[0]  # (lat, lon) tuples
+            regions = generate_weather_regions(artcc_boundary, airport_points, grid_resolution=0.2)
+
+            for region in regions:
+                feature = {
+                    "type": "Feature",
+                    "properties": {
+                        "category": region['category'],
+                    },
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [region['coords']],
+                    }
+                }
+                weather_region_features.append(feature)
+
+    weather_regions_geojson = {
+        "type": "FeatureCollection",
+        "features": weather_region_features,
+    }
 
     # Convert boundaries to GeoJSON for Leaflet (CONUS only)
-    # Now using neutral styling - borders only, no fill based on weather
+    # Now using neutral styling - borders only
     geojson_features = []
     for artcc, polys in boundaries.items():
         # Skip non-CONUS ARTCCs (oceanic, Alaska, Hawaii, etc.)
@@ -779,8 +908,8 @@ def generate_html(
         // ARTCC boundaries GeoJSON
         const artccData = {json.dumps(geojson)};
 
-        // Airport weather points for localized coloring
-        const weatherPoints = {json.dumps(all_weather_points)};
+        // Weather region cells (Voronoi-style grid)
+        const weatherRegions = {json.dumps(weather_regions_geojson)};
 
         // Category colors
         const categoryColors = {{
@@ -791,13 +920,24 @@ def generate_html(
             'UNK': '#888888'
         }};
 
-        // Style function for ARTCC polygons - neutral borders only
+        // Style function for weather region cells
+        function weatherRegionStyle(feature) {{
+            const color = categoryColors[feature.properties.category] || categoryColors['UNK'];
+            return {{
+                fillColor: color,
+                weight: 0,
+                opacity: 0,
+                fillOpacity: 0.5,
+            }};
+        }}
+
+        // Style function for ARTCC polygons - borders only
         function artccStyle(feature) {{
             return {{
                 fillColor: 'transparent',
-                weight: 1.5,
-                opacity: 0.6,
-                color: '#666666',
+                weight: 2,
+                opacity: 0.7,
+                color: '#ffffff',
                 fillOpacity: 0,
             }};
         }}
@@ -806,9 +946,9 @@ def generate_html(
         function highlightFeature(e) {{
             const layer = e.target;
             layer.setStyle({{
-                weight: 2.5,
-                opacity: 0.9,
-                color: '#999999',
+                weight: 3,
+                opacity: 1,
+                color: '#ffffff',
             }});
             layer.bringToFront();
         }}
@@ -867,30 +1007,17 @@ def generate_html(
             }});
         }}
 
+        // Render weather region cells first (below ARTCC borders)
+        const weatherRegionLayer = L.geoJSON(weatherRegions, {{
+            style: weatherRegionStyle,
+            interactive: false,  // Don't capture mouse events
+        }}).addTo(map);
+
+        // ARTCC borders on top
         const geojsonLayer = L.geoJSON(artccData, {{
             style: artccStyle,
             onEachFeature: onEachFeature,
         }}).addTo(map);
-
-        // Render airport weather circles for localized coloring
-        const weatherLayer = L.layerGroup().addTo(map);
-        weatherPoints.forEach(point => {{
-            const color = categoryColors[point.category] || categoryColors['UNK'];
-            const circle = L.circleMarker([point.lat, point.lon], {{
-                radius: 8,
-                fillColor: color,
-                color: color,
-                weight: 1,
-                opacity: 0.8,
-                fillOpacity: 0.6,
-            }});
-            circle.bindTooltip(point.icao, {{
-                permanent: false,
-                direction: 'top',
-                className: 'airport-tooltip'
-            }});
-            weatherLayer.addLayer(circle);
-        }});
 
         // Grouping polygons for hover effect
         const groupingPolygons = {json.dumps(grouping_polygons)};
