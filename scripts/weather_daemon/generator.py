@@ -22,6 +22,48 @@ from rich.console import Console
 logger = logging.getLogger("weather_daemon")
 
 
+def _save_weather_cache(cache_dir: Path, metars: Dict, tafs: Dict, atis_data: Dict) -> None:
+    """Save weather data to cache for later use with --use-cached."""
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / "weather_cache.json"
+
+    cache_data = {
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'metars': metars,
+        'tafs': tafs,
+        'atis': atis_data,
+    }
+
+    try:
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f)
+        logger.debug(f"Saved weather cache to {cache_file}")
+    except Exception as e:
+        logger.warning(f"Failed to save weather cache: {e}")
+
+
+def _load_weather_cache(cache_dir: Path) -> Optional[Tuple[Dict, Dict, Dict, str]]:
+    """Load weather data from cache. Returns (metars, tafs, atis, timestamp) or None."""
+    cache_file = cache_dir / "weather_cache.json"
+
+    if not cache_file.exists():
+        return None
+
+    try:
+        with open(cache_file, 'r', encoding='utf-8') as f:
+            cache_data = json.load(f)
+
+        return (
+            cache_data.get('metars', {}),
+            cache_data.get('tafs', {}),
+            cache_data.get('atis', {}),
+            cache_data.get('timestamp', 'unknown'),
+        )
+    except Exception as e:
+        logger.warning(f"Failed to load weather cache: {e}")
+        return None
+
+
 class ProgressTracker:
     """Tracks and reports progress for long-running operations."""
 
@@ -1005,6 +1047,9 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
     print(f"    Found {atis_count} airports with ATIS")
     logger.info(f"Found {atis_count} airports with active ATIS")
 
+    # Cache weather data for --use-cached mode
+    _save_weather_cache(config.weather_cache_dir, metars, tafs, atis_data)
+
     num_groupings = len(groupings_to_process)
     print(f"  Generating {num_groupings} briefings...")
     logger.info(f"Generating {num_groupings} briefings")
@@ -1269,6 +1314,200 @@ def generate_index_only(config: DaemonConfig) -> Dict[str, str]:
     end_timestamp = datetime.now(timezone.utc).strftime('%H:%M:%SZ')
     print(f"[{end_timestamp}] Index regeneration complete! {total_time:.1f}s")
     logger.info(f"Index regeneration complete in {total_time:.1f}s")
+    return generated_files
+
+
+def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
+    """
+    Generate briefings using cached weather data (no API calls).
+
+    Useful for testing code changes without waiting for weather fetch.
+
+    Returns:
+        Dict mapping output file paths to grouping names
+    """
+    # Load cached weather data
+    cache_result = _load_weather_cache(config.weather_cache_dir)
+    if cache_result is None:
+        print("Error: No cached weather data found. Run without --use-cached first.")
+        logger.error("No cached weather data found")
+        return {}
+
+    metars, tafs, atis_data, cache_timestamp = cache_result
+
+    start_time = datetime.now(timezone.utc)
+    timestamp = start_time.strftime('%H:%M:%SZ')
+    print(f"[{timestamp}] Regenerating briefings with cached weather data...")
+    print(f"  Cache timestamp: {cache_timestamp}")
+    logger.info(f"Regenerating briefings with cached weather from {cache_timestamp}")
+
+    # Load airport data
+    print("  Loading airport data...")
+    unified_airport_data = load_unified_airport_data(
+        str(config.data_dir / "APT_BASE.csv"),
+        str(config.data_dir / "airports.json"),
+        str(config.data_dir / "iata-icao.csv"),
+    )
+
+    # Initialize disambiguator
+    print("  Initializing airport disambiguator...")
+    airports_json_path = str(config.data_dir / "airports.json")
+    disambiguator = AirportDisambiguator(airports_json_path, lazy_load=True, unified_data=unified_airport_data)
+
+    # Load all groupings
+    print("  Loading groupings...")
+    all_groupings = load_all_groupings(str(config.custom_groupings_path), unified_airport_data)
+
+    # Separate preset and custom groupings
+    preset_groupings = load_preset_groupings() if config.include_presets else {}
+    custom_groupings = load_custom_groupings(str(config.custom_groupings_path)) if config.include_custom else {}
+
+    # Determine which groupings to process
+    groupings_to_process: Dict[str, Tuple[List[str], str]] = {}
+
+    if config.include_presets:
+        for json_file in config.preset_groupings_dir.glob("*.json"):
+            artcc = json_file.stem
+            if config.artcc_filter and artcc not in config.artcc_filter:
+                continue
+
+            try:
+                with open(json_file, 'r') as f:
+                    artcc_groupings = json.load(f)
+
+                for grouping_name, airports in artcc_groupings.items():
+                    resolved = resolve_grouping_recursively(grouping_name, all_groupings)
+                    if resolved:
+                        groupings_to_process[grouping_name] = (list(resolved), artcc)
+            except Exception as e:
+                print(f"  Warning: Error loading {json_file}: {e}")
+
+    if config.include_custom and custom_groupings:
+        for grouping_name in custom_groupings:
+            if grouping_name not in groupings_to_process:
+                resolved = resolve_grouping_recursively(grouping_name, all_groupings)
+                if resolved:
+                    groupings_to_process[grouping_name] = (list(resolved), "custom")
+
+    num_groupings = len(groupings_to_process)
+    print(f"  Found {num_groupings} groupings to process")
+    print(f"  Generating {num_groupings} briefings (using cached weather)...")
+    logger.info(f"Generating {num_groupings} briefings with cached weather")
+
+    # Create output directories
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    generated_files: Dict[str, str] = {}
+    artcc_groupings_map: Dict[str, List[Dict]] = {}
+
+    # Helper to get airport's ARTCC from unified data
+    def get_airport_artcc(icao: str) -> Optional[str]:
+        airport_info = unified_airport_data.get(icao, {})
+        artcc_code = airport_info.get('artcc', '')
+        if artcc_code and len(artcc_code) == 3:
+            return artcc_code
+        return None
+
+    # Helper to get airport coordinates
+    def get_airport_coords(icao: str) -> Optional[Tuple[float, float]]:
+        airport_info = unified_airport_data.get(icao, {})
+        lat = airport_info.get('latitude')
+        lon = airport_info.get('longitude')
+        if lat is not None and lon is not None:
+            return (float(lat), float(lon))
+        return None
+
+    # Helper to infer ARTCCs for a grouping from its airports
+    def infer_artccs_for_grouping(airports: List[str]) -> Set[str]:
+        artccs = set()
+        for icao in airports:
+            artcc_code = get_airport_artcc(icao)
+            if artcc_code:
+                artccs.add(artcc_code)
+        return artccs
+
+    briefing_progress = ProgressTracker("Briefing generation", num_groupings, log_interval_pct=10)
+
+    for grouping_name, (airports, artcc) in groupings_to_process.items():
+        # Create generator
+        generator = WeatherBriefingGenerator(
+            grouping_name=grouping_name,
+            airports=airports,
+            unified_airport_data=unified_airport_data,
+            disambiguator=disambiguator,
+        )
+
+        # Populate weather data from cache
+        generator.fetch_weather_data(metars, tafs, atis_data)
+
+        # Generate HTML
+        html_content = generator.generate_html()
+
+        # Create ARTCC subdirectory
+        artcc_dir = config.output_dir / artcc
+        artcc_dir.mkdir(parents=True, exist_ok=True)
+
+        # Sanitize filename
+        safe_name = re.sub(r'[^\w\-_]', '_', grouping_name)
+        output_path = artcc_dir / f"{safe_name}.html"
+
+        # Write file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        generated_files[str(output_path)] = grouping_name
+
+        # Track for index generation
+        category_summary = generator.get_category_summary()
+
+        # Collect airport coordinates for hover polygon
+        airport_coords = []
+        for icao in airports:
+            coords = get_airport_coords(icao)
+            if coords:
+                airport_coords.append(coords)
+
+        grouping_info = {
+            'name': grouping_name,
+            'filename': f"{safe_name}.html",
+            'airport_count': len(airports),
+            'categories': category_summary,
+            'airport_coords': airport_coords,
+        }
+
+        # For custom groupings, infer ARTCCs from airport data
+        if artcc == "custom":
+            inferred_artccs = infer_artccs_for_grouping(airports)
+            if inferred_artccs:
+                for inferred_artcc in inferred_artccs:
+                    if inferred_artcc not in artcc_groupings_map:
+                        artcc_groupings_map[inferred_artcc] = []
+                    artcc_info = grouping_info.copy()
+                    artcc_info['is_custom'] = True
+                    artcc_info['path_prefix'] = 'custom'
+                    artcc_groupings_map[inferred_artcc].append(artcc_info)
+            else:
+                if "custom" not in artcc_groupings_map:
+                    artcc_groupings_map["custom"] = []
+                artcc_groupings_map["custom"].append(grouping_info)
+        else:
+            if artcc not in artcc_groupings_map:
+                artcc_groupings_map[artcc] = []
+            artcc_groupings_map[artcc].append(grouping_info)
+
+        briefing_progress.update()
+
+    # Generate index if enabled
+    if config.generate_index:
+        from .index_generator import generate_index_page
+        index_path = generate_index_page(config, artcc_groupings_map)
+        if index_path:
+            generated_files[str(index_path)] = "Index"
+
+    total_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+    end_timestamp = datetime.now(timezone.utc).strftime('%H:%M:%SZ')
+    print(f"[{end_timestamp}] Cached regeneration complete! {len(generated_files)} files in {total_time:.1f}s")
+    logger.info(f"Cached regeneration complete: {len(generated_files)} files in {total_time:.1f}s")
     return generated_files
 
 

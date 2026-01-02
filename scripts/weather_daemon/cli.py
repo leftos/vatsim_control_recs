@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from scripts.weather_daemon.config import DaemonConfig
-from scripts.weather_daemon.generator import generate_all_briefings, generate_index_only
+from scripts.weather_daemon.generator import generate_all_briefings, generate_index_only, generate_with_cached_weather
 
 
 def setup_logging(log_dir: Path, verbose: bool = False) -> None:
@@ -112,6 +112,12 @@ Examples:
     )
 
     parser.add_argument(
+        "--use-cached",
+        action="store_true",
+        help="Regenerate briefings using cached weather data (no API calls)",
+    )
+
+    parser.add_argument(
         "--workers",
         type=int,
         default=10,
@@ -178,10 +184,15 @@ Examples:
     if args.index_only and args.no_index:
         parser.error("Cannot use both --index-only and --no-index")
 
+    if args.index_only and args.use_cached:
+        parser.error("Cannot use both --index-only and --use-cached")
+
     # Run generation
     try:
         if args.index_only:
             generated_files = generate_index_only(config)
+        elif args.use_cached:
+            generated_files = generate_with_cached_weather(config)
         else:
             generated_files = generate_all_briefings(config)
 
