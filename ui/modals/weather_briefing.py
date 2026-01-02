@@ -191,15 +191,28 @@ def _calculate_trend(
     return "stable"
 
 
+# FAR Part 139 priority for sorting (lower = larger/more significant airport)
+# "I E" = Index E (wide-body scheduled service) = Class B airports
+# "I D" = Index D (large jets) = major Class C airports
+# "I C" = Index C (medium jets) = Class C airports
+FAR139_PRIORITY = {
+    'I E': 0,  # Class B (KSFO, KLAX, KJFK, etc.)
+    'I D': 1,  # Major Class C (KOAK, KSJC, KSAN, etc.)
+    'I C': 2,  # Class C
+    'I B': 3,  # Smaller scheduled service
+    'I A': 4,  # Smallest scheduled service
+}
+
 # Tower type priority for sorting (lower = larger/more significant airport)
+# Used as fallback when FAR 139 data is not available
 TOWER_TYPE_PRIORITY = {
-    'ATCT-TRACON': 0,
-    'ATCT-RAPCON': 0,
-    'ATCT-RATCF': 0,
-    'ATCT-A/C': 1,
-    'ATCT': 2,
-    'NON-ATCT': 3,
-    '': 4,
+    'ATCT-TRACON': 5,
+    'ATCT-RAPCON': 5,
+    'ATCT-RATCF': 5,
+    'ATCT-A/C': 6,
+    'ATCT': 7,
+    'NON-ATCT': 8,
+    '': 9,
 }
 
 
@@ -611,12 +624,24 @@ class WeatherBriefingScreen(ModalScreen):
         self._update_display()
 
     def _get_airport_size_priority(self, icao: str) -> int:
-        """Get airport size priority for sorting (lower = larger airport)."""
+        """Get airport size priority for sorting (lower = larger airport).
+
+        Priority is determined first by FAR Part 139 certification (if available),
+        then falls back to tower type. This ensures Class B airports (I E) are
+        always prioritized as cluster centers over smaller airports.
+        """
         if not config.UNIFIED_AIRPORT_DATA:
-            return 4
+            return 9
         airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {})
+
+        # First check FAR 139 certification (most accurate for major airports)
+        far139 = airport_info.get('far139', '')
+        if far139 in FAR139_PRIORITY:
+            return FAR139_PRIORITY[far139]
+
+        # Fall back to tower type
         tower_type = airport_info.get('tower_type', '')
-        return TOWER_TYPE_PRIORITY.get(tower_type, 4)
+        return TOWER_TYPE_PRIORITY.get(tower_type, 9)
 
     def _get_airport_coords(self, icao: str) -> Optional[tuple]:
         """Get airport coordinates (lat, lon) if available."""
@@ -670,7 +695,7 @@ class WeatherBriefingScreen(ModalScreen):
     def _calculate_optimal_k(self, num_towered: int, num_total: int) -> int:
         """
         Calculate optimal number of clusters (k) for k-means.
-        Aims for 2-8 clusters depending on the number of airports.
+        Scales based on number of towered airports and geographic extent.
         """
         extent = self._calculate_grouping_extent()
 
@@ -679,25 +704,33 @@ class WeatherBriefingScreen(ModalScreen):
         elif num_towered <= 3:
             return min(num_towered, 2)
         elif num_towered <= 6:
-            return min(num_towered, 3)
+            return min(num_towered, 4)
         elif num_towered <= 12:
             # Scale based on extent
-            if extent < 200:
-                return 3
-            elif extent < 500:
-                return 4
-            else:
-                return min(num_towered, 5)
-        else:
-            # Many towered airports - use more clusters for larger areas
             if extent < 200:
                 return 4
             elif extent < 500:
                 return 5
-            elif extent < 1000:
-                return 6
+            else:
+                return min(num_towered, 6)
+        elif num_towered <= 20:
+            # Medium number of towered airports
+            if extent < 200:
+                return 5
+            elif extent < 500:
+                return 7
             else:
                 return min(num_towered, 8)
+        else:
+            # Many towered airports - use more clusters for larger areas
+            if extent < 200:
+                return 6
+            elif extent < 500:
+                return 8
+            elif extent < 1000:
+                return 10
+            else:
+                return min(num_towered, 12)
 
     def _kmeans_clustering(
         self,
@@ -1310,12 +1343,11 @@ class WeatherBriefingScreen(ModalScreen):
         # Use wide width to prevent Rich from wrapping - let CSS handle wrapping instead
         console = Console(record=True, force_terminal=True, width=500)
 
-        # Title and timestamp (Zulu + Local)
+        # Title and timestamp (Zulu only for web - local time varies by viewer)
         now = datetime.now(timezone.utc)
         zulu_str = now.strftime("%Y-%m-%d %H%MZ")
-        local_str = now.astimezone().strftime("%H:%M LT")
         console.print(f"[bold]Weather Briefing: {self.grouping_name}[/bold]")
-        console.print(f"Generated: {zulu_str} ({local_str})\n")
+        console.print(f"Generated: {zulu_str}\n")
 
         # Summary
         category_counts = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0, "UNK": 0}

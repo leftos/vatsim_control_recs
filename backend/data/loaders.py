@@ -68,7 +68,8 @@ def load_unified_airport_data(
                     'elevation': int(row['elevation']) if row.get('elevation') else None,
                     'artcc': '',
                     'tz': row.get('tz', '').strip(),
-                    'tower_type': ''  # Will be updated by APT_BASE if available
+                    'tower_type': '',  # Will be updated by APT_BASE if available
+                    'far139': ''  # FAR Part 139 certification (e.g., "I E" for Class B)
                 }
         #print(f"  Loaded {len(airports)} airports from iata-icao.csv")
     except FileNotFoundError:
@@ -117,7 +118,8 @@ def load_unified_airport_data(
                         'elevation': details.get('elevation'),
                         'artcc': '',
                         'tz': safe_strip(details.get('tz')),
-                        'tower_type': ''  # Will be updated by APT_BASE if available
+                        'tower_type': '',  # Will be updated by APT_BASE if available
+                        'far139': ''  # FAR Part 139 certification
                     }
         #print(f"  Merged data from airports.json (now {len(airports)} airports)")
     except FileNotFoundError:
@@ -187,7 +189,8 @@ def load_unified_airport_data(
                     'elevation': None,
                     'artcc': '',
                     'tz': '',
-                    'tower_type': ''
+                    'tower_type': '',
+                    'far139': ''
                 })
                 
                 # Update with APT_BASE data (highest priority)
@@ -203,6 +206,7 @@ def load_unified_airport_data(
                     'elevation': elevation if elevation is not None else airport_data.get('elevation'),
                     'artcc': row.get('RESP_ARTCC_ID', '').strip(),
                     'tower_type': row.get('TWR_TYPE_CODE', '').strip(),
+                    'far139': row.get('FAR_139_TYPE_CODE', '').strip(),
                 })
                 
                 airports[primary_code] = airport_data
