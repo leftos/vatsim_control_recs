@@ -210,10 +210,18 @@ def _parse_taf_changes(
     current_vis: Optional[float] = None,
     current_ceil: Optional[int] = None
 ) -> List[Dict[str, Any]]:
-    """Parse TAF to find forecast weather changes."""
+    """Parse TAF to find forecast weather changes.
+
+    Trend is calculated relative to the previous period (not always current).
+    """
     changes = []
     if not taf:
         return changes
+
+    # Track previous period for trend comparison
+    prev_cat = current_category
+    prev_vis = current_vis
+    prev_ceil = current_ceil
 
     fm_pattern = r'FM(\d{6})\s+([^\n]+?)(?=\s+FM|\s+TEMPO|\s+BECMG|\s+PROB|$)'
     for match in re.finditer(fm_pattern, taf, re.DOTALL):
@@ -221,8 +229,9 @@ def _parse_taf_changes(
         conditions = match.group(2)
         details = _parse_taf_forecast_details(conditions)
         predicted_cat = details['category']
+        # Compare to previous period, not always current
         trend = _calculate_trend(
-            current_vis, current_ceil, current_category,
+            prev_vis, prev_ceil, prev_cat,
             details['visibility_sm'], details['ceiling_ft'], predicted_cat
         )
         changes.append({
@@ -238,7 +247,12 @@ def _parse_taf_changes(
             'is_improvement': trend == 'improving',
             'is_deterioration': trend == 'worsening',
         })
+        # Update previous for next iteration
+        prev_cat = predicted_cat
+        prev_vis = details['visibility_sm']
+        prev_ceil = details['ceiling_ft']
 
+    # For TEMPO/BECMG, compare to current or most recent FM
     tempo_becmg_pattern = r'(TEMPO|BECMG)\s+(\d{4})/(\d{4})\s+([^\n]+?)(?=\s+TEMPO|\s+BECMG|\s+FM|\s+PROB|$)'
     for match in re.finditer(tempo_becmg_pattern, taf, re.DOTALL):
         change_type = match.group(1)
@@ -247,6 +261,7 @@ def _parse_taf_changes(
         conditions = match.group(4)
         details = _parse_taf_forecast_details(conditions)
         predicted_cat = details['category']
+        # TEMPO/BECMG compare to current conditions (they're temporary deviations)
         trend = _calculate_trend(
             current_vis, current_ceil, current_category,
             details['visibility_sm'], details['ceiling_ft'], predicted_cat
