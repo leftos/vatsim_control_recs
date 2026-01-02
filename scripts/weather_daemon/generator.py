@@ -976,6 +976,25 @@ body { margin: 20px; background: #1a1a1a; color: #e0e0e0; }
             counts[cat] = counts.get(cat, 0) + 1
         return counts
 
+    def get_airport_weather_points(self) -> List[Dict[str, Any]]:
+        """
+        Get per-airport weather data with coordinates for map visualization.
+
+        Returns:
+            List of dicts with {icao, lat, lon, category} for each airport
+        """
+        points = []
+        for icao, data in self.weather_data.items():
+            coords = self._get_airport_coords(icao)
+            if coords:
+                points.append({
+                    'icao': icao,
+                    'lat': coords[0],
+                    'lon': coords[1],
+                    'category': data.get('category', 'UNK'),
+                })
+        return points
+
 
 def _generate_artcc_wide_briefings(
     config: DaemonConfig,
@@ -1216,6 +1235,7 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
 
         # Track for index generation
         category_summary = generator.get_category_summary()
+        airport_weather_points = generator.get_airport_weather_points()
 
         # Collect airport coordinates for hover polygon
         airport_coords = []
@@ -1230,6 +1250,7 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
             'airport_count': len(airports),
             'categories': category_summary,
             'airport_coords': airport_coords,  # For hover polygon
+            'airport_weather_points': airport_weather_points,  # For localized map coloring
         }
 
         # For custom groupings, infer ARTCCs from airport data
@@ -1567,6 +1588,7 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
 
         # Track for index generation
         category_summary = generator.get_category_summary()
+        airport_weather_points = generator.get_airport_weather_points()
 
         # Collect airport coordinates for hover polygon
         airport_coords = []
@@ -1581,6 +1603,7 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
             'airport_count': len(airports),
             'categories': category_summary,
             'airport_coords': airport_coords,
+            'airport_weather_points': airport_weather_points,  # For localized map coloring
         }
 
         # For custom groupings, infer ARTCCs from airport data

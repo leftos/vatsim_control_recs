@@ -211,14 +211,33 @@ def generate_html(
 ) -> str:
     """Generate the complete HTML content."""
 
+    # Collect all airport weather points per ARTCC (de-duplicated by ICAO)
+    artcc_airport_points: Dict[str, Dict[str, Dict]] = {}  # artcc -> icao -> point
+    for artcc, groupings in artcc_groupings.items():
+        if artcc not in CONUS_ARTCCS and artcc != "custom":
+            continue
+        if artcc not in artcc_airport_points:
+            artcc_airport_points[artcc] = {}
+        for g in groupings:
+            for point in g.get('airport_weather_points', []):
+                icao = point.get('icao')
+                if icao:
+                    artcc_airport_points[artcc][icao] = point
+
+    # Flatten to list for JSON
+    all_weather_points = []
+    for artcc, points in artcc_airport_points.items():
+        for point in points.values():
+            all_weather_points.append(point)
+
     # Convert boundaries to GeoJSON for Leaflet (CONUS only)
+    # Now using neutral styling - borders only, no fill based on weather
     geojson_features = []
     for artcc, polys in boundaries.items():
         # Skip non-CONUS ARTCCs (oceanic, Alaska, Hawaii, etc.)
         if artcc not in CONUS_ARTCCS:
             continue
         stats = artcc_stats.get(artcc, {})
-        color = get_artcc_color(stats)
         display_name = ARTCC_NAMES.get(artcc, artcc)
         grouping_count = len(artcc_groupings.get(artcc, []))
 
@@ -234,7 +253,6 @@ def generate_html(
                 "properties": {
                     "artcc": artcc,
                     "name": display_name,
-                    "color": color,
                     "groupings": grouping_count,
                     "lifr": stats.get("LIFR", 0),
                     "ifr": stats.get("IFR", 0),
@@ -622,6 +640,20 @@ def generate_html(
             background: #1a1a2e;
         }}
 
+        .airport-tooltip {{
+            background: #16213e;
+            color: #e0e0e0;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }}
+
+        .airport-tooltip::before {{
+            border-top-color: #0f3460;
+        }}
+
         .leaflet-popup-content-wrapper {{
             background: #16213e;
             color: #e0e0e0;
@@ -747,14 +779,26 @@ def generate_html(
         // ARTCC boundaries GeoJSON
         const artccData = {json.dumps(geojson)};
 
-        // Style function for ARTCC polygons
+        // Airport weather points for localized coloring
+        const weatherPoints = {json.dumps(all_weather_points)};
+
+        // Category colors
+        const categoryColors = {{
+            'LIFR': '#ff00ff',
+            'IFR': '#ff0000',
+            'MVFR': '#5599ff',
+            'VFR': '#00ff00',
+            'UNK': '#888888'
+        }};
+
+        // Style function for ARTCC polygons - neutral borders only
         function artccStyle(feature) {{
             return {{
-                fillColor: feature.properties.color,
-                weight: 2,
-                opacity: 0.8,
-                color: '#ffffff',
-                fillOpacity: 0.25,
+                fillColor: 'transparent',
+                weight: 1.5,
+                opacity: 0.6,
+                color: '#666666',
+                fillOpacity: 0,
             }};
         }}
 
@@ -762,8 +806,9 @@ def generate_html(
         function highlightFeature(e) {{
             const layer = e.target;
             layer.setStyle({{
-                weight: 3,
-                fillOpacity: 0.4,
+                weight: 2.5,
+                opacity: 0.9,
+                color: '#999999',
             }});
             layer.bringToFront();
         }}
@@ -826,6 +871,26 @@ def generate_html(
             style: artccStyle,
             onEachFeature: onEachFeature,
         }}).addTo(map);
+
+        // Render airport weather circles for localized coloring
+        const weatherLayer = L.layerGroup().addTo(map);
+        weatherPoints.forEach(point => {{
+            const color = categoryColors[point.category] || categoryColors['UNK'];
+            const circle = L.circleMarker([point.lat, point.lon], {{
+                radius: 8,
+                fillColor: color,
+                color: color,
+                weight: 1,
+                opacity: 0.8,
+                fillOpacity: 0.6,
+            }});
+            circle.bindTooltip(point.icao, {{
+                permanent: false,
+                direction: 'top',
+                className: 'airport-tooltip'
+            }});
+            weatherLayer.addLayer(circle);
+        }});
 
         // Grouping polygons for hover effect
         const groupingPolygons = {json.dumps(grouping_polygons)};
