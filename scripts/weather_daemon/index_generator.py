@@ -355,25 +355,28 @@ def generate_html(
                 'category': None,  # No weather data - will use interpolation
             }
 
-        # Now interpolate categories for airports without weather data
+        # Now interpolate categories for airports without valid weather data
+        # Only use VFR/MVFR/IFR/LIFR as sources - exclude UNK since it means no weather
+        valid_categories = {'VFR', 'MVFR', 'IFR', 'LIFR'}
         for artcc, airports in artcc_airport_points.items():
-            # Get airports with known weather
-            known_weather = [(icao, ap) for icao, ap in airports.items() if ap.get('category')]
+            # Get airports with known VALID weather (not UNK)
+            known_weather = [(icao, ap) for icao, ap in airports.items()
+                             if ap.get('category') in valid_categories]
             if not known_weather:
-                continue  # No weather data at all for this ARTCC
+                continue  # No valid weather data at all for this ARTCC
 
-            # For airports without weather, find nearest with weather
+            # For airports without valid weather, find nearest with valid weather
             for icao, ap in airports.items():
-                if ap.get('category'):
-                    continue  # Already has weather
-                # Find nearest airport with weather
+                if ap.get('category') in valid_categories:
+                    continue  # Already has valid weather
+                # Find nearest airport with valid weather
                 min_dist = float('inf')
-                nearest_category = 'UNK'
+                nearest_category = 'VFR'  # Default to VFR if no weather found nearby
                 for known_icao, known_ap in known_weather:
                     dist = (ap['lat'] - known_ap['lat'])**2 + (ap['lon'] - known_ap['lon'])**2
                     if dist < min_dist:
                         min_dist = dist
-                        nearest_category = known_ap.get('category', 'UNK')
+                        nearest_category = known_ap.get('category', 'VFR')
                 ap['category'] = nearest_category
 
     # Generate weather region GeoJSON features (Voronoi-style grid cells)
