@@ -14,6 +14,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from .config import DaemonConfig, ARTCC_NAMES, CATEGORY_COLORS
 from .artcc_boundaries import get_artcc_boundaries, get_artcc_center
 
+# Continental US ARTCCs to display on the map (excludes oceanic/remote)
+CONUS_ARTCCS = {
+    'ZAB', 'ZAU', 'ZBW', 'ZDC', 'ZDV', 'ZFW', 'ZHU', 'ZID', 'ZJX',
+    'ZKC', 'ZLA', 'ZLC', 'ZMA', 'ZME', 'ZMP', 'ZNY', 'ZOA', 'ZOB',
+    'ZSE', 'ZTL',
+}
+
 
 def compute_convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
     """
@@ -204,9 +211,12 @@ def generate_html(
 ) -> str:
     """Generate the complete HTML content."""
 
-    # Convert boundaries to GeoJSON for Leaflet
+    # Convert boundaries to GeoJSON for Leaflet (CONUS only)
     geojson_features = []
     for artcc, polys in boundaries.items():
+        # Skip non-CONUS ARTCCs (oceanic, Alaska, Hawaii, etc.)
+        if artcc not in CONUS_ARTCCS:
+            continue
         stats = artcc_stats.get(artcc, {})
         color = get_artcc_color(stats)
         display_name = ARTCC_NAMES.get(artcc, artcc)
@@ -243,6 +253,24 @@ def generate_html(
         "features": geojson_features,
     }
 
+    # Build ARTCC bounds for zoom reference (CONUS only)
+    artcc_bounds = {}
+    for artcc, polys in boundaries.items():
+        if artcc not in CONUS_ARTCCS:
+            continue
+        all_coords = []
+        for poly in polys:
+            all_coords.extend(poly)
+        if all_coords:
+            lats = [c[0] for c in all_coords]
+            lons = [c[1] for c in all_coords]
+            artcc_bounds[artcc] = {
+                'south': min(lats),
+                'north': max(lats),
+                'west': min(lons),
+                'east': max(lons),
+            }
+
     # Build grouping polygons data for hover effect
     # Use same iteration order as sidebar builder (sorted ARTCCs, then custom)
     grouping_polygons = {}
@@ -271,6 +299,7 @@ def generate_html(
 
                 grouping_polygons[str(grouping_id)] = {
                     'name': g['name'],
+                    'artcc': artcc,
                     'coords': polygon_coords,
                 }
             grouping_id += 1
@@ -288,6 +317,7 @@ def generate_html(
                     polygon_coords.append(polygon_coords[0])
                 grouping_polygons[str(grouping_id)] = {
                     'name': g['name'],
+                    'artcc': None,  # No ARTCC for unmapped custom groupings
                     'coords': polygon_coords,
                 }
             grouping_id += 1
@@ -669,6 +699,9 @@ def generate_html(
         // Grouping polygons for hover effect
         const groupingPolygons = {json.dumps(grouping_polygons)};
 
+        // ARTCC bounds for stable zooming
+        const artccBounds = {json.dumps(artcc_bounds)};
+
         // Variable to hold the current hover polygon layer
         let hoverPolygon = null;
 
@@ -694,8 +727,11 @@ def generate_html(
                     dashArray: '5, 5',
                 }}).addTo(map);
 
-                // Fit map to show the polygon
-                map.fitBounds(hoverPolygon.getBounds(), {{ padding: [50, 50], maxZoom: 8 }});
+                // Zoom to ARTCC bounds (stable) instead of grouping bounds (jumpy)
+                if (data.artcc && artccBounds[data.artcc]) {{
+                    const bounds = artccBounds[data.artcc];
+                    map.fitBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]], {{ padding: [20, 20], maxZoom: 7 }});
+                }}
             }}
         }}
 

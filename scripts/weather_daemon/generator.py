@@ -1003,7 +1003,8 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
     # Helper to get airport's ARTCC from unified data
     def get_airport_artcc(icao: str) -> Optional[str]:
         airport_info = unified_airport_data.get(icao, {})
-        artcc_code = airport_info.get('resp_artcc_id', '')
+        # Field is 'artcc' in unified airport data
+        artcc_code = airport_info.get('artcc', '')
         if artcc_code and len(artcc_code) == 3:
             return artcc_code
         return None
