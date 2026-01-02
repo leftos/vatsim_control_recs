@@ -28,7 +28,10 @@ class DaemonConfig:
     artcc_filter: Optional[List[str]] = None
 
     # Maximum concurrent weather API requests
-    max_workers: int = 10
+    max_workers: int = 20
+
+    # Weather cache TTL in seconds (use cached data if fresher than this)
+    weather_cache_ttl: int = 600  # 10 minutes
 
     # Include custom groupings
     include_custom: bool = True

@@ -42,8 +42,16 @@ def _save_weather_cache(cache_dir: Path, metars: Dict, tafs: Dict, atis_data: Di
         logger.warning(f"Failed to save weather cache: {e}")
 
 
-def _load_weather_cache(cache_dir: Path) -> Optional[Tuple[Dict, Dict, Dict, str]]:
-    """Load weather data from cache. Returns (metars, tafs, atis, timestamp) or None."""
+def _load_weather_cache(cache_dir: Path, max_age_seconds: Optional[int] = None) -> Optional[Tuple[Dict, Dict, Dict, str]]:
+    """Load weather data from cache.
+
+    Args:
+        cache_dir: Directory containing cache file
+        max_age_seconds: If set, only return cache if fresher than this many seconds
+
+    Returns:
+        (metars, tafs, atis, timestamp) or None if cache missing/expired
+    """
     cache_file = cache_dir / "weather_cache.json"
 
     if not cache_file.exists():
@@ -53,11 +61,24 @@ def _load_weather_cache(cache_dir: Path) -> Optional[Tuple[Dict, Dict, Dict, str
         with open(cache_file, 'r', encoding='utf-8') as f:
             cache_data = json.load(f)
 
+        timestamp_str = cache_data.get('timestamp', '')
+
+        # Check TTL if specified
+        if max_age_seconds is not None and timestamp_str:
+            try:
+                cache_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                age = (datetime.now(timezone.utc) - cache_time).total_seconds()
+                if age > max_age_seconds:
+                    logger.debug(f"Cache expired ({age:.0f}s old, TTL={max_age_seconds}s)")
+                    return None
+            except (ValueError, TypeError):
+                pass  # Can't parse timestamp, ignore TTL check
+
         return (
             cache_data.get('metars', {}),
             cache_data.get('tafs', {}),
             cache_data.get('atis', {}),
-            cache_data.get('timestamp', 'unknown'),
+            timestamp_str or 'unknown',
         )
     except Exception as e:
         logger.warning(f"Failed to load weather cache: {e}")
@@ -129,6 +150,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from backend import (
     get_metar_batch,
     get_taf_batch,
+    get_rate_limit_status,
     haversine_distance_nm,
     load_all_groupings,
     load_unified_airport_data,
@@ -1026,29 +1048,45 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
         all_airports.update(airports)
 
     num_airports = len(all_airports)
-    print(f"  Fetching weather for {num_airports} unique airports...")
-    logger.info(f"Fetching weather for {num_airports} airports")
-
-    # Batch fetch all weather data with progress tracking
     airports_list = list(all_airports)
 
-    metar_progress = ProgressTracker("METAR fetch", num_airports, log_interval_pct=20)
-    metars = get_metar_batch(airports_list, max_workers=config.max_workers, progress_callback=metar_progress.callback)
+    # Check if we have fresh cached weather data
+    cache_result = _load_weather_cache(config.weather_cache_dir, max_age_seconds=config.weather_cache_ttl)
 
-    taf_progress = ProgressTracker("TAF fetch", num_airports, log_interval_pct=20)
-    tafs = get_taf_batch(airports_list, max_workers=config.max_workers, progress_callback=taf_progress.callback)
+    if cache_result is not None:
+        metars, tafs, atis_data, cache_timestamp = cache_result
+        print(f"  Using cached weather data (from {cache_timestamp})")
+        logger.info(f"Using cached weather data from {cache_timestamp}")
+        atis_count = len([a for a in atis_data.values() if a]) if atis_data else 0
+    else:
+        # Fetch fresh weather data
+        print(f"  Fetching weather for {num_airports} unique airports...")
+        logger.info(f"Fetching weather for {num_airports} airports")
 
-    # Fetch VATSIM data for ATIS
-    print("  Fetching VATSIM ATIS data...")
-    logger.info("Fetching VATSIM ATIS data")
-    vatsim_data = download_vatsim_data()
-    atis_data = get_atis_for_airports(vatsim_data, airports_list) if vatsim_data else {}
-    atis_count = len([a for a in atis_data.values() if a]) if atis_data else 0
-    print(f"    Found {atis_count} airports with ATIS")
-    logger.info(f"Found {atis_count} airports with active ATIS")
+        metar_progress = ProgressTracker("METAR fetch", num_airports, log_interval_pct=20)
+        metars = get_metar_batch(airports_list, max_workers=config.max_workers, progress_callback=metar_progress.callback)
 
-    # Cache weather data for --use-cached mode
-    _save_weather_cache(config.weather_cache_dir, metars, tafs, atis_data)
+        taf_progress = ProgressTracker("TAF fetch", num_airports, log_interval_pct=20)
+        tafs = get_taf_batch(airports_list, max_workers=config.max_workers, progress_callback=taf_progress.callback)
+
+        # Log rate limit status after fetches
+        rate_status = get_rate_limit_status()
+        if rate_status['is_rate_limited']:
+            logger.warning(f"Rate limiting active: backoff={rate_status['backoff_seconds']:.1f}s, errors={rate_status['error_count']}")
+        elif rate_status['error_count'] > 0:
+            logger.info(f"Rate limit recovery: {rate_status['error_count']} errors, recovered")
+
+        # Fetch VATSIM data for ATIS
+        print("  Fetching VATSIM ATIS data...")
+        logger.info("Fetching VATSIM ATIS data")
+        vatsim_data = download_vatsim_data()
+        atis_data = get_atis_for_airports(vatsim_data, airports_list) if vatsim_data else {}
+        atis_count = len([a for a in atis_data.values() if a]) if atis_data else 0
+        print(f"    Found {atis_count} airports with ATIS")
+        logger.info(f"Found {atis_count} airports with active ATIS")
+
+        # Cache weather data for next run
+        _save_weather_cache(config.weather_cache_dir, metars, tafs, atis_data)
 
     num_groupings = len(groupings_to_process)
     print(f"  Generating {num_groupings} briefings...")

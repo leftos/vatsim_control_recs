@@ -5,11 +5,98 @@ Weather data fetching for airports (METAR and wind information).
 import json
 import re
 import threading
+import time
 import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple, Optional, Any, Callable
+
+# Rate limiting state
+_rate_limit_lock = threading.Lock()
+_rate_limit_backoff = 0.0  # Current backoff delay in seconds
+_rate_limit_errors = 0  # Consecutive rate limit errors
+_rate_limit_last_error_time: Optional[datetime] = None
+
+# Rate limiting configuration
+RATE_LIMIT_INITIAL_BACKOFF = 1.0  # Initial backoff delay in seconds
+RATE_LIMIT_MAX_BACKOFF = 30.0  # Maximum backoff delay in seconds
+RATE_LIMIT_BACKOFF_MULTIPLIER = 2.0  # Exponential backoff multiplier
+RATE_LIMIT_RECOVERY_TIME = 60.0  # Seconds without errors before resetting backoff
+
+
+def _check_rate_limit_error(status_code: int) -> bool:
+    """Check if an HTTP status code indicates rate limiting."""
+    return status_code == 429 or status_code >= 500
+
+
+def _record_rate_limit_error() -> float:
+    """
+    Record a rate limit error and calculate new backoff delay.
+
+    Returns:
+        The current backoff delay in seconds
+    """
+    global _rate_limit_backoff, _rate_limit_errors, _rate_limit_last_error_time
+
+    with _rate_limit_lock:
+        _rate_limit_errors += 1
+        _rate_limit_last_error_time = datetime.now(timezone.utc)
+
+        if _rate_limit_backoff == 0:
+            _rate_limit_backoff = RATE_LIMIT_INITIAL_BACKOFF
+        else:
+            _rate_limit_backoff = min(
+                _rate_limit_backoff * RATE_LIMIT_BACKOFF_MULTIPLIER,
+                RATE_LIMIT_MAX_BACKOFF
+            )
+
+        return _rate_limit_backoff
+
+
+def _record_successful_request() -> None:
+    """
+    Record a successful request and potentially reset backoff.
+
+    Resets backoff if enough time has passed since last error.
+    """
+    global _rate_limit_backoff, _rate_limit_errors, _rate_limit_last_error_time
+
+    with _rate_limit_lock:
+        if _rate_limit_last_error_time is not None:
+            time_since_error = (datetime.now(timezone.utc) - _rate_limit_last_error_time).total_seconds()
+            if time_since_error > RATE_LIMIT_RECOVERY_TIME:
+                # Reset rate limiting state after recovery period
+                _rate_limit_backoff = 0.0
+                _rate_limit_errors = 0
+                _rate_limit_last_error_time = None
+
+
+def _get_current_backoff() -> float:
+    """
+    Get the current backoff delay.
+
+    Returns:
+        Current backoff delay in seconds, or 0 if no backoff needed
+    """
+    with _rate_limit_lock:
+        if _rate_limit_last_error_time is None:
+            return 0.0
+
+        # Check if we've recovered
+        time_since_error = (datetime.now(timezone.utc) - _rate_limit_last_error_time).total_seconds()
+        if time_since_error > RATE_LIMIT_RECOVERY_TIME:
+            return 0.0
+
+        return _rate_limit_backoff
+
+
+def _wait_for_backoff() -> None:
+    """Wait for the current backoff delay if rate limiting is active."""
+    backoff = _get_current_backoff()
+    if backoff > 0:
+        time.sleep(backoff)
+
 
 from backend.cache.manager import (
     get_wind_cache, get_metar_cache, get_taf_cache,
@@ -159,12 +246,18 @@ def _fetch_metar_from_aviationweather(airport_icao: str) -> Optional[str]:
         METAR string, empty string if no data, or None on error
     """
     try:
+        # Wait for backoff if rate limiting is active
+        _wait_for_backoff()
+
         url = f"https://aviationweather.gov/api/data/metar?ids={airport_icao}&format=raw"
         req = urllib.request.Request(url)
         req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
 
         with urllib.request.urlopen(req, timeout=5) as response:
             metar_text = response.read().decode('utf-8').strip()
+
+        # Record successful request (may reset backoff after recovery period)
+        _record_successful_request()
 
         if not metar_text:
             # Empty response (e.g., HTTP 204) - return empty to trigger fallback
@@ -179,6 +272,10 @@ def _fetch_metar_from_aviationweather(airport_icao: str) -> Optional[str]:
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None  # Station doesn't exist - blacklist
+        if _check_rate_limit_error(e.code):
+            backoff = _record_rate_limit_error()
+            from common import logger as debug_logger
+            debug_logger.debug(f"Rate limit detected (HTTP {e.code}) for METAR {airport_icao}, backoff: {backoff:.1f}s")
         return ""  # Other HTTP errors - try fallback
     except (urllib.error.URLError, TimeoutError):
         return ""  # Network error - try fallback
@@ -314,12 +411,18 @@ def get_taf(airport_icao: str) -> str:
 
     # Cache miss or expired - fetch new data (outside lock to avoid blocking)
     try:
+        # Wait for backoff if rate limiting is active
+        _wait_for_backoff()
+
         url = f"https://aviationweather.gov/api/data/taf?ids={airport_icao}&format=raw"
         req = urllib.request.Request(url)
         req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
 
         with urllib.request.urlopen(req, timeout=5) as response:
             taf_text = response.read().decode('utf-8').strip()
+
+        # Record successful request (may reset backoff after recovery period)
+        _record_successful_request()
 
         # Check if we got valid data (not empty and not an error message)
         if not taf_text:
@@ -348,7 +451,11 @@ def get_taf(airport_icao: str) -> str:
             with taf_lock:
                 taf_blacklist[airport_icao] = True
             return ""
-        # For other HTTP errors (500, 502, 503, 504, etc.) - temporary, don't blacklist
+        if _check_rate_limit_error(e.code):
+            backoff = _record_rate_limit_error()
+            from common import logger as debug_logger
+            debug_logger.debug(f"Rate limit detected (HTTP {e.code}) for TAF {airport_icao}, backoff: {backoff:.1f}s")
+        # For other HTTP errors - temporary, don't blacklist
         # Return cached data if available
         with taf_lock:
             if airport_icao in taf_data_cache:
@@ -1132,3 +1239,41 @@ def clear_weather_caches() -> None:
     with taf_lock:
         taf_data_cache.clear()
         # Don't clear blacklist - those are permanent 404s
+
+
+def get_rate_limit_status() -> Dict[str, Any]:
+    """
+    Get current rate limiting status for monitoring/logging.
+
+    Returns:
+        Dictionary with rate limit state:
+        - is_rate_limited: True if currently backing off
+        - backoff_seconds: Current backoff delay
+        - error_count: Consecutive error count
+        - last_error_time: ISO timestamp of last error (or None)
+    """
+    with _rate_limit_lock:
+        is_rate_limited = _rate_limit_backoff > 0 and _rate_limit_last_error_time is not None
+
+        # Check if we've recovered
+        if _rate_limit_last_error_time is not None:
+            time_since_error = (datetime.now(timezone.utc) - _rate_limit_last_error_time).total_seconds()
+            if time_since_error > RATE_LIMIT_RECOVERY_TIME:
+                is_rate_limited = False
+
+        return {
+            'is_rate_limited': is_rate_limited,
+            'backoff_seconds': _rate_limit_backoff if is_rate_limited else 0.0,
+            'error_count': _rate_limit_errors,
+            'last_error_time': _rate_limit_last_error_time.isoformat() if _rate_limit_last_error_time else None
+        }
+
+
+def reset_rate_limit_state() -> None:
+    """Reset rate limiting state (e.g., after a long pause between fetches)."""
+    global _rate_limit_backoff, _rate_limit_errors, _rate_limit_last_error_time
+
+    with _rate_limit_lock:
+        _rate_limit_backoff = 0.0
+        _rate_limit_errors = 0
+        _rate_limit_last_error_time = None

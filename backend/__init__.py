@@ -19,7 +19,9 @@ from backend.data.weather import (
     get_taf_batch,
     get_altimeter_setting,
     find_nearest_airport_with_metar,
-    find_airports_near_position
+    find_airports_near_position,
+    get_rate_limit_status,
+    reset_rate_limit_state
 )
 
 # Import groupings functions
@@ -86,6 +88,8 @@ __all__ = [
     'get_altimeter_setting',
     'find_nearest_airport_with_metar',
     'find_airports_near_position',
+    'get_rate_limit_status',
+    'reset_rate_limit_state',
     'load_all_groupings',
     'load_unified_airport_data',
     'WIND_SOURCE',
