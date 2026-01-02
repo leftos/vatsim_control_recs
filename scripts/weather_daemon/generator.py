@@ -6,6 +6,7 @@ Reuses core logic from ui/modals/weather_briefing.py.
 """
 
 import json
+import logging
 import os
 import re
 import sys
@@ -13,9 +14,72 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from rich.console import Console
+
+# Set up logging
+logger = logging.getLogger("weather_daemon")
+
+
+class ProgressTracker:
+    """Tracks and reports progress for long-running operations."""
+
+    def __init__(self, operation: str, total: int, log_interval_pct: int = 10):
+        """
+        Initialize progress tracker.
+
+        Args:
+            operation: Name of the operation (e.g., "Fetching METAR")
+            total: Total number of items to process
+            log_interval_pct: How often to log progress (percentage)
+        """
+        self.operation = operation
+        self.total = total
+        self.completed = 0
+        self.log_interval_pct = log_interval_pct
+        self.last_logged_pct = -log_interval_pct  # Ensure first update logs
+        self.start_time = datetime.now(timezone.utc)
+
+    def update(self, completed: int = None, increment: int = 1) -> None:
+        """Update progress and print/log if at interval."""
+        if completed is not None:
+            self.completed = completed
+        else:
+            self.completed += increment
+
+        if self.total == 0:
+            return
+
+        pct = int((self.completed / self.total) * 100)
+
+        # Log at intervals
+        if pct >= self.last_logged_pct + self.log_interval_pct or self.completed == self.total:
+            self._report(pct)
+            self.last_logged_pct = pct
+
+    def _report(self, pct: int) -> None:
+        """Report progress to console and log."""
+        elapsed = (datetime.now(timezone.utc) - self.start_time).total_seconds()
+
+        if self.completed == self.total:
+            msg = f"    {self.operation}: {self.completed}/{self.total} (100%) - {elapsed:.1f}s"
+            print(msg)
+            logger.info(f"{self.operation}: completed {self.total} items in {elapsed:.1f}s")
+        else:
+            # Estimate remaining time
+            if self.completed > 0:
+                rate = self.completed / elapsed
+                remaining = (self.total - self.completed) / rate if rate > 0 else 0
+                msg = f"    {self.operation}: {self.completed}/{self.total} ({pct}%) - ETA {remaining:.0f}s"
+            else:
+                msg = f"    {self.operation}: {self.completed}/{self.total} ({pct}%)"
+            print(msg)
+            logger.debug(f"{self.operation}: {pct}% ({self.completed}/{self.total})")
+
+    def callback(self, completed: int, total: int) -> None:
+        """Callback compatible with batch fetch functions."""
+        self.update(completed=completed)
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -841,7 +905,10 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
     Returns:
         Dict mapping output file paths to grouping names
     """
-    print(f"[{datetime.now(timezone.utc).strftime('%H:%M:%SZ')}] Starting weather briefing generation...")
+    start_time = datetime.now(timezone.utc)
+    timestamp = start_time.strftime('%H:%M:%SZ')
+    print(f"[{timestamp}] Starting weather briefing generation...")
+    logger.info(f"Starting weather briefing generation")
 
     # Load airport data
     print("  Loading airport data...")
@@ -901,25 +968,65 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
     for airports, _ in groupings_to_process.values():
         all_airports.update(airports)
 
-    print(f"  Fetching weather for {len(all_airports)} unique airports...")
+    num_airports = len(all_airports)
+    print(f"  Fetching weather for {num_airports} unique airports...")
+    logger.info(f"Fetching weather for {num_airports} airports")
 
-    # Batch fetch all weather data
+    # Batch fetch all weather data with progress tracking
     airports_list = list(all_airports)
-    metars = get_metar_batch(airports_list, max_workers=config.max_workers)
-    tafs = get_taf_batch(airports_list, max_workers=config.max_workers)
+
+    metar_progress = ProgressTracker("METAR fetch", num_airports, log_interval_pct=20)
+    metars = get_metar_batch(airports_list, max_workers=config.max_workers, progress_callback=metar_progress.callback)
+
+    taf_progress = ProgressTracker("TAF fetch", num_airports, log_interval_pct=20)
+    tafs = get_taf_batch(airports_list, max_workers=config.max_workers, progress_callback=taf_progress.callback)
 
     # Fetch VATSIM data for ATIS
     print("  Fetching VATSIM ATIS data...")
+    logger.info("Fetching VATSIM ATIS data")
     vatsim_data = download_vatsim_data()
     atis_data = get_atis_for_airports(vatsim_data, airports_list) if vatsim_data else {}
+    atis_count = len([a for a in atis_data.values() if a]) if atis_data else 0
+    print(f"    Found {atis_count} airports with ATIS")
+    logger.info(f"Found {atis_count} airports with active ATIS")
 
-    print(f"  Generating {len(groupings_to_process)} briefings...")
+    num_groupings = len(groupings_to_process)
+    print(f"  Generating {num_groupings} briefings...")
+    logger.info(f"Generating {num_groupings} briefings")
 
     # Create output directories
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
     generated_files: Dict[str, str] = {}
     artcc_groupings_map: Dict[str, List[Dict]] = {}  # artcc -> list of grouping info
+
+    # Helper to get airport's ARTCC from unified data
+    def get_airport_artcc(icao: str) -> Optional[str]:
+        airport_info = unified_airport_data.get(icao, {})
+        artcc_code = airport_info.get('resp_artcc_id', '')
+        if artcc_code and len(artcc_code) == 3:
+            return artcc_code
+        return None
+
+    # Helper to get airport coordinates
+    def get_airport_coords(icao: str) -> Optional[Tuple[float, float]]:
+        airport_info = unified_airport_data.get(icao, {})
+        lat = airport_info.get('latitude')
+        lon = airport_info.get('longitude')
+        if lat is not None and lon is not None:
+            return (float(lat), float(lon))
+        return None
+
+    # Helper to infer ARTCCs for a grouping from its airports
+    def infer_artccs_for_grouping(airports: List[str]) -> Set[str]:
+        artccs = set()
+        for icao in airports:
+            artcc_code = get_airport_artcc(icao)
+            if artcc_code:
+                artccs.add(artcc_code)
+        return artccs
+
+    briefing_progress = ProgressTracker("Briefing generation", num_groupings, log_interval_pct=10)
 
     for grouping_name, (airports, artcc) in groupings_to_process.items():
         # Create generator
@@ -951,18 +1058,47 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
         generated_files[str(output_path)] = grouping_name
 
         # Track for index generation
-        if artcc not in artcc_groupings_map:
-            artcc_groupings_map[artcc] = []
-
         category_summary = generator.get_category_summary()
-        artcc_groupings_map[artcc].append({
+
+        # Collect airport coordinates for hover polygon
+        airport_coords = []
+        for icao in airports:
+            coords = get_airport_coords(icao)
+            if coords:
+                airport_coords.append(coords)
+
+        grouping_info = {
             'name': grouping_name,
             'filename': f"{safe_name}.html",
             'airport_count': len(airports),
             'categories': category_summary,
-        })
+            'airport_coords': airport_coords,  # For hover polygon
+        }
 
-    print(f"  Generated {len(generated_files)} briefing files")
+        # For custom groupings, infer ARTCCs from airport data
+        if artcc == "custom":
+            inferred_artccs = infer_artccs_for_grouping(airports)
+            if inferred_artccs:
+                # Add to each inferred ARTCC
+                for inferred_artcc in inferred_artccs:
+                    if inferred_artcc not in artcc_groupings_map:
+                        artcc_groupings_map[inferred_artcc] = []
+                    # Create a copy with the correct path for this ARTCC
+                    artcc_info = grouping_info.copy()
+                    artcc_info['is_custom'] = True  # Mark as originally custom
+                    artcc_info['path_prefix'] = 'custom'  # Files are still in custom dir
+                    artcc_groupings_map[inferred_artcc].append(artcc_info)
+            else:
+                # No ARTCC could be inferred - keep in custom
+                if "custom" not in artcc_groupings_map:
+                    artcc_groupings_map["custom"] = []
+                artcc_groupings_map["custom"].append(grouping_info)
+        else:
+            if artcc not in artcc_groupings_map:
+                artcc_groupings_map[artcc] = []
+            artcc_groupings_map[artcc].append(grouping_info)
+
+        briefing_progress.update()
 
     # Generate index if enabled
     if config.generate_index:
@@ -971,7 +1107,11 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
         if index_path:
             generated_files[str(index_path)] = "Index"
 
-    print(f"[{datetime.now(timezone.utc).strftime('%H:%M:%SZ')}] Generation complete!")
+    # Final summary
+    total_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+    end_timestamp = datetime.now(timezone.utc).strftime('%H:%M:%SZ')
+    print(f"[{end_timestamp}] Generation complete! {len(generated_files)} files in {total_time:.1f}s")
+    logger.info(f"Generation complete: {len(generated_files)} files in {total_time:.1f}s")
     return generated_files
 
 

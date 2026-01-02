@@ -16,8 +16,10 @@ from typing import Dict, List, Optional, Tuple
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
-# NASR subscription base URL
-NASR_BASE_URL = "https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/"
+# NASR subscription page (for finding current date)
+NASR_INDEX_URL = "https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/"
+# Actual download base URL (different domain)
+NASR_DOWNLOAD_URL = "https://nfdc.faa.gov/webContent/28DaySub/"
 
 
 def get_current_subscription_date() -> Optional[str]:
@@ -32,13 +34,13 @@ def get_current_subscription_date() -> Optional[str]:
     """
     try:
         # Fetch the main subscription page to find available dates
-        req = Request(NASR_BASE_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        req = Request(NASR_INDEX_URL, headers={'User-Agent': 'Mozilla/5.0'})
         with urlopen(req, timeout=30) as response:
             html = response.read().decode('utf-8')
 
         # Parse available subscription dates from directory listing
-        # Pattern matches href="YYYY-MM-DD/"
-        date_pattern = r'href="(\d{4}-\d{2}-\d{2})/"'
+        # Pattern matches href="./../NASR_Subscription/YYYY-MM-DD" or similar paths
+        date_pattern = r'NASR_Subscription/(\d{4}-\d{2}-\d{2})'
         dates = re.findall(date_pattern, html)
 
         if not dates:
@@ -95,9 +97,8 @@ def download_artcc_boundaries(
         except Exception:
             pass  # Re-download if cache is corrupt
 
-    # Download the subscription ZIP file
-    # ARTCC boundary data is in the "Additional_Data" directory
-    zip_url = f"{NASR_BASE_URL}{subscription_date}/Additional_Data.zip"
+    # Download the ARB.zip file from nfdc.faa.gov
+    zip_url = f"{NASR_DOWNLOAD_URL}{subscription_date}/ARB.zip"
 
     print(f"  Downloading ARTCC boundaries from {zip_url}...")
 
@@ -114,31 +115,32 @@ def download_artcc_boundaries(
 
     try:
         with zipfile.ZipFile(zip_data) as zf:
-            # Look for ARTCC boundary files
-            # The file is typically named "ARB.txt" or similar
-            artcc_files = [
-                name for name in zf.namelist()
-                if 'ARB' in name.upper() and name.endswith('.txt')
-            ]
+            # List all files in the ZIP
+            file_list = zf.namelist()
+            print(f"    ZIP contains: {file_list}")
 
-            if not artcc_files:
-                # Try looking for the boundary data in other common locations
-                artcc_files = [
-                    name for name in zf.namelist()
-                    if 'BOUNDARY' in name.upper() or 'ARTCC' in name.upper()
-                ]
+            # Look for ARB.txt file
+            arb_file = None
+            for name in file_list:
+                if name.upper() == 'ARB.TXT' or name.upper().endswith('/ARB.TXT'):
+                    arb_file = name
+                    break
 
-            if not artcc_files:
-                print("  Warning: Could not find ARTCC boundary file in NASR data")
-                # Fall back to embedded boundaries
+            if not arb_file:
+                # Try any .txt file
+                for name in file_list:
+                    if name.endswith('.txt'):
+                        arb_file = name
+                        break
+
+            if not arb_file:
+                print("  Warning: Could not find ARB.txt in ZIP file")
                 return get_embedded_boundaries()
 
-            for artcc_file in artcc_files:
-                print(f"    Parsing {artcc_file}...")
-                with zf.open(artcc_file) as f:
-                    content = f.read().decode('latin-1')
-                    parsed = parse_arb_file(content)
-                    boundaries.update(parsed)
+            print(f"    Parsing {arb_file}...")
+            with zf.open(arb_file) as f:
+                content = f.read().decode('latin-1')
+                boundaries = parse_arb_file(content)
 
     except zipfile.BadZipFile:
         print("  Error: Invalid ZIP file from NASR")
@@ -147,6 +149,8 @@ def download_artcc_boundaries(
     if not boundaries:
         print("  Warning: No boundaries parsed, using embedded data")
         return get_embedded_boundaries()
+
+    print(f"    Parsed boundaries for {len(boundaries)} ARTCCs")
 
     # Cache the parsed data
     try:
@@ -167,11 +171,16 @@ def parse_arb_file(content: str) -> Dict[str, List[List[Tuple[float, float]]]]:
     """
     Parse FAA ARB (ARTCC Boundary) file format.
 
-    The ARB file contains records with boundary point data.
-    Format varies but typically includes:
-    - ARTCC identifier
-    - Latitude/Longitude coordinates
-    - Sequence numbers
+    Fixed-width format (397 chars per record):
+    - Position 1-3: ARTCC ID (3 chars, part of 12-char identifier)
+    - Position 4-12: Altitude structure code + point designator
+    - Position 13-52: Center name (40 chars)
+    - Position 53-62: Altitude structure decode (10 chars)
+    - Position 63-76: Latitude (14 chars)
+    - Position 77-90: Longitude (14 chars)
+    - Position 91-390: Boundary description (300 chars)
+    - Position 391-396: Sequence number (6 chars)
+    - Position 397: NAS-only flag (1 char)
 
     Args:
         content: Raw file content
@@ -180,98 +189,140 @@ def parse_arb_file(content: str) -> Dict[str, List[List[Tuple[float, float]]]]:
         Dict mapping ARTCC codes to boundary polygons
     """
     boundaries: Dict[str, List[List[Tuple[float, float]]]] = {}
-    current_artcc: Optional[str] = None
-    current_polygon: List[Tuple[float, float]] = []
 
-    for line in content.split('\n'):
-        line = line.strip()
-        if not line:
+    # Track points by ARTCC and altitude structure
+    artcc_points: Dict[str, Dict[str, List[Tuple[int, float, float]]]] = {}
+
+    # Use splitlines() to properly handle different line endings (CRLF, LF)
+    for line in content.splitlines():
+        # Skip empty lines and short lines
+        if len(line) < 90:
             continue
 
-        # Try to parse as fixed-width record (common in NASR data)
-        # ARB record format (approximate):
-        # Columns 1-4: Record type
-        # Columns 5-8: ARTCC ID
-        # Various position data follows
+        # Extract fields using fixed positions (0-indexed)
+        artcc_id = line[0:3].strip().upper()
 
-        if len(line) >= 8:
-            record_type = line[0:4].strip()
+        # Skip if not a valid ARTCC ID (should be 3 uppercase letters starting with Z or K)
+        if not artcc_id or len(artcc_id) != 3:
+            continue
 
-            if record_type == 'ARB1' or record_type == 'ARB':
-                # Header record - extract ARTCC ID
-                artcc_id = line[4:8].strip().upper()
-                if artcc_id and len(artcc_id) == 3:
-                    # Save previous polygon if exists
-                    if current_artcc and current_polygon:
-                        if current_artcc not in boundaries:
-                            boundaries[current_artcc] = []
-                        boundaries[current_artcc].append(current_polygon)
+        # Only process continental US ARTCCs (start with Z)
+        # Also include ZAN (Alaska), ZHN (Honolulu), ZSU (San Juan)
+        if not artcc_id.startswith('Z'):
+            continue
 
-                    current_artcc = artcc_id
-                    current_polygon = []
+        # Extract airspace type: *H* = HIGH, *L* = LOW
+        # Format is " *H*" starting at position 3, so H/L is at position 5
+        airspace_type = line[5:6] if len(line) > 6 else 'H'  # Default to HIGH
 
-            elif record_type == 'ARB2' or 'ARB' in record_type:
-                # Boundary point record
-                # Try to extract lat/lon
-                coords = extract_coordinates(line)
-                if coords and current_artcc:
-                    current_polygon.append(coords)
+        # Extract sequence number from positions 390-396 (end of record)
+        # This is used to sort points in the correct order around the boundary
+        try:
+            seq_str = line[390:397].strip()
+            seq_num = int(seq_str) if seq_str.isdigit() else 0
+        except (ValueError, IndexError):
+            seq_num = 0
 
-    # Save last polygon
-    if current_artcc and current_polygon:
-        if current_artcc not in boundaries:
-            boundaries[current_artcc] = []
-        boundaries[current_artcc].append(current_polygon)
+        # Extract latitude (positions 63-76, 1-indexed = 62-75 0-indexed)
+        lat_str = line[62:76].strip()
+
+        # Extract longitude (positions 77-90, 1-indexed = 76-89 0-indexed)
+        lon_str = line[76:90].strip()
+
+        # Parse coordinates
+        lat = parse_nasr_coordinate(lat_str)
+        lon = parse_nasr_coordinate(lon_str)
+
+        if lat is None or lon is None:
+            continue
+
+        # Store point by ARTCC and airspace type (H=HIGH, L=LOW)
+        if artcc_id not in artcc_points:
+            artcc_points[artcc_id] = {}
+
+        if airspace_type not in artcc_points[artcc_id]:
+            artcc_points[artcc_id][airspace_type] = []
+
+        artcc_points[artcc_id][airspace_type].append((seq_num, lat, lon))
+
+    # Convert to boundary polygons
+    # Priority order for airspace types:
+    # H = HIGH (main en-route boundary)
+    # L = LOW (lower altitude boundary)
+    # B = Base/Boundary (used by some facilities like ZHN, ZSU)
+    # F = FIR (oceanic boundaries)
+    for artcc_id, airspace_types in artcc_points.items():
+        for airspace_type in ['H', 'L', 'B', 'F']:
+            if airspace_type not in airspace_types:
+                continue
+
+            points = airspace_types[airspace_type]
+            if not points:
+                continue
+
+            # Sort by sequence number
+            points.sort(key=lambda p: p[0])
+
+            # Extract just lat/lon
+            polygon = [(lat, lon) for _, lat, lon in points]
+
+            # Only include polygons with enough points
+            if len(polygon) >= 3:
+                # Close the polygon if not already closed
+                if polygon[0] != polygon[-1]:
+                    polygon.append(polygon[0])
+                boundaries[artcc_id] = [polygon]
+                break  # Use first valid airspace type
 
     return boundaries
 
 
-def extract_coordinates(line: str) -> Optional[Tuple[float, float]]:
+def parse_nasr_coordinate(coord_str: str) -> Optional[float]:
     """
-    Extract latitude/longitude from a boundary record line.
+    Parse NASR coordinate format.
 
-    Handles various NASR coordinate formats:
-    - Decimal degrees
-    - Degrees-Minutes-Seconds
-    - DDMMSS.SS format
+    NASR uses formatted coordinates like:
+    - "40-25-30.000N" (DMS format with dashes)
+    - "074-10-20.000W"
+
+    Args:
+        coord_str: Coordinate string from NASR file
 
     Returns:
-        (latitude, longitude) tuple or None
+        Decimal degrees or None if parsing fails
     """
-    # Pattern for DMS format: DDMMSSH (H = hemisphere)
-    dms_pattern = r'(\d{2})(\d{2})(\d{2}(?:\.\d+)?)\s*([NS])\s+(\d{2,3})(\d{2})(\d{2}(?:\.\d+)?)\s*([EW])'
-    match = re.search(dms_pattern, line)
+    if not coord_str:
+        return None
 
+    # Pattern for DMS with dashes: DD-MM-SS.sssH
+    match = re.match(r'(\d{2,3})-(\d{2})-(\d{2}(?:\.\d+)?)\s*([NSEW])', coord_str)
     if match:
-        lat_deg = int(match.group(1))
-        lat_min = int(match.group(2))
-        lat_sec = float(match.group(3))
-        lat_hem = match.group(4)
+        degrees = int(match.group(1))
+        minutes = int(match.group(2))
+        seconds = float(match.group(3))
+        hemisphere = match.group(4)
 
-        lon_deg = int(match.group(5))
-        lon_min = int(match.group(6))
-        lon_sec = float(match.group(7))
-        lon_hem = match.group(8)
+        decimal = degrees + minutes / 60 + seconds / 3600
 
-        lat = lat_deg + lat_min / 60 + lat_sec / 3600
-        if lat_hem == 'S':
-            lat = -lat
+        if hemisphere in ('S', 'W'):
+            decimal = -decimal
 
-        lon = lon_deg + lon_min / 60 + lon_sec / 3600
-        if lon_hem == 'W':
-            lon = -lon
+        return decimal
 
-        return (lat, lon)
-
-    # Try decimal degrees pattern
-    decimal_pattern = r'(-?\d+\.\d+)\s+(-?\d+\.\d+)'
-    match = re.search(decimal_pattern, line)
+    # Try pattern without dashes: DDMMSS.sssH
+    match = re.match(r'(\d{2,3})(\d{2})(\d{2}(?:\.\d+)?)\s*([NSEW])', coord_str)
     if match:
-        lat = float(match.group(1))
-        lon = float(match.group(2))
-        # Validate reasonable lat/lon range
-        if -90 <= lat <= 90 and -180 <= lon <= 180:
-            return (lat, lon)
+        degrees = int(match.group(1))
+        minutes = int(match.group(2))
+        seconds = float(match.group(3))
+        hemisphere = match.group(4)
+
+        decimal = degrees + minutes / 60 + seconds / 3600
+
+        if hemisphere in ('S', 'W'):
+            decimal = -decimal
+
+        return decimal
 
     return None
 

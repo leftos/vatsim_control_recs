@@ -6,12 +6,127 @@ showing ARTCC boundaries that link to weather briefings.
 """
 
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .config import DaemonConfig, ARTCC_NAMES, CATEGORY_COLORS
 from .artcc_boundaries import get_artcc_boundaries, get_artcc_center
+
+
+def compute_convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    """
+    Compute the convex hull of a set of 2D points using Graham scan.
+
+    Args:
+        points: List of (lat, lon) tuples
+
+    Returns:
+        List of points forming the convex hull in counter-clockwise order
+    """
+    if len(points) < 3:
+        return points
+
+    # Remove duplicates
+    points = list(set(points))
+    if len(points) < 3:
+        return points
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    # Sort points lexicographically
+    points = sorted(points)
+
+    # Build lower hull
+    lower = []
+    for p in points:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+
+    # Build upper hull
+    upper = []
+    for p in reversed(points):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+
+    # Concatenate (remove last point of each half because it's repeated)
+    return lower[:-1] + upper[:-1]
+
+
+def add_buffer_to_polygon(points: List[Tuple[float, float]], buffer_nm: float = 20) -> List[Tuple[float, float]]:
+    """
+    Add a buffer around a polygon by expanding it outward.
+
+    Args:
+        points: List of (lat, lon) tuples forming the convex hull
+        buffer_nm: Buffer distance in nautical miles
+
+    Returns:
+        Expanded polygon points
+    """
+    if len(points) < 3:
+        # For single point or line, create a circle/rectangle
+        if len(points) == 1:
+            lat, lon = points[0]
+            # Convert nm to approximate degrees (1 degree lat ≈ 60 nm)
+            buffer_deg = buffer_nm / 60
+            # Create octagon around single point
+            return [
+                (lat + buffer_deg, lon),
+                (lat + buffer_deg * 0.7, lon + buffer_deg * 0.7),
+                (lat, lon + buffer_deg),
+                (lat - buffer_deg * 0.7, lon + buffer_deg * 0.7),
+                (lat - buffer_deg, lon),
+                (lat - buffer_deg * 0.7, lon - buffer_deg * 0.7),
+                (lat, lon - buffer_deg),
+                (lat + buffer_deg * 0.7, lon - buffer_deg * 0.7),
+            ]
+        elif len(points) == 2:
+            # For two points, create a rounded rectangle
+            lat1, lon1 = points[0]
+            lat2, lon2 = points[1]
+            buffer_deg = buffer_nm / 60
+            # Simple bounding box with buffer
+            min_lat = min(lat1, lat2) - buffer_deg
+            max_lat = max(lat1, lat2) + buffer_deg
+            min_lon = min(lon1, lon2) - buffer_deg
+            max_lon = max(lon1, lon2) + buffer_deg
+            return [
+                (max_lat, min_lon),
+                (max_lat, max_lon),
+                (min_lat, max_lon),
+                (min_lat, min_lon),
+            ]
+
+    # Calculate centroid
+    centroid_lat = sum(p[0] for p in points) / len(points)
+    centroid_lon = sum(p[1] for p in points) / len(points)
+
+    # Expand each point away from centroid
+    buffer_deg = buffer_nm / 60  # Approximate conversion
+    expanded = []
+
+    for lat, lon in points:
+        # Vector from centroid to point
+        dlat = lat - centroid_lat
+        dlon = lon - centroid_lon
+
+        # Normalize and scale
+        dist = math.sqrt(dlat * dlat + dlon * dlon)
+        if dist > 0:
+            scale = (dist + buffer_deg) / dist
+            new_lat = centroid_lat + dlat * scale
+            new_lon = centroid_lon + dlon * scale
+        else:
+            new_lat, new_lon = lat, lon
+
+        expanded.append((new_lat, new_lon))
+
+    return expanded
 
 
 def generate_index_page(
@@ -127,6 +242,55 @@ def generate_html(
         "type": "FeatureCollection",
         "features": geojson_features,
     }
+
+    # Build grouping polygons data for hover effect
+    # Use same iteration order as sidebar builder (sorted ARTCCs, then custom)
+    grouping_polygons = {}
+    grouping_id = 0
+
+    sorted_artccs = sorted(
+        [a for a in artcc_groupings.keys() if a != "custom"],
+        key=lambda x: ARTCC_NAMES.get(x, x)
+    )
+
+    for artcc in sorted_artccs:
+        groupings = artcc_groupings[artcc]
+        for g in sorted(groupings, key=lambda x: x['name']):
+            coords = g.get('airport_coords', [])
+            if coords:
+                # Convert to tuples for convex hull
+                coord_tuples = [(c[0], c[1]) for c in coords]
+                # Compute convex hull and add buffer
+                hull = compute_convex_hull(coord_tuples)
+                buffered = add_buffer_to_polygon(hull, buffer_nm=15)
+                # Convert to GeoJSON format [lon, lat]
+                polygon_coords = [[p[1], p[0]] for p in buffered]
+                # Close the polygon
+                if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
+                    polygon_coords.append(polygon_coords[0])
+
+                grouping_polygons[str(grouping_id)] = {
+                    'name': g['name'],
+                    'coords': polygon_coords,
+                }
+            grouping_id += 1
+
+    # Add custom groupings at the end
+    if "custom" in artcc_groupings:
+        for g in sorted(artcc_groupings["custom"], key=lambda x: x['name']):
+            coords = g.get('airport_coords', [])
+            if coords:
+                coord_tuples = [(c[0], c[1]) for c in coords]
+                hull = compute_convex_hull(coord_tuples)
+                buffered = add_buffer_to_polygon(hull, buffer_nm=15)
+                polygon_coords = [[p[1], p[0]] for p in buffered]
+                if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
+                    polygon_coords.append(polygon_coords[0])
+                grouping_polygons[str(grouping_id)] = {
+                    'name': g['name'],
+                    'coords': polygon_coords,
+                }
+            grouping_id += 1
 
     # Build groupings sidebar data
     sidebar_html = build_sidebar_html(artcc_groupings, artcc_stats)
@@ -292,6 +456,12 @@ def generate_html(
         .grouping-airports {{
             font-size: 0.75rem;
             color: #888;
+        }}
+
+        .custom-marker {{
+            color: #ffaa00;
+            font-size: 0.7rem;
+            margin-left: 4px;
         }}
 
         .custom-section {{
@@ -496,6 +666,56 @@ def generate_html(
             onEachFeature: onEachFeature,
         }}).addTo(map);
 
+        // Grouping polygons for hover effect
+        const groupingPolygons = {json.dumps(grouping_polygons)};
+
+        // Variable to hold the current hover polygon layer
+        let hoverPolygon = null;
+
+        // Function to show grouping polygon on hover
+        function showGroupingPolygon(groupingId) {{
+            // Remove existing hover polygon
+            if (hoverPolygon) {{
+                map.removeLayer(hoverPolygon);
+                hoverPolygon = null;
+            }}
+
+            const data = groupingPolygons[groupingId];
+            if (data && data.coords && data.coords.length > 0) {{
+                // Create polygon from coordinates
+                // Leaflet expects [lat, lon] but our coords are [lon, lat]
+                const latLngs = data.coords.map(c => [c[1], c[0]]);
+
+                hoverPolygon = L.polygon(latLngs, {{
+                    color: '#ffff00',
+                    weight: 2,
+                    fillColor: '#ffff00',
+                    fillOpacity: 0.2,
+                    dashArray: '5, 5',
+                }}).addTo(map);
+
+                // Fit map to show the polygon
+                map.fitBounds(hoverPolygon.getBounds(), {{ padding: [50, 50], maxZoom: 8 }});
+            }}
+        }}
+
+        // Function to hide grouping polygon
+        function hideGroupingPolygon() {{
+            if (hoverPolygon) {{
+                map.removeLayer(hoverPolygon);
+                hoverPolygon = null;
+            }}
+        }}
+
+        // Add hover listeners to grouping links
+        document.querySelectorAll('.grouping-link').forEach(link => {{
+            const groupingId = link.dataset.groupingId;
+            if (groupingId) {{
+                link.addEventListener('mouseenter', () => showGroupingPolygon(groupingId));
+                link.addEventListener('mouseleave', hideGroupingPolygon);
+            }}
+        }});
+
         // Sidebar toggle functionality
         document.querySelectorAll('.artcc-header').forEach(header => {{
             header.addEventListener('click', () => {{
@@ -558,6 +778,9 @@ def build_sidebar_html(
         key=lambda x: ARTCC_NAMES.get(x, x)
     )
 
+    # Track grouping ID for hover polygon mapping
+    grouping_id = 0
+
     for artcc in sorted_artccs:
         groupings = artcc_groupings[artcc]
         stats = artcc_stats.get(artcc, {})
@@ -578,11 +801,16 @@ def build_sidebar_html(
         groupings_html = ""
         for g in sorted(groupings, key=lambda x: x['name']):
             airport_count = g.get('airport_count', 0)
+            # Use path_prefix for custom groupings that were assigned to an ARTCC
+            path_prefix = g.get('path_prefix', artcc)
+            is_custom = g.get('is_custom', False)
+            custom_marker = ' <span class="custom-marker">★</span>' if is_custom else ''
             groupings_html += f'''
-                <a href="{artcc}/{g['filename']}" class="grouping-link">
-                    <span class="grouping-name">{g['name']}</span>
+                <a href="{path_prefix}/{g['filename']}" class="grouping-link" data-grouping-id="{grouping_id}">
+                    <span class="grouping-name">{g['name']}{custom_marker}</span>
                     <span class="grouping-airports">{airport_count} airports</span>
                 </a>'''
+            grouping_id += 1
 
         html_parts.append(f'''
             <div class="artcc-section" data-artcc="{artcc}">
@@ -598,7 +826,7 @@ def build_sidebar_html(
                 </div>
             </div>''')
 
-    # Add custom groupings section if present
+    # Add custom groupings section if present (only for truly unmapped groupings)
     if "custom" in artcc_groupings:
         custom_groupings = artcc_groupings["custom"]
         stats = artcc_stats.get("custom", {})
@@ -617,16 +845,17 @@ def build_sidebar_html(
         for g in sorted(custom_groupings, key=lambda x: x['name']):
             airport_count = g.get('airport_count', 0)
             groupings_html += f'''
-                <a href="custom/{g['filename']}" class="grouping-link">
+                <a href="custom/{g['filename']}" class="grouping-link" data-grouping-id="{grouping_id}">
                     <span class="grouping-name">{g['name']}</span>
                     <span class="grouping-airports">{airport_count} airports</span>
                 </a>'''
+            grouping_id += 1
 
         html_parts.append(f'''
             <div class="artcc-section custom-section" data-artcc="custom">
                 <div class="artcc-header">
                     <div>
-                        <span class="artcc-name">Custom Groupings</span>
+                        <span class="artcc-name">Unmapped Groupings</span>
                     </div>
                     <div class="artcc-stats">{stats_html}</div>
                 </div>

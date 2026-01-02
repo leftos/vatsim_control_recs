@@ -7,7 +7,9 @@ Can be run manually or via systemd timer.
 """
 
 import argparse
+import logging
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add project root to path
@@ -15,6 +17,36 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from scripts.weather_daemon.config import DaemonConfig
 from scripts.weather_daemon.generator import generate_all_briefings
+
+
+def setup_logging(log_dir: Path, verbose: bool = False) -> None:
+    """Configure logging for the daemon."""
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create log filename with date
+    log_file = log_dir / f"weather_daemon_{datetime.now().strftime('%Y%m%d')}.log"
+
+    # Configure root logger for weather_daemon
+    logger = logging.getLogger("weather_daemon")
+    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+
+    # File handler - always logs INFO and above
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    file_formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
+
+    # Console handler for verbose mode (DEBUG level)
+    if verbose:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.DEBUG)
+        console_formatter = logging.Formatter('[%(levelname)s] %(message)s')
+        console_handler.setFormatter(console_formatter)
+        logger.addHandler(console_handler)
 
 
 def main():
@@ -93,10 +125,24 @@ Examples:
         help="Path to data directory (default: project's data/ folder)",
     )
 
+    parser.add_argument(
+        "--log-dir",
+        type=Path,
+        default=None,
+        help="Path to log directory (default: project's logs/ folder)",
+    )
+
     args = parser.parse_args()
 
     # Build configuration
     config = DaemonConfig()
+
+    # Determine log directory
+    project_root = Path(__file__).parent.parent.parent
+    log_dir = args.log_dir or project_root / "logs"
+
+    # Set up logging
+    setup_logging(log_dir, verbose=args.verbose)
 
     if args.output:
         config.output_dir = args.output
