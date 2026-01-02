@@ -1,0 +1,25 @@
+[Unit]
+Description=VATSIM Weather Briefing Generator
+Documentation=https://github.com/leftos/vatsim_control_recs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/vatsim-weather-daemon
+ExecStart=/opt/vatsim-weather-daemon/.venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/www/leftos.dev/weather /opt/vatsim-weather-daemon/cache
+
+[Install]
+WantedBy=multi-user.target

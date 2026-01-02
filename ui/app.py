@@ -919,10 +919,13 @@ class VATSIMControlApp(App):
     def action_show_weather_briefing(self) -> None:
         """Show the weather briefing modal.
 
-        Auto-fills with current grouping if viewing a FlightBoardScreen for a grouping.
-        Otherwise opens a grouping picker.
+        Auto-fills with current grouping/airport if viewing a FlightBoardScreen.
+        Otherwise opens a picker for groupings or airports.
         """
-        # Check if FlightBoardScreen is open with a grouping
+        from . import config
+        from backend import find_airports_near_position
+
+        # Check if FlightBoardScreen is open
         for screen in self.screen_stack:
             if isinstance(screen, FlightBoardScreen):
                 if isinstance(screen.airport_icao_or_list, list) and len(screen.airport_icao_or_list) > 1:
@@ -934,24 +937,120 @@ class VATSIMControlApp(App):
                     )
                     self.push_screen(briefing_screen)
                     return
+                elif isinstance(screen.airport_icao_or_list, str):
+                    # It's a single airport - use 30nm radius
+                    icao = screen.airport_icao_or_list
+                    self._open_airport_weather_briefing([icao])
+                    return
 
-        # No grouping context - show picker
+        # No context - show picker (allows both airports and groupings)
         goto_screen = GoToScreen(
-            filter_type="$",
-            title="Select Grouping for Weather Briefing",
+            title="Weather Briefing: Enter airports or select grouping",
             callback=self._open_weather_briefing_callback
         )
         self.push_screen(goto_screen)
 
     def _open_weather_briefing_callback(self, result) -> None:
-        """Callback from grouping picker for weather briefing."""
+        """Callback from picker for weather briefing."""
         if result is None:
-            # User cancelled
             return
-        grouping_name, airports = result
+
+        name, data = result
+
+        if name == "airports":
+            # User typed airport ICAO code(s) directly
+            self._open_airport_weather_briefing(data)
+        elif name == "flight":
+            # Flight selected - open briefing for departure/arrival
+            flight_plan = data.get('flight_plan') or {}
+            callsign = data.get('callsign', 'Flight')
+            departure = flight_plan.get('departure', '')
+            arrival = flight_plan.get('arrival', '')
+            airports = [a for a in [departure, arrival] if a]
+            if airports:
+                self._open_flight_weather_briefing(callsign, airports)
+            else:
+                self.notify("No departure/arrival in flight plan", severity="warning")
+        elif isinstance(data, list) and len(data) == 1:
+            # Single airport selected from list
+            self._open_airport_weather_briefing(data)
+        else:
+            # Grouping selected
+            briefing_screen = WeatherBriefingScreen(
+                grouping_name=name,
+                airports=data
+            )
+            self.push_screen(briefing_screen)
+
+    def _open_airport_weather_briefing(self, airports: list) -> None:
+        """Open weather briefing for airport(s), with 30nm radius for single airport."""
+        from . import config
+        from backend import find_airports_near_position
+
+        if len(airports) == 1:
+            # Single airport - find nearby airports within 30nm
+            icao = airports[0]
+            airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {}) if config.UNIFIED_AIRPORT_DATA else {}
+            lat = airport_info.get('latitude')
+            lon = airport_info.get('longitude')
+
+            if lat and lon:
+                nearby = find_airports_near_position(
+                    lat, lon,
+                    config.UNIFIED_AIRPORT_DATA or {},
+                    radius_nm=30.0,
+                    max_results=15
+                )
+                # Ensure primary airport is in the list
+                all_airports = [icao] + [a for a in nearby if a != icao]
+            else:
+                all_airports = airports
+
+            pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
+            title = f"{pretty_name} Area"
+            primary = airports
+        else:
+            # Multiple airports - use only those specified
+            all_airports = airports
+            title = f"{len(airports)} Airports"
+            primary = airports
+
         briefing_screen = WeatherBriefingScreen(
-            grouping_name=grouping_name,
-            airports=airports
+            grouping_name=title,
+            airports=all_airports,
+            primary_airports=primary
+        )
+        self.push_screen(briefing_screen)
+
+    def _open_flight_weather_briefing(self, callsign: str, airports: list) -> None:
+        """Open weather briefing for a flight's departure and arrival airports."""
+        from . import config
+        from backend import find_airports_near_position
+
+        all_airports = set()
+        primary = list(airports)  # Departure and arrival are primary
+
+        # Add nearby airports for each flight endpoint
+        for icao in airports:
+            all_airports.add(icao)
+            airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {}) if config.UNIFIED_AIRPORT_DATA else {}
+            lat = airport_info.get('latitude')
+            lon = airport_info.get('longitude')
+
+            if lat and lon:
+                nearby = find_airports_near_position(
+                    lat, lon,
+                    config.UNIFIED_AIRPORT_DATA or {},
+                    radius_nm=30.0,
+                    max_results=10
+                )
+                all_airports.update(nearby)
+
+        title = f"{callsign} Route"
+        briefing_screen = WeatherBriefingScreen(
+            grouping_name=title,
+            airports=list(all_airports),
+            primary_airports=primary
         )
         self.push_screen(briefing_screen)
 

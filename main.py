@@ -219,6 +219,7 @@ if not ensure_spacy_model_installed():
 
 from backend import analyze_flights_data, load_unified_airport_data  # noqa: E402
 from backend import ensure_cifp_data, ensure_runway_data, cleanup_old_cifp_caches  # noqa: E402
+from backend import load_weather_cache, save_weather_cache  # noqa: E402
 from backend.config import constants as backend_constants  # noqa: E402
 from backend.core.groupings import load_all_groupings, resolve_grouping_recursively, find_grouping_case_insensitive  # noqa: E402
 from backend.cache.manager import load_aircraft_approach_speeds  # noqa: E402
@@ -264,6 +265,11 @@ def main():
     
     # Log cleanup happens automatically when debug_logger is imported
     debug_logger.info("Application starting")
+
+    # Load persistent weather cache from disk (if available and not expired)
+    metar_count, taf_count = load_weather_cache()
+    if metar_count > 0 or taf_count > 0:
+        print(f"Loaded cached weather data: {metar_count} METARs, {taf_count} TAFs")
 
     # Ensure CIFP data is available (downloads from FAA if needed)
     # This happens once per AIRAC cycle (28 days)
@@ -364,6 +370,10 @@ def main():
     # Run the Textual app
     app = VATSIMControlApp(airport_data, groupings_data, total_flights or 0, args, airport_allowlist if airport_allowlist else None)
     app.run()
+
+    # Save weather cache to disk on exit
+    save_weather_cache()
+    debug_logger.info("Application exiting - weather cache saved")
 
 
 if __name__ == "__main__":

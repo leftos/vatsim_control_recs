@@ -1,0 +1,17 @@
+[Unit]
+Description=Run VATSIM Weather Briefing Generator every 15 minutes
+Documentation=https://github.com/leftos/vatsim_control_recs
+
+[Timer]
+# Run every 15 minutes, starting 5 minutes after boot
+OnBootSec=5min
+OnUnitActiveSec=15min
+
+# Randomize execution by up to 30 seconds to avoid thundering herd
+RandomizedDelaySec=30
+
+# If system was off, don't catch up on missed runs
+Persistent=false
+
+[Install]
+WantedBy=timers.target

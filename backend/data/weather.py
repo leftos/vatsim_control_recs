@@ -9,7 +9,7 @@ import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Callable
 
 from backend.cache.manager import (
     get_wind_cache, get_metar_cache, get_taf_cache,
@@ -538,7 +538,11 @@ def get_wind_info_batch(airport_icaos: List[str], source: str = "metar", max_wor
     return results
 
 
-def get_metar_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str, str]:
+def get_metar_batch(
+    airport_icaos: List[str],
+    max_workers: int = 10,
+    progress_callback: Optional[Callable[[int, int], None]] = None
+) -> Dict[str, str]:
     """
     Fetch METAR data for multiple airports in parallel.
 
@@ -549,6 +553,7 @@ def get_metar_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str
     Args:
         airport_icaos: List of ICAO codes to fetch METAR for
         max_workers: Maximum number of concurrent threads (default: 10)
+        progress_callback: Optional callback(completed, total) called as results arrive
 
     Returns:
         Dictionary mapping ICAO codes to METAR strings (empty string if unavailable)
@@ -557,6 +562,9 @@ def get_metar_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str
 
     if not airport_icaos:
         return results
+
+    total = len(airport_icaos)
+    completed = 0
 
     # Use ThreadPoolExecutor to parallelize network requests
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -576,10 +584,18 @@ def get_metar_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str
                 # If there's an error, just use empty string
                 results[icao] = ""
 
+            completed += 1
+            if progress_callback:
+                progress_callback(completed, total)
+
     return results
 
 
-def get_taf_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str, str]:
+def get_taf_batch(
+    airport_icaos: List[str],
+    max_workers: int = 10,
+    progress_callback: Optional[Callable[[int, int], None]] = None
+) -> Dict[str, str]:
     """
     Fetch TAF data for multiple airports in parallel.
 
@@ -589,6 +605,7 @@ def get_taf_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str, 
     Args:
         airport_icaos: List of ICAO codes to fetch TAF for
         max_workers: Maximum number of concurrent threads (default: 10)
+        progress_callback: Optional callback(completed, total) called as results arrive
 
     Returns:
         Dictionary mapping ICAO codes to TAF strings (empty string if unavailable)
@@ -597,6 +614,9 @@ def get_taf_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str, 
 
     if not airport_icaos:
         return results
+
+    total = len(airport_icaos)
+    completed = 0
 
     # Use ThreadPoolExecutor to parallelize network requests
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -615,6 +635,10 @@ def get_taf_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str, 
             except Exception:
                 # If there's an error, just use empty string
                 results[icao] = ""
+
+            completed += 1
+            if progress_callback:
+                progress_callback(completed, total)
 
     return results
 

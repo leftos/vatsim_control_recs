@@ -180,9 +180,9 @@ class GoToScreen(ModalScreen):
                     if item_type == self.filter_type or (self.filter_type == "$" and item_type == "grouping")
                 ]
 
-            self.filtered_results = list(self.all_results)
             self.data_loaded = True
-            self._update_option_list()
+            # Re-apply current filter if user already typed something
+            self._apply_current_filter()
             return
 
         # Fallback path: build results manually (for filtered modals or before cache is ready)
@@ -220,11 +220,10 @@ class GoToScreen(ModalScreen):
 
         # Build initial results in executor (don't block event loop)
         await loop.run_in_executor(None, self._build_all_results)
-        self.filtered_results = list(self.all_results)
         self.data_loaded = True
 
-        # Update the option list
-        self._update_option_list()
+        # Re-apply current filter if user already typed something
+        self._apply_current_filter()
 
     def _build_all_results(self) -> None:
         """Build the complete results list, respecting filter_type if set"""
@@ -288,19 +287,19 @@ class GoToScreen(ModalScreen):
         if option_list.option_count > 0:
             option_list.highlighted = 0
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        """Filter results as user types
+    def _apply_current_filter(self) -> None:
+        """Apply filtering based on current input text. Called after data loads."""
+        try:
+            input_widget = self.query_one("#goto-input", Input)
+            query = input_widget.value.strip()
+        except Exception:
+            query = ""
 
-        Special prefixes for type filtering:
-        - @ for airports only
-        - # for flights only
-        - $ for groupings only
-        """
-        if not self.data_loaded:
-            return
+        self._filter_results(query)
+        self._update_option_list()
 
-        query = event.value.strip()
-
+    def _filter_results(self, query: str) -> None:
+        """Filter all_results based on query string."""
         # Check for type filter prefix
         type_filter = None
         if query.startswith('@'):
@@ -341,10 +340,23 @@ class GoToScreen(ModalScreen):
                 if query_lower in searchable:
                     self.filtered_results.append((item_type, identifier, data))
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Filter results as user types
+
+        Special prefixes for type filtering:
+        - @ for airports only
+        - # for flights only
+        - $ for groupings only
+        """
+        if not self.data_loaded:
+            return
+
+        query = event.value.strip()
+        self._filter_results(query)
         self._update_option_list()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle Enter key in input"""
+        """Handle Enter key in input - select top result if available"""
         await self._execute_selected()
 
     async def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
@@ -375,8 +387,10 @@ class GoToScreen(ModalScreen):
             elif item_type == 'airport':
                 # For airports, return as a single-item list
                 self.callback((identifier, [identifier]))
+            elif item_type == 'flight':
+                # For flights, pass as ("flight", flight_data) tuple
+                self.callback(("flight", data))
             else:
-                # Flights don't make sense for callbacks - just close
                 self.callback(None)
             return
 

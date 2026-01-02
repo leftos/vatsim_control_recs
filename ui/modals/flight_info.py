@@ -81,6 +81,7 @@ class FlightInfoScreen(ModalScreen):
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
         Binding("d", "show_diversions", "Find Diversions", priority=True),
+        Binding("w", "show_route_weather", "Route Weather", priority=True),
     ]
     
     def __init__(self, flight_data: dict):
@@ -114,7 +115,7 @@ class FlightInfoScreen(ModalScreen):
             yield Static(self._format_title(), id="flight-info-title")
             with Vertical():
                 yield Static(self._format_flight_info(), classes="info-section", id="flight-info-content")
-            yield Static("D: Find Diversions | Escape/Q: Close", id="flight-info-hint")
+            yield Static("D: Diversions | W: Route Wx | Escape/Q: Close", id="flight-info-hint")
     
     async def on_mount(self) -> None:
         """Load altimeter info and member stats asynchronously after modal is shown"""
@@ -867,3 +868,24 @@ class FlightInfoScreen(ModalScreen):
             vatsim_data=vatsim_data,
         )
         self.app.push_screen(diversion_modal)
+
+    def action_show_route_weather(self) -> None:
+        """Open the route weather modal for this flight"""
+        from .route_weather import RouteWeatherScreen
+
+        # Check if flight has a route
+        flight_plan = self.flight_data.get('flight_plan')
+        if not flight_plan:
+            self.notify("No flight plan filed", severity="warning")
+            return
+
+        route = flight_plan.get('route', '')
+        departure = flight_plan.get('departure', '')
+        arrival = flight_plan.get('arrival', '')
+
+        if not route and not (departure and arrival):
+            self.notify("No route filed", severity="warning")
+            return
+
+        route_weather = RouteWeatherScreen(self.flight_data)
+        self.app.push_screen(route_weather)

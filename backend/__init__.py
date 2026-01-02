@@ -65,6 +65,12 @@ from backend.data.runways import (
     get_runway_summary
 )
 
+# Import cache functions
+from backend.cache.manager import (
+    save_weather_cache,
+    load_weather_cache
+)
+
 __version__ = "1.0.0"
 
 # Export public API
@@ -106,4 +112,7 @@ __all__ = [
     'get_longest_runway',
     'get_runways',
     'get_runway_summary',
+    # Cache functions
+    'save_weather_cache',
+    'load_weather_cache',
 ]

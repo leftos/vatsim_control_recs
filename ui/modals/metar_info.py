@@ -201,6 +201,171 @@ def _extract_flight_rules_weather(metar: str) -> Tuple[Optional[str], Optional[s
     return (_extract_visibility_str(metar), _parse_ceiling_layer(metar))
 
 
+# Weather phenomena codes mapping
+# Format: code -> (readable name, is_significant)
+# Intensity prefixes: - (light), + (heavy), VC (vicinity)
+# Descriptor prefixes: MI (shallow), PR (partial), BC (patches), DR (drifting),
+#                     BL (blowing), SH (showers), TS (thunderstorm), FZ (freezing)
+WEATHER_PHENOMENA = {
+    # Precipitation
+    "RA": ("Rain", False),
+    "SN": ("Snow", True),
+    "DZ": ("Drizzle", False),
+    "GR": ("Hail", True),
+    "GS": ("Small Hail", True),
+    "PL": ("Ice Pellets", True),
+    "SG": ("Snow Grains", False),
+    "IC": ("Ice Crystals", False),
+    "UP": ("Unknown Precip", False),
+    # Obscuration
+    "FG": ("Fog", True),
+    "BR": ("Mist", False),
+    "HZ": ("Haze", False),
+    "FU": ("Smoke", True),
+    "VA": ("Volcanic Ash", True),
+    "DU": ("Dust", False),
+    "SA": ("Sand", False),
+    "PY": ("Spray", False),
+    # Other
+    "SQ": ("Squall", True),
+    "FC": ("Funnel Cloud", True),
+    "SS": ("Sandstorm", True),
+    "DS": ("Duststorm", True),
+    "PO": ("Dust Whirls", False),
+}
+
+WEATHER_DESCRIPTORS = {
+    "MI": "Shallow",
+    "PR": "Partial",
+    "BC": "Patches",
+    "DR": "Drifting",
+    "BL": "Blowing",
+    "SH": "Showers",
+    "TS": "Thunderstorm",
+    "FZ": "Freezing",
+}
+
+WEATHER_INTENSITY = {
+    "-": "Light",
+    "+": "Heavy",
+    "VC": "Vicinity",
+}
+
+
+def parse_weather_phenomena(metar: str) -> List[str]:
+    """
+    Parse weather phenomena from METAR string.
+
+    Args:
+        metar: Raw METAR string
+
+    Returns:
+        List of human-readable weather phenomena (e.g., ["Light Rain", "Mist", "Thunderstorm"])
+    """
+    if not metar:
+        return []
+
+    phenomena = []
+
+    # Weather phenomena appear after wind and visibility, before clouds
+    # Pattern: optional intensity (-/+/VC) + optional descriptor + one or more weather types
+    # Examples: -RA, +TSRA, VCSH, FZFG, -SHRA, +TSRAGR
+
+    # Split METAR into parts
+    parts = metar.split()
+
+    for part in parts:
+        # Skip parts that are clearly not weather (timestamps, wind, visibility, clouds, temps)
+        if re.match(r'^\d{6}Z$', part):  # Timestamp
+            continue
+        if re.match(r'^\d{5}(G\d+)?KT$', part):  # Wind
+            continue
+        if re.match(r'^(VRB)?\d{3}V\d{3}$', part):  # Variable wind
+            continue
+        if re.match(r'^[PM]?\d+SM$', part):  # Visibility
+            continue
+        if re.match(r'^\d+/\d+SM$', part):  # Fractional visibility
+            continue
+        if re.match(r'^(SKC|CLR|FEW|SCT|BKN|OVC|VV)\d{3}', part):  # Clouds
+            continue
+        if re.match(r'^[AM]?\d{2}/[AM]?\d{2}$', part):  # Temp/dewpoint
+            continue
+        if re.match(r'^A\d{4}$', part):  # Altimeter
+            continue
+        if re.match(r'^Q\d{4}$', part):  # QNH
+            continue
+        if re.match(r'^RMK', part):  # Start of remarks - stop processing
+            break
+
+        # Try to parse as weather phenomenon
+        parsed = _parse_single_weather(part)
+        if parsed:
+            phenomena.extend(parsed)
+
+    return phenomena
+
+
+def _parse_single_weather(code: str) -> List[str]:
+    """
+    Parse a single weather code into human-readable format.
+
+    Args:
+        code: Weather code like "-RA", "+TSRA", "FZFG", "VCSH"
+
+    Returns:
+        List of weather descriptions (usually 1, but can be more for combined phenomena)
+    """
+    if not code:
+        return []
+
+    results = []
+    original = code
+    intensity = ""
+    descriptor = ""
+
+    # Check for intensity prefix
+    if code.startswith("-"):
+        intensity = "Light "
+        code = code[1:]
+    elif code.startswith("+"):
+        intensity = "Heavy "
+        code = code[1:]
+    elif code.startswith("VC"):
+        intensity = "Vicinity "
+        code = code[2:]
+
+    # Check for descriptor (2-letter codes that modify phenomena)
+    for desc_code, desc_name in WEATHER_DESCRIPTORS.items():
+        if code.startswith(desc_code):
+            descriptor = desc_name + " "
+            code = code[len(desc_code):]
+            break
+
+    # Handle thunderstorm specially - it's both descriptor and phenomenon
+    if "TS" in original and descriptor == "Thunderstorm ":
+        results.append(f"{intensity}Thunderstorm")
+        intensity = ""  # Don't double-apply intensity
+        descriptor = ""
+
+    # Parse remaining phenomena (2-letter codes, can be multiple like RAGR)
+    while len(code) >= 2:
+        phenomenon_code = code[:2]
+        if phenomenon_code in WEATHER_PHENOMENA:
+            name, _ = WEATHER_PHENOMENA[phenomenon_code]
+            full_name = f"{intensity}{descriptor}{name}".strip()
+            if full_name and full_name not in results:
+                results.append(full_name)
+            # Reset intensity/descriptor after first use
+            intensity = ""
+            descriptor = ""
+            code = code[2:]
+        else:
+            # Unknown code, skip
+            break
+
+    return results
+
+
 def get_flight_category(metar: str) -> Tuple[str, str]:
     """
     Determine flight category from METAR conditions.
