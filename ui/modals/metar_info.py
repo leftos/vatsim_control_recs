@@ -617,6 +617,7 @@ class MetarInfoScreen(ModalScreen):
         result_lines = []
 
         # Airport title first with flight category on same line
+        category: Optional[str] = None
         if metar:
             category, color = get_flight_category(metar)
             result_lines.append(f"{pretty_name} ({icao}) // [{color} bold]{category}[/{color} bold]")

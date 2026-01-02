@@ -860,9 +860,7 @@ class FlightInfoScreen(ModalScreen):
         from .diversion_modal import DiversionModal
 
         # Get the current VATSIM data from the app if available
-        vatsim_data = None
-        if hasattr(self.app, 'vatsim_data'):
-            vatsim_data = self.app.vatsim_data
+        vatsim_data = getattr(self.app, 'vatsim_data', None)
 
         diversion_modal = DiversionModal(
             flight_data=self.flight_data,

@@ -872,7 +872,7 @@ class VATSIMControlApp(App):
                             pass
                     else:
                         # For single airport, the board airport is the departure/arrival airport
-                        initial_icao = screen.airport_icao_or_list
+                        initial_icao = str(screen.airport_icao_or_list)
                 break
 
         # Fall back to airports tab selection if no modal selection
@@ -927,8 +927,9 @@ class VATSIMControlApp(App):
             if isinstance(screen, FlightBoardScreen):
                 if isinstance(screen.airport_icao_or_list, list) and len(screen.airport_icao_or_list) > 1:
                     # It's a grouping - open weather briefing directly
+                    grouping_title = screen.title if screen.title else "Grouping"
                     briefing_screen = WeatherBriefingScreen(
-                        grouping_name=screen.title,
+                        grouping_name=grouping_title,
                         airports=screen.airport_icao_or_list
                     )
                     self.push_screen(briefing_screen)
