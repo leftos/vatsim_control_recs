@@ -47,6 +47,11 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     echo -e "${YELLOW}Updating existing repository...${NC}"
     cd "$INSTALL_DIR"
     git pull
+elif [ -d "$INSTALL_DIR" ] && [ "$(ls -A $INSTALL_DIR 2>/dev/null)" ]; then
+    # Directory exists but isn't a git repo - back it up and clone fresh
+    echo -e "${YELLOW}Directory exists but is not a git repo. Backing up and cloning fresh...${NC}"
+    mv "$INSTALL_DIR" "${INSTALL_DIR}.backup.$(date +%s)"
+    git clone "$REPO_URL" "$INSTALL_DIR"
 else
     echo -e "${YELLOW}Cloning repository...${NC}"
     git clone "$REPO_URL" "$INSTALL_DIR"
