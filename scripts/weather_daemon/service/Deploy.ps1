@@ -97,7 +97,7 @@ Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && source .venv/bin/activate && pip install -r requirements.txt"
 
 Write-Host "Running weather generation..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather"
+ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --verbose"
 
 Write-Host ""
 Write-Host "=== Deployment Complete! ===" -ForegroundColor Green

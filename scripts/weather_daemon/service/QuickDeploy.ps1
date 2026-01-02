@@ -22,7 +22,7 @@ Write-Host "Pulling latest code..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && git pull"
 
 Write-Host "Running weather generation..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather"
+ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --verbose"
 
 Write-Host ""
 Write-Host "=== Quick Deploy Complete! ===" -ForegroundColor Green
