@@ -534,7 +534,7 @@ def generate_html(
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: #1a1a1a;
             z-index: 1000;
             justify-content: center;
             align-items: center;
