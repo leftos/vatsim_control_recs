@@ -16,6 +16,7 @@ from backend.data.weather import (
     get_metar,
     get_metar_batch,
     get_taf,
+    get_taf_batch,
     get_altimeter_setting,
     find_nearest_airport_with_metar,
     find_airports_near_position
@@ -75,6 +76,7 @@ __all__ = [
     'get_metar',
     'get_metar_batch',
     'get_taf',
+    'get_taf_batch',
     'get_altimeter_setting',
     'find_nearest_airport_with_metar',
     'find_airports_near_position',

@@ -1,6 +1,7 @@
 """Flight Board Modal Screen"""
 
 import asyncio
+from typing import Dict, Optional
 
 from textual.screen import ModalScreen
 from textual.widgets import Static
@@ -11,11 +12,13 @@ from textual.app import ComposeResult
 
 from backend import get_wind_info, get_altimeter_setting, get_metar_batch, find_airports_near_position
 from backend.core.flights import get_airport_flight_details
-from backend.data.vatsim_api import download_vatsim_data
+from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
 from backend.config import constants as backend_constants
+from ui.modals.metar_info import get_flight_category
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from ui import config
+from ui.config import CATEGORY_COLORS
 from ui.tables import TableManager, DEPARTURES_TABLE_CONFIG, ARRIVALS_TABLE_CONFIG, GROUPING_DEPARTURES_TABLE_CONFIG, GROUPING_ARRIVALS_TABLE_CONFIG
 from ui.modals.flight_info import FlightInfoScreen
 
@@ -93,12 +96,29 @@ class FlightBoardScreen(ModalScreen):
     #board-tables.loading .board-table {
         display: none;
     }
+
+    #weather-notification {
+        dock: bottom;
+        width: 100%;
+        height: 1;
+        padding: 0 1;
+        background: $boost;
+        text-align: right;
+        layer: notification;
+    }
+
+    #weather-notification.hidden {
+        display: none;
+    }
     """
 
     BINDINGS = [
         Binding("escape", "close_board", "Close", priority=True),
         Binding("q", "close_board", "Close"),
     ]
+
+    # Weather check interval in seconds (check for condition changes)
+    WEATHER_CHECK_INTERVAL = 60
 
     def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float, refresh_interval: int = 15, disambiguator=None, enable_animations: bool = True):
         super().__init__()
@@ -118,6 +138,16 @@ class FlightBoardScreen(ModalScreen):
         self.arrivals_manager = None
         self.vatsim_data = None  # Store VATSIM data for flight info lookup
         self._cache_refresh_timer = None  # Timer for periodic cache refresh
+        # Weather change tracking
+        self._previous_weather: Dict[str, str] = {}  # ICAO -> flight category
+        self._weather_check_timer = None  # Timer for weather change checks
+        self._notification_dismiss_timer = None  # Timer to auto-dismiss notification
+        # Flash animation for ATIS airports
+        self._notification_flash_timer = None  # Timer for flash animation
+        self._notification_flash_count = 0  # Number of flashes remaining
+        self._notification_flash_bright = True  # Current flash state
+        self._notification_text_bright = ""  # Bright version of notification
+        self._notification_text_dim = ""  # Dim version of notification
 
     def compose(self) -> ComposeResult:
         # Use a placeholder title initially - will be updated async after data loads
@@ -141,6 +171,8 @@ class FlightBoardScreen(ModalScreen):
                     arrivals_table = SplitFlapDataTable(classes="board-table", id="arrivals-table", enable_animations=self.enable_animations, on_select=self.action_show_flight_info)
                     arrivals_table.cursor_type = "row"
                     yield arrivals_table
+            # Weather change notification toast (hidden by default)
+            yield Static("", id="weather-notification", classes="hidden", markup=True)
 
     async def on_mount(self) -> None:
         """Load and display flight data when the screen is mounted"""
@@ -153,11 +185,30 @@ class FlightBoardScreen(ModalScreen):
             self._refresh_altimeter_cache
         )
 
+        # Start weather change monitoring for groupings
+        if isinstance(self.airport_icao_or_list, list) and len(self.airport_icao_or_list) > 1:
+            # Initialize baseline weather (fire-and-forget)
+            self.run_worker(self._initialize_weather_baseline(), exclusive=False)
+            # Start periodic weather checks
+            self._weather_check_timer = self.set_interval(
+                self.WEATHER_CHECK_INTERVAL,
+                self._check_weather_changes
+            )
+
     def on_unmount(self) -> None:
         """Clean up timers when modal is dismissed."""
         if self._cache_refresh_timer:
             self._cache_refresh_timer.stop()
             self._cache_refresh_timer = None
+        if self._weather_check_timer:
+            self._weather_check_timer.stop()
+            self._weather_check_timer = None
+        if self._notification_dismiss_timer:
+            self._notification_dismiss_timer.stop()
+            self._notification_dismiss_timer = None
+        if self._notification_flash_timer:
+            self._notification_flash_timer.stop()
+            self._notification_flash_timer = None
 
     async def load_flight_data(self) -> None:
         """Load flight data from backend"""
@@ -443,7 +494,16 @@ class FlightBoardScreen(ModalScreen):
             pass
 
     def action_close_board(self) -> None:
-        """Close the modal"""
+        """Close the modal, but dismiss weather notification first if visible."""
+        # Check if weather notification is visible - if so, dismiss it first
+        try:
+            notification = self.query_one("#weather-notification", Static)
+            if "hidden" not in notification.classes:
+                self._dismiss_notification()
+                return  # Don't close the board yet
+        except Exception:
+            pass
+
         # Reset the flight board open flag and reference in the parent app
         app = self.app
         if hasattr(app, 'flight_board_open'):
@@ -503,3 +563,157 @@ class FlightBoardScreen(ModalScreen):
 
         # Open the flight info modal
         self.app.push_screen(FlightInfoScreen(flight_data))
+
+    # --- Weather change notification methods ---
+
+    async def _initialize_weather_baseline(self) -> None:
+        """Fetch initial weather conditions to establish baseline for change detection."""
+        if not isinstance(self.airport_icao_or_list, list):
+            return
+
+        airports = self.airport_icao_or_list
+        loop = asyncio.get_event_loop()
+
+        # Fetch METARs in background
+        metars = await loop.run_in_executor(None, get_metar_batch, airports)
+
+        # Build baseline weather state
+        for icao in airports:
+            metar = metars.get(icao, '')
+            if metar:
+                category, _ = get_flight_category(metar)
+                self._previous_weather[icao] = category
+
+    async def _check_weather_changes(self) -> None:
+        """Check for weather condition changes and show notifications."""
+        if not isinstance(self.airport_icao_or_list, list):
+            return
+
+        airports = self.airport_icao_or_list
+        loop = asyncio.get_event_loop()
+
+        # Fetch fresh METARs and VATSIM data in parallel
+        metar_task = loop.run_in_executor(None, get_metar_batch, airports)
+        vatsim_task = loop.run_in_executor(None, download_vatsim_data)
+
+        metars, vatsim_data = await asyncio.gather(metar_task, vatsim_task)
+
+        # Get ATIS info for airports
+        atis_data = {}
+        if vatsim_data:
+            atis_data = get_atis_for_airports(vatsim_data, airports)
+
+        # Check for changes
+        for icao in airports:
+            metar = metars.get(icao, '')
+            if not metar:
+                continue
+
+            new_category, _ = get_flight_category(metar)
+            old_category = self._previous_weather.get(icao)
+
+            # If we have a previous category and it changed, show notification
+            if old_category and new_category != old_category:
+                has_atis = icao in atis_data
+                self._show_weather_notification(icao, new_category, old_category, has_atis)
+
+            # Update baseline
+            self._previous_weather[icao] = new_category
+
+    def _show_weather_notification(self, icao: str, new_category: str, old_category: str, has_atis: bool = False) -> None:
+        """Show a weather change notification toast, with flashing if airport has ATIS."""
+        new_color = CATEGORY_COLORS.get(new_category, 'white')
+        old_color = CATEGORY_COLORS.get(old_category, 'white')
+
+        # Get airport name
+        airport_name = icao
+        if config.DISAMBIGUATOR:
+            airport_name = config.DISAMBIGUATOR.get_full_name(icao)
+
+        # Build bright version (normal colors)
+        self._notification_text_bright = (
+            f"{icao} ({airport_name}) now "
+            f"[{new_color} bold]{new_category}[/{new_color} bold] "
+            f"[dim](prev. [{old_color}]{old_category}[/{old_color}])[/dim]"
+        )
+
+        # Build dim version (all dim)
+        self._notification_text_dim = (
+            f"[dim]{icao} ({airport_name}) now "
+            f"{new_category} "
+            f"(prev. {old_category})[/dim]"
+        )
+
+        # Update and show notification widget
+        try:
+            notification = self.query_one("#weather-notification", Static)
+            notification.update(self._notification_text_bright)
+            notification.remove_class("hidden")
+
+            # Cancel existing timers
+            if self._notification_dismiss_timer:
+                self._notification_dismiss_timer.stop()
+            if self._notification_flash_timer:
+                self._notification_flash_timer.stop()
+                self._notification_flash_timer = None
+
+            # If airport has ATIS, start flash animation
+            if has_atis:
+                self._notification_flash_count = 6  # 3 full cycles (bright-dim-bright-dim-bright-dim)
+                self._notification_flash_bright = True
+                self._notification_flash_timer = self.set_interval(
+                    0.3,  # Flash every 300ms
+                    self._flash_notification
+                )
+
+            # Auto-dismiss after 15 seconds
+            self._notification_dismiss_timer = self.set_timer(
+                15.0,
+                self._dismiss_notification
+            )
+        except Exception:
+            pass
+
+    def _flash_notification(self) -> None:
+        """Toggle notification between bright and dim states."""
+        if self._notification_flash_count <= 0:
+            # Stop flashing, leave on bright
+            if self._notification_flash_timer:
+                self._notification_flash_timer.stop()
+                self._notification_flash_timer = None
+            try:
+                notification = self.query_one("#weather-notification", Static)
+                notification.update(self._notification_text_bright)
+            except Exception:
+                pass
+            return
+
+        # Toggle state
+        self._notification_flash_bright = not self._notification_flash_bright
+        self._notification_flash_count -= 1
+
+        try:
+            notification = self.query_one("#weather-notification", Static)
+            if self._notification_flash_bright:
+                notification.update(self._notification_text_bright)
+            else:
+                notification.update(self._notification_text_dim)
+        except Exception:
+            pass
+
+    def _dismiss_notification(self) -> None:
+        """Hide the weather notification toast and stop all related timers."""
+        # Stop flash timer if running
+        if self._notification_flash_timer:
+            self._notification_flash_timer.stop()
+            self._notification_flash_timer = None
+        # Stop dismiss timer if running
+        if self._notification_dismiss_timer:
+            self._notification_dismiss_timer.stop()
+            self._notification_dismiss_timer = None
+        # Hide the notification
+        try:
+            notification = self.query_one("#weather-notification", Static)
+            notification.add_class("hidden")
+        except Exception:
+            pass

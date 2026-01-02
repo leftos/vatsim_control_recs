@@ -3,15 +3,18 @@
 import asyncio
 import re
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 from textual.screen import ModalScreen
 from textual.widgets import Static, Input
-from textual.containers import Container
+from textual.containers import Container, VerticalScroll
 from textual.binding import Binding
 from textual.app import ComposeResult
 
 from backend import get_metar, get_taf
+from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
+from backend.data.atis_filter import filter_atis_text
 from ui import config
+from ui.config import CATEGORY_COLORS
 
 
 def _parse_visibility_sm(metar: str) -> Optional[float]:
@@ -254,16 +257,7 @@ def get_flight_category(metar: str) -> Tuple[str, str]:
     else:
         final_category = ceil_category
 
-    # Color mapping (#00ff00 bright green for better contrast on dark backgrounds)
-    colors = {
-        "VFR": "#00ff00",
-        "MVFR": "#5599ff",
-        "IFR": "red",
-        "LIFR": "magenta",
-        "UNK": "white"
-    }
-
-    return (final_category, colors.get(final_category, "white"))
+    return (final_category, CATEGORY_COLORS.get(final_category, "white"))
 
 
 class MetarInfoScreen(ModalScreen):
@@ -273,33 +267,39 @@ class MetarInfoScreen(ModalScreen):
     MetarInfoScreen {
         align: center middle;
     }
-    
+
     #metar-container {
         width: 80;
         height: auto;
+        max-height: 80%;
         background: $surface;
         border: thick $primary;
         padding: 1 2;
     }
-    
+
     #metar-title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
     }
-    
+
     #metar-input-container {
         height: auto;
         margin-bottom: 1;
     }
-    
+
+    #metar-scroll {
+        height: auto;
+        max-height: 100%;
+    }
+
     #metar-result {
         text-align: left;
         height: auto;
         margin-top: 1;
         padding: 1;
     }
-    
+
     #metar-hint {
         text-align: center;
         color: $text-muted;
@@ -330,7 +330,8 @@ class MetarInfoScreen(ModalScreen):
             yield Static("METAR & TAF Lookup", id="metar-title")
             with Container(id="metar-input-container"):
                 yield Input(placeholder="Enter airport ICAO code (e.g., KSFO)", id="metar-input")
-            yield Static("", id="metar-result", markup=True)
+            with VerticalScroll(id="metar-scroll"):
+                yield Static("", id="metar-result", markup=True)
             yield Static("Press Enter to fetch, Escape to close", id="metar-hint")
 
     def on_mount(self) -> None:
@@ -401,7 +402,39 @@ class MetarInfoScreen(ModalScreen):
             return datetime(current_year, current_month, day, hour, minute, tzinfo=timezone.utc)
         except (ValueError, TypeError):
             return None
-    
+
+    def _format_relative_time(self, target_time: Optional[datetime], current_time: datetime) -> str:
+        """
+        Format a relative time duration (e.g., "in 2h", "1h ago").
+
+        Args:
+            target_time: Target datetime in UTC
+            current_time: Current datetime in UTC
+
+        Returns:
+            Formatted relative time string with dim markup, or empty string if invalid
+        """
+        if not target_time:
+            return ""
+
+        diff_seconds = (target_time - current_time).total_seconds()
+        abs_hours = abs(diff_seconds) / 3600
+
+        if abs_hours < 1:
+            mins = int(abs(diff_seconds) / 60)
+            time_str = f"{mins}m"
+        elif abs_hours < 24:
+            hours = int(abs_hours)
+            time_str = f"{hours}h"
+        else:
+            days = int(abs_hours / 24)
+            time_str = f"{days}d"
+
+        if diff_seconds > 0:
+            return f" [dim](in {time_str})[/dim]"
+        else:
+            return f" [dim]({time_str} ago)[/dim]"
+
     def _highlight_flight_category_components(self, metar: str) -> str:
         """
         Highlight visibility and ceiling components in METAR that determine flight category.
@@ -435,31 +468,31 @@ class MetarInfoScreen(ModalScreen):
 
     def _colorize_taf(self, taf: str) -> str:
         """
-        Colorize the TAF entry applicable to the current Zulu time.
+        Colorize the TAF entry applicable to the current Zulu time and add relative times.
 
         Args:
             taf: Raw TAF string
 
         Returns:
-            TAF string with rich text markup for the current period
+            TAF string with rich text markup for the current period and relative time annotations
         """
         if not taf:
             return taf
-        
+
         current_time = datetime.now(timezone.utc)
         current_month = current_time.month
         current_year = current_time.year
-        
+
         # Split TAF into lines
         lines = taf.split('\n')
         colorized_lines = []
-        
+
         for line in lines:
             # Skip empty lines
             if not line.strip():
                 colorized_lines.append(line)
                 continue
-            
+
             # Check if this is a TAF header line with valid period
             # Format: TAF ICAO DDHHMM DDHH/DDHH ...
             header_match = re.search(r'TAF\s+\w{4}\s+\d{6}Z?\s+(\d{4})/(\d{4})', line)
@@ -468,48 +501,50 @@ class MetarInfoScreen(ModalScreen):
                 valid_to_str = header_match.group(2)
                 valid_from = self._parse_taf_time(valid_from_str, current_month, current_year)
                 valid_to = self._parse_taf_time(valid_to_str, current_month, current_year)
-                
+
                 # Handle month rollover for valid_to
                 if valid_to and valid_from and valid_to < valid_from:
                     if current_month == 12:
                         valid_to = valid_to.replace(month=1, year=current_year + 1)
                     else:
                         valid_to = valid_to.replace(month=current_month + 1)
-                
+
+                # Add relative time annotation after the period
+                relative_from = self._format_relative_time(valid_from, current_time)
+                period_end = header_match.end()
+                annotated_line = line[:period_end] + relative_from + line[period_end:]
+
                 # Check if current time is within this period
                 if valid_from and valid_to and valid_from <= current_time <= valid_to:
-                    # Find where the conditions start (after the time period)
-                    period_end = header_match.end()
-                    prefix = line[:period_end]
                     conditions = line[period_end:]
-                    colorized_lines.append(f"{prefix}[bold yellow]{conditions}[/bold yellow]")
+                    colorized_lines.append(f"{line[:period_end]}{relative_from}[bold yellow]{conditions}[/bold yellow]")
                 else:
-                    colorized_lines.append(line)
+                    colorized_lines.append(annotated_line)
                 continue
-            
+
             # Check for FM (FROM) groups: FM DDHHMM
             fm_match = re.search(r'\s+(FM\d{6})\s+', line)
             if fm_match:
                 fm_time_str = fm_match.group(1)[2:]  # Remove 'FM' prefix
                 fm_time = self._parse_taf_time(fm_time_str, current_month, current_year)
-                
+
+                # Add relative time annotation after FM time
+                relative_time = self._format_relative_time(fm_time, current_time)
+                fm_end = fm_match.end()
+                annotated_line = line[:fm_end-1] + relative_time + " " + line[fm_end:]
+
                 if fm_time:
                     # FM periods are valid from their time until the next FM or end of TAF
-                    # For now, highlight if current time >= FM time (next FM check would require full TAF parsing)
-                    # Simple heuristic: highlight if FM time is in the past but within 24 hours
                     time_diff = (current_time - fm_time).total_seconds()
                     if 0 <= time_diff <= 86400:  # Within 24 hours from FM time
-                        # Highlight the conditions part (after FM time)
-                        fm_end = fm_match.end()
-                        prefix = line[:fm_end]
                         conditions = line[fm_end:]
-                        colorized_lines.append(f"{prefix}[bold yellow]{conditions}[/bold yellow]")
+                        colorized_lines.append(f"{line[:fm_end-1]}{relative_time} [bold yellow]{conditions}[/bold yellow]")
                     else:
-                        colorized_lines.append(line)
+                        colorized_lines.append(annotated_line)
                 else:
-                    colorized_lines.append(line)
+                    colorized_lines.append(annotated_line)
                 continue
-            
+
             # Check for TEMPO or BECMG groups: TEMPO DDHH/DDHH or BECMG DDHH/DDHH
             tempo_becmg_match = re.search(r'\s+(TEMPO|BECMG)\s+(\d{4})/(\d{4})', line)
             if tempo_becmg_match:
@@ -517,25 +552,27 @@ class MetarInfoScreen(ModalScreen):
                 valid_to_str = tempo_becmg_match.group(3)
                 valid_from = self._parse_taf_time(valid_from_str, current_month, current_year)
                 valid_to = self._parse_taf_time(valid_to_str, current_month, current_year)
-                
+
                 # Handle hour rollover (same day or next day)
                 if valid_to and valid_from and valid_to < valid_from:
                     valid_to = valid_to.replace(day=valid_to.day + 1)
-                
+
+                # Add relative time annotation after the period
+                relative_from = self._format_relative_time(valid_from, current_time)
+                group_end = tempo_becmg_match.end()
+                annotated_line = line[:group_end] + relative_from + line[group_end:]
+
                 # Check if current time is within this period
                 if valid_from and valid_to and valid_from <= current_time <= valid_to:
-                    # Highlight the conditions part
-                    group_end = tempo_becmg_match.end()
-                    prefix = line[:group_end]
                     conditions = line[group_end:]
-                    colorized_lines.append(f"{prefix}[bold yellow]{conditions}[/bold yellow]")
+                    colorized_lines.append(f"{line[:group_end]}{relative_from}[bold yellow]{conditions}[/bold yellow]")
                 else:
-                    colorized_lines.append(line)
+                    colorized_lines.append(annotated_line)
                 continue
-            
+
             # Default: no colorization
             colorized_lines.append(line)
-        
+
         return '\n'.join(colorized_lines)
     
     def action_fetch_metar(self) -> None:
@@ -564,28 +601,55 @@ class MetarInfoScreen(ModalScreen):
         asyncio.create_task(self._fetch_metar_async(icao, pretty_name))
 
     async def _fetch_metar_async(self, icao: str, pretty_name: str) -> None:
-        """Fetch METAR and TAF asynchronously"""
+        """Fetch ATIS, METAR and TAF asynchronously"""
         loop = asyncio.get_event_loop()
 
-        # Fetch METAR and TAF in executor to avoid blocking
-        metar = await loop.run_in_executor(None, get_metar, icao)
-        taf = await loop.run_in_executor(None, get_taf, icao)
+        # Fetch METAR, TAF, and VATSIM data (for ATIS) in parallel
+        metar_task = loop.run_in_executor(None, get_metar, icao)
+        taf_task = loop.run_in_executor(None, get_taf, icao)
+        vatsim_task = loop.run_in_executor(None, download_vatsim_data)
+
+        metar, taf, vatsim_data = await asyncio.gather(metar_task, taf_task, vatsim_task)
 
         result_widget = self.query_one("#metar-result", Static)
 
-        # Build the display string with flight category on same line
+        # Build display
+        result_lines = []
+
+        # Airport title first with flight category on same line
         if metar:
             category, color = get_flight_category(metar)
-            result_lines = [f"{pretty_name} ({icao}) // [{color} bold]{category}[/{color} bold]", ""]
+            result_lines.append(f"{pretty_name} ({icao}) // [{color} bold]{category}[/{color} bold]")
+            result_lines.append("")
+        else:
+            result_lines.append(f"{pretty_name} ({icao})")
+            result_lines.append("")
 
-            # Highlight the visibility and ceiling components that determine flight category
+        # ATIS (filtered to remove METAR-duplicated info, letter highlighted in cyan)
+        if vatsim_data:
+            atis_info = self._get_atis_for_airport(vatsim_data, icao)
+            if atis_info:
+                atis_code = atis_info.get('atis_code', '')
+                raw_text = atis_info.get('text_atis', '')
+                # Filter out METAR-duplicated info
+                filtered_text = filter_atis_text(raw_text)
+                if filtered_text:
+                    # Highlight the ATIS letter in cyan
+                    if atis_code:
+                        filtered_text = re.sub(
+                            rf'\b(INFORMATION|INFO|ATIS)\s+{re.escape(atis_code)}\b',
+                            rf'\1 [bold cyan]{atis_code}[/bold cyan]',
+                            filtered_text
+                        )
+                    result_lines.append(f"[dim]{filtered_text}[/dim]")
+                    result_lines.append("")
+
+        # METAR with highlighted flight category components
+        if metar:
             highlighted_metar = self._highlight_flight_category_components(metar)
             result_lines.append(highlighted_metar)
-
-            # Show VFR alternatives hint for IFR/LIFR conditions
             self._update_hint(category)
         else:
-            result_lines = [f"{pretty_name} ({icao})", ""]
             result_lines.append("METAR: No data available")
             self._update_hint(None)
 
@@ -599,6 +663,11 @@ class MetarInfoScreen(ModalScreen):
             result_lines.append("TAF: No data available")
 
         result_widget.update("\n".join(result_lines))
+
+    def _get_atis_for_airport(self, vatsim_data: dict, icao: str) -> dict | None:
+        """Extract ATIS for a specific airport from VATSIM data."""
+        atis_dict = get_atis_for_airports(vatsim_data, [icao])
+        return atis_dict.get(icao)
 
     def _update_hint(self, category: str | None) -> None:
         """Update the hint text based on current flight category"""

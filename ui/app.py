@@ -20,7 +20,7 @@ from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, GoToScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen, FlightInfoScreen, DiversionModal
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, GoToScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen, FlightInfoScreen, DiversionModal, WeatherBriefingScreen
 
 
 def set_terminal_title(title: str) -> None:
@@ -140,6 +140,7 @@ class VATSIMControlApp(App):
         Binding("ctrl+a", "show_vfr_alternatives", "VFR Alts", show=False, priority=True),
         Binding("ctrl+t", "show_airport_tracking", "Tracked", show=False, priority=True),
         Binding("ctrl+s", "show_historical_stats", "Hist Stats", show=False, priority=True),
+        Binding("ctrl+b", "show_weather_briefing", "Wx Brief", show=False, priority=True),
         Binding("escape", "cancel_search", "Cancel", show=False),
     ]
     
@@ -872,6 +873,44 @@ class VATSIMControlApp(App):
             disambiguator=config.DISAMBIGUATOR
         )
         self.push_screen(stats_screen)
+
+    def action_show_weather_briefing(self) -> None:
+        """Show the weather briefing modal.
+
+        Auto-fills with current grouping if viewing a FlightBoardScreen for a grouping.
+        Otherwise opens a grouping picker.
+        """
+        # Check if FlightBoardScreen is open with a grouping
+        for screen in self.screen_stack:
+            if isinstance(screen, FlightBoardScreen):
+                if isinstance(screen.airport_icao_or_list, list) and len(screen.airport_icao_or_list) > 1:
+                    # It's a grouping - open weather briefing directly
+                    briefing_screen = WeatherBriefingScreen(
+                        grouping_name=screen.title,
+                        airports=screen.airport_icao_or_list
+                    )
+                    self.push_screen(briefing_screen)
+                    return
+
+        # No grouping context - show picker
+        goto_screen = GoToScreen(
+            filter_type="$",
+            title="Select Grouping for Weather Briefing",
+            callback=self._open_weather_briefing_callback
+        )
+        self.push_screen(goto_screen)
+
+    def _open_weather_briefing_callback(self, result) -> None:
+        """Callback from grouping picker for weather briefing."""
+        if result is None:
+            # User cancelled
+            return
+        grouping_name, airports = result
+        briefing_screen = WeatherBriefingScreen(
+            grouping_name=grouping_name,
+            airports=airports
+        )
+        self.push_screen(briefing_screen)
 
     def action_show_airport_tracking(self) -> None:
         """Show the tracked airports manager modal"""

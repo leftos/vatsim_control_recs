@@ -579,6 +579,46 @@ def get_metar_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str
     return results
 
 
+def get_taf_batch(airport_icaos: List[str], max_workers: int = 10) -> Dict[str, str]:
+    """
+    Fetch TAF data for multiple airports in parallel.
+
+    This is much more efficient than calling get_taf() sequentially for many airports.
+    Uses ThreadPoolExecutor to fetch TAF data concurrently.
+
+    Args:
+        airport_icaos: List of ICAO codes to fetch TAF for
+        max_workers: Maximum number of concurrent threads (default: 10)
+
+    Returns:
+        Dictionary mapping ICAO codes to TAF strings (empty string if unavailable)
+    """
+    results = {}
+
+    if not airport_icaos:
+        return results
+
+    # Use ThreadPoolExecutor to parallelize network requests
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_icao = {
+            executor.submit(get_taf, icao): icao
+            for icao in airport_icaos
+        }
+
+        # Collect results as they complete
+        for future in as_completed(future_to_icao):
+            icao = future_to_icao[future]
+            try:
+                taf = future.result()
+                results[icao] = taf
+            except Exception:
+                # If there's an error, just use empty string
+                results[icao] = ""
+
+    return results
+
+
 def parse_altimeter_from_metar(metar: str) -> Optional[str]:
     """
     Extract altimeter setting from METAR.

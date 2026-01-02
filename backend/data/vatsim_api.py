@@ -220,3 +220,49 @@ def filter_flights_by_airports(
             })
     
     return filtered_flights
+
+
+def get_atis_for_airports(vatsim_data: Dict[str, Any], airports: List[str]) -> Dict[str, Dict[str, Any]]:
+    """
+    Extract ATIS information for specified airports from VATSIM data.
+
+    Args:
+        vatsim_data: Full VATSIM API response
+        airports: List of airport ICAO codes to find ATIS for
+
+    Returns:
+        Dict mapping ICAO to ATIS data:
+        {
+            'KSFO': {
+                'callsign': 'KSFO_ATIS',
+                'atis_code': 'K',
+                'text_atis': 'Full ATIS text as single string',
+                'frequency': '127.650'
+            },
+            ...
+        }
+    """
+    result: Dict[str, Dict[str, Any]] = {}
+
+    if not vatsim_data or not airports:
+        return result
+
+    airport_set = set(airports)
+
+    for atis in vatsim_data.get('atis', []):
+        callsign = atis.get('callsign', '')
+        # Extract ICAO from callsign (e.g., "KSFO_ATIS" -> "KSFO")
+        if '_ATIS' in callsign:
+            icao = callsign.split('_ATIS')[0]
+            if icao in airport_set:
+                # Join text_atis lines into single string (VATSIM splits on line breaks)
+                raw_lines = atis.get('text_atis') or []
+                text_atis = ' '.join(line.strip() for line in raw_lines)
+                result[icao] = {
+                    'callsign': callsign,
+                    'atis_code': atis.get('atis_code', ''),
+                    'text_atis': text_atis,
+                    'frequency': atis.get('frequency', '')
+                }
+
+    return result

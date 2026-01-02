@@ -27,6 +27,7 @@ from backend import (
     haversine_distance_nm,
 )
 from ui import config
+from ui.config import CATEGORY_COLORS
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .metar_info import get_flight_category, _extract_flight_rules_weather
 
@@ -523,14 +524,9 @@ class DiversionModal(ModalScreen):
             else:
                 app_str = "-"
 
-            # Format weather with color (matching app-wide convention)
+            # Format weather with color (using shared color config)
             if d.weather_category:
-                wx_color = {
-                    'VFR': 'green',
-                    'MVFR': 'blue',
-                    'IFR': 'red',
-                    'LIFR': 'magenta',
-                }.get(d.weather_category, 'white')
+                wx_color = CATEGORY_COLORS.get(d.weather_category, 'white')
                 wx_text = Text(d.weather_category, style=f"bold {wx_color}")
             else:
                 wx_text = Text("...", style="dim")

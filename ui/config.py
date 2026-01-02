@@ -4,7 +4,19 @@ Contains flap character sets, data classes, and module-level instances
 """
 
 from dataclasses import dataclass
-from typing import Optional, Callable, Literal
+from typing import Dict, Optional, Callable, Literal
+
+# Flight category colors for Rich markup (VFR/MVFR/IFR/LIFR)
+CATEGORY_COLORS: Dict[str, str] = {
+    'LIFR': 'magenta',
+    'IFR': 'red',
+    'MVFR': '#5599ff',
+    'VFR': '#00ff00',
+    'UNK': 'white',
+}
+
+# Category display order (worst to best conditions)
+CATEGORY_ORDER = ['LIFR', 'IFR', 'MVFR', 'VFR', 'UNK']
 
 # Custom flap character sets for specific column types
 ETA_FLAP_CHARS = "9876543210hm:ADELN <-"  # For NEXT ETA columns: numbers in descending order for countdown effect

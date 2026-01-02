@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from typing import List, Tuple, Any, TYPE_CHECKING
+from typing import List, Tuple, Any, Callable, Optional, TYPE_CHECKING
 
 from textual.screen import ModalScreen
 from textual.widgets import Static, Input, OptionList
@@ -71,8 +71,25 @@ class GoToScreen(ModalScreen):
         Binding("escape", "close", "Close", priority=True),
     ]
 
-    def __init__(self):
+    def __init__(
+        self,
+        filter_type: Optional[str] = None,
+        callback: Optional[Callable[[Optional[Tuple[str, List[str]]]], None]] = None,
+        title: str = "Go To"
+    ):
+        """
+        Initialize the GoTo modal.
+
+        Args:
+            filter_type: If "$", only show groupings (hide airports and flights)
+            callback: If provided, call with (name, airports_list) tuple on selection
+                     instead of navigating. Pass None if cancelled.
+            title: Custom title for the modal (e.g., "Select Grouping")
+        """
         super().__init__()
+        self.filter_type = filter_type
+        self.callback = callback
+        self.custom_title = title
         self.tracked_airports: List[str] = []
         self.all_groupings: dict = {}  # All available groupings (name -> airports)
         self.pilots: List[dict] = []
@@ -82,11 +99,19 @@ class GoToScreen(ModalScreen):
         self._load_worker = None
 
     def compose(self) -> ComposeResult:
+        # Determine placeholder and hint based on filter_type
+        if self.filter_type == "$":
+            placeholder = "Search groupings..."
+            hint = "Enter: Select | Esc: Close"
+        else:
+            placeholder = "Search... (@airport, #flight, $grouping)"
+            hint = "@ Airport | # Flight | $ Grouping | Enter Select | Esc Close"
+
         with Container(id="goto-container"):
-            yield Static("Go To", id="goto-title")
-            yield Input(placeholder="Search... (@airport, #flight, $grouping)", id="goto-input")
+            yield Static(self.custom_title, id="goto-title")
+            yield Input(placeholder=placeholder, id="goto-input")
             yield OptionList(Option("Loading...", disabled=True), id="goto-list")
-            yield Static("@ Airport | # Flight | $ Grouping | Enter Select | Esc Close", id="goto-hint")
+            yield Static(hint, id="goto-hint")
 
     def on_mount(self) -> None:
         """Focus input and load data"""
@@ -175,23 +200,25 @@ class GoToScreen(ModalScreen):
         self._update_option_list()
 
     def _build_all_results(self) -> None:
-        """Build the complete results list"""
+        """Build the complete results list, respecting filter_type if set"""
         self.all_results = []
 
-        # Add airports
-        for icao in sorted(self.tracked_airports):
-            pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
-            self.all_results.append(('airport', icao, pretty_name))
+        # Add airports (unless filtered to groupings only)
+        if self.filter_type != "$":
+            for icao in sorted(self.tracked_airports):
+                pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
+                self.all_results.append(('airport', icao, pretty_name))
 
         # Add all available groupings
         for name in sorted(self.all_groupings.keys()):
             self.all_results.append(('grouping', name, None))
 
-        # Add flights (sorted by callsign)
-        for pilot in sorted(self.pilots, key=lambda p: p.get('callsign', '')):
-            callsign = pilot.get('callsign', '')
-            if callsign:
-                self.all_results.append(('flight', callsign, pilot))
+        # Add flights (sorted by callsign) (unless filtered to groupings only)
+        if self.filter_type != "$":
+            for pilot in sorted(self.pilots, key=lambda p: p.get('callsign', '')):
+                callsign = pilot.get('callsign', '')
+                if callsign:
+                    self.all_results.append(('flight', callsign, pilot))
 
     def _format_label(self, item_type: str, identifier: str, data: Any) -> str:
         """Format the display label for an item
@@ -313,6 +340,19 @@ class GoToScreen(ModalScreen):
 
         self.dismiss()
 
+        # If callback is provided, use it instead of navigating
+        if self.callback:
+            if item_type == 'grouping':
+                airport_list = list(resolve_grouping_recursively(identifier, self.all_groupings))
+                self.callback((identifier, airport_list))
+            elif item_type == 'airport':
+                # For airports, return as a single-item list
+                self.callback((identifier, [identifier]))
+            else:
+                # Flights don't make sense for callbacks - just close
+                self.callback(None)
+            return
+
         if item_type == 'airport':
             self._open_airport(identifier)
         elif item_type == 'grouping':
@@ -355,4 +395,7 @@ class GoToScreen(ModalScreen):
 
     def action_close(self) -> None:
         """Close the modal"""
+        # If callback is provided, call it with None to indicate cancellation
+        if self.callback:
+            self.callback(None)
         self.dismiss()

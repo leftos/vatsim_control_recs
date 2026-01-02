@@ -26,6 +26,7 @@ RIGHT_COLUMN = """\
  Ctrl+E   METAR
  Ctrl+A   VFR alternatives
  Ctrl+S   Historical stats
+ Ctrl+B   Weather briefing
 
 [bold]Management[/bold]
  Ctrl+T   Tracked airports
