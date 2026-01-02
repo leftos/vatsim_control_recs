@@ -388,7 +388,7 @@ def generate_html(
 
         # Process ALL boundary polygons for this ARTCC (some have multiple)
         for artcc_boundary in polys:
-            regions = generate_weather_regions(artcc_boundary, airport_points, grid_resolution=0.2)
+            regions = generate_weather_regions(artcc_boundary, airport_points, grid_resolution=0.1)
 
             for region in regions:
                 feature = {
@@ -720,6 +720,30 @@ def generate_html(
 
         .artcc-briefing-link .icon {{
             font-size: 1.1rem;
+        }}
+
+        .awc-briefing-link {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            margin: 4px 0;
+            background: linear-gradient(135deg, #2d4a2d 0%, #3d6a3d 100%);
+            border-radius: 4px;
+            text-decoration: none;
+            color: #e0e0e0;
+            transition: background 0.2s, transform 0.1s;
+            border: 1px solid #4a8a4a;
+            font-size: 0.85rem;
+        }}
+
+        .awc-briefing-link:hover {{
+            background: linear-gradient(135deg, #3d6a3d 0%, #4d8a4d 100%);
+            transform: translateX(3px);
+        }}
+
+        .awc-briefing-link .icon {{
+            font-size: 1rem;
         }}
 
         /* Modal/Popup styles */
@@ -1262,6 +1286,13 @@ def build_sidebar_html(
         # Count total airports in this ARTCC
         total_airports = stats.get('total', 0)
 
+        # Link to FAA/NWS real-world aviation weather briefing
+        awc_briefing_html = f'''
+                <a href="https://aviationweather.gov/pdwb/?cwsu={artcc.lower()}" target="_blank" class="awc-briefing-link">
+                    <span class="awc-briefing-name">FAA Weather Briefing</span>
+                    <span class="icon">🌐</span>
+                </a>'''
+
         # ARTCC-wide briefing link at the top
         artcc_briefing_html = f'''
                 <a href="{artcc}/_all.html" class="artcc-briefing-link">
@@ -1294,6 +1325,7 @@ def build_sidebar_html(
                     <div class="artcc-stats">{stats_html}</div>
                 </div>
                 <div class="groupings-list">
+                    {awc_briefing_html}
                     {artcc_briefing_html}
                     {groupings_html}
                 </div>
