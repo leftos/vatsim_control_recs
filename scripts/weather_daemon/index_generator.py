@@ -388,7 +388,7 @@ def generate_html(
 
         # Process ALL boundary polygons for this ARTCC (some have multiple)
         for artcc_boundary in polys:
-            regions = generate_weather_regions(artcc_boundary, airport_points, grid_resolution=0.1)
+            regions = generate_weather_regions(artcc_boundary, airport_points, grid_resolution=0.15)
 
             for region in regions:
                 feature = {
