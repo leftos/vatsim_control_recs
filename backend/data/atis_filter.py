@@ -94,22 +94,36 @@ def _extract_runway_numbers(text: str) -> Set[str]:
     Extract runway numbers from a text fragment.
 
     Args:
-        text: Text containing runway numbers (e.g., "16L, 17R AND 18")
+        text: Text containing runway numbers (e.g., "16L, 17R AND 18", "17R AND LEFT", "17 RIGHT AND LEFT")
 
     Returns:
         Set of runway designators (e.g., {"16L", "17R", "18"})
     """
     runways = set()
-    # Match runway numbers: 1-2 digits optionally followed by L/R/C
-    # Also handle spoken forms like "LEFT", "RIGHT", "CENTER"
-    pattern = r'\b(\d{1,2})([LRC]|LEFT|RIGHT|CENTER)?\b'
+    last_runway_num = None
+    suffix_map = {"LEFT": "L", "RIGHT": "R", "CENTER": "C"}
+
+    # Pattern 1: Match runway numbers with optional space before direction
+    # e.g., "17R", "17L", "17 RIGHT", "17 LEFT", "17RIGHT"
+    pattern = r'\b(\d{1,2})\s*([LRC]|LEFT|RIGHT|CENTER)?\b'
     for match in re.finditer(pattern, text, re.IGNORECASE):
         num = match.group(1)
         suffix = match.group(2) or ""
         # Convert spoken forms to single letter
-        suffix_map = {"LEFT": "L", "RIGHT": "R", "CENTER": "C"}
         suffix = suffix_map.get(suffix.upper(), suffix.upper())
         runways.add(f"{num}{suffix}")
+        last_runway_num = num
+
+    # Pattern 2: Handle standalone LEFT/RIGHT/CENTER that refer to the previous runway number
+    # e.g., "17R AND LEFT" means 17R and 17L
+    if last_runway_num:
+        standalone_pattern = r'\b(AND|&|,)\s+(LEFT|RIGHT|CENTER)\b'
+        for match in re.finditer(standalone_pattern, text, re.IGNORECASE):
+            direction = match.group(2).upper()
+            suffix = suffix_map.get(direction, "")
+            if suffix:
+                runways.add(f"{last_runway_num}{suffix}")
+
     return runways
 
 
@@ -131,13 +145,17 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     departing: Set[str] = set()
     text = atis_text.upper()
 
+    # Character class for runway specifications - includes digits, L/R/C, LEFT/RIGHT/CENTER words
+    # and common separators (AND, &, comma, slash, space)
+    RWY_CHARS = r'[\d\sLRCAND,/EFIGHTCENTER]+'
+
     # Pattern 1: Compound LDG/DEPTG or LDG AND DEPTG format (both ops on same runways)
     # e.g., "LDG/DEPTG 4/8", "LDG AND DEPTG RWY 27", "ARR/DEP RWY 36"
     compound_pattern = (
         r'\b(?:LDG|LNDG|LANDING|ARR(?:IVING)?)\s*(?:/|AND)\s*'
         r'(?:DEPTG?|DEPG|DEPARTING|DEP(?:ARTING)?)\s*'
         r'(?:RWYS?|RUNWAYS?)?\s*'
-        r'([\d\sLRCAND,/]+)'
+        rf'({RWY_CHARS})'
     )
     for match in re.finditer(compound_pattern, text):
         rwys = _extract_runway_numbers(match.group(1))
@@ -145,11 +163,11 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
         departing.update(rwys)
 
     # Pattern 2: Landing/Arriving runways
-    # e.g., "LDG RWY 16L", "LANDING RUNWAY 27", "ARR RWY 35"
+    # e.g., "LDG RWY 16L", "LANDING RUNWAY 27", "ARR RWY 35", "LNDG RWYS 17R AND LEFT"
     landing_pattern = (
         r'\b(?:LANDING|LDG|LNDG|ARRIVING|ARR)\s+'
         r'(?:RWYS?|RUNWAYS?)?\s*'
-        r'([\d\sLRCAND,/]+)'
+        rf'({RWY_CHARS})'
     )
     for match in re.finditer(landing_pattern, text):
         # Skip if this is part of a compound pattern (already handled)
@@ -165,7 +183,7 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     departing_pattern = (
         r'\b(?:DEPARTING|DEPARTURES?|DEPTG?|DEPG|DEP)\s+'
         r'(?:RWYS?|RUNWAYS?)?\s*'
-        r'([\d\sLRCAND,/]+)'
+        rf'({RWY_CHARS})'
     )
     for match in re.finditer(departing_pattern, text):
         # Skip if this is part of a compound pattern
