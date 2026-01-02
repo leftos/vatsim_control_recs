@@ -1116,6 +1116,147 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
     return generated_files
 
 
+def generate_index_only(config: DaemonConfig) -> Dict[str, str]:
+    """
+    Generate only the index page without fetching weather data.
+
+    Useful for quick updates to the map/UI without re-fetching weather.
+
+    Returns:
+        Dict mapping output file path to "Index"
+    """
+    start_time = datetime.now(timezone.utc)
+    timestamp = start_time.strftime('%H:%M:%SZ')
+    print(f"[{timestamp}] Regenerating index page only...")
+    logger.info("Regenerating index page only")
+
+    # Load airport data
+    print("  Loading airport data...")
+    unified_airport_data = load_unified_airport_data(
+        str(config.data_dir / "APT_BASE.csv"),
+        str(config.data_dir / "airports.json"),
+        str(config.data_dir / "iata-icao.csv"),
+    )
+
+    # Load all groupings
+    print("  Loading groupings...")
+    all_groupings = load_all_groupings(str(config.custom_groupings_path), unified_airport_data)
+
+    # Separate preset and custom groupings
+    preset_groupings = load_preset_groupings() if config.include_presets else {}
+    custom_groupings = load_custom_groupings(str(config.custom_groupings_path)) if config.include_custom else {}
+
+    # Determine which groupings to process
+    groupings_to_process: Dict[str, Tuple[List[str], str]] = {}  # name -> (airports, artcc)
+
+    # Map preset groupings to their ARTCC
+    if config.include_presets:
+        for json_file in config.preset_groupings_dir.glob("*.json"):
+            artcc = json_file.stem
+            if config.artcc_filter and artcc not in config.artcc_filter:
+                continue
+
+            try:
+                with open(json_file, 'r') as f:
+                    artcc_groupings = json.load(f)
+
+                for grouping_name, airports in artcc_groupings.items():
+                    resolved = resolve_grouping_recursively(grouping_name, all_groupings)
+                    if resolved:
+                        groupings_to_process[grouping_name] = (list(resolved), artcc)
+            except Exception as e:
+                print(f"  Warning: Error loading {json_file}: {e}")
+
+    # Add custom groupings
+    if config.include_custom and custom_groupings:
+        for grouping_name in custom_groupings:
+            if grouping_name not in groupings_to_process:
+                resolved = resolve_grouping_recursively(grouping_name, all_groupings)
+                if resolved:
+                    groupings_to_process[grouping_name] = (list(resolved), "custom")
+
+    print(f"  Found {len(groupings_to_process)} groupings")
+
+    # Helper to get airport's ARTCC from unified data
+    def get_airport_artcc(icao: str) -> Optional[str]:
+        airport_info = unified_airport_data.get(icao, {})
+        artcc_code = airport_info.get('artcc', '')
+        if artcc_code and len(artcc_code) == 3:
+            return artcc_code
+        return None
+
+    # Helper to get airport coordinates
+    def get_airport_coords(icao: str) -> Optional[Tuple[float, float]]:
+        airport_info = unified_airport_data.get(icao, {})
+        lat = airport_info.get('latitude')
+        lon = airport_info.get('longitude')
+        if lat is not None and lon is not None:
+            return (float(lat), float(lon))
+        return None
+
+    # Helper to infer ARTCCs for a grouping from its airports
+    def infer_artccs_for_grouping(airports: List[str]) -> Set[str]:
+        artccs = set()
+        for icao in airports:
+            artcc_code = get_airport_artcc(icao)
+            if artcc_code:
+                artccs.add(artcc_code)
+        return artccs
+
+    artcc_groupings_map: Dict[str, List[Dict]] = {}
+
+    for grouping_name, (airports, artcc) in groupings_to_process.items():
+        # Collect airport coordinates for hover polygon
+        airport_coords = []
+        for icao in airports:
+            coords = get_airport_coords(icao)
+            if coords:
+                airport_coords.append(coords)
+
+        safe_name = re.sub(r'[^\w\-_]', '_', grouping_name)
+
+        grouping_info = {
+            'name': grouping_name,
+            'filename': f"{safe_name}.html",
+            'airport_count': len(airports),
+            'categories': {},  # No weather data
+            'airport_coords': airport_coords,
+        }
+
+        # For custom groupings, infer ARTCCs from airport data
+        if artcc == "custom":
+            inferred_artccs = infer_artccs_for_grouping(airports)
+            if inferred_artccs:
+                for inferred_artcc in inferred_artccs:
+                    if inferred_artcc not in artcc_groupings_map:
+                        artcc_groupings_map[inferred_artcc] = []
+                    artcc_info = grouping_info.copy()
+                    artcc_info['is_custom'] = True
+                    artcc_info['path_prefix'] = 'custom'
+                    artcc_groupings_map[inferred_artcc].append(artcc_info)
+            else:
+                if "custom" not in artcc_groupings_map:
+                    artcc_groupings_map["custom"] = []
+                artcc_groupings_map["custom"].append(grouping_info)
+        else:
+            if artcc not in artcc_groupings_map:
+                artcc_groupings_map[artcc] = []
+            artcc_groupings_map[artcc].append(grouping_info)
+
+    # Generate index
+    generated_files: Dict[str, str] = {}
+    from .index_generator import generate_index_page
+    index_path = generate_index_page(config, artcc_groupings_map)
+    if index_path:
+        generated_files[str(index_path)] = "Index"
+
+    total_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+    end_timestamp = datetime.now(timezone.utc).strftime('%H:%M:%SZ')
+    print(f"[{end_timestamp}] Index regeneration complete! {total_time:.1f}s")
+    logger.info(f"Index regeneration complete in {total_time:.1f}s")
+    return generated_files
+
+
 if __name__ == "__main__":
     # Simple test run
     config = DaemonConfig(output_dir=Path("./test_output"))

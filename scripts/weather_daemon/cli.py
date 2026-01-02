@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from scripts.weather_daemon.config import DaemonConfig
-from scripts.weather_daemon.generator import generate_all_briefings
+from scripts.weather_daemon.generator import generate_all_briefings, generate_index_only
 
 
 def setup_logging(log_dir: Path, verbose: bool = False) -> None:
@@ -106,6 +106,12 @@ Examples:
     )
 
     parser.add_argument(
+        "--index-only",
+        action="store_true",
+        help="Only regenerate the index page (no weather fetch, no briefings)",
+    )
+
+    parser.add_argument(
         "--workers",
         type=int,
         default=10,
@@ -169,9 +175,15 @@ Examples:
     if args.custom_only and args.presets_only:
         parser.error("Cannot use both --custom-only and --presets-only")
 
+    if args.index_only and args.no_index:
+        parser.error("Cannot use both --index-only and --no-index")
+
     # Run generation
     try:
-        generated_files = generate_all_briefings(config)
+        if args.index_only:
+            generated_files = generate_index_only(config)
+        else:
+            generated_files = generate_all_briefings(config)
 
         if args.verbose:
             print("\nGenerated files:")
