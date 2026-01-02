@@ -241,6 +241,7 @@ def add_buffer_to_polygon(points: List[Tuple[float, float]], buffer_nm: float = 
 def generate_index_page(
     config: DaemonConfig,
     artcc_groupings: Dict[str, List[Dict[str, Any]]],
+    unified_airport_data: Optional[Dict[str, Any]] = None,
 ) -> Optional[Path]:
     """
     Generate the interactive index page with ARTCC map.
@@ -248,6 +249,7 @@ def generate_index_page(
     Args:
         config: Daemon configuration
         artcc_groupings: Dict mapping ARTCC codes to lists of grouping info dicts
+        unified_airport_data: Optional airport data for augmenting weather coverage
 
     Returns:
         Path to generated index file, or None on error
@@ -277,6 +279,7 @@ def generate_index_page(
         artcc_groupings=artcc_groupings,
         artcc_stats=artcc_stats,
         timestamp=timestamp,
+        unified_airport_data=unified_airport_data,
     )
 
     # Write index file
@@ -310,6 +313,7 @@ def generate_html(
     artcc_groupings: Dict[str, List[Dict[str, Any]]],
     artcc_stats: Dict[str, Dict[str, int]],
     timestamp: str,
+    unified_airport_data: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Generate the complete HTML content."""
 
@@ -326,6 +330,52 @@ def generate_html(
                 if icao:
                     artcc_airport_points[artcc][icao] = point
 
+    # Augment with ALL airports from unified_airport_data for each ARTCC
+    # This fills in coverage gaps by using all known airports, not just those in groupings
+    if unified_airport_data:
+        for icao, airport_info in unified_airport_data.items():
+            artcc = airport_info.get('artcc', '')
+            if not artcc or artcc not in CONUS_ARTCCS:
+                continue
+            # Skip if we already have this airport with weather data
+            if artcc in artcc_airport_points and icao in artcc_airport_points[artcc]:
+                continue
+            # Get coordinates
+            lat = airport_info.get('latitude')
+            lon = airport_info.get('longitude')
+            if lat is None or lon is None:
+                continue
+            # Add airport without weather data (will be interpolated)
+            if artcc not in artcc_airport_points:
+                artcc_airport_points[artcc] = {}
+            artcc_airport_points[artcc][icao] = {
+                'icao': icao,
+                'lat': lat,
+                'lon': lon,
+                'category': None,  # No weather data - will use interpolation
+            }
+
+        # Now interpolate categories for airports without weather data
+        for artcc, airports in artcc_airport_points.items():
+            # Get airports with known weather
+            known_weather = [(icao, ap) for icao, ap in airports.items() if ap.get('category')]
+            if not known_weather:
+                continue  # No weather data at all for this ARTCC
+
+            # For airports without weather, find nearest with weather
+            for icao, ap in airports.items():
+                if ap.get('category'):
+                    continue  # Already has weather
+                # Find nearest airport with weather
+                min_dist = float('inf')
+                nearest_category = 'UNK'
+                for known_icao, known_ap in known_weather:
+                    dist = (ap['lat'] - known_ap['lat'])**2 + (ap['lon'] - known_ap['lon'])**2
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest_category = known_ap.get('category', 'UNK')
+                ap['category'] = nearest_category
+
     # Generate weather region GeoJSON features (Voronoi-style grid cells)
     # Each ARTCC is divided into a grid, with each cell colored by nearest airport's weather
     weather_region_features = []
@@ -336,9 +386,8 @@ def generate_html(
         if not airport_points:
             continue
 
-        # Use the first (main) polygon for the ARTCC
-        if polys:
-            artcc_boundary = polys[0]  # (lat, lon) tuples
+        # Process ALL boundary polygons for this ARTCC (some have multiple)
+        for artcc_boundary in polys:
             regions = generate_weather_regions(artcc_boundary, airport_points, grid_resolution=0.2)
 
             for region in regions:

@@ -1293,7 +1293,7 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
     # Generate index if enabled
     if config.generate_index:
         from .index_generator import generate_index_page
-        index_path = generate_index_page(config, artcc_groupings_map)
+        index_path = generate_index_page(config, artcc_groupings_map, unified_airport_data)
         if index_path:
             generated_files[str(index_path)] = "Index"
 
@@ -1435,7 +1435,7 @@ def generate_index_only(config: DaemonConfig) -> Dict[str, str]:
     # Generate index
     generated_files: Dict[str, str] = {}
     from .index_generator import generate_index_page
-    index_path = generate_index_page(config, artcc_groupings_map)
+    index_path = generate_index_page(config, artcc_groupings_map, unified_airport_data)
     if index_path:
         generated_files[str(index_path)] = "Index"
 
@@ -1643,7 +1643,7 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
     # Generate index if enabled
     if config.generate_index:
         from .index_generator import generate_index_page
-        index_path = generate_index_page(config, artcc_groupings_map)
+        index_path = generate_index_page(config, artcc_groupings_map, unified_airport_data)
         if index_path:
             generated_files[str(index_path)] = "Index"
 
