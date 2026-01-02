@@ -37,10 +37,8 @@ echo -e "${YELLOW}Installing system dependencies...${NC}"
 apt update
 apt install -y python3 python3-pip python3-venv git
 
-echo -e "${YELLOW}Creating installation directory...${NC}"
-mkdir -p "$INSTALL_DIR"
+echo -e "${YELLOW}Creating output directory...${NC}"
 mkdir -p "$OUTPUT_DIR"
-mkdir -p "$INSTALL_DIR/cache"
 
 # Clone or update repository
 if [ -d "$INSTALL_DIR/.git" ]; then
@@ -58,6 +56,9 @@ else
 fi
 
 cd "$INSTALL_DIR"
+
+# Create cache directory after clone
+mkdir -p "$INSTALL_DIR/cache"
 
 echo -e "${YELLOW}Creating Python virtual environment...${NC}"
 python3 -m venv "$VENV_DIR"
