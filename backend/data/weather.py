@@ -750,6 +750,130 @@ def get_taf_batch(
     return results
 
 
+def fetch_weather_bbox(
+    bbox: Tuple[float, float, float, float],
+    include_taf: bool = True,
+    timeout: int = 30
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """
+    Fetch METAR and TAF data for all stations within a bounding box.
+
+    Uses aviationweather.gov's bbox parameter to fetch all weather data
+    in a single API call, which is much more efficient than per-airport fetching.
+
+    Args:
+        bbox: Bounding box as (min_lat, min_lon, max_lat, max_lon)
+        include_taf: Whether to include TAF data (uses taf=true parameter)
+        timeout: Request timeout in seconds
+
+    Returns:
+        Tuple of (metars_dict, tafs_dict) where keys are ICAO codes
+    """
+    min_lat, min_lon, max_lat, max_lon = bbox
+    bbox_str = f"{min_lat},{min_lon},{max_lat},{max_lon}"
+
+    metars: Dict[str, str] = {}
+    tafs: Dict[str, str] = {}
+
+    try:
+        # Wait for backoff if rate limiting is active
+        _wait_for_backoff()
+
+        # Use taf=true to get both METAR and TAF in one call
+        taf_param = "&taf=true" if include_taf else ""
+        url = f"https://aviationweather.gov/api/data/metar?bbox={bbox_str}&format=json{taf_param}"
+
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            data = json.loads(response.read().decode('utf-8'))
+
+        # Record successful request
+        _record_successful_request()
+
+        # Parse response - it's an array of METAR objects
+        if isinstance(data, list):
+            for entry in data:
+                icao = entry.get('icaoId', '')
+                raw_metar = entry.get('rawOb', '')
+                raw_taf = entry.get('rawTaf', '')
+
+                if icao and raw_metar:
+                    metars[icao] = raw_metar
+                if icao and raw_taf:
+                    tafs[icao] = raw_taf
+
+        return (metars, tafs)
+
+    except urllib.error.HTTPError as e:
+        if _check_rate_limit_error(e.code):
+            _record_rate_limit_error()
+        return ({}, {})
+    except Exception:
+        return ({}, {})
+
+
+def get_weather_batch_bbox(
+    artcc_bboxes: Dict[str, Tuple[float, float, float, float]],
+    target_airports: Optional[List[str]] = None,
+    max_workers: int = 5,
+    progress_callback: Optional[Callable[[int, int], None]] = None
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """
+    Fetch METAR and TAF data for multiple ARTCCs using bounding box queries.
+
+    This is much more efficient than per-airport fetching when dealing with
+    many airports across multiple ARTCCs. Makes one API call per ARTCC instead
+    of one per airport.
+
+    Args:
+        artcc_bboxes: Dict mapping ARTCC codes to bounding boxes (min_lat, min_lon, max_lat, max_lon)
+        target_airports: Optional list of airports to filter results to (if None, returns all)
+        max_workers: Maximum concurrent ARTCC fetches
+        progress_callback: Optional callback(completed, total) called as ARTCCs complete
+
+    Returns:
+        Tuple of (metars_dict, tafs_dict) where keys are ICAO codes
+    """
+    all_metars: Dict[str, str] = {}
+    all_tafs: Dict[str, str] = {}
+
+    if not artcc_bboxes:
+        return (all_metars, all_tafs)
+
+    total = len(artcc_bboxes)
+    completed = 0
+
+    # Fetch weather for each ARTCC in parallel
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_artcc = {
+            executor.submit(fetch_weather_bbox, bbox, True): artcc
+            for artcc, bbox in artcc_bboxes.items()
+        }
+
+        for future in as_completed(future_to_artcc):
+            artcc = future_to_artcc[future]
+            try:
+                metars, tafs = future.result()
+                all_metars.update(metars)
+                all_tafs.update(tafs)
+            except Exception:
+                pass  # Individual ARTCC failure doesn't stop others
+
+            completed += 1
+            if progress_callback:
+                progress_callback(completed, total)
+
+    # Filter to target airports if specified
+    if target_airports is not None:
+        target_set = set(a.upper() for a in target_airports)
+        all_metars = {k: v for k, v in all_metars.items() if k.upper() in target_set}
+        all_tafs = {k: v for k, v in all_tafs.items() if k.upper() in target_set}
+
+    return (all_metars, all_tafs)
+
+
 def parse_altimeter_from_metar(metar: str) -> Optional[str]:
     """
     Extract altimeter setting from METAR.

@@ -151,10 +151,12 @@ from backend import (
     get_metar_batch,
     get_taf_batch,
     get_rate_limit_status,
+    fetch_weather_bbox,
     haversine_distance_nm,
     load_all_groupings,
     load_unified_airport_data,
 )
+from .artcc_boundaries import get_artcc_boundaries
 from backend.core.groupings import (
     load_preset_groupings,
     load_custom_groupings,
@@ -176,6 +178,57 @@ from ui.modals.metar_info import (
     _parse_ceiling_feet,
     parse_weather_phenomena,
 )
+
+def get_artcc_bboxes(
+    artcc_codes: Set[str],
+    cache_dir: Path,
+    padding_degrees: float = 0.5
+) -> Dict[str, Tuple[float, float, float, float]]:
+    """
+    Calculate bounding boxes for ARTCCs from their polygon boundaries.
+
+    Adds padding to each bounding box to ensure airports at the edges
+    of ARTCC boundaries are captured (since the polygon-to-bbox conversion
+    may exclude some airports that are technically within the ARTCC).
+
+    Args:
+        artcc_codes: Set of ARTCC codes to get bboxes for
+        cache_dir: Cache directory for ARTCC boundary data
+        padding_degrees: Extra degrees to add around the bbox (default: 0.5, ~30nm)
+
+    Returns:
+        Dict mapping ARTCC codes to (min_lat, min_lon, max_lat, max_lon)
+    """
+    boundaries = get_artcc_boundaries(cache_dir)
+    bboxes = {}
+
+    for artcc in artcc_codes:
+        if artcc not in boundaries or artcc == "custom":
+            continue
+
+        polygons = boundaries[artcc]
+        all_points = []
+        for polygon in polygons:
+            all_points.extend(polygon)
+
+        if not all_points:
+            continue
+
+        min_lat = min(p[0] for p in all_points) - padding_degrees
+        max_lat = max(p[0] for p in all_points) + padding_degrees
+        min_lon = min(p[1] for p in all_points) - padding_degrees
+        max_lon = max(p[1] for p in all_points) + padding_degrees
+
+        # Clamp to valid ranges
+        min_lat = max(-90.0, min_lat)
+        max_lat = min(90.0, max_lat)
+        min_lon = max(-180.0, min_lon)
+        max_lon = min(180.0, max_lon)
+
+        bboxes[artcc] = (min_lat, min_lon, max_lat, max_lon)
+
+    return bboxes
+
 
 # Category priority for trend comparison (lower = worse conditions)
 CATEGORY_PRIORITY = {"LIFR": 0, "IFR": 1, "MVFR": 2, "VFR": 3}
@@ -1119,10 +1172,17 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
 
     print(f"  Found {len(groupings_to_process)} groupings to process")
 
-    # Collect all unique airports
+    # Collect all unique airports and determine which ARTCCs are involved
     all_airports: Set[str] = set()
-    for airports, _ in groupings_to_process.values():
+    artccs_involved: Set[str] = set()
+    custom_airports: Set[str] = set()  # Airports in custom groupings (no ARTCC bbox)
+
+    for airports, artcc in groupings_to_process.values():
         all_airports.update(airports)
+        if artcc != "custom":
+            artccs_involved.add(artcc)
+        else:
+            custom_airports.update(airports)
 
     num_airports = len(all_airports)
     airports_list = list(all_airports)
@@ -1136,15 +1196,54 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
         logger.info(f"Using cached weather data from {cache_timestamp}")
         atis_count = len([a for a in atis_data.values() if a]) if atis_data else 0
     else:
-        # Fetch fresh weather data
-        print(f"  Fetching weather for {num_airports} unique airports...")
-        logger.info(f"Fetching weather for {num_airports} airports")
+        # Fetch fresh weather data using bounding box approach for efficiency
+        # This uses ~1 API call per ARTCC instead of ~1 per airport
+        metars: Dict[str, str] = {}
+        tafs: Dict[str, str] = {}
 
-        metar_progress = ProgressTracker("METAR fetch", num_airports, log_interval_pct=20)
-        metars = get_metar_batch(airports_list, max_workers=config.max_workers, progress_callback=metar_progress.callback)
+        if artccs_involved:
+            # Get bounding boxes for all ARTCCs
+            artcc_bboxes = get_artcc_bboxes(artccs_involved, config.artcc_cache_dir)
 
-        taf_progress = ProgressTracker("TAF fetch", num_airports, log_interval_pct=20)
-        tafs = get_taf_batch(airports_list, max_workers=config.max_workers, progress_callback=taf_progress.callback)
+            if artcc_bboxes:
+                print(f"  Fetching weather via bbox for {len(artcc_bboxes)} ARTCCs ({num_airports} airports)...")
+                logger.info(f"Fetching weather via bbox for {len(artcc_bboxes)} ARTCCs")
+
+                bbox_progress = ProgressTracker("Weather fetch (bbox)", len(artcc_bboxes), log_interval_pct=25)
+
+                # Fetch weather for each ARTCC bbox in parallel
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                with ThreadPoolExecutor(max_workers=min(5, len(artcc_bboxes))) as executor:
+                    future_to_artcc = {
+                        executor.submit(fetch_weather_bbox, bbox, True): artcc
+                        for artcc, bbox in artcc_bboxes.items()
+                    }
+
+                    for future in as_completed(future_to_artcc):
+                        artcc = future_to_artcc[future]
+                        try:
+                            bbox_metars, bbox_tafs = future.result()
+                            metars.update(bbox_metars)
+                            tafs.update(bbox_tafs)
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch weather for {artcc}: {e}")
+
+                        bbox_progress.update()
+
+                print(f"    Retrieved {len(metars)} METARs, {len(tafs)} TAFs from bbox queries")
+                logger.info(f"Retrieved {len(metars)} METARs, {len(tafs)} TAFs from bbox queries")
+
+        # Fallback: fetch any missing airports individually (e.g., custom groupings or bbox misses)
+        missing_airports = [a for a in airports_list if a not in metars]
+        if missing_airports:
+            print(f"  Fetching {len(missing_airports)} missing airports individually...")
+            logger.info(f"Fetching {len(missing_airports)} airports individually (fallback)")
+
+            fallback_metars = get_metar_batch(missing_airports, max_workers=config.max_workers)
+            fallback_tafs = get_taf_batch(missing_airports, max_workers=config.max_workers)
+
+            metars.update(fallback_metars)
+            tafs.update(fallback_tafs)
 
         # Log rate limit status after fetches
         rate_status = get_rate_limit_status()

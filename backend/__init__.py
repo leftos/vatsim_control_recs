@@ -21,7 +21,9 @@ from backend.data.weather import (
     find_nearest_airport_with_metar,
     find_airports_near_position,
     get_rate_limit_status,
-    reset_rate_limit_state
+    reset_rate_limit_state,
+    fetch_weather_bbox,
+    get_weather_batch_bbox,
 )
 
 # Import groupings functions
@@ -90,6 +92,8 @@ __all__ = [
     'find_airports_near_position',
     'get_rate_limit_status',
     'reset_rate_limit_state',
+    'fetch_weather_bbox',
+    'get_weather_batch_bbox',
     'load_all_groupings',
     'load_unified_airport_data',
     'WIND_SOURCE',
