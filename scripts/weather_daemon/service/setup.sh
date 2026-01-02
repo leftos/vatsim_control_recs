@@ -57,8 +57,9 @@ fi
 
 cd "$INSTALL_DIR"
 
-# Create cache directory after clone
+# Create cache and logs directories after clone
 mkdir -p "$INSTALL_DIR/cache"
+mkdir -p "$INSTALL_DIR/logs"
 
 echo -e "${YELLOW}Creating Python virtual environment...${NC}"
 python3 -m venv "$VENV_DIR"
@@ -78,6 +79,7 @@ cp scripts/weather_daemon/service/weather-daemon.timer /etc/systemd/system/
 # Fix permissions
 chown -R www-data:www-data "$OUTPUT_DIR"
 chown -R www-data:www-data "$INSTALL_DIR/cache"
+chown -R www-data:www-data "$INSTALL_DIR/logs"
 
 # Reload systemd and enable timer
 systemctl daemon-reload

@@ -19,7 +19,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/www/leftos.dev/weather /opt/vatsim-weather-daemon/cache
+ReadWritePaths=/var/www/leftos.dev/weather /opt/vatsim-weather-daemon/cache /opt/vatsim-weather-daemon/logs
 
 [Install]
 WantedBy=multi-user.target
