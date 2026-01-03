@@ -1,23 +1,44 @@
 {
   "SJA AREA 2": [
-    "KSJU",
-    "KSIG",
-    "KSTT",
-    "KSTX",
-    "TUPJ",
     "KCPX",
-    "KVQS",
-    "X63",
     "KRVR",
-    "TUPG",
-    "TUPW"
-  ],
-  "SJA Towers": [
-    "KSJU",
-    "KSTX",
     "KSIG",
+    "KSJU",
     "KSTT",
-    "KRVR",
+    "KSTX",
+    "KVQS",
+    "TUPG",
+    "TUPJ",
+    "TUPW",
+    "X63"
+  ],
+  "SJA BQN Tower": [
     "KBQN"
+  ],
+  "International - Antigua": [
+    "TAPA"
+  ],
+  "International - British Virgin Islands": [
+    "TUPJ"
+  ],
+  "International - Dominican Republic": [
+    "MDCS",
+    "MDPC"
+  ],
+  "International - French Antilles": [
+    "TFFR"
+  ],
+  "International - Netherlands Antilles": [
+    "TNCF",
+    "TNCM"
+  ],
+  "International - St. Kitts": [
+    "TKPK"
+  ],
+  "International - Trinidad & Tobago": [
+    "TTZP"
+  ],
+  "International - Venezuela": [
+    "SVZM"
   ]
 }

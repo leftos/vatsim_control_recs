@@ -1,23 +1,34 @@
 {
   "SDF Louisville TRACON": [
     "6I2",
+    "I93",
     "KBFR",
     "KBRY",
     "KEKX",
     "KFRH",
     "KFTK",
-    "I93",
     "KIMS",
     "KJVY",
     "KLOU",
     "KSDF",
     "KSER"
   ],
+  "SDF Louisville Tower": [
+    "KSDF"
+  ],
+  "SDF Bowman Tower": [
+    "KLOU"
+  ],
   "IND Indianapolis TRACON": [
     "2R2",
     "5I4",
     "81II",
     "8A4",
+    "I34",
+    "I99",
+    "IN35",
+    "IN74",
+    "IN84",
     "KAID",
     "KBAK",
     "KCFJ",
@@ -26,11 +37,6 @@
     "KGPC",
     "KHBE",
     "KHFY",
-    "I34",
-    "I99",
-    "IN35",
-    "IN74",
-    "IN84",
     "KIND",
     "KMIE",
     "KMQJ",
@@ -39,26 +45,38 @@
     "KUMP",
     "KUWL"
   ],
+  "IND Indianapolis Tower": [
+    "KIND"
+  ],
   "LEX Lexington TRACON": [
-    "KLEX",
-    "27K",
     "0I8",
+    "27K",
+    "6I2",
+    "I50",
+    "KDVK",
     "KFFT",
     "KIOB",
-    "KRGA",
-    "KDVK",
-    "6I2",
-    "I50"
+    "KLEX",
+    "KRGA"
+  ],
+  "LEX Lexington Tower": [
+    "KLEX"
   ],
   "CVG Cincinnati TRACON": [
-    "KCVG",
-    "KHAO",
-    "KHLB",
     "I67",
     "I69",
     "K62",
+    "KCVG",
+    "KHAO",
+    "KHLB",
     "KLUK",
     "KOXD"
+  ],
+  "CVG Cincinnati Tower": [
+    "KCVG"
+  ],
+  "CVG Lunken Tower": [
+    "KLUK"
   ],
   "EVV Evansville TRACON": [
     "2I0",
@@ -69,25 +87,31 @@
     "KEVV",
     "KHNB",
     "KJQD",
-    "KY8",
     "KLWV",
     "KOWB",
     "KTEL",
-    "KTWT"
+    "KTWT",
+    "KY8"
+  ],
+  "EVV Evansville Tower": [
+    "KEVV"
   ],
   "HTS Huntington TRACON": [
     "12V",
     "3I2",
+    "I18",
     "KDWU",
     "KGAS",
     "KHTS",
-    "I18",
     "KJRO",
-    "OH23",
-    "OH62",
     "KPMH",
     "KSJS",
-    "KUNI"
+    "KUNI",
+    "OH23",
+    "OH62"
+  ],
+  "HTS Huntington Tower": [
+    "KHTS"
   ],
   "HUF Hulman TRACON": [
     "0I2",
@@ -100,6 +124,9 @@
     "KRSV",
     "KSIV"
   ],
+  "HUF Hulman Tower": [
+    "KHUF"
+  ],
   "CMH Columbus Consolidated TRACON": [
     "0OH8",
     "11OH",
@@ -110,6 +137,17 @@
     "4I9",
     "7OA7",
     "9OI9",
+    "I17",
+    "I22",
+    "I23",
+    "I44",
+    "I54",
+    "I66",
+    "I68",
+    "I73",
+    "I74",
+    "I95",
+    "IN68",
     "KAOH",
     "KAXV",
     "KCEV",
@@ -121,28 +159,12 @@
     "KEDJ",
     "KFFO",
     "KGDK",
-    "I17",
-    "I22",
-    "I23",
-    "I44",
-    "I54",
-    "I66",
-    "I68",
-    "I73",
-    "I74",
-    "I95",
     "KILN",
-    "IN68",
     "KLCK",
     "KLHQ",
     "KMGY",
     "KMRT",
     "KMWO",
-    "OH01",
-    "OH04",
-    "OH46",
-    "OH71",
-    "OH95",
     "KOSU",
     "KRID",
     "KRZT",
@@ -151,7 +173,15 @@
     "KTZR",
     "KUYF",
     "KVES",
-    "KVTA"
+    "KVTA",
+    "OH01",
+    "OH04",
+    "OH46",
+    "OH71",
+    "OH95"
+  ],
+  "CMH Columbus Tower": [
+    "KCMH"
   ],
   "CMH Columbus West": [
     "0OH8",
@@ -159,6 +189,16 @@
     "3OH0",
     "40I",
     "7OA7",
+    "I17",
+    "I22",
+    "I44",
+    "I54",
+    "I66",
+    "I68",
+    "I73",
+    "I74",
+    "I95",
+    "IN68",
     "KAOH",
     "KAXV",
     "KCEV",
@@ -167,54 +207,59 @@
     "KEDJ",
     "KFFO",
     "KGDK",
-    "I17",
-    "I22",
-    "I44",
-    "I54",
-    "I74",
-    "I66",
-    "I68",
-    "I73",
-    "I95",
     "KILN",
-    "IN68",
     "KMGY",
     "KMWO",
-    "OH46",
-    "OH71",
     "KRID",
     "KSCA",
     "KSGH",
     "KUYF",
-    "KVES"
+    "KVES",
+    "OH46",
+    "OH71"
   ],
   "CMH Columbus East": [
+    "0OH1",
+    "0OH4",
     "11OH",
     "4I3",
     "4I9",
     "9OI9",
-    "KCYO",
-    "KCMH",
-    "KDLZ",
     "I23",
+    "KCMH",
+    "KCYO",
+    "KDLZ",
     "KLCK",
     "KLHQ",
     "KMRT",
-    "0OH1",
-    "0OH4",
-    "OH95",
     "KOSU",
     "KRZT",
     "KTZR",
-    "KVTA"
+    "KVTA",
+    "OH95"
+  ],
+  "CMH Dayton Tower": [
+    "KDAY"
+  ],
+  "CMH Patterson Tower": [
+    "KFFO"
+  ],
+  "CMH Rickenbacker Tower": [
+    "KLCK"
+  ],
+  "CMH State Tower": [
+    "KOSU"
   ],
   "CRW Charleston TRACON": [
     "12V",
     "6L4",
+    "I16",
     "KBKW",
     "KCRW",
-    "I16",
     "KSXL",
     "KUSW"
+  ],
+  "CRW Charleston Tower": [
+    "KCRW"
   ]
 }

@@ -1,6 +1,7 @@
 {
   "P50 P50 Arrivals": [
     "KCHD",
+    "KCMR",
     "KDVT",
     "KFFZ",
     "KFLG",
@@ -13,8 +14,7 @@
     "KPRC",
     "KSDL",
     "KSEZ",
-    "P19",
-    "KCMR"
+    "P19"
   ],
   "P50 P50 Departures": [
     "KCHD",
@@ -31,6 +31,7 @@
   ],
   "P50 P50 Satellite": [
     "KCHD",
+    "KCMR",
     "KDVT",
     "KFFZ",
     "KFLG",
@@ -43,48 +44,80 @@
     "KPRC",
     "KSDL",
     "KSEZ",
-    "P19",
-    "KCMR"
+    "P19"
+  ],
+  "P50 PHX TWR": [
+    "KPHX"
+  ],
+  "P50 P50 SATELLITE SDL": [
+    "KSDL"
+  ],
+  "P50 P50 SATELLITE FFZ": [
+    "KFFZ"
+  ],
+  "P50 P50 SATELLITE IWA": [
+    "KIWA"
+  ],
+  "P50 P50 SATELLITE CHD": [
+    "KCHD"
+  ],
+  "P50 P50 SATELLITE DVT": [
+    "KDVT"
+  ],
+  "P50 P50 SATELLITE PRC": [
+    "KPRC"
   ],
   "P50 P50 NAA JEROME": [
-    "KPRC",
+    "KCMR",
     "KFLG",
-    "KSEZ",
-    "KCMR"
+    "KPRC",
+    "KSEZ"
   ],
-  "U90": [
-    "KDMA",
-    "KRYN",
-    "KTUS",
+  "P50 P50 NAA KACHINA": [
+    "KFLG"
+  ],
+  "U90 U90": [
     "KAVQ",
-    "KOLS"
+    "KDMA",
+    "KOLS",
+    "KRYN",
+    "KTUS"
   ],
-  "ABQ": [
+  "ABQ ABQ": [
+    "E98",
     "KABQ",
     "KAEG",
-    "KBRG",
-    "E98"
+    "KBRG"
   ],
-  "ELP": [
+  "ELP ELP": [
     "KBIF",
-    "KELP",
-    "KDNA"
+    "KDNA",
+    "KELP"
   ],
-  "AMA": [
-    "KAMA",
-    "KHRX",
-    "KBGD",
-    "KTDW",
+  "AMA AMA": [
     "H81",
+    "KAMA",
+    "KBGD",
+    "KHRX",
+    "KTDW",
     "T45"
   ],
-  "CVS": [
-    "KCVS",
-    "KCVN"
+  "ROW ROW": [
+    "KROW"
   ],
-  "HMN": [
-    "KHMN",
-    "KALM"
+  "CVS CVS": [
+    "KCVN",
+    "KCVS"
+  ],
+  "HMN HMN": [
+    "KALM",
+    "KHMN"
+  ],
+  "HMN TAC": [
+    "KHMN"
+  ],
+  "FHU FHU": [
+    "KFHU"
   ],
   "LUF Combined": [
     "KGEU",
@@ -93,27 +126,18 @@
     "KLUF"
   ],
   "LUF TAC": [
-    "KLUF",
-    "KGXF"
+    "KGXF",
+    "KLUF"
   ],
   "LUF LUF Deltas": [
     "KGEU",
     "KGXF",
     "KGYR"
   ],
-  "P50 Towers": [
-    "KPHX",
-    "KSDL",
-    "KCHD",
-    "KDVT",
-    "KFFZ",
-    "KIWA",
-    "KFLG",
-    "KPRC"
-  ],
-  "U90 Towers": [
-    "KDMA",
-    "KRYN",
-    "KTUS"
+  "International - Mexico": [
+    "MMCS",
+    "MMHO",
+    "MMTY",
+    "MMZT"
   ]
 }

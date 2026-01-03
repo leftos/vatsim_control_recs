@@ -5,50 +5,77 @@
     "3EX",
     "3GV",
     "63K",
+    "K34",
+    "K59",
     "KEZZ",
     "KFLV",
     "KIXD",
-    "K34",
-    "K59",
     "KLXT",
     "KMCI",
     "KMKC",
     "KOJC",
     "KSTJ"
   ],
+  "MCI MCI Local": [
+    "KMCI"
+  ],
+  "MCI MKC Local": [
+    "KMKC"
+  ],
+  "MCI OJC Local": [
+    "KOJC"
+  ],
   "T75 T75 Combined": [
     "1H0",
     "3LF",
     "5K1",
+    "C15",
+    "I24",
     "KAAA",
     "KALN",
     "KBLV",
     "KBMI",
-    "C15",
     "KCPS",
     "KFES",
     "KFYG",
-    "I24",
     "KIJX",
-    "M71",
     "KPIA",
     "KSAR",
     "KSET",
     "KSPI",
     "KSTL",
     "KSUS",
-    "KTAZ"
+    "KTAZ",
+    "M71"
+  ],
+  "T75 St. Louis ATCT": [
+    "KSTL"
+  ],
+  "T75 Spirit ATCT": [
+    "KSUS"
+  ],
+  "T75 Downtown ATCT": [
+    "KCPS"
+  ],
+  "T75 Alton ATCT": [
+    "KALN"
+  ],
+  "T75 Scott ATCT": [
+    "KBLV"
+  ],
+  "T75 Springfield (T75)": [
+    "KSPI"
   ],
   "T75 Peoria (T75)": [
-    "KPIA",
-    "KBMI"
+    "KBMI",
+    "KPIA"
   ],
   "T75 St. Louis (T75)": [
-    "KSTL",
-    "KSUS",
+    "KALN",
     "KBLV",
     "KCPS",
-    "KALN"
+    "KSTL",
+    "KSUS"
   ],
   "ICT TRACON": [
     "1K1",
@@ -66,19 +93,31 @@
     "KHUT",
     "KIAB",
     "KICT",
-    "M66",
-    "KMPR"
+    "KMPR",
+    "M66"
+  ],
+  "ICT ICT Local": [
+    "KICT"
+  ],
+  "ICT IAB Local": [
+    "KIAB"
+  ],
+  "ICT HUT Local": [
+    "KHUT"
   ],
   "TUL TRACON": [
     "1H6",
     "2F6",
     "2K9",
-    "KGCM",
     "H71",
-    "O38",
+    "KGCM",
     "KOKM",
     "KOWP",
     "KRVS",
+    "KTUL",
+    "O38"
+  ],
+  "TUL TUL LOCAL": [
     "KTUL"
   ],
   "SGF Springfield": [
@@ -89,26 +128,26 @@
     "3DW",
     "63M",
     "94K",
+    "H17",
+    "H58",
+    "H79",
+    "K15",
     "KAIZ",
     "KAOV",
     "KBBG",
     "KCOU",
     "KFTT",
     "KFWB",
-    "H17",
-    "H58",
-    "H79",
     "KHFJ",
     "KJEF",
-    "K15",
     "KLBO",
-    "M17",
-    "MO3",
     "KMYJ",
     "KOZS",
     "KPLK",
     "KSGF",
-    "KVER"
+    "KVER",
+    "M17",
+    "MO3"
   ],
   "SGF Mizzou": [
     "KCOU",
@@ -123,9 +162,12 @@
     "KCKA",
     "KEND",
     "KJWG",
+    "KWDG",
     "O53",
-    "O65",
-    "KWDG"
+    "O65"
+  ],
+  "END TOWER": [
+    "KEND"
   ],
   "SZL TRACON": [
     "0R2",
@@ -137,15 +179,5 @@
     "KRAW",
     "KRCM",
     "KSZL"
-  ],
-  "T75 Towers": [
-    "KSTL",
-    "KSUS",
-    "KCPS",
-    "KALN",
-    "KBLV",
-    "KPIA",
-    "KBMI",
-    "KSPI"
   ]
 }

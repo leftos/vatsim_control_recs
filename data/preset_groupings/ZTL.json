@@ -1,17 +1,41 @@
 {
-  "A80 Towers": [
+  "A80 Atlanta TRACON": [
+    "A80",
+    "KAHN",
     "KATL",
-    "KPDK",
-    "KLZU",
-    "KRYY",
-    "KMCN",
+    "KAUO",
+    "KCCO",
     "KCSG",
     "KFTY",
-    "KMGE",
-    "KWRB",
-    "KAHN",
     "KLSF",
-    "KAUO",
-    "KCCO"
+    "KLZU",
+    "KMCN",
+    "KMGE",
+    "KPDK",
+    "KRYY",
+    "KWRB"
+  ],
+  "GSP Greer ATCT/TRACON": [
+    "KGMU",
+    "KGSP",
+    "KGYH"
+  ],
+  "BHM Birmingham ATCT/TRACON": [
+    "KBHM",
+    "KTCL"
+  ],
+  "CLT Charlotte ATCT/TRACON": [
+    "KCLT",
+    "KJQF",
+    "KVUJ"
+  ],
+  "GSO Greensboro ATCT/TRACON": [
+    "KGSO",
+    "KINT"
+  ],
+  "MGM Montgomery ATCT/TRACON": [
+    "KMGM",
+    "KMXF",
+    "KSEM"
   ]
 }

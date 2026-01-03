@@ -15,14 +15,23 @@
     "T74",
     "T91"
   ],
+  "AUS GTU TOWER MAPS": [
+    "KGTU"
+  ],
+  "AUS HYI TOWER MAPS": [
+    "KHYI"
+  ],
+  "AUS AUS TOWER": [
+    "KAUS"
+  ],
   "I90 Beaumont": [
-    "KBPT",
     "KBMT",
+    "KBPT",
     "KORG"
   ],
   "I90 College Station": [
-    "KCLL",
     "KCFD",
+    "KCLL",
     "KELA"
   ],
   "I90 Consolidated": [
@@ -53,12 +62,18 @@
     "KRCK",
     "KRWV",
     "KSGR",
+    "KTME",
     "T00",
     "T35",
     "T41",
     "T51",
-    "T78",
-    "KTME"
+    "T78"
+  ],
+  "I90 IAH Tower": [
+    "KIAH"
+  ],
+  "I90 HOU Tower": [
+    "KHOU"
   ],
   "SAT TRACON": [
     "5C1",
@@ -70,12 +85,18 @@
     "KSKF",
     "KSSF"
   ],
+  "SAT SAT TOWER": [
+    "KSAT"
+  ],
   "DLF DLF RAPCON": [
     "5T9",
     "KDLF",
     "KDRT",
     "KECU",
     "T70"
+  ],
+  "DLF DLF TOWER": [
+    "KDLF"
   ],
   "NQI NQI RATCF": [
     "07R",
@@ -86,6 +107,9 @@
     "KNOG",
     "KNQI"
   ],
+  "NQI NQI TOWER": [
+    "KNQI"
+  ],
   "LCH TRACON": [
     "3R7",
     "5R8",
@@ -94,16 +118,25 @@
     "KLCH",
     "KUXL"
   ],
+  "LCH LCH TOWER": [
+    "KLCH"
+  ],
   "CRP Corpus TRACON": [
     "KCRP",
     "KNGP",
-    "KNWL",
-    "KNGW"
+    "KNGW",
+    "KNWL"
   ],
   "CRP Valley TRACON": [
     "KBRO",
-    "KMFE",
-    "KHRL"
+    "KHRL",
+    "KMFE"
+  ],
+  "CRP LRD TOWER": [
+    "KLRD"
+  ],
+  "CRP CRP TOWER": [
+    "KCRP"
   ],
   "LFT TRACON": [
     "3R2",
@@ -113,14 +146,20 @@
     "KLFT",
     "KOPL"
   ],
+  "LFT LFT TOWER": [
+    "KLFT"
+  ],
   "GPT TRACON": [
     "5R2",
     "KBIX",
     "KGPT",
     "KHSA",
+    "KMJD",
     "M13",
-    "M24",
-    "KMJD"
+    "M24"
+  ],
+  "GPT GPT TOWER": [
+    "KGPT"
   ],
   "MOB TRACON": [
     "1R8",
@@ -130,11 +169,17 @@
     "KMOB",
     "KPQL"
   ],
+  "MOB MOB TOWER": [
+    "KMOB"
+  ],
   "BTR TRACON": [
     "7L9",
     "KBTR",
     "KHZR",
     "KREG"
+  ],
+  "BTR BTR TOWER": [
+    "KBTR"
   ],
   "POE POE ARAC": [
     "3R4",
@@ -144,6 +189,9 @@
     "KESF",
     "KIER",
     "KMKV",
+    "KPOE"
+  ],
+  "POE POE TOWER": [
     "KPOE"
   ],
   "MSY TRACON": [
@@ -156,16 +204,18 @@
     "KNEW",
     "KPTN"
   ],
-  "I90 Towers": [
-    "KIAH",
-    "KHOU",
-    "KEFD",
-    "KDWH",
-    "KCLL",
-    "KBPT",
-    "KGLS",
-    "KCXO",
-    "KTME",
-    "KSGR"
+  "MSY MSY TOWER": [
+    "KMSY"
+  ],
+  "International - Cuba": [
+    "MUFH"
+  ],
+  "International - Mexico": [
+    "MMID",
+    "MMMA",
+    "MMMY",
+    "MMNL",
+    "MMRX",
+    "MMTY"
   ]
 }

@@ -6,54 +6,55 @@
     "L70"
   ],
   "SCT Empire": [
+    "F70",
+    "KAJO",
+    "KBNG",
+    "KCCB",
     "KCNO",
     "KEMT",
+    "KHMT",
     "KONT",
     "KPOC",
     "KPSP",
     "KRAL",
+    "KREI",
     "KRIV",
     "KSBD",
-    "F70",
-    "KHMT",
-    "L65",
-    "KBNG",
-    "KUDD",
     "KTRM",
-    "KREI",
+    "KUDD",
     "L22",
-    "KCCB",
-    "KAJO"
+    "L65"
   ],
   "SCT Coast": [
+    "KCPM",
     "KLGB",
     "KSLI",
     "KSNA",
-    "KTOA",
-    "KCPM"
+    "KTOA"
   ],
   "SCT San Diego": [
     "KCRQ",
+    "KLRD",
     "KMYF",
     "KNFG",
     "KNKX",
     "KNRS",
     "KNZY",
+    "KOKB",
     "KRNM",
     "KSAN",
     "KSDM",
     "KSEE",
-    "KOKB",
-    "L18",
-    "KLRD"
+    "L18"
   ],
   "SCT Del Rey": [
+    "KAVX",
     "KHHR",
     "KLAX",
-    "KSMO",
-    "KAVX"
+    "KSMO"
   ],
   "SCT Consolidated": [
+    "F70",
     "KAJO",
     "KAVX",
     "KBNG",
@@ -63,14 +64,9 @@
     "KCPM",
     "KCRQ",
     "KEMT",
-    "F70",
     "KFUL",
     "KHHR",
     "KHMT",
-    "L18",
-    "L22",
-    "L65",
-    "L70",
     "KLAX",
     "KLGB",
     "KMYF",
@@ -98,11 +94,81 @@
     "KTRM",
     "KUDD",
     "KVNY",
-    "KWHP"
+    "KWHP",
+    "L18",
+    "L22",
+    "L65",
+    "L70"
+  ],
+  "SCT Los Angeles Tower": [
+    "KLAX"
   ],
   "SCT Lindbergh Tower": [
-    "KSAN",
-    "KLRD"
+    "KLRD",
+    "KSAN"
+  ],
+  "SCT John Wayne Tower": [
+    "KSNA"
+  ],
+  "SCT Ontario Tower": [
+    "KONT"
+  ],
+  "SCT Burbank Tower": [
+    "KBUR"
+  ],
+  "SCT Palm Springs Tower": [
+    "KPSP"
+  ],
+  "SCT Long Beach Tower": [
+    "KLGB"
+  ],
+  "SCT Van Nuys Tower": [
+    "KVNY"
+  ],
+  "SCT Santa Monica Tower": [
+    "KSMO"
+  ],
+  "SCT Whiteman Tower": [
+    "KWHP"
+  ],
+  "SCT San Gabriel Valley Tower": [
+    "KEMT"
+  ],
+  "SCT Brackett Tower": [
+    "KPOC"
+  ],
+  "SCT Hawthorne Tower": [
+    "KHHR"
+  ],
+  "SCT Chino Tower": [
+    "KCNO"
+  ],
+  "SCT Riverside Tower": [
+    "KRAL"
+  ],
+  "SCT Torrance Tower": [
+    "KTOA"
+  ],
+  "SCT Los Alamitos Tower": [
+    "KSLI"
+  ],
+  "SCT Fullerton Tower": [
+    "KFUL"
+  ],
+  "SCT Ramona Tower": [
+    "KRNM"
+  ],
+  "SCT Montgomery Tower": [
+    "KMYF"
+  ],
+  "SCT Gillespie Tower": [
+    "KSEE"
+  ],
+  "SCT Palomar Tower": [
+    "KCRQ"
+  ],
+  "SCT Brown Tower": [
+    "KSDM"
   ],
   "SCT Springs": [
     "KPSP",
@@ -110,61 +176,82 @@
     "KUDD",
     "L22"
   ],
-  "L30": [
+  "SCT Miramar Tower": [
+    "KNKX"
+  ],
+  "L30 L30": [
     "0L7",
     "KBVU",
     "KHND",
     "KLAS",
     "KLSV",
-    "U30",
+    "KVGT",
+    "U30"
+  ],
+  "L30 Las Vegas Tower": [
+    "KLAS"
+  ],
+  "L30 North Las Vegas Tower": [
     "KVGT"
   ],
-  "SBA": [
+  "L30 Henderson Tower": [
+    "KHND"
+  ],
+  "L30 Canyon Tower": [
+    "KGCN"
+  ],
+  "SBA SBA": [
     "KSBA",
     "KSBP",
     "KSMX",
     "KVBG"
   ],
-  "JCF": [
+  "JCF JCF": [
     "9L2",
     "KAPV",
     "KBYS",
     "KEDW",
     "KIYK",
-    "L00",
-    "L05",
-    "L26",
-    "L71",
-    "L72",
-    "L94",
     "KMHV",
     "KNID",
     "KPMD",
     "KTSP",
     "KVCV",
-    "KWJF"
+    "KWJF",
+    "L00",
+    "L05",
+    "L26",
+    "L71",
+    "L72",
+    "L94"
   ],
-  "BFL": [
+  "JCF Edwards Tower": [
+    "KEDW"
+  ],
+  "BFL BFL": [
     "KBFL",
     "KDLO",
     "KHJO",
+    "KMIT",
+    "KPTV",
+    "KTLR",
+    "KTSP",
     "L05",
     "L17",
     "L19",
     "L45",
     "L62",
     "L73",
-    "L84",
-    "KMIT",
-    "KPTV",
-    "KTLR",
-    "KTSP"
+    "L84"
+  ],
+  "BFL Tower": [
+    "KBFL"
   ],
   "NYL Main": [
     "KLGF",
     "KNYL"
   ],
-  "NTD": [
+  "NTD NTD": [
     "KCMA",
     "KNTD",
     "KOXR"
@@ -172,50 +259,17 @@
   "LSV Nellis": [
     "KINS",
     "KLSV",
-    "KTNX",
-    "KTPH"
+    "KTNX"
   ],
-  "SCT Towers": [
-    "KLAX",
-    "KBUR",
-    "KVNY",
-    "KSNA",
-    "KSAN",
-    "KONT",
-    "KWHP",
-    "KCNO",
-    "KEMT",
-    "KPOC",
-    "KPSP",
-    "KRAL",
-    "KSBD",
-    "KFUL",
-    "KLGB",
-    "KSLI",
-    "KTOA",
-    "KCRQ",
-    "KMYF",
-    "KNKX",
-    "KNRS",
-    "KNZY",
-    "KRNM",
-    "KSDM",
-    "KSEE",
-    "KSMO",
-    "KHHR"
+  "NFG NFG": [
+    "KNFG"
   ],
-  "L30 Towers": [
-    "KLAS",
-    "KVGT",
-    "KHND",
-    "KGCN"
+  "RIV RIV": [
+    "KRIV"
   ],
-  "JCF Towers": [
-    "KVCV",
-    "KWJF",
-    "KPMD",
-    "KMHV",
-    "KEDW",
-    "KNID"
+  "International - Mexico": [
+    "MMML",
+    "MMTJ",
+    "MMZT"
   ]
 }

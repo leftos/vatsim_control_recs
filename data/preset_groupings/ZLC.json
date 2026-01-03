@@ -25,46 +25,57 @@
     "MT55",
     "MT57"
   ],
+  "GTF GTF CTRD": [
+    "KGFA"
+  ],
+  "S56 Salt Lake City TRACON": [
+    "KHIF",
+    "KOGD",
+    "KPVU",
+    "KSLC",
+    "S56"
+  ],
   "BOI RADAR": [
-    "KMAN",
-    "KEUL"
+    "KEUL",
+    "KMAN"
+  ],
+  "BOI BOI ATCT": [
+    "KBOI"
   ],
   "BZN RADAR": [
-    "K6S0",
+    "21MT",
+    "23MT",
+    "2MT5",
+    "2MT8",
+    "3MT6",
     "9S5",
+    "9U1",
+    "K6S0",
     "KBZN",
     "KEKS",
     "KLVM",
     "KWYS",
-    "MT36",
-    "3MT6",
     "MT34",
-    "9U1",
+    "MT36",
     "MT41",
-    "2MT8",
     "MT42",
     "MT48",
-    "MT94",
-    "2MT5",
-    "23MT",
-    "21MT"
+    "MT94"
   ],
   "MUO Range Control": [
-    "KMUO",
-    "U91",
-    "3U0",
     "08U",
     "10U",
-    "U89"
+    "3U0",
+    "KMUO",
+    "U89",
+    "U91"
   ],
   "MSO Approach": [
     "32S",
     "52S"
   ],
-  "S56 Towers": [
-    "KOGD",
-    "KPVU",
-    "KSLC",
-    "KHIF"
+  "International - Canada": [
+    "CZEG",
+    "CZWG"
   ]
 }

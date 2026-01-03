@@ -1,42 +1,77 @@
 {
   "MIA Miami Sector": [
+    "KHST",
     "KMIA",
-    "KTMB",
-    "KHST"
+    "KTMB"
   ],
   "MIA Fort Lauderdale Sector": [
-    "KMIA",
     "KFLL",
-    "KOPF",
     "KFXE",
-    "KPMP",
-    "KHWO"
+    "KHWO",
+    "KMIA",
+    "KOPF",
+    "KPMP"
+  ],
+  "MIA Miami Tower": [
+    "KMIA"
+  ],
+  "MIA Fort Lauderdale Tower": [
+    "KFLL"
   ],
   "TPA Tampa": [
-    "KTPA",
-    "KSRQ",
-    "KPIE",
-    "KLAL",
-    "KSPG",
     "KBKV",
     "KBOW",
-    "KMCF"
+    "KLAL",
+    "KMCF",
+    "KPIE",
+    "KSPG",
+    "KSRQ",
+    "KTPA"
+  ],
+  "TPA Tampa Tower": [
+    "KTPA"
   ],
   "PBI Palm Beach": [
-    "KPBI",
+    "KBCT",
     "KFPR",
+    "KPBI",
     "KSUA",
-    "KVRB",
-    "KBCT"
+    "KVRB"
+  ],
+  "PBI Palm Beach Tower": [
+    "KPBI"
   ],
   "RSW Fort Myers": [
-    "KRSW",
-    "KPGD",
     "KAPF",
-    "KFMY"
+    "KFMY",
+    "KPGD",
+    "KRSW"
+  ],
+  "RSW Fort Myers Tower": [
+    "KRSW"
   ],
   "NQX Navy Key West": [
     "KEYW",
     "KNQX"
+  ],
+  "HST Homestead RAPCON": [
+    "KHST"
+  ],
+  "International - Bahamas": [
+    "MYAM",
+    "MYGF",
+    "MYNN"
+  ],
+  "International - Cuba": [
+    "MTEG",
+    "MUFH"
+  ],
+  "International - Dominican Republic": [
+    "MDCS",
+    "MDPP"
+  ],
+  "International - Turks & Caicos": [
+    "MBGT",
+    "MBPV"
   ]
 }

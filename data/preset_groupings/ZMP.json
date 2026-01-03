@@ -1,5 +1,5 @@
 {
-  "M98": [
+  "M98 M98": [
     "09Y",
     "0MN9",
     "0MY0",
@@ -41,22 +41,37 @@
     "KGYL",
     "KLVN",
     "KMGG",
-    "MN07",
     "KOEO",
     "KRGK",
     "KRNH",
     "KSGS",
     "KSYN",
+    "MN07",
     "WI14"
   ],
-  "R90": [
-    "KOMA",
-    "KOFF",
-    "KLNK",
-    "KCBF",
-    "KMLE"
+  "M98 MSP": [
+    "KMSP"
   ],
-  "GRB": [
+  "M98 FCM": [
+    "KFCM"
+  ],
+  "M98 STP": [
+    "KSTP"
+  ],
+  "M98 ANE": [
+    "KANE"
+  ],
+  "M98 MIC": [
+    "KMIC"
+  ],
+  "R90 R90": [
+    "KCBF",
+    "KLNK",
+    "KMLE",
+    "KOFF",
+    "KOMA"
+  ],
+  "GRB GRB": [
     "92C",
     "KCLI",
     "KEZS",
@@ -66,36 +81,42 @@
     "KOCG",
     "KSUE"
   ],
-  "DSM": [
+  "GRB TVC": [
+    "KTVC"
+  ],
+  "GRB ATW": [
+    "KATW"
+  ],
+  "DSM DSM": [
     "KAMW",
     "KDSM",
     "KIKV",
     "KTNU"
   ],
-  "RST": [
+  "RST RST": [
     "KAEL",
     "KAUM",
     "KFKA",
     "KOWA",
     "KRST"
   ],
-  "DLH": [
+  "DLH DLH": [
     "KDLH",
+    "KEVM",
     "KHIB",
-    "KSUW",
     "KMZH",
-    "KEVM"
+    "KSUW"
   ],
-  "BIS": [
+  "BIS BIS": [
     "KBIS",
     "KHZE",
     "Y19"
   ],
-  "FAR": [
+  "FAR FAR": [
     "KFAR",
     "KJKJ"
   ],
-  "SUX": [
+  "SUX SUX": [
     "0C4",
     "7K7",
     "7K8",
@@ -106,7 +127,7 @@
     "KSXK",
     "KVMR"
   ],
-  "FSD": [
+  "FSD FSD": [
     "7G9",
     "KFSD",
     "KLYV",
@@ -115,35 +136,32 @@
     "KRRQ",
     "Y14"
   ],
-  "APN": [
+  "APN APN": [
     "KAPN",
     "KPZQ"
   ],
-  "RDR": [
+  "RDR RDR": [
     "2L1",
     "3H4",
-    "KCKN",
     "D37",
     "D41",
     "D56",
+    "KCKN",
     "KGAF",
     "KRDR"
   ],
-  "MIB": [
+  "RDR GFK": [
+    "KGFK"
+  ],
+  "MIB MIB": [
     "KHBC",
     "KMIB",
     "KMOT"
   ],
-  "M98 Towers": [
-    "KMSP",
-    "KANE",
-    "KFCM",
-    "KMIC",
-    "KSTP"
-  ],
-  "R90 Towers": [
-    "KOMA",
-    "KLNK",
-    "KOFF"
+  "International - Canada": [
+    "CYQT",
+    "CYWG",
+    "CZWG",
+    "CZYZ"
   ]
 }

@@ -1,29 +1,88 @@
 {
-  "DAB": [
-    "KDAB",
-    "KOMN",
-    "KEVB",
-    "KFIN",
-    "KDED"
+  "F11 Sanford Cab": [
+    "KSFB"
   ],
-  "F11 Towers": [
-    "KORL",
-    "KMCO",
-    "KSFB",
-    "KMLB",
-    "KISM",
-    "KXMR",
-    "KTIX",
-    "KTTS",
-    "KLEE",
+  "F11 Orlando International Delivery/Ground": [
+    "KMCO"
+  ],
+  "F11 Melbourne Cab": [
+    "KMLB"
+  ],
+  "F11 Titusville Cab": [
+    "KTIX"
+  ],
+  "F11 Kissimmee Gateway Cab": [
+    "KISM"
+  ],
+  "F11 Patrick Tower ": [
     "KCOF"
   ],
-  "P31 Towers": [
-    "KPNS",
-    "KNDZ",
-    "KNPA",
-    "KNFJ",
-    "KNSE",
-    "KJKA"
+  "JAX CRG": [
+    "KCRG"
+  ],
+  "JAX GNV": [
+    "KGNV"
+  ],
+  "JAX SGJ": [
+    "KSGJ"
+  ],
+  "JAX VQQ": [
+    "KVQQ"
+  ],
+  "JAX NIP": [
+    "KNIP"
+  ],
+  "JAX NRB": [
+    "KNRB"
+  ],
+  "P31 NPA Tower": [
+    "KNPA"
+  ],
+  "P31 NSE Tower": [
+    "KNSE"
+  ],
+  "P31 NDZ Tower": [
+    "KNDZ"
+  ],
+  "CAE CAE TOWER": [
+    "KCAE"
+  ],
+  "SAV HXD": [
+    "KHXD"
+  ],
+  "DAB DAB": [
+    "KDAB",
+    "KDED",
+    "KEVB",
+    "KFIN",
+    "KOMN"
+  ],
+  "DAB Daytona Beach Tower": [
+    "KDAB"
+  ],
+  "DAB Ormond Beach Tower": [
+    "KOMN"
+  ],
+  "DAB New Smyrna Beach Tower": [
+    "KEVB"
+  ],
+  "VLD Valdosta Regional ATCT/TRACON": [
+    "KVAD",
+    "KVLD"
+  ],
+  "PAM ECP TOWER": [
+    "KECP"
+  ],
+  "OZR Cairns Army Air ATCT/RAPCON": [
+    "KDHN",
+    "KOZR",
+    "KTOI"
+  ],
+  "VPS VPS TOWER": [
+    "KVPS"
+  ],
+  "SSC Shaw Air Force ATCT/RAPCON": [
+    "KMMT",
+    "KSSC"
   ]
 }

@@ -160,3 +160,7 @@ data/cifp/FAACIFP*
 
 test_artcc_cache/
 test_output/
+
+cache/artcc_boundaries/
+cache/weather_cache/
+cache/weather/

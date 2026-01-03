@@ -44,20 +44,21 @@
     "9TN7",
     "AR67",
     "AR72",
+    "H75",
     "KAWM",
     "KFCY",
     "KFYE",
-    "H75",
+    "KMEM",
+    "KNQA",
+    "KOLV",
+    "KUTA",
     "M01",
     "M04",
     "M41",
-    "KMEM",
     "MS55",
     "MS64",
     "MS65",
     "MS9",
-    "KNQA",
-    "KOLV",
     "TN01",
     "TN18",
     "TN25",
@@ -69,8 +70,13 @@
     "TN61",
     "TN69",
     "TN70",
-    "TN99",
-    "KUTA"
+    "TN99"
+  ],
+  "M03 OLV TOWER": [
+    "KOLV"
+  ],
+  "M03 MEM TOWER": [
+    "KMEM"
   ],
   "BNA BNA TRACON": [
     "02TN",
@@ -108,10 +114,11 @@
     "9TN9",
     "KBNA",
     "KJWN",
-    "M54",
-    "M91",
     "KMBT",
     "KMQY",
+    "KXNX",
+    "M54",
+    "M91",
     "TN00",
     "TN07",
     "TN14",
@@ -131,8 +138,13 @@
     "TN84",
     "TN92",
     "TN96",
-    "TN97",
-    "KXNX"
+    "TN97"
+  ],
+  "BNA MQY TOWER": [
+    "KMQY"
+  ],
+  "BNA BNA TOWER": [
+    "KBNA"
   ],
   "LIT LIT TRACON": [
     "04AR",
@@ -191,94 +203,115 @@
     "KCXW",
     "KLIT",
     "KLRF",
-    "M73",
-    "M74",
     "KORK",
     "KPBF",
     "KRBM",
     "KSGT",
     "KSRC",
-    "KSUZ"
+    "KSUZ",
+    "M73",
+    "M74"
+  ],
+  "LIT LRF TOWER": [
+    "KLRF"
+  ],
+  "LIT LIT TOWER": [
+    "KLIT"
   ],
   "FSM FSM TRACON - FSM": [
-    "54AR",
+    "1PP",
+    "2AR1",
     "4M2",
-    "KAZU",
-    "KFSM",
+    "54AR",
+    "7M5",
+    "83OK",
+    "89OK",
     "AR21",
     "AR40",
-    "7M5",
-    "2AR1",
     "AR87",
+    "KAZU",
+    "KFSM",
+    "KJSV",
+    "KRKR",
     "M27",
     "OK06",
-    "83OK",
-    "KRKR",
+    "OK27",
+    "OK34",
+    "OK52",
     "OK59",
     "OL38",
-    "OK27",
-    "89OK",
-    "OK52",
-    "KJSV",
-    "OK34",
-    "OL42",
-    "1PP"
+    "OL42"
   ],
   "FSM FSM TRACON - FYV": [
-    "58AR",
-    "KVBT",
+    "05AR",
+    "0AR0",
+    "0AR4",
+    "0AR9",
+    "14AR",
+    "17A",
+    "18AR",
+    "1AR4",
+    "1AR5",
+    "22AR",
     "27AR",
+    "2AR5",
+    "2AR9",
+    "38AR",
+    "3AR7",
+    "40AR",
+    "46AR",
+    "4AR8",
     "4M1",
+    "51AR",
+    "53AR",
+    "55AR",
+    "58AR",
+    "58MU",
+    "5M5",
+    "62AR",
+    "66AR",
+    "67AR",
+    "68AR",
+    "6AR1",
+    "71AR",
+    "7AR0",
+    "7MO3",
+    "95MO",
+    "99AR",
+    "AR08",
+    "AR09",
+    "AR11",
+    "AR27",
+    "AR36",
     "AR41",
     "AR51",
-    "17A",
-    "62AR",
-    "6AR1",
-    "2AR5",
-    "5M5",
-    "0AR9",
-    "AR08",
-    "55AR",
-    "7AR0",
-    "18AR",
-    "KFYV",
-    "KXNA",
-    "67AR",
-    "4AR8",
-    "40AR",
-    "1AR5",
-    "71AR",
-    "0AR4",
-    "AR09",
-    "2AR9",
-    "H34",
-    "22AR",
-    "05AR",
-    "68AR",
-    "AR91",
-    "3AR7",
-    "1AR4",
-    "51AR",
-    "KROG",
-    "AR36",
-    "AR11",
-    "53AR",
-    "99AR",
-    "KSLG",
     "AR69",
-    "38AR",
-    "66AR",
+    "AR91",
+    "H34",
     "KASG",
-    "0AR0",
-    "14AR",
-    "AR27",
+    "KFYV",
+    "KROG",
+    "KSLG",
+    "KVBT",
+    "KXNA",
     "MO32",
     "MU98",
-    "95MO",
-    "58MU",
-    "7MO3",
-    "46AR",
     "OL17"
+  ],
+  "FSM ROG TOWER": [
+    "KROG"
+  ],
+  "FSM XNA TOWER": [
+    "KXNA"
+  ],
+  "FSM ASG TOWER": [
+    "KASG"
+  ],
+  "FSM FYV TOWER": [
+    "KFYV"
+  ],
+  "FSM FSM TOWER": [
+    "KFSM"
   ],
   "HSV HSV TRACON": [
     "00AL",
@@ -308,8 +341,11 @@
     "KFYM",
     "KHSV",
     "KHUA",
-    "M38",
-    "KMDQ"
+    "KMDQ",
+    "M38"
+  ],
+  "HSV HSV TOWER": [
+    "KHSV"
   ],
   "JAN JAN TRACON": [
     "12MS",
@@ -347,6 +383,12 @@
     "MS90",
     "MS91"
   ],
+  "JAN HKS TOWER": [
+    "KHKS"
+  ],
+  "JAN JAN TOWER": [
+    "KJAN"
+  ],
   "HOP HOP ARAC": [
     "1M9",
     "2M0",
@@ -366,6 +408,9 @@
     "TN53",
     "TN93"
   ],
+  "HOP HOP TOWER": [
+    "KHOP"
+  ],
   "CBM CBM RAPCON": [
     "0MS9",
     "25MS",
@@ -376,11 +421,13 @@
     "42MS",
     "5A4",
     "5MS8",
-    "KAIV",
     "AL01",
     "AL54",
+    "KAIV",
     "KCBM",
     "KGTR",
+    "KSTF",
+    "KUBS",
     "M40",
     "M44",
     "M51",
@@ -389,9 +436,10 @@
     "M95",
     "MS56",
     "MS63",
-    "MS76",
-    "KSTF",
-    "KUBS"
+    "MS76"
+  ],
+  "CBM CBM TOWER": [
+    "KCBM"
   ],
   "NMM NMM RATCF": [
     "09A",
@@ -405,16 +453,17 @@
     "42AL",
     "AL43",
     "KDYA",
-    "M23",
     "KMEI",
-    "MS32",
-    "MS70",
     "KNJW",
-    "KNMM"
+    "KNMM",
+    "M23",
+    "MS32",
+    "MS70"
   ],
-  "M03 Towers": [
-    "KMEM",
-    "KOLV",
-    "KNQA"
+  "NMM MEI TOWER": [
+    "KMEI"
+  ],
+  "NMM NMM TOWER": [
+    "KNMM"
   ]
 }

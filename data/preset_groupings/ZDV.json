@@ -1,78 +1,95 @@
 {
   "D01 Denver": [
-    "KDEN",
-    "KAPA",
-    "KBJC",
-    "KBDU",
-    "KLMO",
     "18V",
+    "KAPA",
+    "KBDU",
+    "KBJC",
     "KCFO",
+    "KDEN",
     "KFNL",
-    "KGXY"
+    "KGXY",
+    "KLMO"
   ],
   "D01 Pueblo": [
-    "KPUB",
     "1V6",
+    "46CO",
     "7CO8",
     "80CO",
     "99CO",
-    "46CO",
-    "CO80"
+    "CO80",
+    "KPUB"
   ],
   "D01 Junction": [
-    "KGJT",
-    "10CO"
+    "10CO",
+    "KGJT"
+  ],
+  "D01 DEN TWR": [
+    "KDEN"
+  ],
+  "D01 GJT TWR": [
+    "KGJT"
+  ],
+  "D01 PUB TWR": [
+    "KPUB"
+  ],
+  "D01 FNL TWR": [
+    "KFNL"
+  ],
+  "D01 APA TWR": [
+    "KAPA"
+  ],
+  "D01 BJC TWR": [
+    "KBJC"
+  ],
+  "D01 CFO TWR": [
+    "KCFO"
   ],
   "D01 Hidden": [
-    "KDEN",
-    "KAPA",
-    "KBJC",
-    "KBDU",
-    "KLMO",
     "18V",
+    "KAPA",
+    "KBDU",
+    "KBJC",
     "KCFO",
+    "KDEN",
     "KFNL",
-    "KGXY"
+    "KGXY",
+    "KLMO"
   ],
-  "COS": [
-    "KCOS",
-    "KFLY",
-    "KFCS",
-    "KAFF",
+  "COS COS": [
+    "5V4",
     "CO4",
     "CO90",
-    "5V4"
+    "KAFF",
+    "KCOS",
+    "KFCS",
+    "KFLY"
   ],
-  "CPR": [
+  "CPR CPR": [
+    "45WY",
     "KCPR",
-    "KHAD",
-    "45WY"
+    "KHAD"
   ],
-  "RCA": [
+  "RCA RCA": [
+    "3SD2",
+    "49B",
+    "6V4",
+    "KCUT",
     "KRAP",
     "KRCA",
-    "49B",
-    "KSPF",
-    "KCUT",
-    "6V4",
-    "3SD2"
+    "KSPF"
+  ],
+  "ASE ASE": [
+    "KASE"
   ],
   "CYS Cheyenne": [
+    "82V",
     "KCYS",
     "KFEW",
-    "WY46",
     "WY05",
     "WY45",
-    "82V"
+    "WY46"
   ],
-  "D01 Towers": [
-    "KGJT",
-    "KDEN",
-    "KAPA",
-    "KBJC",
-    "KPUB",
-    "KCFO",
-    "KFNL",
-    "KBKF"
+  "EGE EGE": [
+    "KEGE"
   ]
 }

@@ -1,12 +1,7 @@
 {
-  "GUM TRACON": [
-    "PGUM",
-    "PGSN",
-    "PGUA"
-  ],
-  "GUM Towers": [
-    "PGUM",
-    "PGSN",
-    "PGUA"
+  "GUM Guam International": [
+    "KGSN",
+    "KGUM",
+    "KUAM"
   ]
 }

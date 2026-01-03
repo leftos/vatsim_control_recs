@@ -1,5 +1,5 @@
 {
-  "Y90": [
+  "Y90 Y90": [
     "1B6",
     "3B0",
     "3B3",
@@ -10,17 +10,20 @@
     "7B6",
     "7B9",
     "9B8",
+    "C44",
     "KBAF",
     "KBDL",
-    "C44",
     "KCEF",
     "KHFD",
     "KIJD",
     "KMMK",
-    "N41",
-    "KORH"
+    "KORH",
+    "N41"
   ],
-  "PWM": [
+  "Y90 Bradley Tower": [
+    "KBDL"
+  ],
+  "PWM PWM": [
     "03M",
     "0B1",
     "5ME",
@@ -28,22 +31,22 @@
     "76B",
     "81B",
     "98M",
-    "KAUG",
     "B10",
     "B19",
+    "KAUG",
     "KBXM",
     "KIWI",
     "KIZG",
     "KLEW",
-    "M00",
-    "ME6",
     "KOWK",
     "KPWM",
     "KRKD",
     "KSFM",
-    "KWVL"
+    "KWVL",
+    "M00",
+    "ME6"
   ],
-  "BGR": [
+  "BGR BGR": [
     "0B2",
     "1B0",
     "2B7",
@@ -52,11 +55,11 @@
     "KBGR",
     "KBHB",
     "KBST",
-    "ME5",
     "KOLD",
+    "ME5",
     "PG1"
   ],
-  "PVD": [
+  "PVD PVD": [
     "08R",
     "0B8",
     "1M8",
@@ -72,7 +75,10 @@
     "KWEB",
     "KWST"
   ],
-  "ALB": [
+  "PVD Providence Tower": [
+    "KPVD"
+  ],
+  "ALB ALB": [
     "1A1",
     "1B1",
     "1B8",
@@ -85,33 +91,39 @@
     "5B2",
     "5B7",
     "83K",
+    "B04",
+    "K30",
     "KALB",
     "KAQW",
-    "B04",
     "KDDH",
     "KGBR",
     "KGFL",
-    "K30",
-    "N25",
-    "NY0",
     "KPSF",
     "KSCH",
+    "N25",
+    "NY0",
     "W57"
   ],
-  "SYR": [
+  "SYR SYR": [
     "0G7",
     "2N4",
     "6B4",
     "6B9",
     "B16",
-    "KFZY",
     "K16",
-    "N03",
+    "KFZY",
     "KRME",
     "KSYR",
-    "KVGC"
+    "KVGC",
+    "N03"
   ],
-  "BTV": [
+  "SYR Syracuse Tower": [
+    "KSYR"
+  ],
+  "SYR Griffiss FCT": [
+    "KRME"
+  ],
+  "BTV BTV": [
     "0B7",
     "1I1",
     "6B0",
@@ -191,6 +203,9 @@
     "KPVC",
     "KPYM"
   ],
+  "A90 Boston Tower": [
+    "KBOS"
+  ],
   "A90 Incognito": [
     "1B9",
     "28M",
@@ -204,29 +219,15 @@
     "KLWM",
     "KOWD"
   ],
-  "GTB": [
+  "GTB GTB": [
     "KART",
     "KGTB"
   ],
-  "Y90 Towers": [
-    "KBDL",
-    "KHFD",
-    "KBAF",
-    "KCEF",
-    "KORH"
-  ],
-  "A90 Towers": [
-    "KBOS",
-    "KOWD",
-    "KBED",
-    "KLWM",
-    "KBVY",
-    "KACK",
-    "KMVY",
-    "KHYA",
-    "KMHT",
-    "KASH",
-    "KFMH",
-    "KPSM"
+  "International - Canada": [
+    "CYTR",
+    "CYUL",
+    "CZQM",
+    "CZUL",
+    "CZYZ"
   ]
 }

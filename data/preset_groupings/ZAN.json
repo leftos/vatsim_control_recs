@@ -1,8 +1,22 @@
 {
-  "A11 Towers": [
+  "A11 Anchorage TRACON": [
+    "A11",
+    "KANC",
     "KEDF",
-    "KMRI",
     "KFRN",
-    "KANC"
+    "KMRI"
+  ],
+  "FAI Fairbanks ATCT/TRACON": [
+    "KEIL",
+    "KFAI",
+    "KFBK"
+  ],
+  "International - Canada": [
+    "CZEG",
+    "CZVR"
+  ],
+  "International - Russia": [
+    "UHMM",
+    "UHPP"
   ]
 }

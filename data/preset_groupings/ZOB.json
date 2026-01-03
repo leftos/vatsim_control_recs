@@ -1,17 +1,47 @@
 {
   "D21 Detroit TRACON": [
+    "CYQG",
     "KARB",
     "KDET",
     "KDTW",
     "KPTK",
-    "KYIP",
-    "CYQG"
+    "KYIP"
+  ],
+  "D21 Metro ATCT": [
+    "KDTW"
+  ],
+  "D21 Pontiac ATCT": [
+    "KPTK"
+  ],
+  "D21 Ann Arbor ATCT": [
+    "KARB"
+  ],
+  "D21 Detroit City ATCT": [
+    "KDET"
+  ],
+  "D21 Willow Run ATCT": [
+    "KYIP"
   ],
   "CLE Cleveland TRACON": [
-    "KCLE",
     "KBKL",
-    "KCGF",
     "KCAK",
+    "KCGF",
+    "KCLE",
+    "KMFD"
+  ],
+  "CLE Cleveland ATCT": [
+    "KCLE"
+  ],
+  "CLE Lakefront ATCT": [
+    "KBKL"
+  ],
+  "CLE County ATCT": [
+    "KCGF"
+  ],
+  "CLE Akron-Canton ATCT": [
+    "KCAK"
+  ],
+  "CLE Mansfield ATCT": [
     "KMFD"
   ],
   "BUF Buffalo TRACON": [
@@ -19,25 +49,67 @@
     "KERI",
     "KIAG"
   ],
+  "BUF Buffalo ATCT": [
+    "KBUF"
+  ],
   "PIT Pittsburgh TRACON": [
     "KAGC",
     "KBVI",
     "KHLG",
     "KPIT"
   ],
+  "PIT Pittsburgh ATCT": [
+    "KPIT"
+  ],
+  "PIT Allegheny ATCT": [
+    "KAGC"
+  ],
+  "PIT Beaver County ATCT": [
+    "KBVI"
+  ],
   "LAN Great Lakes TRACON": [
-    "KLAN",
     "KFNT",
-    "KMBS",
-    "KJXN"
+    "KJXN",
+    "KLAN",
+    "KMBS"
+  ],
+  "LAN Lansing ATCT": [
+    "KLAN"
+  ],
+  "LAN Flint ATCT": [
+    "KFNT"
+  ],
+  "LAN Saginaw ATCT": [
+    "KMDS"
+  ],
+  "ROC Rochester TRACON": [
+    "KROC"
+  ],
+  "ROC Rochester ATCT": [
+    "KROC"
   ],
   "CKB Clarksburg TRACON": [
     "KCKB",
     "KMGW"
   ],
+  "CKB Clarksburg ATCT": [
+    "KCKB"
+  ],
+  "TOL Toledo TRACON": [
+    "KTOL"
+  ],
+  "TOL Toledo ATCT": [
+    "KTOL"
+  ],
   "YNG Youngstown TRACON": [
-    "KYNG",
-    "KFKL"
+    "KFKL",
+    "KYNG"
+  ],
+  "YNG Youngstown ATCT": [
+    "KTNG"
+  ],
+  "MTC Selfridge RAPCON": [
+    "KMTC"
   ],
   "JST Johnstown RAPCON": [
     "2G9",
@@ -50,11 +122,17 @@
     "KJST",
     "KLBE"
   ],
-  "D21 Towers": [
-    "KDTW",
-    "KYIP",
-    "KARB",
-    "KDET",
-    "KPTK"
+  "JST Johnstown ATCT": [
+    "KJST"
+  ],
+  "JST Arnold Palmer ATCT": [
+    "KLBE"
+  ],
+  "International - Canada": [
+    "CYQG",
+    "CYTR",
+    "CYYZ",
+    "CZUL",
+    "CZYZ"
   ]
 }

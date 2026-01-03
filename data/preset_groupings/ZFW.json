@@ -1,5 +1,5 @@
 {
-  "ACT": [
+  "ACT ACT": [
     "68F",
     "7F7",
     "KACT",
@@ -11,7 +11,7 @@
     "KPWG",
     "T15"
   ],
-  "GGG": [
+  "GGG GGG": [
     "07F",
     "F51",
     "KGGG",
@@ -21,7 +21,7 @@
     "KRFI",
     "KTYR"
   ],
-  "SHV": [
+  "SHV SHV": [
     "3F3",
     "3F4",
     "4F2",
@@ -32,14 +32,14 @@
     "KSHV",
     "KSPH"
   ],
-  "MLU": [
-    "KBQP",
+  "MLU MLU": [
     "F88",
-    "M79",
+    "KBQP",
     "KMLU",
-    "KRSN"
+    "KRSN",
+    "M79"
   ],
-  "D10": [
+  "D10 D10": [
     "1F7",
     "25XS",
     "2TE2",
@@ -50,15 +50,15 @@
     "52F",
     "7TX4",
     "9F9",
+    "F41",
+    "F46",
+    "F69",
     "KADS",
     "KAFW",
     "KCPT",
     "KDAL",
     "KDFW",
     "KDTO",
-    "F41",
-    "F46",
-    "F69",
     "KFTW",
     "KFWS",
     "KGKY",
@@ -69,69 +69,93 @@
     "KLUD",
     "KNFW",
     "KRBD",
+    "KTKI",
+    "KWEA",
     "T31",
     "T56",
-    "T67",
-    "KTKI",
-    "KWEA"
+    "T67"
+  ],
+  "D10 DFW": [
+    "KDFW"
+  ],
+  "D10 DAL": [
+    "KDAL"
   ],
   "D10 AFW": [
-    "KAFW",
-    "7TX4"
+    "7TX4",
+    "KAFW"
+  ],
+  "D10 FTW": [
+    "KFTW"
+  ],
+  "D10 FWS": [
+    "KFWS"
   ],
   "D10 DTO": [
-    "KDTO",
+    "4TX8",
     "74T",
-    "4TX8"
+    "KDTO"
+  ],
+  "D10 GKY": [
+    "KGKY"
+  ],
+  "D10 GPM": [
+    "KGPM"
+  ],
+  "D10 RBD": [
+    "KRBD"
   ],
   "D10 ADS": [
-    "KADS",
-    "F69"
+    "F69",
+    "KADS"
   ],
-  "OKC": [
-    "KOKC",
-    "KTIK",
-    "KPWA",
-    "KOUN",
-    "KHSD",
+  "D10 TKI": [
+    "KTKI"
+  ],
+  "OKC OKC": [
     "1K4",
-    "KSNL",
-    "KHMY",
-    "KRQO",
+    "3O3",
     "KCHK",
     "KGOK",
+    "KHMY",
+    "KHSD",
+    "KOKC",
+    "KOUN",
+    "KPWA",
     "KRCE",
-    "3O3"
+    "KRQO",
+    "KSNL",
+    "KTIK"
   ],
   "FSI Fort Sill": [
     "KDUC",
     "KFSI",
     "KLAW"
   ],
-  "ABI": [
+  "ABI ABI": [
     "3F2",
     "77F",
+    "F56",
     "KABI",
     "KDYS",
-    "F56",
     "KGZN",
     "KSWW",
     "T23"
   ],
-  "LBB": [
+  "LBB LBB": [
     "2F4",
     "41F",
     "5F1",
     "8F3",
-    "KBFE",
     "F49",
     "F83",
+    "KBFE",
     "KLBB",
     "KLIU",
     "KLLN",
     "KPVW"
   ],
-  "MAF": [
+  "MAF MAF": [
     "E11",
     "E30",
     "KMAF",
@@ -139,41 +163,26 @@
     "KODO",
     "KSJT"
   ],
-  "SPS": [
-    "KCWC",
+  "SPS SPS": [
     "F14",
+    "KCWC",
     "KSPS"
   ],
-  "LTS": [
+  "LTS LTS": [
     "2K4",
-    "KAXS",
     "F05",
+    "KAXS",
     "KFDR",
     "KHBR",
     "KLTS",
     "O35"
   ],
-  "GRK": [
+  "GRK GRK": [
     "KGRK",
     "KHLR",
     "KILE",
     "KLZZ",
     "KMNZ",
     "KTPL"
-  ],
-  "D10 Towers": [
-    "KDFW",
-    "KDAL",
-    "KADS",
-    "KTKI",
-    "KDTO",
-    "KAFW",
-    "KFTW",
-    "KFWS",
-    "KGKY",
-    "KGPM",
-    "KRBD",
-    "KHQZ",
-    "KNFW"
   ]
 }
