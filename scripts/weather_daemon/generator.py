@@ -5,21 +5,245 @@ Generates HTML weather briefings without requiring the Textual UI.
 Reuses core logic from ui/modals/weather_briefing.py.
 """
 
+import hashlib
 import json
 import logging
 import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Generator, List, Optional, Set, Tuple
 
 from rich.console import Console
 
 # Set up logging
 logger = logging.getLogger("weather_daemon")
+
+# Maximum age for a lock file before considering it stale (seconds)
+# If a lock file is older than this AND the PID is not running, it's stale
+LOCK_STALE_TIMEOUT = 600  # 10 minutes
+
+
+def _is_process_running(pid: int) -> bool:
+    """Check if a process with given PID is running."""
+    if pid <= 0:
+        return False
+    try:
+        if sys.platform == 'win32':
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            SYNCHRONIZE = 0x100000
+            process = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+            if process:
+                kernel32.CloseHandle(process)
+                return True
+            return False
+        else:
+            # Unix: send signal 0 to check if process exists
+            os.kill(pid, 0)
+            return True
+    except (OSError, ProcessLookupError):
+        return False
+    except Exception:
+        # If we can't determine, assume it's running to be safe
+        return True
+
+
+def _check_stale_lock(lock_file: Path) -> bool:
+    """
+    Check if a lock file is stale (process crashed without releasing).
+
+    Returns True if lock is stale and was cleaned up, False otherwise.
+    """
+    if not lock_file.exists():
+        return False
+
+    try:
+        # Read PID from lock file
+        content = lock_file.read_text().strip()
+        if not content:
+            return False
+
+        pid = int(content.split('\n')[0])
+
+        # Check if process is still running
+        if _is_process_running(pid):
+            return False  # Process is alive, lock is valid
+
+        # Process is not running - check file age as safety measure
+        file_age = datetime.now().timestamp() - lock_file.stat().st_mtime
+        if file_age < LOCK_STALE_TIMEOUT:
+            # File is recent, maybe process just started - be conservative
+            logger.debug(f"Lock file PID {pid} not running but file is recent ({file_age:.0f}s old)")
+            return False
+
+        # Lock is stale - remove it
+        logger.warning(f"Removing stale lock file (PID {pid} not running, file {file_age:.0f}s old)")
+        lock_file.unlink()
+        return True
+
+    except (ValueError, OSError) as e:
+        logger.warning(f"Error checking stale lock: {e}")
+        return False
+
+
+# Platform-specific file locking
+if sys.platform == 'win32':
+    import msvcrt
+
+    @contextmanager
+    def acquire_lock(lock_file: Path, timeout: int = 0) -> Generator[bool, None, None]:
+        """
+        Context manager for acquiring an exclusive lock file (Windows version).
+
+        Args:
+            lock_file: Path to the lock file
+            timeout: Not used (kept for API compatibility), lock is non-blocking
+
+        Yields:
+            True if lock was acquired, False if another process holds it
+        """
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Check for stale lock before attempting to acquire
+        _check_stale_lock(lock_file)
+
+        lock_fd = None
+        acquired = False
+
+        try:
+            lock_fd = open(lock_file, 'w')
+            try:
+                msvcrt.locking(lock_fd.fileno(), msvcrt.LK_NBLCK, 1)
+                acquired = True
+                # Write PID and timestamp to lock file for debugging
+                lock_fd.write(f"{os.getpid()}\n")
+                lock_fd.write(f"{datetime.now(timezone.utc).isoformat()}\n")
+                lock_fd.flush()
+                logger.debug(f"Acquired lock: {lock_file}")
+            except (IOError, OSError):
+                # Lock is held by another process
+                logger.info(f"Lock already held by another process: {lock_file}")
+                acquired = False
+
+            yield acquired
+
+        finally:
+            if lock_fd:
+                if acquired:
+                    try:
+                        lock_fd.seek(0)
+                        msvcrt.locking(lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
+                        logger.debug(f"Released lock: {lock_file}")
+                    except (IOError, OSError):
+                        pass
+                lock_fd.close()
+else:
+    import fcntl
+
+    @contextmanager
+    def acquire_lock(lock_file: Path, timeout: int = 0) -> Generator[bool, None, None]:
+        """
+        Context manager for acquiring an exclusive lock file (Unix version).
+
+        Includes stale lock detection: if the PID in the lock file is no longer
+        running and the file is older than LOCK_STALE_TIMEOUT, the lock is
+        considered stale and removed.
+
+        Args:
+            lock_file: Path to the lock file
+            timeout: Not used (kept for API compatibility), lock is non-blocking
+
+        Yields:
+            True if lock was acquired, False if another process holds it
+
+        Example:
+            with acquire_lock(Path("/tmp/weather.lock")) as acquired:
+                if not acquired:
+                    print("Another instance is running")
+                    return
+                # Do work...
+        """
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Check for stale lock before attempting to acquire
+        _check_stale_lock(lock_file)
+
+        lock_fd = None
+        acquired = False
+
+        try:
+            lock_fd = open(lock_file, 'w')
+            try:
+                fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+                # Write PID and timestamp to lock file for debugging
+                lock_fd.write(f"{os.getpid()}\n")
+                lock_fd.write(f"{datetime.now(timezone.utc).isoformat()}\n")
+                lock_fd.flush()
+                logger.debug(f"Acquired lock: {lock_file}")
+            except (IOError, OSError):
+                # Lock is held by another process
+                logger.info(f"Lock already held by another process: {lock_file}")
+                acquired = False
+
+            yield acquired
+
+        finally:
+            if lock_fd:
+                if acquired:
+                    try:
+                        fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+                        logger.debug(f"Released lock: {lock_file}")
+                    except (IOError, OSError):
+                        pass
+                lock_fd.close()
+
+
+def compute_weather_hash(metars: Dict[str, str], tafs: Dict[str, str]) -> str:
+    """
+    Compute a hash of weather data to detect changes.
+
+    Only hashes METARs and TAFs (not ATIS, which changes frequently
+    and doesn't affect the visual presentation much).
+
+    Args:
+        metars: Dict of ICAO -> METAR string
+        tafs: Dict of ICAO -> TAF string
+
+    Returns:
+        SHA256 hash of the weather data
+    """
+    # Sort keys for consistent ordering
+    metar_str = json.dumps(metars, sort_keys=True)
+    taf_str = json.dumps(tafs, sort_keys=True)
+    combined = f"{metar_str}\n{taf_str}"
+    return hashlib.sha256(combined.encode('utf-8')).hexdigest()[:16]
+
+
+def load_weather_hash(cache_dir: Path) -> Optional[str]:
+    """Load the previously saved weather hash."""
+    hash_file = cache_dir / "weather_hash.txt"
+    if hash_file.exists():
+        try:
+            return hash_file.read_text().strip()
+        except Exception:
+            return None
+    return None
+
+
+def save_weather_hash(cache_dir: Path, weather_hash: str) -> None:
+    """Save the current weather hash."""
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    hash_file = cache_dir / "weather_hash.txt"
+    try:
+        hash_file.write_text(weather_hash)
+    except Exception as e:
+        logger.warning(f"Failed to save weather hash: {e}")
 
 
 def _save_weather_cache(cache_dir: Path, metars: Dict, tafs: Dict, atis_data: Dict) -> None:
@@ -841,6 +1065,36 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
 
         # Cache weather data for next run
         _save_weather_cache(config.weather_cache_dir, metars, tafs, atis_data)
+
+    # Check if weather has changed since last run
+    weather_changed = True
+    if config.skip_if_unchanged and metars:
+        new_hash = compute_weather_hash(metars, tafs)
+        old_hash = load_weather_hash(config.weather_cache_dir)
+
+        if old_hash == new_hash:
+            weather_changed = False
+            print(f"  Weather unchanged (hash: {new_hash[:8]}...), skipping regeneration")
+            logger.info(f"Weather unchanged (hash: {new_hash}), skipping regeneration")
+        else:
+            print(f"  Weather changed (old: {old_hash[:8] if old_hash else 'none'}... -> new: {new_hash[:8]}...)")
+            logger.info(f"Weather changed from {old_hash} to {new_hash}")
+            save_weather_hash(config.weather_cache_dir, new_hash)
+
+    # If weather hasn't changed, skip briefings and tiles but still update index timestamp
+    if not weather_changed:
+        # Only regenerate index if enabled (to update timestamp)
+        if config.generate_index:
+            # We need to load existing data for the index
+            # For now, just update the timestamp in the index by regenerating it
+            pass
+        else:
+            # Nothing to do
+            total_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+            end_timestamp = datetime.now(timezone.utc).strftime('%H:%M:%SZ')
+            print(f"[{end_timestamp}] Skipped (no changes) in {total_time:.1f}s")
+            logger.info(f"Skipped (no changes) in {total_time:.1f}s")
+            return {}
 
     num_groupings = len(groupings_to_process)
     print(f"  Generating {num_groupings} briefings...")

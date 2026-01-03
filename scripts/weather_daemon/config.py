@@ -31,7 +31,8 @@ class DaemonConfig:
     max_workers: int = 20
 
     # Weather cache TTL in seconds (use cached data if fresher than this)
-    weather_cache_ttl: int = 600  # 10 minutes
+    # With 5-minute timer intervals, 4 minutes ensures fresh fetch each run
+    weather_cache_ttl: int = 240  # 4 minutes
 
     # Include custom groupings
     include_custom: bool = True
@@ -65,6 +66,13 @@ class DaemonConfig:
     # If None, uses UTC
     display_timezone: Optional[str] = None
 
+    # Skip regeneration if weather data hasn't changed since last run
+    # Uses a hash of METAR/TAF data to detect changes
+    skip_if_unchanged: bool = True
+
+    # Lock file path (prevents concurrent runs)
+    lock_file: Path = field(default_factory=lambda: Path("/tmp/weather-daemon.lock"))
+
     def __post_init__(self):
         """Ensure paths are Path objects and create directories."""
         if isinstance(self.output_dir, str):
@@ -77,6 +85,8 @@ class DaemonConfig:
             self.data_dir = Path(self.data_dir)
         if isinstance(self.artcc_cache_dir, str):
             self.artcc_cache_dir = Path(self.artcc_cache_dir)
+        if isinstance(self.lock_file, str):
+            self.lock_file = Path(self.lock_file)
 
 
 # ARTCC display names for index page

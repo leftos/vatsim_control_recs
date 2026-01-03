@@ -17,7 +17,7 @@ from typing import Set
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from scripts.weather_daemon.config import DaemonConfig
-from scripts.weather_daemon.generator import generate
+from scripts.weather_daemon.generator import generate, acquire_lock
 
 # Valid stages for --stages argument
 VALID_STAGES = {'weather', 'briefings', 'tiles', 'index'}
@@ -81,14 +81,11 @@ Examples:
   # Tiles and index only (use cached weather)
   python -m scripts.weather_daemon.cli --stages tiles,index
 
-  # Tiles only
-  python -m scripts.weather_daemon.cli --stages tiles
+  # Force regeneration even if weather unchanged
+  python -m scripts.weather_daemon.cli --force
 
-  # Index only
-  python -m scripts.weather_daemon.cli --stages index
-
-  # Briefings and index without tiles
-  python -m scripts.weather_daemon.cli --stages weather,briefings,index
+  # Run without lock file (allow concurrent runs)
+  python -m scripts.weather_daemon.cli --no-lock
 
   # Generate only for specific ARTCCs
   python -m scripts.weather_daemon.cli --artccs ZOA ZLA ZSE
@@ -163,6 +160,18 @@ Examples:
         help="Path to log directory (default: project's logs/ folder)",
     )
 
+    parser.add_argument(
+        "--no-lock",
+        action="store_true",
+        help="Disable lock file (allow concurrent runs)",
+    )
+
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force regeneration even if weather hasn't changed",
+    )
+
     args = parser.parse_args()
 
     # Parse stages
@@ -211,6 +220,10 @@ Examples:
     if args.data_dir:
         config.data_dir = args.data_dir
 
+    # Handle --force flag
+    if args.force:
+        config.skip_if_unchanged = False
+
     # Validate configuration
     if args.custom_only and args.presets_only:
         parser.error("Cannot use both --custom-only and --presets-only")
@@ -221,8 +234,8 @@ Examples:
         if not config.fetch_fresh_weather:
             print("Using cached weather data")
 
-    # Run generation
-    try:
+    # Run generation (with optional lock)
+    def do_generate():
         generated_files = generate(config)
 
         if args.verbose:
@@ -230,8 +243,25 @@ Examples:
             for path, name in generated_files.items():
                 print(f"  {path}")
 
-        print(f"\nSuccess: Generated {len(generated_files)} files to {config.output_dir}")
+        if generated_files:
+            print(f"\nSuccess: Generated {len(generated_files)} files to {config.output_dir}")
+        else:
+            print(f"\nNo files generated (weather unchanged or no groupings)")
         return 0
+
+    try:
+        if args.no_lock:
+            # Run without lock
+            return do_generate()
+        else:
+            # Use lock file to prevent concurrent runs
+            with acquire_lock(config.lock_file) as acquired:
+                if not acquired:
+                    print("Another instance is already running, skipping this run")
+                    logger = logging.getLogger("weather_daemon")
+                    logger.info("Skipped: another instance is already running")
+                    return 0  # Exit cleanly, systemd timer will retry later
+                return do_generate()
 
     except KeyboardInterrupt:
         print("\nInterrupted by user")
