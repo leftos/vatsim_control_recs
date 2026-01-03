@@ -10,18 +10,16 @@ from textual.app import ComposeResult
 
 from backend import get_metar_batch, haversine_distance_nm, find_airports_near_position
 from backend.data.navaids import parse_route_string, Waypoint
+from backend.data.weather_parsing import (
+    get_flight_category,
+    extract_visibility_str,
+    parse_ceiling_layer,
+    parse_weather_phenomena,
+    parse_wind_from_metar,
+)
 from ui import config
 from ui.config import CATEGORY_COLORS
-from ui.modals.metar_info import (
-    get_flight_category,
-    _extract_visibility_str,
-    _parse_ceiling_layer,
-    parse_weather_phenomena,
-)
-from ui.modals.weather_briefing import (
-    _parse_wind_from_metar,
-    _parse_metar_observation_time,
-)
+from ui.modals.weather_briefing import _parse_metar_observation_time
 
 
 # Search radius around each waypoint for nearby airports
@@ -208,14 +206,15 @@ class RouteWeatherScreen(ModalScreen):
         for icao in all_airports:
             metar = metars.get(icao, '')
             if metar:
-                category, color = get_flight_category(metar)
+                category = get_flight_category(metar)
+                color = CATEGORY_COLORS.get(category, "white")
                 self.weather_data[icao] = {
                     'metar': metar,
                     'category': category,
                     'color': color,
-                    'visibility': _extract_visibility_str(metar),
-                    'ceiling': _parse_ceiling_layer(metar),
-                    'wind': _parse_wind_from_metar(metar),
+                    'visibility': extract_visibility_str(metar),
+                    'ceiling': parse_ceiling_layer(metar),
+                    'wind': parse_wind_from_metar(metar),
                     'obs_time': _parse_metar_observation_time(metar),
                     'phenomena': parse_weather_phenomena(metar),
                 }

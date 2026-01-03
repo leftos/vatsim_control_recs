@@ -14,27 +14,27 @@ from textual.containers import Container, VerticalScroll
 from textual.binding import Binding
 from textual.app import ComposeResult
 
-from backend import get_metar_batch, get_taf_batch, haversine_distance_nm
+from backend import get_metar_batch, get_taf_batch
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
 from backend.data.atis_filter import filter_atis_text, colorize_atis_text
-from ui import config
-from ui.config import CATEGORY_COLORS, CATEGORY_ORDER
-from ui.modals.metar_info import (
+from backend.briefing import (
+    AreaClusterer,
+    count_area_categories,
+    build_area_summary,
+    parse_wind_from_metar,
+    parse_taf_changes,
+    format_taf_relative_time,
+)
+from backend.data.weather_parsing import (
     get_flight_category,
-    _extract_visibility_str,
-    _parse_ceiling_layer,
-    _parse_visibility_sm,
-    _parse_ceiling_feet,
+    extract_visibility_str,
+    parse_ceiling_layer,
+    parse_visibility_sm,
+    parse_ceiling_feet,
     parse_weather_phenomena,
 )
-
-# Import shared constants from backend
-from backend.data.weather_parsing import (
-    CATEGORY_PRIORITY,
-    FAR139_PRIORITY,
-    TOWER_TYPE_PRIORITY,
-    get_airport_size_priority as _get_airport_size_priority_impl,
-)
+from ui import config
+from ui.config import CATEGORY_COLORS, CATEGORY_ORDER
 
 
 def _parse_metar_observation_time(metar: str) -> Optional[tuple]:
@@ -79,320 +79,6 @@ def _parse_metar_observation_time(metar: str) -> Optional[tuple]:
         return (zulu_str, local_str)
     except (ValueError, OSError):
         return (zulu_str, None)
-
-
-def _parse_taf_forecast_details(conditions: str) -> Dict[str, Any]:
-    """
-    Parse detailed forecast conditions from a TAF segment.
-
-    Args:
-        conditions: TAF segment conditions string (after FM/TEMPO/BECMG time code)
-
-    Returns:
-        Dict with visibility_sm, ceiling_ft, ceiling_layer, wind, phenomena, category
-    """
-    # Get category for this segment
-    category, _ = get_flight_category(conditions)
-
-    # Parse visibility (in SM)
-    visibility_sm = _parse_visibility_sm(conditions)
-
-    # Parse ceiling (in feet for trend comparison, and layer string for display)
-    ceiling_ft = _parse_ceiling_feet(conditions)
-    ceiling_layer = _parse_ceiling_layer(conditions)  # e.g., "BKN020", "OVC008"
-
-    # Parse wind
-    wind = _parse_wind_from_metar(conditions)  # Same format as METAR
-
-    # Parse weather phenomena
-    phenomena = parse_weather_phenomena(conditions)
-
-    return {
-        'category': category,
-        'visibility_sm': visibility_sm,
-        'ceiling_ft': ceiling_ft,
-        'ceiling_layer': ceiling_layer,
-        'wind': wind,
-        'phenomena': phenomena,
-    }
-
-
-def _calculate_trend(
-    current_vis: Optional[float],
-    current_ceil: Optional[int],
-    current_cat: str,
-    forecast_vis: Optional[float],
-    forecast_ceil: Optional[int],
-    forecast_cat: str
-) -> str:
-    """
-    Calculate weather trend between current and forecast conditions.
-
-    Uses smarter logic: only flags as worsening/improving when:
-    - Category actually changes, OR
-    - Conditions are approaching a worse category boundary
-
-    Args:
-        current_vis: Current visibility in SM
-        current_ceil: Current ceiling in feet
-        current_cat: Current flight category
-        forecast_vis: Forecast visibility in SM
-        forecast_ceil: Forecast ceiling in feet
-        forecast_cat: Forecast flight category
-
-    Returns:
-        "improving", "worsening", or "stable"
-    """
-    current_priority = CATEGORY_PRIORITY.get(current_cat, 3)
-    forecast_priority = CATEGORY_PRIORITY.get(forecast_cat, 3)
-
-    # If category changes, that's definitive
-    if forecast_priority < current_priority:
-        return "worsening"
-    if forecast_priority > current_priority:
-        return "improving"
-
-    # Same category - only flag as worsening if approaching the next worse boundary
-    # Category boundaries:
-    # - VFR: ceil > 3000, vis > 5
-    # - MVFR: ceil 1000-3000, vis 3-5
-    # - IFR: ceil 500-1000, vis 1-3
-    # - LIFR: ceil < 500, vis < 1
-
-    # Define "approaching boundary" thresholds for each category
-    boundary_thresholds = {
-        'VFR': {'ceil': 4000, 'vis': 6.0},    # Near MVFR boundary
-        'MVFR': {'ceil': 1500, 'vis': 3.5},   # Near IFR boundary
-        'IFR': {'ceil': 700, 'vis': 1.5},     # Near LIFR boundary
-        'LIFR': {'ceil': 200, 'vis': 0.5},    # Already at worst
-    }
-
-    thresholds = boundary_thresholds.get(forecast_cat, {'ceil': 1000, 'vis': 3.0})
-
-    # Check if forecast is approaching boundary (worsening within category)
-    vis_near_boundary = forecast_vis is not None and forecast_vis <= thresholds['vis']
-    ceil_near_boundary = forecast_ceil is not None and forecast_ceil <= thresholds['ceil']
-
-    # Only "worsening" if forecast is dropping AND getting close to boundary
-    if vis_near_boundary or ceil_near_boundary:
-        # Verify it's actually a decrease from current
-        vis_decreasing = (current_vis is not None and forecast_vis is not None and
-                         forecast_vis < current_vis - 0.5)
-        ceil_decreasing = (current_ceil is not None and forecast_ceil is not None and
-                          forecast_ceil < current_ceil - 200)
-
-        if (vis_near_boundary and vis_decreasing) or (ceil_near_boundary and ceil_decreasing):
-            return "worsening"
-
-    # Check for improvement - conditions moving away from boundary
-    if current_vis is not None and forecast_vis is not None:
-        if forecast_vis > current_vis + 2 and forecast_vis > thresholds['vis']:
-            return "improving"
-
-    if current_ceil is not None and forecast_ceil is not None:
-        if forecast_ceil > current_ceil + 1000 and forecast_ceil > thresholds['ceil']:
-            return "improving"
-
-    return "stable"
-
-
-def _parse_wind_from_metar(metar: str) -> Optional[str]:
-    """
-    Extract wind string from METAR.
-
-    Args:
-        metar: Raw METAR string
-
-    Returns:
-        Wind string (e.g., "28012G18KT", "VRB05KT", "00000KT") or None
-    """
-    if not metar:
-        return None
-
-    # Wind pattern: direction + speed + optional gust + unit
-    # Examples: 28012KT, 28012G18KT, VRB05KT, 00000KT
-    wind_pattern = r'\b(\d{3}|VRB)(\d{2,3})(G\d{2,3})?(KT|MPS|KMH)\b'
-    match = re.search(wind_pattern, metar)
-    if match:
-        return match.group(0)
-    return None
-
-
-def _parse_taf_changes(
-    taf: str,
-    current_category: str,
-    current_vis: Optional[float] = None,
-    current_ceil: Optional[int] = None
-) -> List[Dict[str, Any]]:
-    """
-    Parse TAF to find forecast weather changes with detailed conditions.
-
-    Args:
-        taf: Raw TAF string
-        current_category: Current flight category (VFR/MVFR/IFR/LIFR)
-        current_vis: Current visibility in SM (for trend comparison)
-        current_ceil: Current ceiling in feet (for trend comparison)
-
-    Returns:
-        List of changes with type, time, predicted category, detailed conditions, and trend.
-        Trend is calculated relative to the previous forecast period (or current METAR for first).
-    """
-    changes = []
-    if not taf:
-        return changes
-
-    # Collect all forecast groups with their positions for document-order processing
-    all_groups = []
-
-    # Parse FM groups: FM251800 ...conditions...
-    fm_pattern = r'FM(\d{6})\s+([^\n]+?)(?=\s+FM|\s+TEMPO|\s+BECMG|\s+PROB|$)'
-    for match in re.finditer(fm_pattern, taf, re.DOTALL):
-        all_groups.append({
-            'pos': match.start(),
-            'type': 'FM',
-            'time_str': match.group(1),
-            'conditions': match.group(2),
-            'updates_baseline': True,  # FM groups update the baseline
-        })
-
-    # Parse TEMPO/BECMG groups
-    tempo_becmg_pattern = r'(TEMPO|BECMG)\s+(\d{4})/(\d{4})\s+([^\n]+?)(?=\s+TEMPO|\s+BECMG|\s+FM|\s+PROB|$)'
-    for match in re.finditer(tempo_becmg_pattern, taf, re.DOTALL):
-        all_groups.append({
-            'pos': match.start(),
-            'type': match.group(1),
-            'time_str': f"{match.group(2)}/{match.group(3)}",
-            'conditions': match.group(4),
-            'updates_baseline': False,  # TEMPO/BECMG don't update baseline
-        })
-
-    # Sort by position in document (chronological order in TAF)
-    all_groups.sort(key=lambda x: x['pos'])
-
-    # Track the "baseline" conditions for trend comparison
-    # Starts with current METAR, updates after each FM period
-    baseline_vis = current_vis
-    baseline_ceil = current_ceil
-    baseline_cat = current_category
-
-    # Process groups in document order
-    for group in all_groups:
-        # Parse detailed forecast conditions
-        details = _parse_taf_forecast_details(group['conditions'])
-        predicted_cat = details['category']
-
-        # Calculate trend relative to current baseline
-        trend = _calculate_trend(
-            baseline_vis, baseline_ceil, baseline_cat,
-            details['visibility_sm'], details['ceiling_ft'], predicted_cat
-        )
-
-        changes.append({
-            'type': group['type'],
-            'time_str': group['time_str'],
-            'category': predicted_cat,
-            'visibility_sm': details['visibility_sm'],
-            'ceiling_ft': details['ceiling_ft'],
-            'ceiling_layer': details['ceiling_layer'],
-            'wind': details['wind'],
-            'phenomena': details['phenomena'],
-            'trend': trend,
-            'is_improvement': trend == 'improving',
-            'is_deterioration': trend == 'worsening',
-        })
-
-        # FM groups update the baseline for subsequent comparisons
-        if group['updates_baseline']:
-            baseline_vis = details['visibility_sm']
-            baseline_ceil = details['ceiling_ft']
-            baseline_cat = predicted_cat
-
-    return changes
-
-
-def _format_taf_relative_time(time_str: str) -> str:
-    """
-    Format a TAF time string with relative duration.
-
-    Args:
-        time_str: TAF time string, either "DDHHMM" (FM format) or "HHMM/HHMM" (TEMPO/BECMG)
-
-    Returns:
-        Relative time string like "(in 2h)" or "(1h ago)" or empty string if can't parse
-    """
-    now = datetime.now(timezone.utc)
-
-    try:
-        # FM format: DDHHMM (e.g., "251800" = 25th day at 18:00Z)
-        if len(time_str) == 6 and time_str.isdigit():
-            day = int(time_str[:2])
-            hour = int(time_str[2:4])
-            minute = int(time_str[4:6])
-
-            # Build target datetime in current month
-            target = now.replace(day=day, hour=hour, minute=minute, second=0, microsecond=0)
-
-            # Handle month rollover
-            if target < now - timedelta(days=15):
-                # Target is likely next month
-                if now.month == 12:
-                    target = target.replace(year=now.year + 1, month=1)
-                else:
-                    target = target.replace(month=now.month + 1)
-            elif target > now + timedelta(days=15):
-                # Target is likely previous month
-                if now.month == 1:
-                    target = target.replace(year=now.year - 1, month=12)
-                else:
-                    target = target.replace(month=now.month - 1)
-
-        # TEMPO/BECMG format: DDHH/DDHH (e.g., "2515/2518")
-        elif '/' in time_str:
-            start_str = time_str.split('/')[0]
-            if len(start_str) == 4 and start_str.isdigit():
-                day = int(start_str[:2])
-                hour = int(start_str[2:4])
-
-                target = now.replace(day=day, hour=hour, minute=0, second=0, microsecond=0)
-
-                # Handle month rollover
-                if target < now - timedelta(days=15):
-                    if now.month == 12:
-                        target = target.replace(year=now.year + 1, month=1)
-                    else:
-                        target = target.replace(month=now.month + 1)
-                elif target > now + timedelta(days=15):
-                    if now.month == 1:
-                        target = target.replace(year=now.year - 1, month=12)
-                    else:
-                        target = target.replace(month=now.month - 1)
-            else:
-                return ""
-        else:
-            return ""
-
-        # Calculate relative time
-        diff_seconds = (target - now).total_seconds()
-        abs_hours = abs(diff_seconds) / 3600
-
-        # Right-align number to 2 chars so "9h" aligns with "19h"
-        if abs_hours < 1:
-            mins = int(abs(diff_seconds) / 60)
-            time_label = f"{mins:2d}m"
-        elif abs_hours < 24:
-            hours = int(abs_hours)
-            time_label = f"{hours:2d}h"
-        else:
-            days = int(abs_hours / 24)
-            time_label = f"{days:2d}d"
-
-        if diff_seconds > 0:
-            return f" [dim](in {time_label})[/dim]"
-        else:
-            return f" [dim]({time_label} ago)[/dim]"
-
-    except (ValueError, AttributeError):
-        return ""
 
 
 class WeatherBriefingScreen(ModalScreen):
@@ -580,25 +266,26 @@ class WeatherBriefingScreen(ModalScreen):
 
             metar = metars.get(icao, '')
             taf = tafs.get(icao, '')
-            category, color = get_flight_category(metar) if metar else ("UNK", "white")
+            category = get_flight_category(metar) if metar else "UNK"
+            color = CATEGORY_COLORS.get(category, "white")
 
             # Parse visibility and ceiling for trend comparison
-            visibility_sm = _parse_visibility_sm(metar) if metar else None
-            ceiling_ft = _parse_ceiling_feet(metar) if metar else None
+            visibility_sm = parse_visibility_sm(metar) if metar else None
+            ceiling_ft = parse_ceiling_feet(metar) if metar else None
 
             self.weather_data[icao] = {
                 'metar': metar,
                 'taf': taf,
                 'category': category,
                 'color': color,
-                'visibility': _extract_visibility_str(metar) if metar else None,
+                'visibility': extract_visibility_str(metar) if metar else None,
                 'visibility_sm': visibility_sm,
-                'ceiling': _parse_ceiling_layer(metar) if metar else None,
+                'ceiling': parse_ceiling_layer(metar) if metar else None,
                 'ceiling_ft': ceiling_ft,
-                'wind': _parse_wind_from_metar(metar) if metar else None,
+                'wind': parse_wind_from_metar(metar) if metar else None,
                 'atis': atis_data.get(icao),
                 'phenomena': parse_weather_phenomena(metar) if metar else [],
-                'taf_changes': _parse_taf_changes(taf, category, visibility_sm, ceiling_ft) if taf else [],
+                'taf_changes': parse_taf_changes(taf, category, visibility_sm, ceiling_ft) if taf else [],
             }
 
         # Final progress
@@ -608,452 +295,16 @@ class WeatherBriefingScreen(ModalScreen):
         # Update display
         self._update_display()
 
-    def _get_airport_size_priority(self, icao: str) -> int:
-        """Get airport size priority for sorting (lower = larger airport)."""
-        if not config.UNIFIED_AIRPORT_DATA:
-            return 9
-        airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {})
-        return _get_airport_size_priority_impl(airport_info)
-
-    def _get_airport_coords(self, icao: str) -> Optional[tuple]:
-        """Get airport coordinates (lat, lon) if available."""
-        if not config.UNIFIED_AIRPORT_DATA:
-            return None
-        airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {})
-        lat = airport_info.get('latitude')
-        lon = airport_info.get('longitude')
-        if lat is not None and lon is not None:
-            return (lat, lon)
-        return None
-
-    def _get_airport_city(self, icao: str) -> str:
-        """Get airport city name if available."""
-        if not config.UNIFIED_AIRPORT_DATA:
-            return ""
-        airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {})
-        return airport_info.get('city', '') or ''
-
-    def _get_airport_state(self, icao: str) -> str:
-        """Get airport state/region if available."""
-        if not config.UNIFIED_AIRPORT_DATA:
-            return ""
-        airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {})
-        return airport_info.get('state', '') or ''
-
-    def _calculate_grouping_extent(self) -> float:
-        """
-        Calculate the geographic extent (max distance) of all airports in the briefing.
-        Returns the approximate diagonal distance in nautical miles.
-        """
-        coords = []
-        for icao in self.weather_data:
-            c = self._get_airport_coords(icao)
-            if c:
-                coords.append(c)
-
-        if len(coords) < 2:
-            return 50.0  # Default for single airport
-
-        # Find bounding box
-        min_lat = min(c[0] for c in coords)
-        max_lat = max(c[0] for c in coords)
-        min_lon = min(c[1] for c in coords)
-        max_lon = max(c[1] for c in coords)
-
-        # Calculate diagonal distance
-        diagonal = haversine_distance_nm(min_lat, min_lon, max_lat, max_lon)
-        return diagonal
-
-    def _calculate_optimal_k(self, num_towered: int, num_total: int) -> int:
-        """
-        Calculate optimal number of clusters (k) for k-means.
-        Scales based on number of towered airports and geographic extent.
-        """
-        extent = self._calculate_grouping_extent()
-
-        if num_towered <= 1:
-            return 1
-        elif num_towered <= 3:
-            return min(num_towered, 2)
-        elif num_towered <= 6:
-            return min(num_towered, 4)
-        elif num_towered <= 12:
-            # Scale based on extent
-            if extent < 200:
-                return 4
-            elif extent < 500:
-                return 5
-            else:
-                return min(num_towered, 6)
-        elif num_towered <= 20:
-            # Medium number of towered airports
-            if extent < 200:
-                return 5
-            elif extent < 500:
-                return 7
-            else:
-                return min(num_towered, 8)
-        else:
-            # Many towered airports - use more clusters for larger areas
-            if extent < 200:
-                return 6
-            elif extent < 500:
-                return 8
-            elif extent < 1000:
-                return 10
-            else:
-                return min(num_towered, 12)
-
-    def _kmeans_clustering(
-        self,
-        airports: List[tuple],
-        k: int,
-        max_iterations: int = 50
-    ) -> List[List[tuple]]:
-        """
-        Simple k-means clustering for airports using haversine distance.
-
-        Args:
-            airports: List of (icao, data, size_priority, coords) tuples
-            k: Number of clusters
-            max_iterations: Maximum iterations for convergence
-
-        Returns:
-            List of clusters, each containing airport tuples
-        """
-        # Filter to airports with valid coordinates
-        valid_airports = [a for a in airports if a[3] is not None]
-
-        if not valid_airports:
-            return []
-
-        if len(valid_airports) <= k:
-            # Each airport is its own cluster
-            return [[a] for a in valid_airports]
-
-        # Initialize centroids using k-means++ style selection
-        # Start with the largest airport (lowest size_priority)
-        sorted_by_size = sorted(valid_airports, key=lambda x: (x[2], x[0]))
-        centroids = [sorted_by_size[0][3]]  # First centroid is largest airport
-
-        # Select remaining centroids weighted by distance from existing centroids
-        remaining = sorted_by_size[1:]
-        while len(centroids) < k and remaining:
-            # Calculate min distance to any existing centroid for each airport
-            distances = []
-            for airport in remaining:
-                coords = airport[3]
-                min_dist = min(
-                    haversine_distance_nm(coords[0], coords[1], c[0], c[1])
-                    for c in centroids
-                )
-                distances.append((airport, min_dist))
-
-            # Select airport with maximum distance (k-means++ style)
-            distances.sort(key=lambda x: -x[1])
-            selected = distances[0][0]
-            centroids.append(selected[3])
-            remaining.remove(selected)
-
-        # K-means iterations
-        clusters = [[] for _ in range(k)]
-
-        for _ in range(max_iterations):
-            # Assignment step: assign each airport to nearest centroid
-            new_clusters = [[] for _ in range(k)]
-
-            for airport in valid_airports:
-                coords = airport[3]
-                min_dist = float('inf')
-                best_cluster = 0
-
-                for i, centroid in enumerate(centroids):
-                    dist = haversine_distance_nm(
-                        coords[0], coords[1],
-                        centroid[0], centroid[1]
-                    )
-                    if dist < min_dist:
-                        min_dist = dist
-                        best_cluster = i
-
-                new_clusters[best_cluster].append(airport)
-
-            # Check for convergence
-            if new_clusters == clusters:
-                break
-
-            clusters = new_clusters
-
-            # Update step: recalculate centroids
-            new_centroids = []
-            for i, cluster in enumerate(clusters):
-                if cluster:
-                    avg_lat = sum(a[3][0] for a in cluster) / len(cluster)
-                    avg_lon = sum(a[3][1] for a in cluster) / len(cluster)
-                    new_centroids.append((avg_lat, avg_lon))
-                else:
-                    # Empty cluster - keep old centroid
-                    new_centroids.append(centroids[i])
-
-            centroids = new_centroids
-
-        # Remove empty clusters
-        clusters = [c for c in clusters if c]
-
-        return clusters
-
     def _create_area_groups(self) -> List[Dict[str, Any]]:
-        """
-        Create area-based groupings using k-means clustering on towered airports.
-
-        Returns a list of area groups, each containing:
-        - name: Area name (e.g., "Sacramento Area")
-        - airports: List of (icao, data, size_priority) tuples
-        - center_icao: The main towered airport for this area
-        """
-        # Categorize airports (skip UNK)
-        towered_airports = []  # Airports with tower (size_priority <= 2)
-        non_towered_airports = []
-
-        for icao, data in self.weather_data.items():
-            if data.get('category') == 'UNK':
-                continue
-            coords = self._get_airport_coords(icao)
-            size_priority = self._get_airport_size_priority(icao)
-            entry = (icao, data, size_priority, coords)
-
-            # Towered airports have priority 0-2 (ATCT, ATCT-A, NON-ATCT with ATIS)
-            # Also include any airport with active ATIS
-            if size_priority <= 2 or data.get('atis'):
-                towered_airports.append(entry)
-            else:
-                non_towered_airports.append(entry)
-
-        # If no towered airports, use fallback grouping
-        if not towered_airports:
-            return self._create_fallback_area_groups()
-
-        # Calculate optimal k for clustering
-        num_total = len(towered_airports) + len(non_towered_airports)
-        k = self._calculate_optimal_k(len(towered_airports), num_total)
-
-        # Run k-means on towered airports
-        clusters = self._kmeans_clustering(towered_airports, k)
-
-        if not clusters:
-            return self._create_fallback_area_groups()
-
-        # Calculate cluster centroids for assigning non-towered airports
-        cluster_centroids = []
-        for cluster in clusters:
-            if cluster:
-                avg_lat = sum(a[3][0] for a in cluster if a[3]) / len([a for a in cluster if a[3]])
-                avg_lon = sum(a[3][1] for a in cluster if a[3]) / len([a for a in cluster if a[3]])
-                cluster_centroids.append((avg_lat, avg_lon))
-            else:
-                cluster_centroids.append(None)
-
-        # Assign non-towered airports to nearest cluster
-        for airport in non_towered_airports:
-            icao, data, size_priority, coords = airport
-            if not coords:
-                continue
-
-            best_cluster_idx = 0
-            best_distance = float('inf')
-
-            for i, centroid in enumerate(cluster_centroids):
-                if centroid:
-                    dist = haversine_distance_nm(
-                        coords[0], coords[1],
-                        centroid[0], centroid[1]
-                    )
-                    if dist < best_distance:
-                        best_distance = dist
-                        best_cluster_idx = i
-
-            clusters[best_cluster_idx].append(airport)
-
-        # Build final area groups with names
-        area_groups = []
-        for cluster in clusters:
-            if not cluster:
-                continue
-
-            # Find the "center" airports for naming (towered airports with ATIS first, then by size)
-            centers = sorted(
-                cluster,
-                key=lambda x: (
-                    0 if x[1].get('atis') else 1,  # ATIS first
-                    x[2],  # Then by size
-                    x[0]   # Then alphabetically
-                )
-            )
-
-            # Generate area name from top centers
-            area_name = self._generate_area_name(centers[:3])  # Use top 3 for naming
-
-            # Sort members: ATIS first, then size, then alphabetically
-            members = [
-                (icao, data, size_priority)
-                for icao, data, size_priority, coords in cluster
-            ]
-            members.sort(key=lambda x: (
-                0 if x[1].get('atis') else 1,
-                x[2],
-                x[0]
-            ))
-
-            area_groups.append({
-                'name': area_name,
-                'airports': members,
-                'center_icao': centers[0][0] if centers else None,
-            })
-
-        # Sort area groups by the size of their primary airport
-        area_groups.sort(key=lambda g: (
-            self._get_airport_size_priority(g['center_icao']) if g['center_icao'] else 99,
-            g['name']
-        ))
-
-        return area_groups
-
-    def _generate_area_name(self, centers: List[tuple]) -> str:
-        """
-        Generate an area name from the ATIS airport centers.
-        Handles deduplication (e.g., "Sacramento / Sacramento" -> "Sacramento Area").
-        """
-        if not centers:
-            return "Unknown Area"
-
-        # Get unique city names
-        city_names = []
-        seen_cities = set()
-
-        for icao, data, size_priority, coords in centers:
-            city = self._get_airport_city(icao)
-            if not city:
-                # Fall back to airport name
-                if config.DISAMBIGUATOR:
-                    city = config.DISAMBIGUATOR.get_display_name(icao)
-                else:
-                    city = icao
-
-            # Normalize for comparison (lowercase, remove common suffixes)
-            normalized = city.lower().strip()
-            for suffix in [' area', ' metro', ' metropolitan', ' region']:
-                if normalized.endswith(suffix):
-                    normalized = normalized[:-len(suffix)].strip()
-
-            if normalized not in seen_cities:
-                seen_cities.add(normalized)
-                city_names.append(city)
-
-        if len(city_names) == 1:
-            return f"{city_names[0]} Area"
-        elif len(city_names) == 2:
-            return f"{city_names[0]} / {city_names[1]} Area"
-        else:
-            # For 3+ cities, use first two and "+"
-            return f"{city_names[0]} / {city_names[1]}+ Area"
-
-    def _group_by_city(self, airports: List[tuple]) -> List[Dict[str, Any]]:
-        """Group airports by city name."""
-        city_groups: Dict[str, List[tuple]] = {}
-        no_city = []
-
-        for icao, data, size_priority in airports:
-            city = self._get_airport_city(icao)
-            if city:
-                if city not in city_groups:
-                    city_groups[city] = []
-                city_groups[city].append((icao, data, size_priority))
-            else:
-                no_city.append((icao, data, size_priority))
-
-        result = []
-        for city, members in sorted(city_groups.items()):
-            members.sort(key=lambda x: (x[2], x[0]))
-            result.append({
-                'name': f"{city} Area",
-                'airports': members,
-                'center_icao': None,
-            })
-
-        if no_city:
-            no_city.sort(key=lambda x: (x[2], x[0]))
-            result.append({
-                'name': "Other Airports",
-                'airports': no_city,
-                'center_icao': None,
-            })
-
-        return result
-
-    def _create_fallback_area_groups(self) -> List[Dict[str, Any]]:
-        """
-        Create area groups when no ATIS airports are present.
-        Groups by city, state, or geographic proximity.
-        """
-        all_airports = [
-            (icao, data, self._get_airport_size_priority(icao))
-            for icao, data in self.weather_data.items()
-            if data.get('category') != 'UNK'  # Skip unknown weather
-        ]
-
-        if not all_airports:
+        """Create area-based groupings using shared AreaClusterer."""
+        if not config.UNIFIED_AIRPORT_DATA:
             return []
-
-        # First, try to group by city
-        city_groups: Dict[str, List[tuple]] = {}
-        state_groups: Dict[str, List[tuple]] = {}
-        no_location = []
-
-        for icao, data, size_priority in all_airports:
-            city = self._get_airport_city(icao)
-            state = self._get_airport_state(icao)
-
-            if city:
-                if city not in city_groups:
-                    city_groups[city] = []
-                city_groups[city].append((icao, data, size_priority))
-            elif state:
-                if state not in state_groups:
-                    state_groups[state] = []
-                state_groups[state].append((icao, data, size_priority))
-            else:
-                no_location.append((icao, data, size_priority))
-
-        result = []
-
-        # Add city-based groups
-        for city, members in sorted(city_groups.items()):
-            members.sort(key=lambda x: (x[2], x[0]))
-            result.append({
-                'name': f"{city} Area",
-                'airports': members,
-                'center_icao': None,
-            })
-
-        # Add state-based groups
-        for state, members in sorted(state_groups.items()):
-            members.sort(key=lambda x: (x[2], x[0]))
-            result.append({
-                'name': f"{state} Region",
-                'airports': members,
-                'center_icao': None,
-            })
-
-        # Add remaining airports
-        if no_location:
-            no_location.sort(key=lambda x: (x[2], x[0]))
-            result.append({
-                'name': "Other Airports",
-                'airports': no_location,
-                'center_icao': None,
-            })
-
-        return result
+        clusterer = AreaClusterer(
+            weather_data=self.weather_data,
+            unified_airport_data=config.UNIFIED_AIRPORT_DATA,
+            disambiguator=config.DISAMBIGUATOR,
+        )
+        return clusterer.create_area_groups()
 
     def _update_display(self) -> None:
         """Update the display with weather data"""
@@ -1119,8 +370,14 @@ class WeatherBriefingScreen(ModalScreen):
             if not area['airports']:
                 continue
 
-            # Section header with area name
+            # Count categories and build summary using shared functions
+            area_cats = count_area_categories(area['airports'])
+            area_summary = build_area_summary(area_cats, color_scheme="ui")
+
+            # Section header with area name and summary
             section_header = f"[bold cyan]━━━ {area['name'].upper()} ━━━[/bold cyan]"
+            if area_summary:
+                section_header += f"\n{area_summary}"
             section_lines = [section_header]
 
             # Airport cards in this area
@@ -1192,7 +449,8 @@ class WeatherBriefingScreen(ModalScreen):
                 else:
                     indicator = "[green bold]▲[/green bold]"
 
-                relative_time = _format_taf_relative_time(time_str)
+                raw_relative = format_taf_relative_time(time_str)
+                relative_time = f" [dim]{raw_relative}[/dim]" if raw_relative else ""
                 pred_color = CATEGORY_COLORS.get(pred_category, 'white')
 
                 # Build parts dict for each column
@@ -1349,7 +607,13 @@ class WeatherBriefingScreen(ModalScreen):
             if not area['airports']:
                 continue
 
+            # Area header and summary
+            area_cats = count_area_categories(area['airports'])
+            area_summary = build_area_summary(area_cats, color_scheme="ui")
+
             console.print(f"[bold cyan]━━━ {area['name'].upper()} ━━━[/bold cyan]")
+            if area_summary:
+                console.print(area_summary)
 
             for icao, data, _size in area['airports']:
                 card = self._build_airport_card(icao, data)
