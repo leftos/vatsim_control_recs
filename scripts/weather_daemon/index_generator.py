@@ -120,6 +120,10 @@ def generate_weather_regions(
     min_lon, max_lon = min(lons), max(lons)
 
     # Create grid and assign each cell to nearest airport
+    # Max distance squared for interpolation (~0.7 degrees, about 40-50nm)
+    # Cells farther than this from any airport won't be colored (avoids ocean fill)
+    max_dist_sq = 0.5  # 0.7^2 ≈ 0.5
+
     grid_cells = []  # [(center_lat, center_lon, nearest_airport_idx)]
 
     lat = min_lat + grid_resolution / 2
@@ -136,7 +140,9 @@ def generate_weather_regions(
                     if dist < min_dist:
                         min_dist = dist
                         nearest_idx = idx
-                grid_cells.append((lat, lon, nearest_idx))
+                # Only include cell if it's close enough to an airport
+                if min_dist <= max_dist_sq:
+                    grid_cells.append((lat, lon, nearest_idx))
             lon += grid_resolution
         lat += grid_resolution
 
@@ -1001,9 +1007,8 @@ def generate_html(
             const color = categoryColors[feature.properties.category] || categoryColors['UNK'];
             return {{
                 fillColor: color,
-                weight: 0,
-                opacity: 0,
                 fillOpacity: 0.5,
+                stroke: false,  // No border lines
             }};
         }}
 
@@ -1083,9 +1088,11 @@ def generate_html(
         }}
 
         // Render weather region cells first (below ARTCC borders)
+        // Use Canvas renderer to avoid anti-aliasing gaps between cells
         const weatherRegionLayer = L.geoJSON(weatherRegions, {{
             style: weatherRegionStyle,
             interactive: false,  // Don't capture mouse events
+            renderer: L.canvas(),
         }}).addTo(map);
 
         // ARTCC borders on top
