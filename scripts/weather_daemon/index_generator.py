@@ -1414,6 +1414,63 @@ def generate_html(
             }}
         }});
 
+        // Sidebar state persistence
+        const SIDEBAR_STATE_KEY = 'vatsim-weather-sidebar';
+
+        function saveSidebarState() {{
+            const sidebar = document.querySelector('.sidebar');
+            const openSection = document.querySelector('.artcc-section .artcc-header.active');
+            const state = {{
+                openArtcc: openSection ? openSection.closest('.artcc-section').dataset.artcc : null,
+                scrollTop: sidebar ? sidebar.scrollTop : 0,
+            }};
+            try {{
+                localStorage.setItem(SIDEBAR_STATE_KEY, JSON.stringify(state));
+            }} catch (e) {{
+                // localStorage not available
+            }}
+        }}
+
+        function restoreSidebarState() {{
+            try {{
+                const state = JSON.parse(localStorage.getItem(SIDEBAR_STATE_KEY));
+                if (!state) return;
+
+                // Restore open section
+                if (state.openArtcc) {{
+                    const section = document.querySelector(`[data-artcc="${{state.openArtcc}}"]`);
+                    if (section) {{
+                        const header = section.querySelector('.artcc-header');
+                        const list = section.querySelector('.groupings-list');
+                        if (header && list) {{
+                            header.classList.add('active');
+                            list.classList.add('open');
+                        }}
+                    }}
+                }}
+
+                // Restore scroll position (after a brief delay to ensure DOM is ready)
+                if (state.scrollTop) {{
+                    const sidebar = document.querySelector('.sidebar');
+                    if (sidebar) {{
+                        setTimeout(() => {{
+                            sidebar.scrollTop = state.scrollTop;
+                        }}, 50);
+                    }}
+                }}
+            }} catch (e) {{
+                // localStorage not available or invalid data
+            }}
+        }}
+
+        // Save sidebar scroll position on scroll
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) {{
+            sidebar.addEventListener('scroll', () => {{
+                saveSidebarState();
+            }});
+        }}
+
         // Sidebar toggle functionality
         document.querySelectorAll('.artcc-header').forEach(header => {{
             header.addEventListener('click', () => {{
@@ -1438,8 +1495,14 @@ def generate_html(
                         map.fitBounds(bounds, {{ padding: [50, 50] }});
                     }}
                 }}
+
+                // Save sidebar state after toggle
+                saveSidebarState();
             }});
         }});
+
+        // Restore sidebar state on page load
+        restoreSidebarState();
 
         // Function to scroll to ARTCC section from map popup
         function scrollToArtcc(artcc) {{
