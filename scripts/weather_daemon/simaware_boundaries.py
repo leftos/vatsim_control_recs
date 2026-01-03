@@ -33,6 +33,8 @@ def load_preset_grouping_data(preset_dir: Optional[Path] = None) -> Dict[str, Di
     """
     Load all preset groupings with full metadata (including position_prefixes).
 
+    Note: Single-airport groupings are filtered out.
+
     Returns:
         Dict mapping grouping names to their full data including:
         - airports: list of airport codes
@@ -59,17 +61,26 @@ def load_preset_grouping_data(preset_dir: Optional[Path] = None) -> Dict[str, Di
             for key, value in data.items():
                 if not isinstance(key, str):
                     continue
+
+                grouping_data = None
                 if isinstance(value, dict):
                     # New format with metadata
-                    all_data[key] = value
+                    grouping_data = value
                 elif isinstance(value, list):
                     # Old format - just airport list, no metadata
-                    all_data[key] = {
+                    grouping_data = {
                         'airports': value,
                         'position_prefixes': None,
                         'position_suffixes': None,
                         'facility_id': None,
                     }
+
+                # Filter out single-airport groupings
+                if grouping_data:
+                    airports = grouping_data.get('airports', [])
+                    if len(airports) > 1:
+                        all_data[key] = grouping_data
+
         except Exception:
             pass
 
@@ -370,6 +381,45 @@ def convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
     return lower[:-1] + upper[:-1]
 
 
+def generate_circle_polygon(
+    lat: float,
+    lon: float,
+    radius_nm: float = 5,
+    num_points: int = 32
+) -> List[Tuple[float, float]]:
+    """
+    Generate a circle polygon around a point.
+
+    Used for Tower groupings that don't have specific airspace boundaries.
+
+    Args:
+        lat: Center latitude
+        lon: Center longitude
+        radius_nm: Radius in nautical miles (default 5nm)
+        num_points: Number of points in the circle
+
+    Returns:
+        List of (lat, lon) tuples forming a circle
+    """
+    import math
+
+    # Convert nm to degrees (approximate: 1 degree lat ≈ 60nm)
+    radius_deg_lat = radius_nm / 60.0
+    # Adjust longitude for latitude (longitude degrees are smaller at higher latitudes)
+    radius_deg_lon = radius_nm / (60.0 * math.cos(math.radians(lat)))
+
+    points = []
+    for i in range(num_points):
+        angle = 2 * math.pi * i / num_points
+        pt_lat = lat + radius_deg_lat * math.sin(angle)
+        pt_lon = lon + radius_deg_lon * math.cos(angle)
+        points.append((pt_lat, pt_lon))
+
+    # Close the polygon
+    points.append(points[0])
+    return points
+
+
 def combine_polygons(
     polygons: List[List[List[float]]],
     neighbor_threshold: float = 0.05  # ~3nm at mid-latitudes
@@ -446,6 +496,7 @@ def get_all_grouping_boundaries(
     preset_dir: Optional[Path] = None,
     boundaries_dir: Optional[Path] = None,
     max_workers: int = 8,  # Kept for API compatibility, not used
+    unified_airport_data: Optional[Dict[str, Any]] = None,  # For Tower circle generation
 ) -> Dict[str, List[List[Tuple[float, float]]]]:
     """
     Get boundaries for multiple groupings from pre-downloaded SimAware data.
@@ -480,6 +531,22 @@ def get_all_grouping_boundaries(
     boundaries: Dict[str, List[List[Tuple[float, float]]]] = {}
 
     for name in grouping_names:
+        # Check if this is a Tower grouping - use circle polygon
+        if name.endswith(' Tower') and unified_airport_data:
+            grouping_data = all_grouping_data.get(name)
+            if grouping_data:
+                airports = grouping_data.get('airports', [])
+                if airports:
+                    # Get coordinates of the first (usually only) airport
+                    airport_code = airports[0]
+                    airport_info = unified_airport_data.get(airport_code, {})
+                    lat = airport_info.get('latitude')
+                    lon = airport_info.get('longitude')
+                    if lat and lon:
+                        circle = generate_circle_polygon(lat, lon, radius_nm=5)
+                        boundaries[name] = [circle]
+                        continue  # Skip to next grouping
+
         # Check for '+' pattern
         expanded_names = expand_plus_pattern(name, all_grouping_data)
 

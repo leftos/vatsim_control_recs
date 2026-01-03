@@ -644,7 +644,17 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
                 with open(json_file, 'r') as f:
                     artcc_groupings = json.load(f)
 
-                for grouping_name in artcc_groupings:
+                for grouping_name, grouping_data in artcc_groupings.items():
+                    # Filter out single-airport groupings
+                    if isinstance(grouping_data, dict):
+                        airports = grouping_data.get('airports', [])
+                    elif isinstance(grouping_data, list):
+                        airports = grouping_data
+                    else:
+                        continue
+                    if len(airports) <= 1:
+                        continue
+
                     # Resolve nested groupings (airports resolved from all_groupings)
                     resolved = resolve_grouping_recursively(grouping_name, all_groupings)
                     if resolved:
@@ -1012,7 +1022,17 @@ def generate_index_only(config: DaemonConfig) -> Dict[str, str]:
                 with open(json_file, 'r') as f:
                     artcc_groupings = json.load(f)
 
-                for grouping_name in artcc_groupings:
+                for grouping_name, grouping_data in artcc_groupings.items():
+                    # Filter out single-airport groupings
+                    if isinstance(grouping_data, dict):
+                        airports = grouping_data.get('airports', [])
+                    elif isinstance(grouping_data, list):
+                        airports = grouping_data
+                    else:
+                        continue
+                    if len(airports) <= 1:
+                        continue
+
                     resolved = resolve_grouping_recursively(grouping_name, all_groupings)
                     if resolved:
                         groupings_to_process[grouping_name] = (list(resolved), artcc)
@@ -1167,7 +1187,17 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
                 with open(json_file, 'r') as f:
                     artcc_groupings = json.load(f)
 
-                for grouping_name in artcc_groupings:
+                for grouping_name, grouping_data in artcc_groupings.items():
+                    # Filter out single-airport groupings
+                    if isinstance(grouping_data, dict):
+                        airports = grouping_data.get('airports', [])
+                    elif isinstance(grouping_data, list):
+                        airports = grouping_data
+                    else:
+                        continue
+                    if len(airports) <= 1:
+                        continue
+
                     resolved = resolve_grouping_recursively(grouping_name, all_groupings)
                     if resolved:
                         groupings_to_process[grouping_name] = (list(resolved), artcc)

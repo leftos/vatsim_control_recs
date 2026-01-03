@@ -181,6 +181,8 @@ def load_preset_groupings() -> Dict[str, List[str]]:
     Supports both old format (value is list of airports) and new format
     (value is dict with 'airports', 'position_prefixes', etc.).
 
+    Note: Single-airport groupings are filtered out.
+
     Returns:
         Dictionary mapping grouping names to lists of airport codes
     """
@@ -203,14 +205,18 @@ def load_preset_groupings() -> Dict[str, List[str]]:
             for key, value in data.items():
                 if not isinstance(key, str):
                     continue
+                airports = None
                 if isinstance(value, list):
                     # Old format: value is list of airports
-                    all_preset_groupings[key] = [str(v) for v in value]
+                    airports = [str(v) for v in value]
                 elif isinstance(value, dict) and 'airports' in value:
                     # New format: value is dict with 'airports' key
-                    airports = value['airports']
-                    if isinstance(airports, list):
-                        all_preset_groupings[key] = [str(v) for v in airports]
+                    if isinstance(value['airports'], list):
+                        airports = [str(v) for v in value['airports']]
+
+                # Filter out single-airport groupings
+                if airports and len(airports) > 1:
+                    all_preset_groupings[key] = airports
 
         except json.JSONDecodeError as e:
             logger.warning(f"Could not decode JSON from preset groupings file '{json_file.name}': {e}")

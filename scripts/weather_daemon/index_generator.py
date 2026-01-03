@@ -22,6 +22,113 @@ CONUS_ARTCCS = {
     'ZSE', 'ZTL',
 }
 
+# FAR 139 ARFF Index categories for airport markers
+# I E, I D = Major airports (show at all zoom levels)
+# I C = Regional airports (show at zoom 6+)
+FAR139_MAJOR = {'I E', 'I D'}  # ~49 airports
+FAR139_REGIONAL = {'I C'}      # ~92 airports
+
+# Weather category to marker color mapping
+MARKER_COLORS = {
+    'VFR': '#00cc00',    # Green
+    'MVFR': '#0066ff',   # Blue
+    'IFR': '#ff0000',    # Red
+    'LIFR': '#ff00ff',   # Magenta
+    'UNK': '#888888',    # Gray
+}
+
+
+def build_airport_markers(
+    artcc_groupings: Dict[str, List[Dict[str, Any]]],
+    unified_airport_data: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Build airport marker data from grouping weather points.
+
+    Collects all airports with weather data, classifies by FAR139,
+    and returns marker data for rendering on the map.
+
+    Args:
+        artcc_groupings: Dict mapping ARTCC codes to groupings with weather points
+        unified_airport_data: Airport data containing FAR_139_TYPE_CODE
+
+    Returns:
+        List of marker dicts: {icao, lat, lon, category, color, tier}
+        tier: 'major' (zoom 4+), 'regional' (zoom 6+)
+    """
+    if not unified_airport_data:
+        return []
+
+    # Collect all airport weather points from all groupings
+    all_airports: Dict[str, Dict[str, Any]] = {}  # icao -> weather data
+
+    for artcc, groupings in artcc_groupings.items():
+        for g in groupings:
+            # Try airport_weather_points first (has weather category)
+            weather_points = g.get('airport_weather_points', [])
+            for point in weather_points:
+                icao = point.get('icao')
+                if icao and icao not in all_airports:
+                    all_airports[icao] = point
+
+            # Fallback: use airport_coords if no weather points available
+            if not weather_points:
+                airport_coords = g.get('airport_coords', [])
+                # airport_coords is a list of (lat, lon) tuples, need to match with airports
+                # We don't have ICAO here, so we need to get airports from categories or name
+
+    # If we have no weather points, build markers directly from unified_airport_data
+    # for airports that match FAR139 criteria
+    if not all_airports:
+        for icao, info in unified_airport_data.items():
+            far139 = info.get('far139', '') or info.get('FAR_139_TYPE_CODE', '')
+            if far139 in FAR139_MAJOR or far139 in FAR139_REGIONAL:
+                lat = info.get('latitude') or info.get('lat')
+                lon = info.get('longitude') or info.get('lon')
+                if lat and lon:
+                    all_airports[icao] = {
+                        'icao': icao,
+                        'lat': lat,
+                        'lon': lon,
+                        'category': 'UNK',  # No weather data available
+                    }
+
+    # Filter and classify airports by FAR139
+    markers = []
+    for icao, point in all_airports.items():
+        airport_info = unified_airport_data.get(icao, {})
+        far139 = airport_info.get('far139', '') or airport_info.get('FAR_139_TYPE_CODE', '')
+
+        # Determine tier based on FAR139 classification
+        if far139 in FAR139_MAJOR:
+            tier = 'major'
+        elif far139 in FAR139_REGIONAL:
+            tier = 'regional'
+        else:
+            # Skip airports without FAR139 major/regional classification
+            continue
+
+        category = point.get('category', 'UNK')
+        color = MARKER_COLORS.get(category, MARKER_COLORS['UNK'])
+
+        lat = point.get('lat')
+        lon = point.get('lon')
+
+        # Skip if no coordinates
+        if not lat or not lon:
+            continue
+
+        markers.append({
+            'icao': icao,
+            'lat': lat,
+            'lon': lon,
+            'category': category,
+            'color': color,
+            'tier': tier,
+        })
+
+    return markers
+
 
 def compute_convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
     """
@@ -281,6 +388,10 @@ def generate_index_page(
     timestamp = now.strftime("%Y-%m-%d %H:%M:%SZ")
     tile_version = int(now.timestamp())  # Used to version tiles with this generation
 
+    # Build airport marker data for the map
+    airport_markers = build_airport_markers(artcc_groupings, unified_airport_data)
+    print(f"    Built {len(airport_markers)} airport markers for map")
+
     # Build the HTML
     html_content = generate_html(
         boundaries=boundaries,
@@ -290,6 +401,7 @@ def generate_index_page(
         tile_version=tile_version,
         unified_airport_data=unified_airport_data,
         simaware_cache_dir=config.artcc_cache_dir,  # Reuse ARTCC cache dir for SimAware data
+        airport_markers=airport_markers,
     )
 
     # Write index file
@@ -327,6 +439,7 @@ def generate_html(
     unified_airport_data: Optional[Dict[str, Any]] = None,
     use_tile_layer: bool = True,
     simaware_cache_dir: Optional[Path] = None,
+    airport_markers: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Generate the complete HTML content."""
 
@@ -412,7 +525,11 @@ def generate_html(
     simaware_boundaries = {}
     if simaware_cache_dir:
         print("    Fetching SimAware TRACON boundaries for groupings...")
-        simaware_boundaries = get_all_grouping_boundaries(all_grouping_names, simaware_cache_dir)
+        simaware_boundaries = get_all_grouping_boundaries(
+            all_grouping_names,
+            simaware_cache_dir,
+            unified_airport_data=unified_airport_data,
+        )
 
     for artcc in sorted_artccs:
         groupings = artcc_groupings[artcc]
@@ -885,6 +1002,41 @@ def generate_html(
             background: #1a4a8e;
         }}
 
+        .airport-popup {{
+            min-width: 80px;
+        }}
+
+        .airport-popup-header {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+
+        .airport-popup-icao {{
+            font-weight: 700;
+            font-size: 1rem;
+        }}
+
+        .airport-popup-cat {{
+            font-size: 0.8rem;
+        }}
+
+        .airport-marker-tooltip {{
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }}
+
+        .airport-marker-tooltip .leaflet-tooltip-content {{
+            margin: 0;
+        }}
+
+        .airport-marker-tooltip::before {{
+            border-top-color: #0f3460;
+        }}
+
         @media (max-width: 768px) {{
             .container {{
                 flex-direction: column;
@@ -952,13 +1104,39 @@ def generate_html(
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Initialize map centered on CONUS
+        // Parse map state from URL query params
+        const urlParams = new URLSearchParams(window.location.search);
+        const defaultCenter = [39.0, -98.0];
+        const defaultZoom = 4;
+
+        const initialLat = parseFloat(urlParams.get('lat')) || defaultCenter[0];
+        const initialLon = parseFloat(urlParams.get('lon')) || defaultCenter[1];
+        const initialZoom = parseInt(urlParams.get('z')) || defaultZoom;
+
+        // Initialize map with saved or default position
         const map = L.map('map', {{
-            center: [39.0, -98.0],
-            zoom: 4,
+            center: [initialLat, initialLon],
+            zoom: initialZoom,
             minZoom: 3,
             maxZoom: 10,
         }});
+
+        // Update URL with map state (without reloading)
+        function updateMapStateInUrl() {{
+            const center = map.getCenter();
+            const zoom = map.getZoom();
+            const params = new URLSearchParams(window.location.search);
+            params.set('lat', center.lat.toFixed(4));
+            params.set('lon', center.lng.toFixed(4));
+            params.set('z', zoom);
+            // Remove the cache-bust 'r' param if present
+            params.delete('r');
+            const newUrl = window.location.pathname + '?' + params.toString();
+            window.history.replaceState(null, '', newUrl);
+        }}
+
+        // Update URL when map moves or zooms
+        map.on('moveend', updateMapStateInUrl);
 
         // Dark tile layer
         L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
@@ -1226,6 +1404,72 @@ def generate_html(
             }});
         }});
 
+        // Airport markers data
+        const airportMarkers = {json.dumps(airport_markers or [])};
+
+        // Layer groups for airport markers (separated by visibility tier)
+        const majorMarkerGroup = L.layerGroup();
+        const regionalMarkerGroup = L.layerGroup();
+
+        // Create airport markers
+        airportMarkers.forEach(marker => {{
+            const circleMarker = L.circleMarker([marker.lat, marker.lon], {{
+                radius: 5,
+                fillColor: marker.color,
+                color: '#000000',
+                weight: 1,
+                fillOpacity: 0.9,
+            }});
+
+            // Create tooltip content with weather info (shows on hover)
+            const categoryClass = marker.category.toLowerCase();
+            const tooltipContent = `
+                <div class="airport-popup">
+                    <div class="airport-popup-header">
+                        <span class="airport-popup-icao">${{marker.icao}}</span>
+                        <span class="airport-popup-cat stat stat-${{categoryClass}}">${{marker.category}}</span>
+                    </div>
+                </div>
+            `;
+
+            // Bind tooltip with weather info (shows on hover)
+            circleMarker.bindTooltip(tooltipContent, {{
+                permanent: false,
+                direction: 'top',
+                className: 'airport-marker-tooltip',
+            }});
+
+            // Add to appropriate layer group
+            if (marker.tier === 'major') {{
+                majorMarkerGroup.addLayer(circleMarker);
+            }} else {{
+                regionalMarkerGroup.addLayer(circleMarker);
+            }}
+        }});
+
+        // Add major airports to map (always visible at zoom 4+)
+        majorMarkerGroup.addTo(map);
+
+        // Handle zoom-dependent visibility
+        function updateMarkerVisibility() {{
+            const zoom = map.getZoom();
+            // Major airports: visible at zoom 4+ (always visible on this map)
+            // Regional airports: visible at zoom 6+
+            if (zoom >= 6) {{
+                if (!map.hasLayer(regionalMarkerGroup)) {{
+                    regionalMarkerGroup.addTo(map);
+                }}
+            }} else {{
+                if (map.hasLayer(regionalMarkerGroup)) {{
+                    map.removeLayer(regionalMarkerGroup);
+                }}
+            }}
+        }}
+
+        // Update visibility on zoom change
+        map.on('zoomend', updateMarkerVisibility);
+        updateMarkerVisibility(); // Initial check
+
         // Auto-refresh countdown timer (5 minutes)
         const REFRESH_INTERVAL = 5 * 60; // seconds
         let secondsRemaining = REFRESH_INTERVAL;
@@ -1237,9 +1481,15 @@ def generate_html(
             countdownEl.textContent = `${{minutes}}:${{seconds.toString().padStart(2, '0')}}`;
 
             if (secondsRemaining <= 0) {{
-                // Reload page - if server regenerated, new HTML has new tile version
-                // Using cache-bust on HTML only, tiles use server-set version
-                window.location.href = window.location.pathname + '?r=' + Date.now();
+                // Reload page with map state preserved
+                const center = map.getCenter();
+                const zoom = map.getZoom();
+                const params = new URLSearchParams();
+                params.set('lat', center.lat.toFixed(4));
+                params.set('lon', center.lng.toFixed(4));
+                params.set('z', zoom);
+                params.set('r', Date.now()); // Cache-bust
+                window.location.href = window.location.pathname + '?' + params.toString();
             }} else {{
                 secondsRemaining--;
             }}
