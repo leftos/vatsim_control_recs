@@ -275,10 +275,10 @@ def generate_index_page(
                 artcc_stats[artcc][cat] = artcc_stats[artcc].get(cat, 0) + count
                 artcc_stats[artcc]['total'] += count
 
-    # Generate timestamp
+    # Generate timestamp and version for cache busting
     now = datetime.now(timezone.utc)
     timestamp = now.strftime("%Y-%m-%d %H:%M:%SZ")
-    cache_buster = int(now.timestamp())
+    tile_version = int(now.timestamp())  # Used to version tiles with this generation
 
     # Build the HTML
     html_content = generate_html(
@@ -286,7 +286,7 @@ def generate_index_page(
         artcc_groupings=artcc_groupings,
         artcc_stats=artcc_stats,
         timestamp=timestamp,
-        cache_buster=cache_buster,
+        tile_version=tile_version,
         unified_airport_data=unified_airport_data,
     )
 
@@ -321,7 +321,7 @@ def generate_html(
     artcc_groupings: Dict[str, List[Dict[str, Any]]],
     artcc_stats: Dict[str, Dict[str, int]],
     timestamp: str,
-    cache_buster: int = 0,
+    tile_version: int = 0,
     unified_airport_data: Optional[Dict[str, Any]] = None,
     use_tile_layer: bool = True,
 ) -> str:
@@ -498,6 +498,16 @@ def generate_html(
         .sidebar-header .timestamp {{
             font-size: 0.85rem;
             color: #888;
+        }}
+
+        .sidebar-header .next-update {{
+            font-size: 0.85rem;
+            color: #888;
+        }}
+
+        .sidebar-header .next-update #countdown {{
+            color: #ffaa00;
+            font-weight: 600;
         }}
 
         .legend {{
@@ -764,9 +774,11 @@ def generate_html(
             background: #1a1a2e;
         }}
 
-        .leaflet-tile {{
-            border: none !important;
-            outline: none !important;
+        .weather-overlay-layer img.leaflet-tile {{
+            /* Prevent gaps between weather tiles by slightly overlapping */
+            margin: -0.5px !important;
+            width: calc(100% + 1px) !important;
+            height: calc(100% + 1px) !important;
         }}
 
         .airport-tooltip {{
@@ -865,6 +877,7 @@ def generate_html(
             <div class="sidebar-header">
                 <h1>VATSIM Weather Briefings</h1>
                 <div class="timestamp">Updated: {timestamp}</div>
+                <div class="next-update">Next update: <span id="countdown">5:00</span></div>
                 <div class="legend">
                     <div class="legend-item">
                         <div class="legend-color" style="background: #ff00ff;"></div>
@@ -910,12 +923,13 @@ def generate_html(
 
         // Weather overlay tile layer (pre-rendered tiles, zoom 4-7)
         // minNativeZoom/maxNativeZoom let Leaflet scale tiles for zooms outside 4-7
-        // Cache buster prevents stale tiles from being served
-        const weatherTileLayer = L.tileLayer('tiles/{{z}}/{{x}}/{{y}}.png?v={cache_buster}', {{
+        // Version is set at generation time - changes only when tiles are regenerated
+        const weatherTileLayer = L.tileLayer('tiles/{{z}}/{{x}}/{{y}}.png?v={tile_version}', {{
             opacity: 1.0,
             minNativeZoom: 4,  // Use zoom 4 tiles for zoom 3 and below
             maxNativeZoom: 7,  // Use zoom 7 tiles for zoom 8 and above
             errorTileUrl: '',  // Don't show broken tile images
+            className: 'weather-overlay-layer',  // For CSS targeting
         }});
         weatherTileLayer.addTo(map);
 
@@ -1112,8 +1126,7 @@ def generate_html(
         function openBriefingModal(url, title) {{
             currentBriefingUrl = url;
             modalTitle.textContent = title;
-            // Add cache buster to prevent stale briefings
-            modalIframe.src = url + '?v={cache_buster}';
+            modalIframe.src = url;
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
         }}
@@ -1156,6 +1169,29 @@ def generate_html(
                 openBriefingModal(url, title);
             }});
         }});
+
+        // Auto-refresh countdown timer (5 minutes)
+        const REFRESH_INTERVAL = 5 * 60; // seconds
+        let secondsRemaining = REFRESH_INTERVAL;
+        const countdownEl = document.getElementById('countdown');
+
+        function updateCountdown() {{
+            const minutes = Math.floor(secondsRemaining / 60);
+            const seconds = secondsRemaining % 60;
+            countdownEl.textContent = `${{minutes}}:${{seconds.toString().padStart(2, '0')}}`;
+
+            if (secondsRemaining <= 0) {{
+                // Reload page - if server regenerated, new HTML has new tile version
+                // Using cache-bust on HTML only, tiles use server-set version
+                window.location.href = window.location.pathname + '?r=' + Date.now();
+            }} else {{
+                secondsRemaining--;
+            }}
+        }}
+
+        // Update countdown every second
+        setInterval(updateCountdown, 1000);
+        updateCountdown(); // Initial call
     </script>
 </body>
 </html>'''
