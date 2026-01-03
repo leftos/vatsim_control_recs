@@ -61,7 +61,17 @@ class Waypoint:
     identifier: str
     latitude: float
     longitude: float
-    waypoint_type: str  # "navaid", "fix", "airport", "coordinate"
+    waypoint_type: str  # "navaid", "fix", "airport", "coordinate", "airway_fix"
+
+
+@dataclass
+class AirwayFix:
+    """A fix along an airway with sequence number."""
+
+    identifier: str  # e.g., "MZB", "SUNOL"
+    sequence: int  # Order along the airway
+    latitude: float
+    longitude: float
 
 
 # --- NASR Cycle Calculation ---
@@ -98,10 +108,49 @@ def get_nasr_cache_path() -> Path:
     return NASR_CACHE_DIR / cycle_date
 
 
+def _download_nasr_file(url: str, dest_file: Path, quiet: bool = False) -> bool:
+    """Download a single NASR zip file and extract its .txt file.
+
+    Args:
+        url: URL to download from
+        dest_file: Path to save the extracted .txt file
+        quiet: If True, suppress print output
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'VATSIM-Control-Recs/1.0'}
+        )
+        with urllib.request.urlopen(req, timeout=NASR_TIMEOUT) as response:
+            zip_data = response.read()
+
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            # Find the .txt file in the zip
+            txt_name = dest_file.stem + ".txt"
+            for name in zf.namelist():
+                if name.endswith(txt_name) or name == txt_name:
+                    with zf.open(name) as src:
+                        dest_file.write_bytes(src.read())
+                    return True
+
+        if not quiet:
+            print(f"{txt_name} not found in {url}")
+        return False
+
+    except (urllib.error.URLError, TimeoutError, zipfile.BadZipFile) as e:
+        if not quiet:
+            print(f"Failed to download {url}: {e}")
+        return False
+
+
 def ensure_nasr_data(quiet: bool = False) -> Optional[Path]:
     """Download NASR data if missing or outdated.
 
     Auto-downloads new NASR data when a new cycle begins.
+    Downloads NAV.zip, FIX.zip, and AWY.zip separately for faster downloads.
 
     Args:
         quiet: If True, suppress print output
@@ -112,65 +161,44 @@ def ensure_nasr_data(quiet: bool = False) -> Optional[Path]:
     cache_path = get_nasr_cache_path()
     nav_file = cache_path / "NAV.txt"
     fix_file = cache_path / "FIX.txt"
+    awy_file = cache_path / "AWY.txt"
 
-    # Check if we already have the data
-    if nav_file.exists() and fix_file.exists():
+    # Check if we already have all the data
+    if nav_file.exists() and fix_file.exists() and awy_file.exists():
         return cache_path
 
-    # Try to download NASR subscription
-    # The URL format is: 28DaySub/28DaySub_YYYY-MM-DD.zip
+    cache_path.mkdir(parents=True, exist_ok=True)
     cycle_date = get_current_nasr_cycle_date()
-    url = f"{NASR_BASE_URL}28DaySub_{cycle_date}.zip"
+
+    # Download NAV.zip, FIX.zip, and AWY.zip separately (smaller, faster downloads)
+    # URL format: https://nfdc.faa.gov/webContent/28DaySub/{date}/NAV.zip
+    nav_url = f"{NASR_BASE_URL}{cycle_date}/NAV.zip"
+    fix_url = f"{NASR_BASE_URL}{cycle_date}/FIX.zip"
+    awy_url = f"{NASR_BASE_URL}{cycle_date}/AWY.zip"
+
+    if not nav_file.exists():
+        if not quiet:
+            print(f"Downloading NASR NAV data from {nav_url}...")
+        if not _download_nasr_file(nav_url, nav_file, quiet):
+            return None
+
+    if not fix_file.exists():
+        if not quiet:
+            print(f"Downloading NASR FIX data from {fix_url}...")
+        if not _download_nasr_file(fix_url, fix_file, quiet):
+            return None
+
+    if not awy_file.exists():
+        if not quiet:
+            print(f"Downloading NASR AWY data from {awy_url}...")
+        if not _download_nasr_file(awy_url, awy_file, quiet):
+            # Airways are optional - don't fail if we can't get them
+            if not quiet:
+                print("Warning: Could not download airway data")
 
     if not quiet:
-        print(f"Downloading NASR data from {url}...")
-
-    try:
-        req = urllib.request.Request(
-            url,
-            headers={'User-Agent': 'VATSIM-Control-Recs/1.0'}
-        )
-        with urllib.request.urlopen(req, timeout=NASR_TIMEOUT) as response:
-            zip_data = response.read()
-    except (urllib.error.URLError, TimeoutError) as e:
-        if not quiet:
-            print(f"Failed to download NASR: {e}")
-        return None
-
-    # Extract NAV.txt and FIX.txt from the zip
-    try:
-        cache_path.mkdir(parents=True, exist_ok=True)
-
-        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
-            # Find and extract NAV.txt
-            nav_found = False
-            fix_found = False
-
-            for name in zf.namelist():
-                # NAV.txt is in NAV/NAV.txt
-                if name.endswith("NAV.txt") or name == "NAV.txt":
-                    with zf.open(name) as src:
-                        nav_file.write_bytes(src.read())
-                    nav_found = True
-                # FIX.txt is in FIX/FIX.txt
-                elif name.endswith("FIX.txt") or name == "FIX.txt":
-                    with zf.open(name) as src:
-                        fix_file.write_bytes(src.read())
-                    fix_found = True
-
-            if not nav_found or not fix_found:
-                if not quiet:
-                    print(f"NAV.txt or FIX.txt not found in NASR zip (found NAV: {nav_found}, FIX: {fix_found})")
-                return None
-
-            if not quiet:
-                print(f"NASR data cached to {cache_path}")
-            return cache_path
-
-    except zipfile.BadZipFile as e:
-        if not quiet:
-            print(f"Invalid NASR zip file: {e}")
-        return None
+        print(f"NASR data cached to {cache_path}")
+    return cache_path
 
 
 def cleanup_old_nasr_caches(keep_cycles: int = 2) -> int:
@@ -243,15 +271,15 @@ def _parse_dms_to_decimal(dms_str: str) -> Optional[float]:
 def _parse_nav_record(line: str) -> Optional[Navaid]:
     """Parse a NAV.txt record line.
 
-    NAV.txt format is fixed-width. Key fields:
-    - Positions 1-4: Record type (NAV1, NAV2, etc.)
+    NAV.txt format is fixed-width. Key fields (as of 2025-12-25 cycle):
+    - Positions 0-4: Record type (NAV1, NAV2, etc.)
     - NAV1 records contain the main navaid data
-    - Positions 5-8: Navaid type (VOR, VORDME, NDB, TACAN, etc.)
-    - Positions 9-12: Identifier (may have spaces)
-    - Positions 43-72: Official name
-    - Positions 372-385: Latitude (DMS format)
-    - Positions 397-410: Longitude (DMS format)
-    - Positions 143-144: State
+    - Positions 4-8: Identifier (e.g., "SFO ", "OAK ")
+    - Positions 8-28: Navaid type (VOR, VORDME, NDB, TACAN, etc.)
+    - Positions 42-72: Official name/city
+    - Positions 142-144: State
+    - Positions 371-385: Latitude (DMS format)
+    - Positions 396-411: Longitude (DMS format)
 
     Args:
         line: Raw NAV.txt record line
@@ -268,8 +296,8 @@ def _parse_nav_record(line: str) -> Optional[Navaid]:
         return None
 
     try:
-        navaid_type = line[4:24].strip()
-        identifier = line[24:28].strip()
+        identifier = line[4:8].strip()
+        navaid_type = line[8:28].strip()
         name = line[42:72].strip()
         state = line[142:144].strip()
 
@@ -413,6 +441,183 @@ def load_fixes() -> Dict[str, Fix]:
     return fixes
 
 
+def _parse_awy_record(line: str) -> Optional[Tuple[str, AirwayFix]]:
+    """Parse an AWY.txt record line (AWY2 records only).
+
+    AWY.txt format is fixed-width. AWY2 records contain fix details:
+    - Positions 0-4: Record type (AWY1, AWY2, etc.)
+    - AWY2 records contain the fix location data
+    - Positions 4:13: Airway designator (e.g., "V27      ")
+    - Positions 13:16: Sequence number
+    - Positions 16:46: Fix name (full name)
+    - Latitude/longitude in DMS format (variable position, use regex)
+    - Fix identifier is near the end of the line
+
+    Args:
+        line: Raw AWY.txt record line
+
+    Returns:
+        Tuple of (airway_designator, AirwayFix) if valid, None otherwise
+    """
+    if len(line) < 120:
+        return None
+
+    # Only process AWY2 records (fix location data)
+    record_type = line[0:4].strip()
+    if record_type != "AWY2":
+        return None
+
+    try:
+        # Extract airway designator and sequence number
+        # Format: "AWY2" + airway (variable length) + spaces + sequence + fix name
+        # e.g., "AWY2V27      20REDIN..." or "AWY2J1      100AVENAL..."
+        header_match = re.match(r'AWY2([A-Z][A-Z0-9]*)\s*(\d+)', line)
+        if not header_match:
+            return None
+
+        airway = header_match.group(1)
+        sequence = int(header_match.group(2))
+
+        # Find latitude and longitude using regex
+        # Pattern: digits-digits-digits.decimals + N/S or E/W
+        # Some records have no space before lat (e.g., "CAK232-57-03.86N")
+        # so we look for 2-digit lat degrees followed by -mm-ss pattern
+        lat_match = re.search(r'(\d{2})-(\d{2})-(\d{2}\.?\d*)([NS])', line)
+        lon_match = re.search(r'(\d{2,3})-(\d{2})-(\d{2}\.?\d*)([EW])', line)
+
+        if not lat_match or not lon_match:
+            return None
+
+        # Parse latitude
+        lat_deg = int(lat_match.group(1))
+        lat_min = int(lat_match.group(2))
+        lat_sec = float(lat_match.group(3)) if lat_match.group(3) else 0.0
+        latitude = lat_deg + lat_min / 60 + lat_sec / 3600
+        if lat_match.group(4) == 'S':
+            latitude = -latitude
+
+        # Parse longitude
+        lon_deg = int(lon_match.group(1))
+        lon_min = int(lon_match.group(2))
+        lon_sec = float(lon_match.group(3)) if lon_match.group(3) else 0.0
+        longitude = lon_deg + lon_min / 60 + lon_sec / 3600
+        if lon_match.group(4) == 'W':
+            longitude = -longitude
+
+        # Extract fix identifier from the remaining part of the line
+        # Format is typically: "... V27  *REDIN*CA..." or "...MZB V27  *MZB*C..."
+        remaining = line[lon_match.end():]
+
+        fix_id = None
+
+        # Pattern 1: Look for *FIXID* pattern (most common for fixes)
+        star_match = re.search(r'\*([A-Z]{2,5})\*', remaining)
+        if star_match:
+            fix_id = star_match.group(1)
+        else:
+            # Pattern 2: Look for 3-letter code followed by airway (for VORTACs)
+            id_match = re.search(r'\s+([A-Z]{2,5})\s+' + re.escape(airway), remaining)
+            if id_match:
+                fix_id = id_match.group(1)
+
+        if not fix_id:
+            return None
+
+        return (airway, AirwayFix(
+            identifier=fix_id,
+            sequence=sequence,
+            latitude=latitude,
+            longitude=longitude,
+        ))
+
+    except (IndexError, ValueError):
+        return None
+
+
+@lru_cache(maxsize=1)
+def load_airways() -> Dict[str, List[AirwayFix]]:
+    """Load all airways from NASR data.
+
+    Returns:
+        Dict mapping airway designator to ordered list of AirwayFix objects
+    """
+    cache_path = ensure_nasr_data(quiet=True)
+    if not cache_path:
+        return {}
+
+    awy_file = cache_path / "AWY.txt"
+    if not awy_file.exists():
+        return {}
+
+    airways: Dict[str, List[AirwayFix]] = {}
+
+    try:
+        with open(awy_file, "r", encoding="latin-1") as f:
+            for line in f:
+                result = _parse_awy_record(line)
+                if result:
+                    airway, fix = result
+                    if airway not in airways:
+                        airways[airway] = []
+                    airways[airway].append(fix)
+
+        # Sort each airway's fixes by sequence number
+        for airway in airways:
+            airways[airway].sort(key=lambda f: f.sequence)
+
+    except (OSError, IOError):
+        return {}
+
+    return airways
+
+
+def get_airway_fixes(
+    airway: str,
+    entry_fix: Optional[str] = None,
+    exit_fix: Optional[str] = None
+) -> List[AirwayFix]:
+    """Get fixes along an airway, optionally between entry and exit points.
+
+    Args:
+        airway: Airway designator (e.g., "V27", "J1")
+        entry_fix: Optional entry fix identifier (start of segment)
+        exit_fix: Optional exit fix identifier (end of segment)
+
+    Returns:
+        List of AirwayFix objects along the airway segment
+    """
+    airways = load_airways()
+    if airway not in airways:
+        return []
+
+    fixes = airways[airway]
+
+    if not entry_fix and not exit_fix:
+        return fixes
+
+    # Find entry and exit indices
+    entry_idx = 0
+    exit_idx = len(fixes) - 1
+
+    if entry_fix:
+        for i, fix in enumerate(fixes):
+            if fix.identifier == entry_fix:
+                entry_idx = i
+                break
+
+    if exit_fix:
+        for i, fix in enumerate(fixes):
+            if fix.identifier == exit_fix:
+                exit_idx = i
+                break
+
+    # Handle reversed direction (exit before entry)
+    if entry_idx > exit_idx:
+        entry_idx, exit_idx = exit_idx, entry_idx
+
+    return fixes[entry_idx:exit_idx + 1]
+
+
 def get_waypoint_coordinates(identifier: str) -> Optional[Tuple[float, float]]:
     """Get coordinates for a waypoint identifier.
 
@@ -475,14 +680,45 @@ def _parse_coordinate_fix(identifier: str) -> Optional[Tuple[float, float]]:
     return None
 
 
+def _get_fix_identifier(
+    part: str,
+    airports: Dict[str, Tuple[float, float]]
+) -> Optional[str]:
+    """Try to resolve a route part to a known fix/navaid identifier.
+
+    Returns the identifier if found, None otherwise.
+    """
+    part = part.upper()
+
+    # Check airports
+    if part in airports:
+        return part
+    if len(part) == 4 and part.startswith('K') and part[1:] in airports:
+        return part
+
+    # Check navaids
+    navaids = load_navaids()
+    if part in navaids:
+        return part
+
+    # Check fixes
+    fixes = load_fixes()
+    if part in fixes:
+        return part
+
+    return None
+
+
 def parse_route_string(
     route: str,
     airports: Optional[Dict[str, Tuple[float, float]]] = None
 ) -> List[Waypoint]:
     """Parse a filed route string into waypoints with coordinates.
 
+    Expands airways (V, J, T, Q routes) into their constituent fixes.
+
     Args:
-        route: Filed route string (e.g., "SUNOL V27 HES V23 DAHJY")
+        route: Filed route string (e.g., "SUNOL V27 BSR")
         airports: Optional dict mapping ICAO codes to (lat, lon) tuples
 
     Returns:
@@ -493,24 +729,73 @@ def parse_route_string(
 
     airports = airports or {}
     waypoints: List[Waypoint] = []
+    seen_identifiers: set = set()  # Avoid duplicates
 
     # Split route on whitespace
     parts = route.upper().split()
 
-    for part in parts:
-        # Skip airways (V##, J##, T##, Q##)
+    i = 0
+    while i < len(parts):
+        part = parts[i]
+
+        # Check if this is an airway (V##, J##, T##, Q##)
         if re.match(r'^[VJTQ]\d+$', part):
+            # Find entry fix (previous waypoint) and exit fix (next non-airway part)
+            entry_fix = waypoints[-1].identifier if waypoints else None
+
+            # Look ahead to find exit fix
+            exit_fix = None
+            j = i + 1
+            while j < len(parts):
+                next_part = parts[j]
+                # Skip consecutive airways
+                if re.match(r'^[VJTQ]\d+$', next_part):
+                    j += 1
+                    continue
+                # Skip DCT
+                if next_part == 'DCT':
+                    j += 1
+                    continue
+                # Skip SID/STAR names
+                if re.match(r'^[A-Z]+\d+[A-Z]*$', next_part) and len(next_part) > 5:
+                    j += 1
+                    continue
+                # Found a potential exit fix
+                exit_fix = _get_fix_identifier(next_part, airports)
+                break
+
+            # Get airway fixes between entry and exit
+            if entry_fix or exit_fix:
+                airway_fixes = get_airway_fixes(part, entry_fix, exit_fix)
+
+                # Add intermediate fixes (skip entry since it's already added)
+                for awy_fix in airway_fixes:
+                    if awy_fix.identifier not in seen_identifiers:
+                        # Skip if this is the entry fix (already in waypoints)
+                        if entry_fix and awy_fix.identifier == entry_fix:
+                            continue
+                        waypoints.append(Waypoint(
+                            identifier=awy_fix.identifier,
+                            latitude=awy_fix.latitude,
+                            longitude=awy_fix.longitude,
+                            waypoint_type="airway_fix",
+                        ))
+                        seen_identifiers.add(awy_fix.identifier)
+
+            i += 1
             continue
 
         # Skip SID/STAR names with digits (often at start/end)
         if re.match(r'^[A-Z]+\d+[A-Z]*$', part) and len(part) > 5:
+            i += 1
             continue
 
         # Skip DCT (direct)
         if part == 'DCT':
+            i += 1
             continue
 
-        # Try to get coordinates
+        # Try to get coordinates for this waypoint
         coords = None
         waypoint_type = ""
 
@@ -542,13 +827,16 @@ def parse_route_string(
                 else:
                     waypoint_type = "fix"
 
-        if coords:
+        if coords and part not in seen_identifiers:
             waypoints.append(Waypoint(
                 identifier=part,
                 latitude=coords[0],
                 longitude=coords[1],
                 waypoint_type=waypoint_type,
             ))
+            seen_identifiers.add(part)
+
+        i += 1
 
     return waypoints
 
@@ -560,3 +848,4 @@ def clear_navaid_cache() -> None:
     """
     load_navaids.cache_clear()
     load_fixes.cache_clear()
+    load_airways.cache_clear()

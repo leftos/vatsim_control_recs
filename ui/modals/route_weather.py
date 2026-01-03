@@ -98,6 +98,7 @@ class RouteWeatherScreen(ModalScreen):
         # Will be populated asynchronously
         self.waypoints: List[Waypoint] = []
         self.route_airports: List[str] = []  # Airports along the route
+        self.waypoint_airports: Dict[str, List[str]] = {}  # waypoint_id -> nearby airports
         self.weather_data: Dict[str, Dict[str, Any]] = {}
         self._pending_tasks: list = []
 
@@ -156,8 +157,6 @@ class RouteWeatherScreen(ModalScreen):
             airports_to_fetch.add(self.arrival)
 
         # Find airports near each waypoint
-        waypoint_airports: Dict[str, List[str]] = {}  # waypoint_id -> nearby airports
-
         for waypoint in self.waypoints:
             if config.UNIFIED_AIRPORT_DATA:
                 nearby = find_airports_near_position(
@@ -173,7 +172,7 @@ class RouteWeatherScreen(ModalScreen):
                     if len(icao) == 4 and icao.isalpha() and icao not in (self.departure, self.arrival)
                 ]
                 if nearby_icao:
-                    waypoint_airports[waypoint.identifier] = nearby_icao
+                    self.waypoint_airports[waypoint.identifier] = nearby_icao
                     airports_to_fetch.update(nearby_icao)
 
         # Build ordered list of airports along route
@@ -185,8 +184,8 @@ class RouteWeatherScreen(ModalScreen):
 
         # Add waypoint-associated airports in order
         for waypoint in self.waypoints:
-            if waypoint.identifier in waypoint_airports:
-                for icao in waypoint_airports[waypoint.identifier]:
+            if waypoint.identifier in self.waypoint_airports:
+                for icao in self.waypoint_airports[waypoint.identifier]:
                     if icao not in self.route_airports:
                         self.route_airports.append(icao)
 
@@ -229,11 +228,12 @@ class RouteWeatherScreen(ModalScreen):
 
     def _update_display(self) -> None:
         """Update the display with weather data"""
-        # Count categories
-        category_counts = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0, "UNK": 0}
+        # Count categories (excluding UNK)
+        category_counts = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0}
         for data in self.weather_data.values():
             cat = data.get('category', 'UNK')
-            category_counts[cat] = category_counts.get(cat, 0) + 1
+            if cat != 'UNK':
+                category_counts[cat] = category_counts.get(cat, 0) + 1
 
         # Build summary
         summary_parts = []
@@ -254,23 +254,45 @@ class RouteWeatherScreen(ModalScreen):
         summary_widget = self.query_one("#route-wx-summary", Static)
         summary_widget.update(summary_text)
 
-        # Build content
+        # Build content - intersperse waypoints with their nearby airports
         sections = []
 
         # Departure section
-        if self.departure and self.departure in self.weather_data:
+        if self.departure and self._has_valid_weather(self.departure):
             sections.append(self._build_section("DEPARTURE", [self.departure]))
 
-        # Enroute section - airports along the route (excluding departure/arrival)
-        enroute = [
-            icao for icao in self.route_airports
-            if icao not in (self.departure, self.arrival) and icao in self.weather_data
-        ]
-        if enroute:
-            sections.append(self._build_section("ENROUTE", enroute))
+        # Enroute section - show waypoints with their associated airports
+        enroute_lines = []
+        shown_airports: Set[str] = set()  # Track airports already shown
+
+        for waypoint in self.waypoints:
+            # Get airports associated with this waypoint
+            wp_airports = self.waypoint_airports.get(waypoint.identifier, [])
+            # Filter to airports with valid weather that haven't been shown yet
+            valid_airports = [
+                icao for icao in wp_airports
+                if self._has_valid_weather(icao) and icao not in shown_airports
+            ]
+
+            if valid_airports:
+                # Show waypoint header
+                enroute_lines.append(f"[dim]── {waypoint.identifier} ({waypoint.waypoint_type}) ──[/dim]")
+                # Show each airport's weather
+                for icao in valid_airports:
+                    data = self.weather_data.get(icao, {})
+                    card = self._build_airport_card(icao, data)
+                    enroute_lines.append(card)
+                    shown_airports.add(icao)
+                enroute_lines.append("")  # Blank line between waypoint groups
+
+        if enroute_lines:
+            # Remove trailing blank line
+            if enroute_lines and enroute_lines[-1] == "":
+                enroute_lines.pop()
+            sections.append("[bold cyan]═══ ENROUTE ═══[/bold cyan]\n" + "\n".join(enroute_lines))
 
         # Arrival section
-        if self.arrival and self.arrival in self.weather_data:
+        if self.arrival and self._has_valid_weather(self.arrival):
             sections.append(self._build_section("ARRIVAL", [self.arrival]))
 
         content_widget = self.query_one("#route-wx-content", Static)
@@ -281,11 +303,18 @@ class RouteWeatherScreen(ModalScreen):
         else:
             content_widget.update("[dim]No airports found along route[/dim]")
 
+    def _has_valid_weather(self, icao: str) -> bool:
+        """Check if an airport has valid (non-UNK) weather data."""
+        data = self.weather_data.get(icao, {})
+        return data.get('category', 'UNK') != 'UNK'
+
     def _build_section(self, header: str, airports: List[str]) -> str:
-        """Build a section with header and airport cards"""
+        """Build a section with header and airport cards (filters out UNK)"""
         lines = [f"[bold cyan]═══ {header} ═══[/bold cyan]"]
 
         for icao in airports:
+            if not self._has_valid_weather(icao):
+                continue
             data = self.weather_data.get(icao, {})
             card = self._build_airport_card(icao, data)
             lines.append(card)
@@ -297,7 +326,7 @@ class RouteWeatherScreen(ModalScreen):
         lines = []
 
         # Header with airport name and colored category suffix
-        category = data.get('category', 'UNK')
+        category = data.get('category', 'VFR')
         color = CATEGORY_COLORS.get(category, 'white')
         pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
 
@@ -307,10 +336,6 @@ class RouteWeatherScreen(ModalScreen):
 
         header = f"[bold]{icao}[/bold] ({pretty_name}) // [{color} bold]{category}[/{color} bold]{distance_str}"
         lines.append(header)
-
-        # Skip further details if no METAR
-        if category == 'UNK':
-            return "\n".join(lines)
 
         # Observation time line (Zulu + Local)
         obs_time = data.get('obs_time')
