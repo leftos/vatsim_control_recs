@@ -1228,16 +1228,42 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
                 logger.info(f"Retrieved {len(metars)} METARs, {len(tafs)} TAFs from bbox queries")
 
         # Fallback: fetch any missing airports individually (e.g., custom groupings or bbox misses)
-        missing_airports = [a for a in airports_list if a not in metars]
-        if missing_airports:
-            print(f"  Fetching {len(missing_airports)} missing airports individually...")
-            logger.info(f"Fetching {len(missing_airports)} airports individually (fallback)")
+        # Filter to only airports likely to have METAR reporting:
+        # - 4-letter ICAO starting with 'K' (US airports with METAR stations)
+        # - OR has an actual control tower (not NON-ATCT)
+        # - OR has FAR 139 certification (scheduled passenger service)
+        # - OR has an IATA code (commercial airports)
+        # This avoids hundreds of wasted requests for small private strips like "68AR", "7CO8"
+        def likely_has_metar(icao: str) -> bool:
+            if len(icao) == 4 and icao.startswith('K'):
+                return True
+            airport_info = unified_airport_data.get(icao, {})
+            tower_type = airport_info.get('tower_type', '')
+            # Only count actual towers, not NON-ATCT
+            if tower_type and tower_type != 'NON-ATCT':
+                return True
+            if airport_info.get('far139'):
+                return True
+            if airport_info.get('iata'):
+                return True
+            return False
 
-            fallback_metars = get_metar_batch(missing_airports, max_workers=config.max_workers)
-            fallback_tafs = get_taf_batch(missing_airports, max_workers=config.max_workers)
+        missing_airports = [a for a in airports_list if a not in metars]
+        fetchable_airports = [a for a in missing_airports if likely_has_metar(a)]
+        skipped_count = len(missing_airports) - len(fetchable_airports)
+
+        if fetchable_airports:
+            print(f"  Fetching {len(fetchable_airports)} missing airports individually (skipping {skipped_count} unlikely to have METAR)...")
+            logger.info(f"Fetching {len(fetchable_airports)} airports individually, skipping {skipped_count} without likely METAR")
+
+            fallback_metars = get_metar_batch(fetchable_airports, max_workers=config.max_workers)
+            fallback_tafs = get_taf_batch(fetchable_airports, max_workers=config.max_workers)
 
             metars.update(fallback_metars)
             tafs.update(fallback_tafs)
+        elif skipped_count > 0:
+            print(f"  Skipping {skipped_count} airports unlikely to have METAR stations")
+            logger.info(f"Skipping {skipped_count} airports unlikely to have METAR stations")
 
         # Log rate limit status after fetches
         rate_status = get_rate_limit_status()
@@ -1396,24 +1422,36 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
                 if icao and icao not in all_airport_weather:
                     all_airport_weather[icao] = point
 
+    valid_weather_count = sum(1 for ap in all_airport_weather.values()
+                               if ap.get('category') in {'VFR', 'MVFR', 'IFR', 'LIFR'})
+    print(f"    Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
+    logger.info(f"Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
+
     # Get ARTCC boundaries for tile generation
     from .index_generator import CONUS_ARTCCS
     artcc_boundaries = get_artcc_boundaries(config.artcc_cache_dir)
 
-    # Generate tiles
-    tiles_dir = config.output_dir / "tiles"
-    tile_results = generate_weather_tiles(
-        artcc_boundaries=artcc_boundaries,
-        airport_weather=all_airport_weather,
-        output_dir=tiles_dir,
-        conus_artccs=CONUS_ARTCCS,
-        zoom_levels=(4, 5, 6, 7, 8, 9, 10),
-        max_workers=config.max_workers,
-    )
+    print(f"    Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
+    logger.info(f"Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
 
-    total_tiles = sum(tile_results.values())
-    print(f"    Generated {total_tiles} weather tiles")
-    logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
+    if not all_airport_weather:
+        print("    WARNING: No airport weather data collected - skipping tile generation")
+        logger.warning("No airport weather data collected - skipping tile generation")
+    else:
+        # Generate tiles (zoom 4-7: continental to regional view)
+        tiles_dir = config.output_dir / "tiles"
+        tile_results = generate_weather_tiles(
+            artcc_boundaries=artcc_boundaries,
+            airport_weather=all_airport_weather,
+            output_dir=tiles_dir,
+            conus_artccs=CONUS_ARTCCS,
+            zoom_levels=(4, 5, 6, 7),
+            max_workers=2,  # Keep low for memory-constrained servers
+        )
+
+        total_tiles = sum(tile_results.values())
+        print(f"    Generated {total_tiles} weather tiles")
+        logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
 
     # Generate index if enabled
     if config.generate_index:
@@ -1778,24 +1816,36 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
                 if icao and icao not in all_airport_weather:
                     all_airport_weather[icao] = point
 
+    valid_weather_count = sum(1 for ap in all_airport_weather.values()
+                               if ap.get('category') in {'VFR', 'MVFR', 'IFR', 'LIFR'})
+    print(f"    Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
+    logger.info(f"Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
+
     # Get ARTCC boundaries for tile generation
     from .index_generator import CONUS_ARTCCS
     artcc_boundaries = get_artcc_boundaries(config.artcc_cache_dir)
 
-    # Generate tiles
-    tiles_dir = config.output_dir / "tiles"
-    tile_results = generate_weather_tiles(
-        artcc_boundaries=artcc_boundaries,
-        airport_weather=all_airport_weather,
-        output_dir=tiles_dir,
-        conus_artccs=CONUS_ARTCCS,
-        zoom_levels=(4, 5, 6, 7, 8, 9, 10),
-        max_workers=config.max_workers,
-    )
+    print(f"    Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
+    logger.info(f"Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
 
-    total_tiles = sum(tile_results.values())
-    print(f"    Generated {total_tiles} weather tiles")
-    logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
+    if not all_airport_weather:
+        print("    WARNING: No airport weather data collected - skipping tile generation")
+        logger.warning("No airport weather data collected - skipping tile generation")
+    else:
+        # Generate tiles (zoom 4-7: continental to regional view)
+        tiles_dir = config.output_dir / "tiles"
+        tile_results = generate_weather_tiles(
+            artcc_boundaries=artcc_boundaries,
+            airport_weather=all_airport_weather,
+            output_dir=tiles_dir,
+            conus_artccs=CONUS_ARTCCS,
+            zoom_levels=(4, 5, 6, 7),
+            max_workers=2,  # Keep low for memory-constrained servers
+        )
+
+        total_tiles = sum(tile_results.values())
+        print(f"    Generated {total_tiles} weather tiles")
+        logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
 
     # Generate index if enabled
     if config.generate_index:

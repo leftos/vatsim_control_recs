@@ -897,13 +897,13 @@ def generate_html(
         // ARTCC boundaries GeoJSON
         const artccData = {json.dumps(geojson)};
 
-        // Weather overlay tile layer (high-resolution pre-rendered tiles)
+        // Weather overlay tile layer (pre-rendered tiles, zoom 4-7)
+        // minNativeZoom/maxNativeZoom let Leaflet scale tiles for zooms outside 4-7
         const weatherTileLayer = L.tileLayer('tiles/{{z}}/{{x}}/{{y}}.png', {{
             opacity: 1.0,
-            maxZoom: 10,
-            minZoom: 4,
+            minNativeZoom: 4,  // Use zoom 4 tiles for zoom 3 and below
+            maxNativeZoom: 7,  // Use zoom 7 tiles for zoom 8 and above
             errorTileUrl: '',  // Don't show broken tile images
-            // Don't show tiles outside our generated range
         }});
         weatherTileLayer.addTo(map);
 
