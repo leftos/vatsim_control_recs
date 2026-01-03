@@ -9,3 +9,12 @@ spacy>=3.0.0
 
 # Thread-safe caching with TTL and size limits
 cachetools>=5.3.0
+
+# Image processing for weather map tile generation
+Pillow>=10.0.0
+
+# Numerical computing for vectorized tile generation
+numpy>=1.24.0
+
+# Spatial indexing for memory-efficient tile generation
+scipy>=1.10.0
