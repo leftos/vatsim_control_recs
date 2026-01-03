@@ -8,6 +8,8 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = (Get-Item "$ScriptDir\..\..\..").FullName
 $OutputDir = "$ProjectRoot\test_output"
+$VenvPath = "$ProjectRoot\.venv"
+$VenvPython = "$VenvPath\Scripts\python.exe"
 
 Write-Host "=== Local Weather Briefing Test ===" -ForegroundColor Green
 Write-Host "Project root: $ProjectRoot" -ForegroundColor Cyan
@@ -17,9 +19,21 @@ Write-Host "Output dir: $OutputDir" -ForegroundColor Cyan
 Push-Location $ProjectRoot
 
 try {
+    # Check if venv exists, create if not
+    if (-not (Test-Path $VenvPython)) {
+        Write-Host ""
+        Write-Host "Creating virtual environment..." -ForegroundColor Yellow
+        python -m venv $VenvPath
+    }
+
+    # Install/update requirements
+    Write-Host ""
+    Write-Host "Installing dependencies..." -ForegroundColor Yellow
+    & $VenvPython -m pip install -q -r requirements.txt
+
     Write-Host ""
     Write-Host "Generating weather briefings..." -ForegroundColor Yellow
-    python -m scripts.weather_daemon.cli --output "$OutputDir" --verbose
+    & $VenvPython -m scripts.weather_daemon.cli --output "$OutputDir" --verbose
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
