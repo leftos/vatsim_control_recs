@@ -39,7 +39,7 @@
     "position_suffixes": null,
     "facility_id": "F11"
   },
-  "F11 Patrick Tower ": {
+  "F11 Patrick Tower": {
     "airports": [
       "KCOF"
     ],
@@ -119,7 +119,7 @@
     "position_suffixes": null,
     "facility_id": "P31"
   },
-  "CAE CAE TOWER": {
+  "CAE Tower": {
     "airports": [
       "KCAE"
     ],
@@ -200,7 +200,7 @@
     ],
     "facility_id": "VLD"
   },
-  "PAM ECP TOWER": {
+  "PAM ECP Tower": {
     "airports": [
       "KECP"
     ],
@@ -222,7 +222,7 @@
     ],
     "facility_id": "OZR"
   },
-  "VPS VPS TOWER": {
+  "VPS Tower": {
     "airports": [
       "KVPS"
     ],

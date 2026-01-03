@@ -26,7 +26,7 @@
     ],
     "facility_id": "MCI"
   },
-  "MCI MCI Local": {
+  "MCI Local": {
     "airports": [
       "KMCI"
     ],
@@ -56,7 +56,7 @@
     "position_suffixes": null,
     "facility_id": "MCI"
   },
-  "T75 T75 Combined": {
+  "T75 Combined": {
     "airports": [
       "1H0",
       "3LF",
@@ -199,7 +199,7 @@
     ],
     "facility_id": "ICT"
   },
-  "ICT ICT Local": {
+  "ICT Local": {
     "airports": [
       "KICT"
     ],
@@ -250,7 +250,7 @@
     ],
     "facility_id": "TUL"
   },
-  "TUL TUL LOCAL": {
+  "TUL LOCAL": {
     "airports": [
       "KTUL"
     ],
@@ -339,7 +339,7 @@
     ],
     "facility_id": "END"
   },
-  "END TOWER": {
+  "END Tower": {
     "airports": [
       "KEND"
     ],

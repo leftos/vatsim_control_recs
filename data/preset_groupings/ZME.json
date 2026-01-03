@@ -1,5 +1,5 @@
 {
-  "M03 M03 TRACON": {
+  "M03 TRACON": {
     "airports": [
       "01TN",
       "05TN",
@@ -83,7 +83,7 @@
     ],
     "facility_id": "M03"
   },
-  "M03 OLV TOWER": {
+  "M03 OLV Tower": {
     "airports": [
       "KOLV"
     ],
@@ -91,7 +91,7 @@
     "position_suffixes": null,
     "facility_id": "M03"
   },
-  "M03 MEM TOWER": {
+  "M03 MEM Tower": {
     "airports": [
       "KMEM"
     ],
@@ -99,7 +99,7 @@
     "position_suffixes": null,
     "facility_id": "M03"
   },
-  "BNA BNA TRACON": {
+  "BNA TRACON": {
     "airports": [
       "02TN",
       "06TN",
@@ -171,7 +171,7 @@
     ],
     "facility_id": "BNA"
   },
-  "BNA MQY TOWER": {
+  "BNA MQY Tower": {
     "airports": [
       "KMQY"
     ],
@@ -179,7 +179,7 @@
     "position_suffixes": null,
     "facility_id": "BNA"
   },
-  "BNA BNA TOWER": {
+  "BNA Tower": {
     "airports": [
       "KBNA"
     ],
@@ -193,7 +193,7 @@
     ],
     "facility_id": "BNA"
   },
-  "LIT LIT TRACON": {
+  "LIT TRACON": {
     "airports": [
       "04AR",
       "10AR",
@@ -268,7 +268,7 @@
     ],
     "facility_id": "LIT"
   },
-  "LIT LRF TOWER": {
+  "LIT LRF Tower": {
     "airports": [
       "KLRF"
     ],
@@ -276,7 +276,7 @@
     "position_suffixes": null,
     "facility_id": "LIT"
   },
-  "LIT LIT TOWER": {
+  "LIT Tower": {
     "airports": [
       "KLIT"
     ],
@@ -290,40 +290,7 @@
     ],
     "facility_id": "LIT"
   },
-  "FSM FSM TRACON - FSM": {
-    "airports": [
-      "1PP",
-      "2AR1",
-      "4M2",
-      "54AR",
-      "7M5",
-      "83OK",
-      "89OK",
-      "AR21",
-      "AR40",
-      "AR87",
-      "KAZU",
-      "KFSM",
-      "KJSV",
-      "KRKR",
-      "M27",
-      "OK06",
-      "OK27",
-      "OK34",
-      "OK52",
-      "OK59",
-      "OL38",
-      "OL42"
-    ],
-    "position_prefixes": [
-      "FSM"
-    ],
-    "position_suffixes": [
-      "APP"
-    ],
-    "facility_id": "FSM"
-  },
-  "FSM FSM TRACON - FYV": {
+  "FSM TRACON": {
     "airports": [
       "05AR",
       "0AR0",
@@ -388,7 +355,7 @@
     ],
     "facility_id": "FSM"
   },
-  "FSM ROG TOWER": {
+  "FSM ROG Tower": {
     "airports": [
       "KROG"
     ],
@@ -396,7 +363,7 @@
     "position_suffixes": null,
     "facility_id": "FSM"
   },
-  "FSM XNA TOWER": {
+  "FSM XNA Tower": {
     "airports": [
       "KXNA"
     ],
@@ -404,7 +371,7 @@
     "position_suffixes": null,
     "facility_id": "FSM"
   },
-  "FSM ASG TOWER": {
+  "FSM ASG Tower": {
     "airports": [
       "KASG"
     ],
@@ -412,7 +379,7 @@
     "position_suffixes": null,
     "facility_id": "FSM"
   },
-  "FSM FYV TOWER": {
+  "FSM FYV Tower": {
     "airports": [
       "KFYV"
     ],
@@ -420,7 +387,7 @@
     "position_suffixes": null,
     "facility_id": "FSM"
   },
-  "FSM FSM TOWER": {
+  "FSM Tower": {
     "airports": [
       "KFSM"
     ],
@@ -434,7 +401,7 @@
     ],
     "facility_id": "FSM"
   },
-  "HSV HSV TRACON": {
+  "HSV TRACON": {
     "airports": [
       "00AL",
       "1AL1",
@@ -474,7 +441,7 @@
     ],
     "facility_id": "HSV"
   },
-  "HSV HSV TOWER": {
+  "HSV Tower": {
     "airports": [
       "KHSV"
     ],
@@ -488,7 +455,7 @@
     ],
     "facility_id": "HSV"
   },
-  "JAN JAN TRACON": {
+  "JAN TRACON": {
     "airports": [
       "12MS",
       "18MS",
@@ -533,7 +500,7 @@
     ],
     "facility_id": "JAN"
   },
-  "JAN HKS TOWER": {
+  "JAN HKS Tower": {
     "airports": [
       "KHKS"
     ],
@@ -541,7 +508,7 @@
     "position_suffixes": null,
     "facility_id": "JAN"
   },
-  "JAN JAN TOWER": {
+  "JAN Tower": {
     "airports": [
       "KJAN"
     ],
@@ -554,7 +521,7 @@
     ],
     "facility_id": "JAN"
   },
-  "HOP HOP ARAC": {
+  "HOP ARAC": {
     "airports": [
       "1M9",
       "2M0",
@@ -582,7 +549,7 @@
     ],
     "facility_id": "HOP"
   },
-  "HOP HOP TOWER": {
+  "HOP Tower": {
     "airports": [
       "KHOP"
     ],
@@ -595,7 +562,7 @@
     ],
     "facility_id": "HOP"
   },
-  "CBM CBM RAPCON": {
+  "CBM RAPCON": {
     "airports": [
       "0MS9",
       "25MS",
@@ -631,7 +598,7 @@
     ],
     "facility_id": "CBM"
   },
-  "CBM CBM TOWER": {
+  "CBM Tower": {
     "airports": [
       "KCBM"
     ],
@@ -644,7 +611,7 @@
     ],
     "facility_id": "CBM"
   },
-  "NMM NMM RATCF": {
+  "NMM RATCF": {
     "airports": [
       "09A",
       "0MS0",
@@ -672,7 +639,7 @@
     ],
     "facility_id": "NMM"
   },
-  "NMM MEI TOWER": {
+  "NMM MEI Tower": {
     "airports": [
       "KMEI"
     ],
@@ -680,7 +647,7 @@
     "position_suffixes": null,
     "facility_id": "NMM"
   },
-  "NMM NMM TOWER": {
+  "NMM Tower": {
     "airports": [
       "KNMM"
     ],

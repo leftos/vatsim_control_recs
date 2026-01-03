@@ -25,7 +25,7 @@
     ],
     "facility_id": "AUS"
   },
-  "AUS GTU TOWER MAPS": {
+  "AUS GTU Tower": {
     "airports": [
       "KGTU"
     ],
@@ -33,7 +33,7 @@
     "position_suffixes": null,
     "facility_id": "AUS"
   },
-  "AUS HYI TOWER MAPS": {
+  "AUS HYI Tower": {
     "airports": [
       "KHYI"
     ],
@@ -41,7 +41,7 @@
     "position_suffixes": null,
     "facility_id": "AUS"
   },
-  "AUS AUS TOWER": {
+  "AUS Tower": {
     "airports": [
       "KAUS"
     ],
@@ -159,7 +159,7 @@
     ],
     "facility_id": "SAT"
   },
-  "SAT SAT TOWER": {
+  "SAT Tower": {
     "airports": [
       "KSAT"
     ],
@@ -167,7 +167,7 @@
     "position_suffixes": null,
     "facility_id": "SAT"
   },
-  "DLF DLF RAPCON": {
+  "DLF RAPCON": {
     "airports": [
       "5T9",
       "KDLF",
@@ -184,7 +184,7 @@
     ],
     "facility_id": "DLF"
   },
-  "DLF DLF TOWER": {
+  "DLF Tower": {
     "airports": [
       "KDLF"
     ],
@@ -192,7 +192,7 @@
     "position_suffixes": null,
     "facility_id": "DLF"
   },
-  "NQI NQI RATCF": {
+  "NQI RATCF": {
     "airports": [
       "07R",
       "67T",
@@ -211,7 +211,7 @@
     ],
     "facility_id": "NQI"
   },
-  "NQI NQI TOWER": {
+  "NQI Tower": {
     "airports": [
       "KNQI"
     ],
@@ -237,7 +237,7 @@
     ],
     "facility_id": "LCH"
   },
-  "LCH LCH TOWER": {
+  "LCH Tower": {
     "airports": [
       "KLCH"
     ],
@@ -275,7 +275,7 @@
     ],
     "facility_id": "CRP"
   },
-  "CRP LRD TOWER": {
+  "CRP LRD Tower": {
     "airports": [
       "KLRD"
     ],
@@ -283,7 +283,7 @@
     "position_suffixes": null,
     "facility_id": "CRP"
   },
-  "CRP CRP TOWER": {
+  "CRP Tower": {
     "airports": [
       "KCRP"
     ],
@@ -309,7 +309,7 @@
     ],
     "facility_id": "LFT"
   },
-  "LFT LFT TOWER": {
+  "LFT Tower": {
     "airports": [
       "KLFT"
     ],
@@ -336,7 +336,7 @@
     ],
     "facility_id": "GPT"
   },
-  "GPT GPT TOWER": {
+  "GPT Tower": {
     "airports": [
       "KGPT"
     ],
@@ -362,7 +362,7 @@
     ],
     "facility_id": "MOB"
   },
-  "MOB MOB TOWER": {
+  "MOB Tower": {
     "airports": [
       "KMOB"
     ],
@@ -386,7 +386,7 @@
     ],
     "facility_id": "BTR"
   },
-  "BTR BTR TOWER": {
+  "BTR Tower": {
     "airports": [
       "KBTR"
     ],
@@ -394,7 +394,7 @@
     "position_suffixes": null,
     "facility_id": "BTR"
   },
-  "POE POE ARAC": {
+  "POE ARAC": {
     "airports": [
       "3R4",
       "KACP",
@@ -414,7 +414,7 @@
     ],
     "facility_id": "POE"
   },
-  "POE POE TOWER": {
+  "POE Tower": {
     "airports": [
       "KPOE"
     ],
@@ -442,7 +442,7 @@
     ],
     "facility_id": "MSY"
   },
-  "MSY MSY TOWER": {
+  "MSY Tower": {
     "airports": [
       "KMSY"
     ],

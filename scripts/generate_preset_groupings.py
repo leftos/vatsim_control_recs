@@ -33,6 +33,15 @@ EXCLUDED_FACILITY_IDS = {
     'ZWY',  # Caribbean virtual ARTCC
 }
 
+# Patterns to clean from area names (applied before combining with facility ID)
+# These patterns handle redundant or noisy suffixes in vNAS area names
+AREA_NAME_CLEANUP_PATTERNS = [
+    # Remove " MAPS" suffix (e.g., "GTU TOWER MAPS" -> "GTU TOWER")
+    (r'\s+MAPS$', ''),
+    # Remove trailing " - XXX" suffixes (e.g., "FSM TRACON - FSM" -> "FSM TRACON")
+    (r'\s+-\s+[A-Z0-9]{2,4}$', ''),
+]
+
 # Country names for international airport groupings
 COUNTRY_NAMES = {
     'MY': 'Bahamas',
@@ -101,6 +110,43 @@ def is_airport_code(code: str) -> bool:
     if len(code) == 3 and code.startswith('Z'):
         return False
     return True
+
+
+def clean_area_name(area_name: str, facility_id: str) -> str:
+    """
+    Clean up an area name by removing redundant patterns.
+
+    Handles cases like:
+    - "M03 TRACON" under facility M03 → "TRACON" (removes leading facility ID)
+    - "AUS TOWER" under facility AUS → "TOWER" (removes leading facility ID)
+    - "GTU TOWER MAPS" → "GTU TOWER" (removes MAPS suffix)
+    - "FSM TRACON - FSM" → "FSM TRACON" (removes trailing airport suffix)
+
+    Args:
+        area_name: The raw area name from vNAS
+        facility_id: The parent facility ID
+
+    Returns:
+        Cleaned area name
+    """
+    name = area_name.strip()
+
+    # Apply cleanup patterns (MAPS suffix, trailing airport codes, etc.)
+    for pattern, replacement in AREA_NAME_CLEANUP_PATTERNS:
+        name = re.sub(pattern, replacement, name)
+
+    # Remove leading facility ID if area name starts with it
+    # e.g., "M03 TRACON" under M03 → "TRACON"
+    facility_upper = facility_id.upper()
+    if name.upper().startswith(facility_upper + ' '):
+        name = name[len(facility_id):].strip()
+
+    # Normalize case for common suffixes (TRACON, TOWER, etc.)
+    # Keep them uppercase for consistency
+    name = re.sub(r'\btracon\b', 'TRACON', name, flags=re.IGNORECASE)
+    name = re.sub(r'\btower\b', 'Tower', name, flags=re.IGNORECASE)
+
+    return name.strip()
 
 
 def extract_position_prefix(callsign: str) -> Optional[str]:
@@ -201,11 +247,18 @@ def extract_areas_from_facility(
         airports = [normalize_icao(code) for code in underlying if is_airport_code(code)]
 
         if airports:
-            # Avoid duplicate names like "FAT FAT" -> just use "FAT"
-            if area_name.upper() == facility_id.upper():
+            # Clean the area name to remove redundant patterns
+            cleaned_name = clean_area_name(area_name, facility_id)
+
+            # Build the group name
+            if not cleaned_name:
+                # Cleaned name is empty - use facility_id alone
+                group_name = facility_id
+            elif area_name.upper() == facility_id.upper():
+                # Exact match with facility ID - just use facility_id
                 group_name = facility_id
             else:
-                group_name = f"{facility_id} {area_name}"
+                group_name = f"{facility_id} {cleaned_name}"
 
             # Get position prefixes and suffixes for this area
             prefixes, suffixes = get_area_position_info(facility, area_id)
