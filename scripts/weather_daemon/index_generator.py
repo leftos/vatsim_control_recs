@@ -694,6 +694,25 @@ def generate_html(
             font-weight: 600;
         }}
 
+        .sidebar-header .zulu-clock {{
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #aaccff;
+            font-family: 'Consolas', 'Monaco', monospace;
+            margin: 8px 0;
+            padding: 6px 12px;
+            background: rgba(15, 52, 96, 0.6);
+            border-radius: 4px;
+            display: inline-block;
+        }}
+
+        .sidebar-header .zulu-clock .zulu-label {{
+            font-size: 0.7rem;
+            color: #888;
+            font-weight: 400;
+            margin-left: 6px;
+        }}
+
         .legend {{
             display: flex;
             gap: 10px;
@@ -1165,6 +1184,7 @@ def generate_html(
         <div class="sidebar">
             <div class="sidebar-header">
                 <h1>VATSIM Weather Briefings</h1>
+                <div class="zulu-clock"><span id="zulu-time">--:--:--</span><span class="zulu-label">ZULU</span></div>
                 <div class="timestamp">Updated: {timestamp}</div>
                 <div class="next-update">Next update: <span id="countdown">5:00</span></div>
                 <div class="legend">
@@ -1635,6 +1655,21 @@ def generate_html(
         // Update visibility on zoom change
         map.on('zoomend', updateMarkerVisibility);
         updateMarkerVisibility(); // Initial check
+
+        // Live Zulu clock
+        const zuluTimeEl = document.getElementById('zulu-time');
+
+        function updateZuluClock() {{
+            const now = new Date();
+            const hours = now.getUTCHours().toString().padStart(2, '0');
+            const minutes = now.getUTCMinutes().toString().padStart(2, '0');
+            const seconds = now.getUTCSeconds().toString().padStart(2, '0');
+            zuluTimeEl.textContent = `${{hours}}:${{minutes}}:${{seconds}}`;
+        }}
+
+        // Update Zulu clock immediately and every second
+        updateZuluClock();
+        setInterval(updateZuluClock, 1000);
 
         // Auto-refresh countdown timer (5 minutes)
         const REFRESH_INTERVAL = 5 * 60; // seconds

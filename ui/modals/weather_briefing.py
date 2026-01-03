@@ -32,6 +32,7 @@ from backend.data.weather_parsing import (
     parse_visibility_sm,
     parse_ceiling_feet,
     parse_weather_phenomena,
+    is_speci_metar,
 )
 from ui import config
 from ui.config import CATEGORY_COLORS, CATEGORY_ORDER
@@ -288,6 +289,7 @@ class WeatherBriefingScreen(ModalScreen):
                 'atis': atis_data.get(icao),
                 'phenomena': parse_weather_phenomena(metar) if metar else [],
                 'taf_changes': parse_taf_changes(taf, category, visibility_sm, ceiling_ft) if taf else [],
+                'is_speci': is_speci_metar(metar) if metar else False,
             }
 
         # Final progress
@@ -409,11 +411,16 @@ class WeatherBriefingScreen(ModalScreen):
         color = CATEGORY_COLORS.get(category, 'white')
         pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
 
+        # Add SPECI indicator if this is a special weather report
+        speci_str = ""
+        if data.get('is_speci'):
+            speci_str = " [#ff9900 bold]SPECI[/#ff9900 bold]"
+
         # Primary airports get bold ICAO
         if is_primary:
-            header = f"[bold]{icao}[/bold] - {pretty_name} // [{color} bold]{category}[/{color} bold]"
+            header = f"[bold]{icao}[/bold] - {pretty_name} // [{color} bold]{category}[/{color} bold]{speci_str}"
         else:
-            header = f"{icao} - {pretty_name} // [{color} bold]{category}[/{color} bold]"
+            header = f"{icao} - {pretty_name} // [{color} bold]{category}[/{color} bold]{speci_str}"
         lines.append(header)
 
         # Conditions line

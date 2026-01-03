@@ -308,6 +308,75 @@ def parse_wind_from_metar(metar: str) -> Optional[str]:
     return None
 
 
+def parse_metar_obs_time(metar: str) -> Optional[str]:
+    """
+    Extract observation time from METAR in DDHHMM format.
+
+    METAR format: ICAO DDHHMMZ ... (e.g., "KSFO 061756Z ...")
+    Returns the time portion without Z suffix.
+
+    Args:
+        metar: Raw METAR string
+
+    Returns:
+        Observation time string like "061756" (day 06, 17:56Z) or None
+    """
+    if not metar:
+        return None
+
+    # Match 6-digit Zulu time after the ICAO code
+    time_pattern = r'\b(\d{6})Z\b'
+    match = re.search(time_pattern, metar)
+    if match:
+        return match.group(1)
+    return None
+
+
+def is_speci_metar(metar: str) -> bool:
+    """
+    Check if a METAR is a SPECI (special) report.
+
+    SPECI METARs are issued when significant weather changes occur between
+    regular hourly observations. They indicate important changes like:
+    - Visibility dropping below or rising above minima
+    - Ceiling changes
+    - Onset or cessation of precipitation
+    - Thunderstorms or other significant weather
+
+    Args:
+        metar: Raw METAR string
+
+    Returns:
+        True if this is a SPECI report, False otherwise
+    """
+    if not metar:
+        return False
+
+    # SPECI appears at the start of the report, possibly after whitespace
+    # Common formats:
+    # - "SPECI KSFO 031756Z..."
+    # - "KSFO 031756Z... SPECI" (less common but possible)
+    metar_upper = metar.strip().upper()
+    return metar_upper.startswith('SPECI') or ' SPECI ' in metar_upper
+
+
+def format_obs_time_display(obs_time: str) -> str:
+    """
+    Format observation time for display.
+
+    Args:
+        obs_time: Time string like "061756" (DDHHMM format)
+
+    Returns:
+        Formatted string like "1756Z" (just HHMM)
+    """
+    if not obs_time or len(obs_time) != 6:
+        return obs_time or ""
+
+    # Return just HHMM portion with Z suffix
+    return f"{obs_time[2:]}Z"
+
+
 def _parse_single_weather(code: str) -> List[str]:
     """
     Parse a single weather code into human-readable format.

@@ -22,6 +22,7 @@ from backend.data.weather_parsing import (
     extract_flight_rules_weather,
     parse_weather_phenomena,
     parse_wind_from_metar,
+    is_speci_metar,
     WEATHER_PHENOMENA,
     WEATHER_DESCRIPTORS,
     WEATHER_INTENSITY,
@@ -422,6 +423,9 @@ class MetarInfoScreen(ModalScreen):
 
         # METAR with highlighted flight category components
         if metar:
+            # Check if this is a SPECI (special) report
+            if is_speci_metar(metar):
+                result_lines.append("[bold #ff9900]⚠ SPECI[/bold #ff9900] [dim](significant weather change)[/dim]")
             highlighted_metar = self._highlight_flight_category_components(metar)
             result_lines.append(highlighted_metar)
             self._update_hint(category)

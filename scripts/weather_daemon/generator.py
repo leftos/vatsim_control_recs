@@ -409,6 +409,9 @@ from backend.data.weather_parsing import (
     parse_visibility_sm,
     parse_ceiling_feet,
     parse_weather_phenomena,
+    parse_metar_obs_time,
+    format_obs_time_display,
+    is_speci_metar,
 )
 
 def get_artcc_bboxes(
@@ -492,6 +495,7 @@ class WeatherBriefingGenerator:
             color = CATEGORY_COLORS.get(category, "white")
             visibility_sm = parse_visibility_sm(metar) if metar else None
             ceiling_ft = parse_ceiling_feet(metar) if metar else None
+            obs_time = parse_metar_obs_time(metar) if metar else None
 
             self.weather_data[icao] = {
                 'metar': metar,
@@ -506,6 +510,8 @@ class WeatherBriefingGenerator:
                 'atis': atis_data.get(icao),
                 'phenomena': parse_weather_phenomena(metar) if metar else [],
                 'taf_changes': parse_taf_changes(taf, category, visibility_sm, ceiling_ft) if taf else [],
+                'obs_time': obs_time,
+                'is_speci': is_speci_metar(metar) if metar else False,
             }
 
     def _get_airport_coords(self, icao: str) -> Optional[Tuple[float, float]]:
@@ -526,15 +532,69 @@ class WeatherBriefingGenerator:
         )
         return clusterer.create_area_groups()
 
-    def _build_airport_card(self, icao: str, data: Dict[str, Any]) -> str:
-        """Build a Rich markup card for one airport."""
+    def _get_common_obs_time(self) -> Tuple[Optional[str], Set[str]]:
+        """
+        Find the most common METAR observation time and airports with different times.
+
+        Returns:
+            Tuple of (most_common_time, set of airports with different times)
+        """
+        from collections import Counter
+
+        # Count observation times (just HHMM, ignoring day)
+        time_counts: Counter = Counter()
+        airport_times: Dict[str, str] = {}
+
+        for icao, data in self.weather_data.items():
+            obs_time = data.get('obs_time')
+            if obs_time and len(obs_time) == 6:
+                # Use just HHMM for comparison (ignore day)
+                hhmm = obs_time[2:]
+                time_counts[hhmm] += 1
+                airport_times[icao] = hhmm
+
+        if not time_counts:
+            return (None, set())
+
+        # Find most common time
+        most_common_hhmm = time_counts.most_common(1)[0][0]
+
+        # Find airports with different times
+        different_airports = {
+            icao for icao, hhmm in airport_times.items()
+            if hhmm != most_common_hhmm
+        }
+
+        return (most_common_hhmm, different_airports)
+
+    def _build_airport_card(self, icao: str, data: Dict[str, Any], show_obs_time: bool = False) -> str:
+        """Build a Rich markup card for one airport.
+
+        Args:
+            icao: Airport ICAO code
+            data: Weather data dict for this airport
+            show_obs_time: If True, show observation time in header (for airports with different times)
+        """
         lines = []
 
         category = data.get('category', 'UNK')
         color = CATEGORY_COLORS.get(category, 'white')
         pretty_name = self.disambiguator.get_full_name(icao) if self.disambiguator else icao
 
-        header = f"{icao} - {pretty_name} // [{color} bold]{category}[/{color} bold]"
+        # Build header with optional observation time and SPECI indicator
+        obs_time_str = ""
+        if show_obs_time:
+            obs_time = data.get('obs_time')
+            if obs_time:
+                formatted_time = format_obs_time_display(obs_time)
+                obs_time_str = f" [#999999]({formatted_time})[/#999999]"
+
+        # Add SPECI indicator if this is a special weather report
+        speci_str = ""
+        if data.get('is_speci'):
+            speci_str = " [#ff9900 bold]SPECI[/#ff9900 bold]"
+
+        header = f"{icao} - {pretty_name}{obs_time_str} // [{color} bold]{category}[/{color} bold]{speci_str}"
         lines.append(header)
 
         conditions_parts = []
@@ -670,11 +730,22 @@ class WeatherBriefingGenerator:
         # Use StringIO to prevent console output during recording
         console = Console(record=True, force_terminal=True, width=500, file=StringIO())
 
-        now = datetime.now(timezone.utc)
-        zulu_str = now.strftime("%Y-%m-%d %H%MZ")
-        local_str = now.astimezone().strftime("%H:%M LT")
+        # Get the most common observation time and airports with different times
+        common_obs_hhmm, different_airports = self._get_common_obs_time()
+
         console.print(f"[bold]Weather Briefing: {self.grouping_name}[/bold]")
-        console.print(f"Generated: [#aaaaff]{zulu_str}[/#aaaaff] ([#ffcc66]{local_str}[/#ffcc66])\n")
+
+        # Show METAR observation time instead of generation time
+        if common_obs_hhmm:
+            now = datetime.now(timezone.utc)
+            date_str = now.strftime("%Y-%m-%d")
+            obs_time_str = f"{common_obs_hhmm[:2]}:{common_obs_hhmm[2:]}Z"
+            console.print(f"METARs from: [#aaaaff]{date_str} {obs_time_str}[/#aaaaff]\n")
+        else:
+            # Fallback if no observation times found
+            now = datetime.now(timezone.utc)
+            zulu_str = now.strftime("%Y-%m-%d %H%MZ")
+            console.print(f"Generated: [#aaaaff]{zulu_str}[/#aaaaff]\n")
 
         category_counts = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0, "UNK": 0}
         for data in self.weather_data.values():
@@ -710,7 +781,8 @@ class WeatherBriefingGenerator:
                 console.print(area_summary)
 
             for icao, data, _size in area['airports']:
-                card = self._build_airport_card(icao, data)
+                show_time = icao in different_airports
+                card = self._build_airport_card(icao, data, show_obs_time=show_time)
                 console.print(card)
             console.print()
 
