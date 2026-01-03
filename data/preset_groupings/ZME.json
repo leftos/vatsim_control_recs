@@ -1,469 +1,695 @@
 {
-  "M03 M03 TRACON": [
-    "01TN",
-    "05TN",
-    "08MS",
-    "0AR2",
-    "14TN",
-    "15AR",
-    "19MS",
-    "21MS",
-    "27TN",
-    "28TN",
-    "2M8",
-    "2TN0",
-    "2TN4",
-    "30M",
-    "34AR",
-    "3MS1",
-    "3MS2",
-    "3TN1",
-    "3TN6",
-    "4MS1",
-    "4MS3",
-    "4MS8",
-    "4TN3",
-    "4TN4",
-    "54M",
-    "54MS",
-    "5AR2",
-    "63AR",
-    "65MS",
-    "6M8",
-    "6TN7",
-    "7M4",
-    "7MS3",
-    "7TN4",
-    "7TN5",
-    "88MS",
-    "8TN0",
-    "8TN1",
-    "8TN8",
-    "8TN9",
-    "9TN6",
-    "9TN7",
-    "AR67",
-    "AR72",
-    "H75",
-    "KAWM",
-    "KFCY",
-    "KFYE",
-    "KMEM",
-    "KNQA",
-    "KOLV",
-    "KUTA",
-    "M01",
-    "M04",
-    "M41",
-    "MS55",
-    "MS64",
-    "MS65",
-    "MS9",
-    "TN01",
-    "TN18",
-    "TN25",
-    "TN28",
-    "TN29",
-    "TN43",
-    "TN58",
-    "TN59",
-    "TN61",
-    "TN69",
-    "TN70",
-    "TN99"
-  ],
-  "M03 OLV TOWER": [
-    "KOLV"
-  ],
-  "M03 MEM TOWER": [
-    "KMEM"
-  ],
-  "BNA BNA TRACON": [
-    "02TN",
-    "06TN",
-    "0TN0",
-    "0TN5",
-    "10TN",
-    "19TN",
-    "1M5",
-    "1TN0",
-    "1TN1",
-    "22TN",
-    "2TN6",
-    "2TN8",
-    "30TN",
-    "36TN",
-    "38TN",
-    "3M7",
-    "3TN9",
-    "41TN",
-    "50M",
-    "61TN",
-    "6TN1",
-    "6TN9",
-    "76TN",
-    "7TN0",
-    "7TN2",
-    "7TN3",
-    "8TN5",
-    "8TN6",
-    "9TN0",
-    "9TN1",
-    "9TN4",
-    "9TN8",
-    "9TN9",
-    "KBNA",
-    "KJWN",
-    "KMBT",
-    "KMQY",
-    "KXNX",
-    "M54",
-    "M91",
-    "TN00",
-    "TN07",
-    "TN14",
-    "TN26",
-    "TN27",
-    "TN33",
-    "TN34",
-    "TN35",
-    "TN38",
-    "TN49",
-    "TN55",
-    "TN62",
-    "TN65",
-    "TN77",
-    "TN79",
-    "TN83",
-    "TN84",
-    "TN92",
-    "TN96",
-    "TN97"
-  ],
-  "BNA MQY TOWER": [
-    "KMQY"
-  ],
-  "BNA BNA TOWER": [
-    "KBNA"
-  ],
-  "LIT LIT TRACON": [
-    "04AR",
-    "10AR",
-    "12A",
-    "12XS",
-    "13AR",
-    "16AR",
-    "17AR",
-    "19AR",
-    "1AR1",
-    "1AR2",
-    "1AR3",
-    "1AR8",
-    "1AR9",
-    "20AR",
-    "21AR",
-    "26AR",
-    "29AR",
-    "2AR0",
-    "32AR",
-    "35AR",
-    "39AR",
-    "3AR3",
-    "3AR5",
-    "3AR6",
-    "4AR1",
-    "4AR2",
-    "4AR3",
-    "4M3",
-    "52AR",
-    "56AR",
-    "5AR5",
-    "5AR6",
-    "6AR0",
-    "6AR3",
-    "6AR7",
-    "6M0",
-    "73AR",
-    "79AR",
-    "99A",
-    "9AR4",
-    "9M8",
-    "AR06",
-    "AR10",
-    "AR13",
-    "AR22",
-    "AR29",
-    "AR33",
-    "AR34",
-    "AR45",
-    "AR55",
-    "AR62",
-    "AR78",
-    "AR88",
-    "KCXW",
-    "KLIT",
-    "KLRF",
-    "KORK",
-    "KPBF",
-    "KRBM",
-    "KSGT",
-    "KSRC",
-    "KSUZ",
-    "M73",
-    "M74"
-  ],
-  "LIT LRF TOWER": [
-    "KLRF"
-  ],
-  "LIT LIT TOWER": [
-    "KLIT"
-  ],
-  "FSM FSM TRACON - FSM": [
-    "1PP",
-    "2AR1",
-    "4M2",
-    "54AR",
-    "7M5",
-    "83OK",
-    "89OK",
-    "AR21",
-    "AR40",
-    "AR87",
-    "KAZU",
-    "KFSM",
-    "KJSV",
-    "KRKR",
-    "M27",
-    "OK06",
-    "OK27",
-    "OK34",
-    "OK52",
-    "OK59",
-    "OL38",
-    "OL42"
-  ],
-  "FSM FSM TRACON - FYV": [
-    "05AR",
-    "0AR0",
-    "0AR4",
-    "0AR9",
-    "14AR",
-    "17A",
-    "18AR",
-    "1AR4",
-    "1AR5",
-    "22AR",
-    "27AR",
-    "2AR5",
-    "2AR9",
-    "38AR",
-    "3AR7",
-    "40AR",
-    "46AR",
-    "4AR8",
-    "4M1",
-    "51AR",
-    "53AR",
-    "55AR",
-    "58AR",
-    "58MU",
-    "5M5",
-    "62AR",
-    "66AR",
-    "67AR",
-    "68AR",
-    "6AR1",
-    "71AR",
-    "7AR0",
-    "7MO3",
-    "95MO",
-    "99AR",
-    "AR08",
-    "AR09",
-    "AR11",
-    "AR27",
-    "AR36",
-    "AR41",
-    "AR51",
-    "AR69",
-    "AR91",
-    "H34",
-    "KASG",
-    "KFYV",
-    "KROG",
-    "KSLG",
-    "KVBT",
-    "KXNA",
-    "MO32",
-    "MU98",
-    "OL17"
-  ],
-  "FSM ROG TOWER": [
-    "KROG"
-  ],
-  "FSM XNA TOWER": [
-    "KXNA"
-  ],
-  "FSM ASG TOWER": [
-    "KASG"
-  ],
-  "FSM FYV TOWER": [
-    "KFYV"
-  ],
-  "FSM FSM TOWER": [
-    "KFSM"
-  ],
-  "HSV HSV TRACON": [
-    "00AL",
-    "1AL1",
-    "1M3",
-    "30AL",
-    "32AL",
-    "3AL8",
-    "3AL9",
-    "3M5",
-    "4AL4",
-    "4AL5",
-    "4AL8",
-    "5AL0",
-    "5AL9",
-    "5M0",
-    "8A1",
-    "8AL7",
-    "9A4",
-    "AL04",
-    "AL10",
-    "AL36",
-    "AL93",
-    "AL99",
-    "KCMD",
-    "KDCU",
-    "KFYM",
-    "KHSV",
-    "KHUA",
-    "KMDQ",
-    "M38"
-  ],
-  "HSV HSV TOWER": [
-    "KHSV"
-  ],
-  "JAN JAN TRACON": [
-    "12MS",
-    "18MS",
-    "1MS4",
-    "37MS",
-    "3MS3",
-    "3MS6",
-    "4MS0",
-    "4MS2",
-    "4MS6",
-    "4MS9",
-    "5MS6",
-    "6MS1",
-    "6MS2",
-    "6MS6",
-    "7MS1",
-    "7MS4",
-    "7MS7",
-    "99MS",
-    "KHKS",
-    "KJAN",
-    "KJVW",
-    "KMBO",
-    "MS07",
-    "MS08",
-    "MS11",
-    "MS20",
-    "MS29",
-    "MS36",
-    "MS46",
-    "MS58",
-    "MS69",
-    "MS71",
-    "MS90",
-    "MS91"
-  ],
-  "JAN HKS TOWER": [
-    "KHKS"
-  ],
-  "JAN JAN TOWER": [
-    "KJAN"
-  ],
-  "HOP HOP ARAC": [
-    "1M9",
-    "2M0",
-    "4KY6",
-    "5KY4",
-    "5KY5",
-    "6KY5",
-    "8M7",
-    "95TN",
-    "9KY8",
-    "KCKV",
-    "KEOD",
-    "KHOP",
-    "KHVC",
-    "M21",
-    "TN23",
-    "TN53",
-    "TN93"
-  ],
-  "HOP HOP TOWER": [
-    "KHOP"
-  ],
-  "CBM CBM RAPCON": [
-    "0MS9",
-    "25MS",
-    "2MS3",
-    "2MS9",
-    "3AL0",
-    "3M8",
-    "42MS",
-    "5A4",
-    "5MS8",
-    "AL01",
-    "AL54",
-    "KAIV",
-    "KCBM",
-    "KGTR",
-    "KSTF",
-    "KUBS",
-    "M40",
-    "M44",
-    "M51",
-    "M55",
-    "M83",
-    "M95",
-    "MS56",
-    "MS63",
-    "MS76"
-  ],
-  "CBM CBM TOWER": [
-    "KCBM"
-  ],
-  "NMM NMM RATCF": [
-    "09A",
-    "0MS0",
-    "14MS",
-    "1MS8",
-    "20M",
-    "23M",
-    "3MS8",
-    "3MS9",
-    "42AL",
-    "AL43",
-    "KDYA",
-    "KMEI",
-    "KNJW",
-    "KNMM",
-    "M23",
-    "MS32",
-    "MS70"
-  ],
-  "NMM MEI TOWER": [
-    "KMEI"
-  ],
-  "NMM NMM TOWER": [
-    "KNMM"
-  ]
+  "M03 M03 TRACON": {
+    "airports": [
+      "01TN",
+      "05TN",
+      "08MS",
+      "0AR2",
+      "14TN",
+      "15AR",
+      "19MS",
+      "21MS",
+      "27TN",
+      "28TN",
+      "2M8",
+      "2TN0",
+      "2TN4",
+      "30M",
+      "34AR",
+      "3MS1",
+      "3MS2",
+      "3TN1",
+      "3TN6",
+      "4MS1",
+      "4MS3",
+      "4MS8",
+      "4TN3",
+      "4TN4",
+      "54M",
+      "54MS",
+      "5AR2",
+      "63AR",
+      "65MS",
+      "6M8",
+      "6TN7",
+      "7M4",
+      "7MS3",
+      "7TN4",
+      "7TN5",
+      "88MS",
+      "8TN0",
+      "8TN1",
+      "8TN8",
+      "8TN9",
+      "9TN6",
+      "9TN7",
+      "AR67",
+      "AR72",
+      "H75",
+      "KAWM",
+      "KFCY",
+      "KFYE",
+      "KMEM",
+      "KNQA",
+      "KOLV",
+      "KUTA",
+      "M01",
+      "M04",
+      "M41",
+      "MS55",
+      "MS64",
+      "MS65",
+      "MS9",
+      "TN01",
+      "TN18",
+      "TN25",
+      "TN28",
+      "TN29",
+      "TN43",
+      "TN58",
+      "TN59",
+      "TN61",
+      "TN69",
+      "TN70",
+      "TN99"
+    ],
+    "position_prefixes": [
+      "M03",
+      "MEM"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "M03"
+  },
+  "M03 OLV TOWER": {
+    "airports": [
+      "KOLV"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "M03"
+  },
+  "M03 MEM TOWER": {
+    "airports": [
+      "KMEM"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "M03"
+  },
+  "BNA BNA TRACON": {
+    "airports": [
+      "02TN",
+      "06TN",
+      "0TN0",
+      "0TN5",
+      "10TN",
+      "19TN",
+      "1M5",
+      "1TN0",
+      "1TN1",
+      "22TN",
+      "2TN6",
+      "2TN8",
+      "30TN",
+      "36TN",
+      "38TN",
+      "3M7",
+      "3TN9",
+      "41TN",
+      "50M",
+      "61TN",
+      "6TN1",
+      "6TN9",
+      "76TN",
+      "7TN0",
+      "7TN2",
+      "7TN3",
+      "8TN5",
+      "8TN6",
+      "9TN0",
+      "9TN1",
+      "9TN4",
+      "9TN8",
+      "9TN9",
+      "KBNA",
+      "KJWN",
+      "KMBT",
+      "KMQY",
+      "KXNX",
+      "M54",
+      "M91",
+      "TN00",
+      "TN07",
+      "TN14",
+      "TN26",
+      "TN27",
+      "TN33",
+      "TN34",
+      "TN35",
+      "TN38",
+      "TN49",
+      "TN55",
+      "TN62",
+      "TN65",
+      "TN77",
+      "TN79",
+      "TN83",
+      "TN84",
+      "TN92",
+      "TN96",
+      "TN97"
+    ],
+    "position_prefixes": [
+      "BNA"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "BNA"
+  },
+  "BNA MQY TOWER": {
+    "airports": [
+      "KMQY"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "BNA"
+  },
+  "BNA BNA TOWER": {
+    "airports": [
+      "KBNA"
+    ],
+    "position_prefixes": [
+      "BNA"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "BNA"
+  },
+  "LIT LIT TRACON": {
+    "airports": [
+      "04AR",
+      "10AR",
+      "12A",
+      "12XS",
+      "13AR",
+      "16AR",
+      "17AR",
+      "19AR",
+      "1AR1",
+      "1AR2",
+      "1AR3",
+      "1AR8",
+      "1AR9",
+      "20AR",
+      "21AR",
+      "26AR",
+      "29AR",
+      "2AR0",
+      "32AR",
+      "35AR",
+      "39AR",
+      "3AR3",
+      "3AR5",
+      "3AR6",
+      "4AR1",
+      "4AR2",
+      "4AR3",
+      "4M3",
+      "52AR",
+      "56AR",
+      "5AR5",
+      "5AR6",
+      "6AR0",
+      "6AR3",
+      "6AR7",
+      "6M0",
+      "73AR",
+      "79AR",
+      "99A",
+      "9AR4",
+      "9M8",
+      "AR06",
+      "AR10",
+      "AR13",
+      "AR22",
+      "AR29",
+      "AR33",
+      "AR34",
+      "AR45",
+      "AR55",
+      "AR62",
+      "AR78",
+      "AR88",
+      "KCXW",
+      "KLIT",
+      "KLRF",
+      "KORK",
+      "KPBF",
+      "KRBM",
+      "KSGT",
+      "KSRC",
+      "KSUZ",
+      "M73",
+      "M74"
+    ],
+    "position_prefixes": [
+      "LIT"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "LIT"
+  },
+  "LIT LRF TOWER": {
+    "airports": [
+      "KLRF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "LIT"
+  },
+  "LIT LIT TOWER": {
+    "airports": [
+      "KLIT"
+    ],
+    "position_prefixes": [
+      "LIT"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "LIT"
+  },
+  "FSM FSM TRACON - FSM": {
+    "airports": [
+      "1PP",
+      "2AR1",
+      "4M2",
+      "54AR",
+      "7M5",
+      "83OK",
+      "89OK",
+      "AR21",
+      "AR40",
+      "AR87",
+      "KAZU",
+      "KFSM",
+      "KJSV",
+      "KRKR",
+      "M27",
+      "OK06",
+      "OK27",
+      "OK34",
+      "OK52",
+      "OK59",
+      "OL38",
+      "OL42"
+    ],
+    "position_prefixes": [
+      "FSM"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "FSM"
+  },
+  "FSM FSM TRACON - FYV": {
+    "airports": [
+      "05AR",
+      "0AR0",
+      "0AR4",
+      "0AR9",
+      "14AR",
+      "17A",
+      "18AR",
+      "1AR4",
+      "1AR5",
+      "22AR",
+      "27AR",
+      "2AR5",
+      "2AR9",
+      "38AR",
+      "3AR7",
+      "40AR",
+      "46AR",
+      "4AR8",
+      "4M1",
+      "51AR",
+      "53AR",
+      "55AR",
+      "58AR",
+      "58MU",
+      "5M5",
+      "62AR",
+      "66AR",
+      "67AR",
+      "68AR",
+      "6AR1",
+      "71AR",
+      "7AR0",
+      "7MO3",
+      "95MO",
+      "99AR",
+      "AR08",
+      "AR09",
+      "AR11",
+      "AR27",
+      "AR36",
+      "AR41",
+      "AR51",
+      "AR69",
+      "AR91",
+      "H34",
+      "KASG",
+      "KFYV",
+      "KROG",
+      "KSLG",
+      "KVBT",
+      "KXNA",
+      "MO32",
+      "MU98",
+      "OL17"
+    ],
+    "position_prefixes": [
+      "FYV"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "FSM"
+  },
+  "FSM ROG TOWER": {
+    "airports": [
+      "KROG"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "FSM"
+  },
+  "FSM XNA TOWER": {
+    "airports": [
+      "KXNA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "FSM"
+  },
+  "FSM ASG TOWER": {
+    "airports": [
+      "KASG"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "FSM"
+  },
+  "FSM FYV TOWER": {
+    "airports": [
+      "KFYV"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "FSM"
+  },
+  "FSM FSM TOWER": {
+    "airports": [
+      "KFSM"
+    ],
+    "position_prefixes": [
+      "FSM"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "FSM"
+  },
+  "HSV HSV TRACON": {
+    "airports": [
+      "00AL",
+      "1AL1",
+      "1M3",
+      "30AL",
+      "32AL",
+      "3AL8",
+      "3AL9",
+      "3M5",
+      "4AL4",
+      "4AL5",
+      "4AL8",
+      "5AL0",
+      "5AL9",
+      "5M0",
+      "8A1",
+      "8AL7",
+      "9A4",
+      "AL04",
+      "AL10",
+      "AL36",
+      "AL93",
+      "AL99",
+      "KCMD",
+      "KDCU",
+      "KFYM",
+      "KHSV",
+      "KHUA",
+      "KMDQ",
+      "M38"
+    ],
+    "position_prefixes": [
+      "HSV"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "HSV"
+  },
+  "HSV HSV TOWER": {
+    "airports": [
+      "KHSV"
+    ],
+    "position_prefixes": [
+      "HSV"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "HSV"
+  },
+  "JAN JAN TRACON": {
+    "airports": [
+      "12MS",
+      "18MS",
+      "1MS4",
+      "37MS",
+      "3MS3",
+      "3MS6",
+      "4MS0",
+      "4MS2",
+      "4MS6",
+      "4MS9",
+      "5MS6",
+      "6MS1",
+      "6MS2",
+      "6MS6",
+      "7MS1",
+      "7MS4",
+      "7MS7",
+      "99MS",
+      "KHKS",
+      "KJAN",
+      "KJVW",
+      "KMBO",
+      "MS07",
+      "MS08",
+      "MS11",
+      "MS20",
+      "MS29",
+      "MS36",
+      "MS46",
+      "MS58",
+      "MS69",
+      "MS71",
+      "MS90",
+      "MS91"
+    ],
+    "position_prefixes": [
+      "JAN"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "JAN"
+  },
+  "JAN HKS TOWER": {
+    "airports": [
+      "KHKS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "JAN"
+  },
+  "JAN JAN TOWER": {
+    "airports": [
+      "KJAN"
+    ],
+    "position_prefixes": [
+      "JAN"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "JAN"
+  },
+  "HOP HOP ARAC": {
+    "airports": [
+      "1M9",
+      "2M0",
+      "4KY6",
+      "5KY4",
+      "5KY5",
+      "6KY5",
+      "8M7",
+      "95TN",
+      "9KY8",
+      "KCKV",
+      "KEOD",
+      "KHOP",
+      "KHVC",
+      "M21",
+      "TN23",
+      "TN53",
+      "TN93"
+    ],
+    "position_prefixes": [
+      "HOP"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "HOP"
+  },
+  "HOP HOP TOWER": {
+    "airports": [
+      "KHOP"
+    ],
+    "position_prefixes": [
+      "HOP"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "HOP"
+  },
+  "CBM CBM RAPCON": {
+    "airports": [
+      "0MS9",
+      "25MS",
+      "2MS3",
+      "2MS9",
+      "3AL0",
+      "3M8",
+      "42MS",
+      "5A4",
+      "5MS8",
+      "AL01",
+      "AL54",
+      "KAIV",
+      "KCBM",
+      "KGTR",
+      "KSTF",
+      "KUBS",
+      "M40",
+      "M44",
+      "M51",
+      "M55",
+      "M83",
+      "M95",
+      "MS56",
+      "MS63",
+      "MS76"
+    ],
+    "position_prefixes": [
+      "CBM"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CBM"
+  },
+  "CBM CBM TOWER": {
+    "airports": [
+      "KCBM"
+    ],
+    "position_prefixes": [
+      "CBM"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "CBM"
+  },
+  "NMM NMM RATCF": {
+    "airports": [
+      "09A",
+      "0MS0",
+      "14MS",
+      "1MS8",
+      "20M",
+      "23M",
+      "3MS8",
+      "3MS9",
+      "42AL",
+      "AL43",
+      "KDYA",
+      "KMEI",
+      "KNJW",
+      "KNMM",
+      "M23",
+      "MS32",
+      "MS70"
+    ],
+    "position_prefixes": [
+      "NMM"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "NMM"
+  },
+  "NMM MEI TOWER": {
+    "airports": [
+      "KMEI"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NMM"
+  },
+  "NMM NMM TOWER": {
+    "airports": [
+      "KNMM"
+    ],
+    "position_prefixes": [
+      "NMM"
+    ],
+    "position_suffixes": [
+      "TWR"
+    ],
+    "facility_id": "NMM"
+  }
 }

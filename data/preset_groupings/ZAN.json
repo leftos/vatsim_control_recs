@@ -1,22 +1,50 @@
 {
-  "A11 Anchorage TRACON": [
-    "A11",
-    "KANC",
-    "KEDF",
-    "KFRN",
-    "KMRI"
-  ],
-  "FAI Fairbanks ATCT/TRACON": [
-    "KEIL",
-    "KFAI",
-    "KFBK"
-  ],
-  "International - Canada": [
-    "CZEG",
-    "CZVR"
-  ],
-  "International - Russia": [
-    "UHMM",
-    "UHPP"
-  ]
+  "A11 Anchorage TRACON": {
+    "airports": [
+      "A11",
+      "KANC",
+      "KEDF",
+      "KFRN",
+      "KMRI"
+    ],
+    "position_prefixes": [
+      "A11"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "A11"
+  },
+  "FAI Fairbanks ATCT/TRACON": {
+    "airports": [
+      "KEIL",
+      "KFAI",
+      "KFBK"
+    ],
+    "position_prefixes": [
+      "FAI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "FAI"
+  },
+  "International - Canada": {
+    "airports": [
+      "CZEG",
+      "CZVR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - Russia": {
+    "airports": [
+      "UHMM",
+      "UHPP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

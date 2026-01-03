@@ -1,275 +1,616 @@
 {
-  "SCT Burbank": [
-    "KBUR",
-    "KVNY",
-    "KWHP",
-    "L70"
-  ],
-  "SCT Empire": [
-    "F70",
-    "KAJO",
-    "KBNG",
-    "KCCB",
-    "KCNO",
-    "KEMT",
-    "KHMT",
-    "KONT",
-    "KPOC",
-    "KPSP",
-    "KRAL",
-    "KREI",
-    "KRIV",
-    "KSBD",
-    "KTRM",
-    "KUDD",
-    "L22",
-    "L65"
-  ],
-  "SCT Coast": [
-    "KCPM",
-    "KLGB",
-    "KSLI",
-    "KSNA",
-    "KTOA"
-  ],
-  "SCT San Diego": [
-    "KCRQ",
-    "KLRD",
-    "KMYF",
-    "KNFG",
-    "KNKX",
-    "KNRS",
-    "KNZY",
-    "KOKB",
-    "KRNM",
-    "KSAN",
-    "KSDM",
-    "KSEE",
-    "L18"
-  ],
-  "SCT Del Rey": [
-    "KAVX",
-    "KHHR",
-    "KLAX",
-    "KSMO"
-  ],
-  "SCT Consolidated": [
-    "F70",
-    "KAJO",
-    "KAVX",
-    "KBNG",
-    "KBUR",
-    "KCCB",
-    "KCNO",
-    "KCPM",
-    "KCRQ",
-    "KEMT",
-    "KFUL",
-    "KHHR",
-    "KHMT",
-    "KLAX",
-    "KLGB",
-    "KMYF",
-    "KNFG",
-    "KNKX",
-    "KNRS",
-    "KNZY",
-    "KOKB",
-    "KONT",
-    "KPOC",
-    "KPSP",
-    "KRAL",
-    "KREI",
-    "KRIR",
-    "KRIV",
-    "KRNM",
-    "KSAN",
-    "KSBD",
-    "KSDM",
-    "KSEE",
-    "KSLI",
-    "KSMO",
-    "KSNA",
-    "KTOA",
-    "KTRM",
-    "KUDD",
-    "KVNY",
-    "KWHP",
-    "L18",
-    "L22",
-    "L65",
-    "L70"
-  ],
-  "SCT Los Angeles Tower": [
-    "KLAX"
-  ],
-  "SCT Lindbergh Tower": [
-    "KLRD",
-    "KSAN"
-  ],
-  "SCT John Wayne Tower": [
-    "KSNA"
-  ],
-  "SCT Ontario Tower": [
-    "KONT"
-  ],
-  "SCT Burbank Tower": [
-    "KBUR"
-  ],
-  "SCT Palm Springs Tower": [
-    "KPSP"
-  ],
-  "SCT Long Beach Tower": [
-    "KLGB"
-  ],
-  "SCT Van Nuys Tower": [
-    "KVNY"
-  ],
-  "SCT Santa Monica Tower": [
-    "KSMO"
-  ],
-  "SCT Whiteman Tower": [
-    "KWHP"
-  ],
-  "SCT San Gabriel Valley Tower": [
-    "KEMT"
-  ],
-  "SCT Brackett Tower": [
-    "KPOC"
-  ],
-  "SCT Hawthorne Tower": [
-    "KHHR"
-  ],
-  "SCT Chino Tower": [
-    "KCNO"
-  ],
-  "SCT Riverside Tower": [
-    "KRAL"
-  ],
-  "SCT Torrance Tower": [
-    "KTOA"
-  ],
-  "SCT Los Alamitos Tower": [
-    "KSLI"
-  ],
-  "SCT Fullerton Tower": [
-    "KFUL"
-  ],
-  "SCT Ramona Tower": [
-    "KRNM"
-  ],
-  "SCT Montgomery Tower": [
-    "KMYF"
-  ],
-  "SCT Gillespie Tower": [
-    "KSEE"
-  ],
-  "SCT Palomar Tower": [
-    "KCRQ"
-  ],
-  "SCT Brown Tower": [
-    "KSDM"
-  ],
-  "SCT Springs": [
-    "KPSP",
-    "KTRM",
-    "KUDD",
-    "L22"
-  ],
-  "SCT Miramar Tower": [
-    "KNKX"
-  ],
-  "L30 L30": [
-    "0L7",
-    "KBVU",
-    "KHND",
-    "KLAS",
-    "KLSV",
-    "KVGT",
-    "U30"
-  ],
-  "L30 Las Vegas Tower": [
-    "KLAS"
-  ],
-  "L30 North Las Vegas Tower": [
-    "KVGT"
-  ],
-  "L30 Henderson Tower": [
-    "KHND"
-  ],
-  "L30 Canyon Tower": [
-    "KGCN"
-  ],
-  "SBA SBA": [
-    "KSBA",
-    "KSBP",
-    "KSMX",
-    "KVBG"
-  ],
-  "JCF JCF": [
-    "9L2",
-    "KAPV",
-    "KBYS",
-    "KEDW",
-    "KIYK",
-    "KMHV",
-    "KNID",
-    "KPMD",
-    "KTSP",
-    "KVCV",
-    "KWJF",
-    "L00",
-    "L05",
-    "L26",
-    "L71",
-    "L72",
-    "L94"
-  ],
-  "JCF Edwards Tower": [
-    "KEDW"
-  ],
-  "BFL BFL": [
-    "KBFL",
-    "KDLO",
-    "KHJO",
-    "KMIT",
-    "KPTV",
-    "KTLR",
-    "KTSP",
-    "L05",
-    "L17",
-    "L19",
-    "L45",
-    "L62",
-    "L73",
-    "L84"
-  ],
-  "BFL Tower": [
-    "KBFL"
-  ],
-  "NYL Main": [
-    "KLGF",
-    "KNYL"
-  ],
-  "NTD NTD": [
-    "KCMA",
-    "KNTD",
-    "KOXR"
-  ],
-  "LSV Nellis": [
-    "KINS",
-    "KLSV",
-    "KTNX"
-  ],
-  "NFG NFG": [
-    "KNFG"
-  ],
-  "RIV RIV": [
-    "KRIV"
-  ],
-  "International - Mexico": [
-    "MMML",
-    "MMTJ",
-    "MMZT"
-  ]
+  "SCT Burbank": {
+    "airports": [
+      "KBUR",
+      "KVNY",
+      "KWHP",
+      "L70"
+    ],
+    "position_prefixes": [
+      "BUR"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SCT"
+  },
+  "SCT Empire": {
+    "airports": [
+      "F70",
+      "KAJO",
+      "KBNG",
+      "KCCB",
+      "KCNO",
+      "KEMT",
+      "KHMT",
+      "KONT",
+      "KPOC",
+      "KPSP",
+      "KRAL",
+      "KREI",
+      "KRIV",
+      "KSBD",
+      "KTRM",
+      "KUDD",
+      "L22",
+      "L65"
+    ],
+    "position_prefixes": [
+      "ONT"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SCT"
+  },
+  "SCT Coast": {
+    "airports": [
+      "KCPM",
+      "KLGB",
+      "KSLI",
+      "KSNA",
+      "KTOA"
+    ],
+    "position_prefixes": [
+      "SNA"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SCT"
+  },
+  "SCT San Diego": {
+    "airports": [
+      "KCRQ",
+      "KLRD",
+      "KMYF",
+      "KNFG",
+      "KNKX",
+      "KNRS",
+      "KNZY",
+      "KOKB",
+      "KRNM",
+      "KSAN",
+      "KSDM",
+      "KSEE",
+      "L18"
+    ],
+    "position_prefixes": [
+      "SAN"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SCT"
+  },
+  "SCT Del Rey": {
+    "airports": [
+      "KAVX",
+      "KHHR",
+      "KLAX",
+      "KSMO"
+    ],
+    "position_prefixes": [
+      "LAX"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "SCT"
+  },
+  "SCT Consolidated": {
+    "airports": [
+      "F70",
+      "KAJO",
+      "KAVX",
+      "KBNG",
+      "KBUR",
+      "KCCB",
+      "KCNO",
+      "KCPM",
+      "KCRQ",
+      "KEMT",
+      "KFUL",
+      "KHHR",
+      "KHMT",
+      "KLAX",
+      "KLGB",
+      "KMYF",
+      "KNFG",
+      "KNKX",
+      "KNRS",
+      "KNZY",
+      "KOKB",
+      "KONT",
+      "KPOC",
+      "KPSP",
+      "KRAL",
+      "KREI",
+      "KRIR",
+      "KRIV",
+      "KRNM",
+      "KSAN",
+      "KSBD",
+      "KSDM",
+      "KSEE",
+      "KSLI",
+      "KSMO",
+      "KSNA",
+      "KTOA",
+      "KTRM",
+      "KUDD",
+      "KVNY",
+      "KWHP",
+      "L18",
+      "L22",
+      "L65",
+      "L70"
+    ],
+    "position_prefixes": [
+      "SCT"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SCT"
+  },
+  "SCT Los Angeles Tower": {
+    "airports": [
+      "KLAX"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Lindbergh Tower": {
+    "airports": [
+      "KLRD",
+      "KSAN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT John Wayne Tower": {
+    "airports": [
+      "KSNA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Ontario Tower": {
+    "airports": [
+      "KONT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Burbank Tower": {
+    "airports": [
+      "KBUR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Palm Springs Tower": {
+    "airports": [
+      "KPSP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Long Beach Tower": {
+    "airports": [
+      "KLGB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Van Nuys Tower": {
+    "airports": [
+      "KVNY"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Santa Monica Tower": {
+    "airports": [
+      "KSMO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Whiteman Tower": {
+    "airports": [
+      "KWHP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT San Gabriel Valley Tower": {
+    "airports": [
+      "KEMT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Brackett Tower": {
+    "airports": [
+      "KPOC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Hawthorne Tower": {
+    "airports": [
+      "KHHR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Chino Tower": {
+    "airports": [
+      "KCNO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Riverside Tower": {
+    "airports": [
+      "KRAL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Torrance Tower": {
+    "airports": [
+      "KTOA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Los Alamitos Tower": {
+    "airports": [
+      "KSLI"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Fullerton Tower": {
+    "airports": [
+      "KFUL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Ramona Tower": {
+    "airports": [
+      "KRNM"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Montgomery Tower": {
+    "airports": [
+      "KMYF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Gillespie Tower": {
+    "airports": [
+      "KSEE"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Palomar Tower": {
+    "airports": [
+      "KCRQ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Brown Tower": {
+    "airports": [
+      "KSDM"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "SCT Springs": {
+    "airports": [
+      "KPSP",
+      "KTRM",
+      "KUDD",
+      "L22"
+    ],
+    "position_prefixes": [
+      "PSP"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SCT"
+  },
+  "SCT Miramar Tower": {
+    "airports": [
+      "KNKX"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SCT"
+  },
+  "L30": {
+    "airports": [
+      "0L7",
+      "KBVU",
+      "KHND",
+      "KLAS",
+      "KLSV",
+      "KVGT",
+      "U30"
+    ],
+    "position_prefixes": [
+      "LAS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "L30"
+  },
+  "L30 Las Vegas Tower": {
+    "airports": [
+      "KLAS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "L30"
+  },
+  "L30 North Las Vegas Tower": {
+    "airports": [
+      "KVGT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "L30"
+  },
+  "L30 Henderson Tower": {
+    "airports": [
+      "KHND"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "L30"
+  },
+  "L30 Canyon Tower": {
+    "airports": [
+      "KGCN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "L30"
+  },
+  "SBA": {
+    "airports": [
+      "KSBA",
+      "KSBP",
+      "KSMX",
+      "KVBG"
+    ],
+    "position_prefixes": [
+      "SBA"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "SBA"
+  },
+  "SBA Santa Barbara": {
+    "airports": [
+      "KSBA",
+      "KSBP",
+      "KSMX",
+      "KVBG"
+    ],
+    "position_prefixes": [
+      "SBA"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SBA"
+  },
+  "JCF": {
+    "airports": [
+      "9L2",
+      "KAPV",
+      "KBYS",
+      "KEDW",
+      "KIYK",
+      "KMHV",
+      "KNID",
+      "KPMD",
+      "KTSP",
+      "KVCV",
+      "KWJF",
+      "L00",
+      "L05",
+      "L26",
+      "L71",
+      "L72",
+      "L94"
+    ],
+    "position_prefixes": [
+      "EDW",
+      "JCF",
+      "NID",
+      "PMD"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "JCF"
+  },
+  "JCF Edwards Tower": {
+    "airports": [
+      "KEDW"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "JCF"
+  },
+  "BFL": {
+    "airports": [
+      "KBFL",
+      "KDLO",
+      "KHJO",
+      "KMIT",
+      "KPTV",
+      "KTLR",
+      "KTSP",
+      "L05",
+      "L17",
+      "L19",
+      "L45",
+      "L62",
+      "L73",
+      "L84"
+    ],
+    "position_prefixes": [
+      "BFL"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP",
+      "TWR"
+    ],
+    "facility_id": "BFL"
+  },
+  "BFL Tower": {
+    "airports": [
+      "KBFL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "BFL"
+  },
+  "NYL Main": {
+    "airports": [
+      "KLGF",
+      "KNYL"
+    ],
+    "position_prefixes": [
+      "NYL"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP",
+      "TWR"
+    ],
+    "facility_id": "NYL"
+  },
+  "NTD": {
+    "airports": [
+      "KCMA",
+      "KNTD",
+      "KOXR"
+    ],
+    "position_prefixes": [
+      "NTD"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "NTD"
+  },
+  "NTD Point Mugu": {
+    "airports": [
+      "KCMA",
+      "KNTD",
+      "KOXR"
+    ],
+    "position_prefixes": [
+      "NTD"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "NTD"
+  },
+  "LSV Nellis": {
+    "airports": [
+      "KINS",
+      "KLSV",
+      "KTNX"
+    ],
+    "position_prefixes": [
+      "LSV"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "LSV"
+  },
+  "NFG": {
+    "airports": [
+      "KNFG"
+    ],
+    "position_prefixes": [
+      "NFG"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "NFG"
+  },
+  "RIV": {
+    "airports": [
+      "KRIV"
+    ],
+    "position_prefixes": [
+      "RIV"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "RIV"
+  },
+  "International - Mexico": {
+    "airports": [
+      "MMML",
+      "MMTJ",
+      "MMZT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

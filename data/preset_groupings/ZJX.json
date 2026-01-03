@@ -1,88 +1,250 @@
 {
-  "F11 Sanford Cab": [
-    "KSFB"
-  ],
-  "F11 Orlando International Delivery/Ground": [
-    "KMCO"
-  ],
-  "F11 Melbourne Cab": [
-    "KMLB"
-  ],
-  "F11 Titusville Cab": [
-    "KTIX"
-  ],
-  "F11 Kissimmee Gateway Cab": [
-    "KISM"
-  ],
-  "F11 Patrick Tower ": [
-    "KCOF"
-  ],
-  "JAX CRG": [
-    "KCRG"
-  ],
-  "JAX GNV": [
-    "KGNV"
-  ],
-  "JAX SGJ": [
-    "KSGJ"
-  ],
-  "JAX VQQ": [
-    "KVQQ"
-  ],
-  "JAX NIP": [
-    "KNIP"
-  ],
-  "JAX NRB": [
-    "KNRB"
-  ],
-  "P31 NPA Tower": [
-    "KNPA"
-  ],
-  "P31 NSE Tower": [
-    "KNSE"
-  ],
-  "P31 NDZ Tower": [
-    "KNDZ"
-  ],
-  "CAE CAE TOWER": [
-    "KCAE"
-  ],
-  "SAV HXD": [
-    "KHXD"
-  ],
-  "DAB DAB": [
-    "KDAB",
-    "KDED",
-    "KEVB",
-    "KFIN",
-    "KOMN"
-  ],
-  "DAB Daytona Beach Tower": [
-    "KDAB"
-  ],
-  "DAB Ormond Beach Tower": [
-    "KOMN"
-  ],
-  "DAB New Smyrna Beach Tower": [
-    "KEVB"
-  ],
-  "VLD Valdosta Regional ATCT/TRACON": [
-    "KVAD",
-    "KVLD"
-  ],
-  "PAM ECP TOWER": [
-    "KECP"
-  ],
-  "OZR Cairns Army Air ATCT/RAPCON": [
-    "KDHN",
-    "KOZR",
-    "KTOI"
-  ],
-  "VPS VPS TOWER": [
-    "KVPS"
-  ],
-  "SSC Shaw Air Force ATCT/RAPCON": [
-    "KMMT",
-    "KSSC"
-  ]
+  "F11 Sanford Cab": {
+    "airports": [
+      "KSFB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "F11"
+  },
+  "F11 Orlando International Delivery/Ground": {
+    "airports": [
+      "KMCO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "F11"
+  },
+  "F11 Melbourne Cab": {
+    "airports": [
+      "KMLB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "F11"
+  },
+  "F11 Titusville Cab": {
+    "airports": [
+      "KTIX"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "F11"
+  },
+  "F11 Kissimmee Gateway Cab": {
+    "airports": [
+      "KISM"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "F11"
+  },
+  "F11 Patrick Tower ": {
+    "airports": [
+      "KCOF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "F11"
+  },
+  "JAX CRG": {
+    "airports": [
+      "KCRG"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "JAX"
+  },
+  "JAX GNV": {
+    "airports": [
+      "KGNV"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "JAX"
+  },
+  "JAX SGJ": {
+    "airports": [
+      "KSGJ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "JAX"
+  },
+  "JAX VQQ": {
+    "airports": [
+      "KVQQ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "JAX"
+  },
+  "JAX NIP": {
+    "airports": [
+      "KNIP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "JAX"
+  },
+  "JAX NRB": {
+    "airports": [
+      "KNRB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "JAX"
+  },
+  "P31 NPA Tower": {
+    "airports": [
+      "KNPA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P31"
+  },
+  "P31 NSE Tower": {
+    "airports": [
+      "KNSE"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P31"
+  },
+  "P31 NDZ Tower": {
+    "airports": [
+      "KNDZ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P31"
+  },
+  "CAE CAE TOWER": {
+    "airports": [
+      "KCAE"
+    ],
+    "position_prefixes": [
+      "CAE"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "CAE"
+  },
+  "SAV HXD": {
+    "airports": [
+      "KHXD"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SAV"
+  },
+  "DAB": {
+    "airports": [
+      "KDAB",
+      "KDED",
+      "KEVB",
+      "KFIN",
+      "KOMN"
+    ],
+    "position_prefixes": [
+      "DAB"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "DAB"
+  },
+  "DAB Daytona Beach Tower": {
+    "airports": [
+      "KDAB"
+    ],
+    "position_prefixes": [
+      "DAB"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "DAB"
+  },
+  "DAB Ormond Beach Tower": {
+    "airports": [
+      "KOMN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "DAB"
+  },
+  "DAB New Smyrna Beach Tower": {
+    "airports": [
+      "KEVB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "DAB"
+  },
+  "VLD Valdosta Regional ATCT/TRACON": {
+    "airports": [
+      "KVAD",
+      "KVLD"
+    ],
+    "position_prefixes": [
+      "VLD"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "VLD"
+  },
+  "PAM ECP TOWER": {
+    "airports": [
+      "KECP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PAM"
+  },
+  "OZR Cairns Army Air ATCT/RAPCON": {
+    "airports": [
+      "KDHN",
+      "KOZR",
+      "KTOI"
+    ],
+    "position_prefixes": [
+      "OZR"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "OZR"
+  },
+  "VPS VPS TOWER": {
+    "airports": [
+      "KVPS"
+    ],
+    "position_prefixes": [
+      "VPS"
+    ],
+    "position_suffixes": [
+      "TWR"
+    ],
+    "facility_id": "VPS"
+  },
+  "SSC Shaw Air Force ATCT/RAPCON": {
+    "airports": [
+      "KMMT",
+      "KSSC"
+    ],
+    "position_prefixes": [
+      "SSC"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SSC"
+  }
 }

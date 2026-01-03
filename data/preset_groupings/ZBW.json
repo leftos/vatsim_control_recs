@@ -1,233 +1,411 @@
 {
-  "Y90 Y90": [
-    "1B6",
-    "3B0",
-    "3B3",
-    "4B8",
-    "4B9",
-    "60M",
-    "7B2",
-    "7B6",
-    "7B9",
-    "9B8",
-    "C44",
-    "KBAF",
-    "KBDL",
-    "KCEF",
-    "KHFD",
-    "KIJD",
-    "KMMK",
-    "KORH",
-    "N41"
-  ],
-  "Y90 Bradley Tower": [
-    "KBDL"
-  ],
-  "PWM PWM": [
-    "03M",
-    "0B1",
-    "5ME",
-    "63B",
-    "76B",
-    "81B",
-    "98M",
-    "B10",
-    "B19",
-    "KAUG",
-    "KBXM",
-    "KIWI",
-    "KIZG",
-    "KLEW",
-    "KOWK",
-    "KPWM",
-    "KRKD",
-    "KSFM",
-    "KWVL",
-    "M00",
-    "ME6"
-  ],
-  "BGR BGR": [
-    "0B2",
-    "1B0",
-    "2B7",
-    "57B",
-    "93B",
-    "KBGR",
-    "KBHB",
-    "KBST",
-    "KOLD",
-    "ME5",
-    "PG1"
-  ],
-  "PVD PVD": [
-    "08R",
-    "0B8",
-    "1M8",
-    "KBID",
-    "KGON",
-    "KLZD",
-    "KMTP",
-    "KOQU",
-    "KPVD",
-    "KSFZ",
-    "KTAN",
-    "KUUU",
-    "KWEB",
-    "KWST"
-  ],
-  "PVD Providence Tower": [
-    "KPVD"
-  ],
-  "ALB ALB": [
-    "1A1",
-    "1B1",
-    "1B8",
-    "1C3",
-    "1F2",
-    "1H4",
-    "1I5",
-    "4B0",
-    "4B1",
-    "5B2",
-    "5B7",
-    "83K",
-    "B04",
-    "K30",
-    "KALB",
-    "KAQW",
-    "KDDH",
-    "KGBR",
-    "KGFL",
-    "KPSF",
-    "KSCH",
-    "N25",
-    "NY0",
-    "W57"
-  ],
-  "SYR SYR": [
-    "0G7",
-    "2N4",
-    "6B4",
-    "6B9",
-    "B16",
-    "K16",
-    "KFZY",
-    "KRME",
-    "KSYR",
-    "KVGC",
-    "N03"
-  ],
-  "SYR Syracuse Tower": [
-    "KSYR"
-  ],
-  "SYR Griffiss FCT": [
-    "KRME"
-  ],
-  "BTV BTV": [
-    "0B7",
-    "1I1",
-    "6B0",
-    "B06",
-    "KBTV",
-    "KFSO",
-    "KPBG",
-    "VT8"
-  ],
-  "A90 Consolidated": [
-    "1B2",
-    "1B9",
-    "28M",
-    "2B1",
-    "2B2",
-    "2N2",
-    "3B4",
-    "5B6",
-    "6B6",
-    "7B3",
-    "8B1",
-    "KACK",
-    "KASH",
-    "KBED",
-    "KBOS",
-    "KBVY",
-    "KCON",
-    "KCQX",
-    "KDAW",
-    "KFIT",
-    "KFMH",
-    "KGHG",
-    "KHYA",
-    "KLCI",
-    "KLWM",
-    "KMHT",
-    "KMVY",
-    "KOWD",
-    "KPSM",
-    "KPVC",
-    "KPYM"
-  ],
-  "A90 Core": [
-    "1B9",
-    "28M",
-    "2B2",
-    "6B6",
-    "KBED",
-    "KBOS",
-    "KBVY",
-    "KFIT",
-    "KGHG",
-    "KLWM",
-    "KOWD"
-  ],
-  "A90 Manchester": [
-    "2N2",
-    "3B4",
-    "7B3",
-    "8B1",
-    "KASH",
-    "KCON",
-    "KDAW",
-    "KLCI",
-    "KMHT",
-    "KPSM"
-  ],
-  "A90 Cape": [
-    "1B2",
-    "2B1",
-    "5B6",
-    "KACK",
-    "KCQX",
-    "KFMH",
-    "KHYA",
-    "KMVY",
-    "KPVC",
-    "KPYM"
-  ],
-  "A90 Boston Tower": [
-    "KBOS"
-  ],
-  "A90 Incognito": [
-    "1B9",
-    "28M",
-    "2B2",
-    "6B6",
-    "KBED",
-    "KBOS",
-    "KBVY",
-    "KFIT",
-    "KGHG",
-    "KLWM",
-    "KOWD"
-  ],
-  "GTB GTB": [
-    "KART",
-    "KGTB"
-  ],
-  "International - Canada": [
-    "CYTR",
-    "CYUL",
-    "CZQM",
-    "CZUL",
-    "CZYZ"
-  ]
+  "Y90": {
+    "airports": [
+      "1B6",
+      "3B0",
+      "3B3",
+      "4B8",
+      "4B9",
+      "60M",
+      "7B2",
+      "7B6",
+      "7B9",
+      "9B8",
+      "C44",
+      "KBAF",
+      "KBDL",
+      "KCEF",
+      "KHFD",
+      "KIJD",
+      "KMMK",
+      "KORH",
+      "N41"
+    ],
+    "position_prefixes": [
+      "BDL"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "Y90"
+  },
+  "Y90 Bradley Tower": {
+    "airports": [
+      "KBDL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "Y90"
+  },
+  "PWM": {
+    "airports": [
+      "03M",
+      "0B1",
+      "5ME",
+      "63B",
+      "76B",
+      "81B",
+      "98M",
+      "B10",
+      "B19",
+      "KAUG",
+      "KBXM",
+      "KIWI",
+      "KIZG",
+      "KLEW",
+      "KOWK",
+      "KPWM",
+      "KRKD",
+      "KSFM",
+      "KWVL",
+      "M00",
+      "ME6"
+    ],
+    "position_prefixes": [
+      "PWM"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "PWM"
+  },
+  "BGR": {
+    "airports": [
+      "0B2",
+      "1B0",
+      "2B7",
+      "57B",
+      "93B",
+      "KBGR",
+      "KBHB",
+      "KBST",
+      "KOLD",
+      "ME5",
+      "PG1"
+    ],
+    "position_prefixes": [
+      "BGR"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "BGR"
+  },
+  "PVD": {
+    "airports": [
+      "08R",
+      "0B8",
+      "1M8",
+      "KBID",
+      "KGON",
+      "KLZD",
+      "KMTP",
+      "KOQU",
+      "KPVD",
+      "KSFZ",
+      "KTAN",
+      "KUUU",
+      "KWEB",
+      "KWST"
+    ],
+    "position_prefixes": [
+      "PVD"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "PVD"
+  },
+  "PVD Providence Tower": {
+    "airports": [
+      "KPVD"
+    ],
+    "position_prefixes": [
+      "PVD"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "PVD"
+  },
+  "ALB": {
+    "airports": [
+      "1A1",
+      "1B1",
+      "1B8",
+      "1C3",
+      "1F2",
+      "1H4",
+      "1I5",
+      "4B0",
+      "4B1",
+      "5B2",
+      "5B7",
+      "83K",
+      "B04",
+      "K30",
+      "KALB",
+      "KAQW",
+      "KDDH",
+      "KGBR",
+      "KGFL",
+      "KPSF",
+      "KSCH",
+      "N25",
+      "NY0",
+      "W57"
+    ],
+    "position_prefixes": [
+      "ALB"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "ALB"
+  },
+  "ALB Albany ATCT/TRACON": {
+    "airports": [
+      "KALB",
+      "KSCH"
+    ],
+    "position_prefixes": [
+      "ALB"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "ALB"
+  },
+  "SYR": {
+    "airports": [
+      "0G7",
+      "2N4",
+      "6B4",
+      "6B9",
+      "B16",
+      "K16",
+      "KFZY",
+      "KRME",
+      "KSYR",
+      "KVGC",
+      "N03"
+    ],
+    "position_prefixes": [
+      "SYR"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SYR"
+  },
+  "SYR Syracuse Tower": {
+    "airports": [
+      "KSYR"
+    ],
+    "position_prefixes": [
+      "SYR"
+    ],
+    "position_suffixes": [
+      "TWR"
+    ],
+    "facility_id": "SYR"
+  },
+  "SYR Griffiss FCT": {
+    "airports": [
+      "KRME"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SYR"
+  },
+  "BTV": {
+    "airports": [
+      "0B7",
+      "1I1",
+      "6B0",
+      "B06",
+      "KBTV",
+      "KFSO",
+      "KPBG",
+      "VT8"
+    ],
+    "position_prefixes": [
+      "BTV"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "BTV"
+  },
+  "A90 Consolidated": {
+    "airports": [
+      "1B2",
+      "1B9",
+      "28M",
+      "2B1",
+      "2B2",
+      "2N2",
+      "3B4",
+      "5B6",
+      "6B6",
+      "7B3",
+      "8B1",
+      "KACK",
+      "KASH",
+      "KBED",
+      "KBOS",
+      "KBVY",
+      "KCON",
+      "KCQX",
+      "KDAW",
+      "KFIT",
+      "KFMH",
+      "KGHG",
+      "KHYA",
+      "KLCI",
+      "KLWM",
+      "KMHT",
+      "KMVY",
+      "KOWD",
+      "KPSM",
+      "KPVC",
+      "KPYM"
+    ],
+    "position_prefixes": [
+      "A90",
+      "BOS"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "A90"
+  },
+  "A90 Core": {
+    "airports": [
+      "1B9",
+      "28M",
+      "2B2",
+      "6B6",
+      "KBED",
+      "KBOS",
+      "KBVY",
+      "KFIT",
+      "KGHG",
+      "KLWM",
+      "KOWD"
+    ],
+    "position_prefixes": [
+      "BOS"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "A90"
+  },
+  "A90 Manchester": {
+    "airports": [
+      "2N2",
+      "3B4",
+      "7B3",
+      "8B1",
+      "KASH",
+      "KCON",
+      "KDAW",
+      "KLCI",
+      "KMHT",
+      "KPSM"
+    ],
+    "position_prefixes": [
+      "MHT"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "A90"
+  },
+  "A90 Cape": {
+    "airports": [
+      "1B2",
+      "2B1",
+      "5B6",
+      "KACK",
+      "KCQX",
+      "KFMH",
+      "KHYA",
+      "KMVY",
+      "KPVC",
+      "KPYM"
+    ],
+    "position_prefixes": [
+      "ACK",
+      "BOS"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "A90"
+  },
+  "A90 Boston Tower": {
+    "airports": [
+      "KBOS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "A90"
+  },
+  "A90 Incognito": {
+    "airports": [
+      "1B9",
+      "28M",
+      "2B2",
+      "6B6",
+      "KBED",
+      "KBOS",
+      "KBVY",
+      "KFIT",
+      "KGHG",
+      "KLWM",
+      "KOWD"
+    ],
+    "position_prefixes": [
+      "BOS"
+    ],
+    "position_suffixes": [
+      "CTR"
+    ],
+    "facility_id": "A90"
+  },
+  "GTB": {
+    "airports": [
+      "KART",
+      "KGTB"
+    ],
+    "position_prefixes": [
+      "GTB"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "GTB"
+  },
+  "International - Canada": {
+    "airports": [
+      "CYTR",
+      "CYUL",
+      "CZQM",
+      "CZUL",
+      "CZYZ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

@@ -1,169 +1,322 @@
 {
-  "AZO Great Lakes ATCT/TRACON West Wall": [
-    "KAZO",
-    "KBTL",
-    "KGRR",
-    "KMKG"
-  ],
-  "C90 Combined": [
-    "05C",
-    "06C",
-    "10C",
-    "1C5",
-    "3CK",
-    "3HO",
-    "68IS",
-    "82IS",
-    "C09",
-    "C81",
-    "KARR",
-    "KDKB",
-    "KDPA",
-    "KGYY",
-    "KIGQ",
-    "KJOT",
-    "KLOT",
-    "KMDW",
-    "KORD",
-    "KPWK",
-    "KUGN",
-    "LL10",
-    "LL22"
-  ],
-  "C90 Departure": [
-    "05C",
-    "06C",
-    "10C",
-    "1C5",
-    "3CK",
-    "3HO",
-    "68IS",
-    "82IS",
-    "C09",
-    "C81",
-    "KARR",
-    "KDKB",
-    "KDPA",
-    "KGYY",
-    "KIGQ",
-    "KJOT",
-    "KLOT",
-    "KMDW",
-    "KORD",
-    "KPWK",
-    "KUGN",
-    "LL10",
-    "LL22"
-  ],
-  "C90 South Satellite": [
-    "05C",
-    "06C",
-    "1C5",
-    "3HO",
-    "68IS",
-    "82IS",
-    "C09",
-    "KARR",
-    "KDKB",
-    "KDPA",
-    "KGYY",
-    "KIGQ",
-    "KJOT",
-    "KLOT",
-    "KMDW",
-    "LL10",
-    "LL22"
-  ],
-  "C90 North Satellite": [
-    "10C",
-    "3CK",
-    "C81",
-    "KPWK",
-    "KUGN"
-  ],
-  "C90 Midway Tower": [
-    "KMDW"
-  ],
-  "C90 Dupage Tower": [
-    "KDPA"
-  ],
-  "C90 Chicago Executive Tower": [
-    "KPWK"
-  ],
-  "CID Cedar Rapids ATCT/TRACON": [
-    "KCID",
-    "KDBQ"
-  ],
-  "CMI Champaign ATCT/TRACON": [
-    "KCMI",
-    "KDEC"
-  ],
-  "MKE Combined": [
-    "57C",
-    "8D1",
-    "C02",
-    "KBUU",
-    "KENW",
-    "KETB",
-    "KFLD",
-    "KHXF",
-    "KMKE",
-    "KMWC",
-    "KOSH",
-    "KRAC",
-    "KSBM",
-    "KUES",
-    "Y50"
-  ],
-  "MKE Feeder": [
-    "57C",
-    "C02",
-    "KBUU",
-    "KENW",
-    "KETB",
-    "KHXF",
-    "KMWC",
-    "KRAC",
-    "KUES"
-  ],
-  "MKE Ripon": [
-    "81D",
-    "KFLD",
-    "KOSH",
-    "KSBM",
-    "Y50"
-  ],
-  "MKE Departure": [
-    "57C",
-    "8D1",
-    "C02",
-    "KBUU",
-    "KENW",
-    "KETB",
-    "KFLD",
-    "KHXF",
-    "KMKE",
-    "KMWC",
-    "KOSH",
-    "KRAC",
-    "KSBM",
-    "KUES",
-    "Y50"
-  ],
-  "GUS Grissom ATCT/RAPCON": [
-    "KGUS",
-    "KLAF"
-  ],
-  "RFD Rockford ATCT/TRACON": [
-    "KJVL",
-    "KRFD"
-  ],
-  "SBN South Bend ATCT/TRACON": [
-    "KEKM",
-    "KSBN"
-  ],
-  "VOK Volk ATCT/RAPCON": [
-    "KCMY",
-    "KVOK"
-  ]
+  "AZO Great Lakes ATCT/TRACON West Wall": {
+    "airports": [
+      "KAZO",
+      "KBTL",
+      "KGRR",
+      "KMKG"
+    ],
+    "position_prefixes": [
+      "AZO"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "AZO"
+  },
+  "C90 Combined": {
+    "airports": [
+      "05C",
+      "06C",
+      "10C",
+      "1C5",
+      "3CK",
+      "3HO",
+      "68IS",
+      "82IS",
+      "C09",
+      "C81",
+      "KARR",
+      "KDKB",
+      "KDPA",
+      "KGYY",
+      "KIGQ",
+      "KJOT",
+      "KLOT",
+      "KMDW",
+      "KORD",
+      "KPWK",
+      "KUGN",
+      "LL10",
+      "LL22"
+    ],
+    "position_prefixes": [
+      "CHI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "C90"
+  },
+  "C90 Departure": {
+    "airports": [
+      "05C",
+      "06C",
+      "10C",
+      "1C5",
+      "3CK",
+      "3HO",
+      "68IS",
+      "82IS",
+      "C09",
+      "C81",
+      "KARR",
+      "KDKB",
+      "KDPA",
+      "KGYY",
+      "KIGQ",
+      "KJOT",
+      "KLOT",
+      "KMDW",
+      "KORD",
+      "KPWK",
+      "KUGN",
+      "LL10",
+      "LL22"
+    ],
+    "position_prefixes": [
+      "CHI"
+    ],
+    "position_suffixes": [
+      "DEP"
+    ],
+    "facility_id": "C90"
+  },
+  "C90 South Satellite": {
+    "airports": [
+      "05C",
+      "06C",
+      "1C5",
+      "3HO",
+      "68IS",
+      "82IS",
+      "C09",
+      "KARR",
+      "KDKB",
+      "KDPA",
+      "KGYY",
+      "KIGQ",
+      "KJOT",
+      "KLOT",
+      "KMDW",
+      "LL10",
+      "LL22"
+    ],
+    "position_prefixes": [
+      "CHI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "C90"
+  },
+  "C90 North Satellite": {
+    "airports": [
+      "10C",
+      "3CK",
+      "C81",
+      "KPWK",
+      "KUGN"
+    ],
+    "position_prefixes": [
+      "CHI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "C90"
+  },
+  "C90 Midway Tower": {
+    "airports": [
+      "KMDW"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "C90"
+  },
+  "C90 Dupage Tower": {
+    "airports": [
+      "KDPA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "C90"
+  },
+  "C90 Chicago Executive Tower": {
+    "airports": [
+      "KPWK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "C90"
+  },
+  "CID Cedar Rapids ATCT/TRACON": {
+    "airports": [
+      "KCID",
+      "KDBQ"
+    ],
+    "position_prefixes": [
+      "CID"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CID"
+  },
+  "CMI Champaign ATCT/TRACON": {
+    "airports": [
+      "KCMI",
+      "KDEC"
+    ],
+    "position_prefixes": [
+      "CMI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CMI"
+  },
+  "MKE Combined": {
+    "airports": [
+      "57C",
+      "8D1",
+      "C02",
+      "KBUU",
+      "KENW",
+      "KETB",
+      "KFLD",
+      "KHXF",
+      "KMKE",
+      "KMWC",
+      "KOSH",
+      "KRAC",
+      "KSBM",
+      "KUES",
+      "Y50"
+    ],
+    "position_prefixes": [
+      "MKE"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "MKE"
+  },
+  "MKE Feeder": {
+    "airports": [
+      "57C",
+      "C02",
+      "KBUU",
+      "KENW",
+      "KETB",
+      "KHXF",
+      "KMWC",
+      "KRAC",
+      "KUES"
+    ],
+    "position_prefixes": [
+      "MKE"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "MKE"
+  },
+  "MKE Ripon": {
+    "airports": [
+      "81D",
+      "KFLD",
+      "KOSH",
+      "KSBM",
+      "Y50"
+    ],
+    "position_prefixes": [
+      "MKE",
+      "OSH"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "MKE"
+  },
+  "MKE Departure": {
+    "airports": [
+      "57C",
+      "8D1",
+      "C02",
+      "KBUU",
+      "KENW",
+      "KETB",
+      "KFLD",
+      "KHXF",
+      "KMKE",
+      "KMWC",
+      "KOSH",
+      "KRAC",
+      "KSBM",
+      "KUES",
+      "Y50"
+    ],
+    "position_prefixes": [
+      "MKE"
+    ],
+    "position_suffixes": [
+      "DEP"
+    ],
+    "facility_id": "MKE"
+  },
+  "GUS Grissom ATCT/RAPCON": {
+    "airports": [
+      "KGUS",
+      "KLAF"
+    ],
+    "position_prefixes": [
+      "GUS"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "GUS"
+  },
+  "RFD Rockford ATCT/TRACON": {
+    "airports": [
+      "KJVL",
+      "KRFD"
+    ],
+    "position_prefixes": [
+      "RFD"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "RFD"
+  },
+  "SBN South Bend ATCT/TRACON": {
+    "airports": [
+      "KEKM",
+      "KSBN"
+    ],
+    "position_prefixes": [
+      "SBN"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SBN"
+  },
+  "VOK Volk ATCT/RAPCON": {
+    "airports": [
+      "KCMY",
+      "KVOK"
+    ],
+    "position_prefixes": [
+      "VOK"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "VOK"
+  }
 }

@@ -178,6 +178,9 @@ def load_preset_groupings() -> Dict[str, List[str]]:
     Load all preset groupings from the preset_groupings directory.
     Each JSON file in the directory represents one ARTCC's groupings.
 
+    Supports both old format (value is list of airports) and new format
+    (value is dict with 'airports', 'position_prefixes', etc.).
+
     Returns:
         Dictionary mapping grouping names to lists of airport codes
     """
@@ -201,8 +204,13 @@ def load_preset_groupings() -> Dict[str, List[str]]:
                 if not isinstance(key, str):
                     continue
                 if isinstance(value, list):
-                    # Ensure all elements are strings
+                    # Old format: value is list of airports
                     all_preset_groupings[key] = [str(v) for v in value]
+                elif isinstance(value, dict) and 'airports' in value:
+                    # New format: value is dict with 'airports' key
+                    airports = value['airports']
+                    if isinstance(airports, list):
+                        all_preset_groupings[key] = [str(v) for v in airports]
 
         except json.JSONDecodeError as e:
             logger.warning(f"Could not decode JSON from preset groupings file '{json_file.name}': {e}")

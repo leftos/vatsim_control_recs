@@ -1,143 +1,375 @@
 {
-  "P50 P50 Arrivals": [
-    "KCHD",
-    "KCMR",
-    "KDVT",
-    "KFFZ",
-    "KFLG",
-    "KGEU",
-    "KGXF",
-    "KGYR",
-    "KIWA",
-    "KLUF",
-    "KPHX",
-    "KPRC",
-    "KSDL",
-    "KSEZ",
-    "P19"
-  ],
-  "P50 P50 Departures": [
-    "KCHD",
-    "KDVT",
-    "KFFZ",
-    "KGEU",
-    "KGXF",
-    "KGYR",
-    "KIWA",
-    "KLUF",
-    "KPHX",
-    "KSDL",
-    "P19"
-  ],
-  "P50 P50 Satellite": [
-    "KCHD",
-    "KCMR",
-    "KDVT",
-    "KFFZ",
-    "KFLG",
-    "KGEU",
-    "KGXF",
-    "KGYR",
-    "KIWA",
-    "KLUF",
-    "KPHX",
-    "KPRC",
-    "KSDL",
-    "KSEZ",
-    "P19"
-  ],
-  "P50 PHX TWR": [
-    "KPHX"
-  ],
-  "P50 P50 SATELLITE SDL": [
-    "KSDL"
-  ],
-  "P50 P50 SATELLITE FFZ": [
-    "KFFZ"
-  ],
-  "P50 P50 SATELLITE IWA": [
-    "KIWA"
-  ],
-  "P50 P50 SATELLITE CHD": [
-    "KCHD"
-  ],
-  "P50 P50 SATELLITE DVT": [
-    "KDVT"
-  ],
-  "P50 P50 SATELLITE PRC": [
-    "KPRC"
-  ],
-  "P50 P50 NAA JEROME": [
-    "KCMR",
-    "KFLG",
-    "KPRC",
-    "KSEZ"
-  ],
-  "P50 P50 NAA KACHINA": [
-    "KFLG"
-  ],
-  "U90 U90": [
-    "KAVQ",
-    "KDMA",
-    "KOLS",
-    "KRYN",
-    "KTUS"
-  ],
-  "ABQ ABQ": [
-    "E98",
-    "KABQ",
-    "KAEG",
-    "KBRG"
-  ],
-  "ELP ELP": [
-    "KBIF",
-    "KDNA",
-    "KELP"
-  ],
-  "AMA AMA": [
-    "H81",
-    "KAMA",
-    "KBGD",
-    "KHRX",
-    "KTDW",
-    "T45"
-  ],
-  "ROW ROW": [
-    "KROW"
-  ],
-  "CVS CVS": [
-    "KCVN",
-    "KCVS"
-  ],
-  "HMN HMN": [
-    "KALM",
-    "KHMN"
-  ],
-  "HMN TAC": [
-    "KHMN"
-  ],
-  "FHU FHU": [
-    "KFHU"
-  ],
-  "LUF Combined": [
-    "KGEU",
-    "KGXF",
-    "KGYR",
-    "KLUF"
-  ],
-  "LUF TAC": [
-    "KGXF",
-    "KLUF"
-  ],
-  "LUF LUF Deltas": [
-    "KGEU",
-    "KGXF",
-    "KGYR"
-  ],
-  "International - Mexico": [
-    "MMCS",
-    "MMHO",
-    "MMTY",
-    "MMZT"
-  ]
+  "P50 P50 Arrivals": {
+    "airports": [
+      "KCHD",
+      "KCMR",
+      "KDVT",
+      "KFFZ",
+      "KFLG",
+      "KGEU",
+      "KGXF",
+      "KGYR",
+      "KIWA",
+      "KLUF",
+      "KPHX",
+      "KPRC",
+      "KSDL",
+      "KSEZ",
+      "P19"
+    ],
+    "position_prefixes": [
+      "PHX"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "P50"
+  },
+  "P50 P50 Departures": {
+    "airports": [
+      "KCHD",
+      "KDVT",
+      "KFFZ",
+      "KGEU",
+      "KGXF",
+      "KGYR",
+      "KIWA",
+      "KLUF",
+      "KPHX",
+      "KSDL",
+      "P19"
+    ],
+    "position_prefixes": [
+      "PHX"
+    ],
+    "position_suffixes": [
+      "DEP"
+    ],
+    "facility_id": "P50"
+  },
+  "P50 P50 Satellite": {
+    "airports": [
+      "KCHD",
+      "KCMR",
+      "KDVT",
+      "KFFZ",
+      "KFLG",
+      "KGEU",
+      "KGXF",
+      "KGYR",
+      "KIWA",
+      "KLUF",
+      "KPHX",
+      "KPRC",
+      "KSDL",
+      "KSEZ",
+      "P19"
+    ],
+    "position_prefixes": [
+      "PHX"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "P50"
+  },
+  "P50 PHX TWR": {
+    "airports": [
+      "KPHX"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P50"
+  },
+  "P50 P50 SATELLITE SDL": {
+    "airports": [
+      "KSDL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P50"
+  },
+  "P50 P50 SATELLITE FFZ": {
+    "airports": [
+      "KFFZ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P50"
+  },
+  "P50 P50 SATELLITE IWA": {
+    "airports": [
+      "KIWA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P50"
+  },
+  "P50 P50 SATELLITE CHD": {
+    "airports": [
+      "KCHD"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P50"
+  },
+  "P50 P50 SATELLITE DVT": {
+    "airports": [
+      "KDVT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P50"
+  },
+  "P50 P50 SATELLITE PRC": {
+    "airports": [
+      "KPRC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "P50"
+  },
+  "P50 P50 NAA JEROME": {
+    "airports": [
+      "KCMR",
+      "KFLG",
+      "KPRC",
+      "KSEZ"
+    ],
+    "position_prefixes": [
+      "PHX"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "P50"
+  },
+  "P50 P50 NAA KACHINA": {
+    "airports": [
+      "KFLG"
+    ],
+    "position_prefixes": [
+      "PHX"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "P50"
+  },
+  "U90": {
+    "airports": [
+      "KAVQ",
+      "KDMA",
+      "KOLS",
+      "KRYN",
+      "KTUS"
+    ],
+    "position_prefixes": [
+      "TUS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "U90"
+  },
+  "U90 Tucson TRACON": {
+    "airports": [
+      "KDMA",
+      "KRYN",
+      "KTUS",
+      "U90"
+    ],
+    "position_prefixes": [
+      "U90"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "U90"
+  },
+  "ABQ": {
+    "airports": [
+      "E98",
+      "KABQ",
+      "KAEG",
+      "KBRG"
+    ],
+    "position_prefixes": [
+      "ABQ"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "ABQ"
+  },
+  "ABQ Albuquerque ATCT/TRACON": {
+    "airports": [
+      "KABQ",
+      "KAEG"
+    ],
+    "position_prefixes": [
+      "ABQ"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "ABQ"
+  },
+  "ELP": {
+    "airports": [
+      "KBIF",
+      "KDNA",
+      "KELP"
+    ],
+    "position_prefixes": [
+      "ELP"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "ELP"
+  },
+  "ELP El Paso ATCT/TRACON": {
+    "airports": [
+      "KBIF",
+      "KELP"
+    ],
+    "position_prefixes": [
+      "ELP"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "ELP"
+  },
+  "AMA": {
+    "airports": [
+      "H81",
+      "KAMA",
+      "KBGD",
+      "KHRX",
+      "KTDW",
+      "T45"
+    ],
+    "position_prefixes": [
+      "AMA"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "AMA"
+  },
+  "ROW": {
+    "airports": [
+      "KROW"
+    ],
+    "position_prefixes": [
+      "ROW"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "ROW"
+  },
+  "CVS": {
+    "airports": [
+      "KCVN",
+      "KCVS"
+    ],
+    "position_prefixes": [
+      "CVS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "CVS"
+  },
+  "HMN": {
+    "airports": [
+      "KALM",
+      "KHMN"
+    ],
+    "position_prefixes": [
+      "HMN"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP",
+      "TWR"
+    ],
+    "facility_id": "HMN"
+  },
+  "HMN TAC": {
+    "airports": [
+      "KHMN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "HMN"
+  },
+  "FHU": {
+    "airports": [
+      "KFHU"
+    ],
+    "position_prefixes": [
+      "FHU"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "FHU"
+  },
+  "LUF Combined": {
+    "airports": [
+      "KGEU",
+      "KGXF",
+      "KGYR",
+      "KLUF"
+    ],
+    "position_prefixes": [
+      "LUF"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "LUF"
+  },
+  "LUF TAC": {
+    "airports": [
+      "KGXF",
+      "KLUF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "LUF"
+  },
+  "LUF LUF Deltas": {
+    "airports": [
+      "KGEU",
+      "KGXF",
+      "KGYR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "LUF"
+  },
+  "International - Mexico": {
+    "airports": [
+      "MMCS",
+      "MMHO",
+      "MMTY",
+      "MMZT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

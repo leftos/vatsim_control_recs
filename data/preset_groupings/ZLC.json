@@ -1,81 +1,163 @@
 {
-  "BIL TRACON": [
-    "00U",
-    "03MT",
-    "0MT5",
-    "16MT",
-    "1MT2",
-    "1MT9",
-    "35MT",
-    "3MT3",
-    "44MT",
-    "49MT",
-    "50MT",
-    "5U7",
-    "63MT",
-    "6S1",
-    "6S3",
-    "6S8",
-    "80S",
-    "96MT",
-    "KBIL",
-    "MT13",
-    "MT25",
-    "MT40",
-    "MT55",
-    "MT57"
-  ],
-  "GTF GTF CTRD": [
-    "KGFA"
-  ],
-  "S56 Salt Lake City TRACON": [
-    "KHIF",
-    "KOGD",
-    "KPVU",
-    "KSLC",
-    "S56"
-  ],
-  "BOI RADAR": [
-    "KEUL",
-    "KMAN"
-  ],
-  "BOI BOI ATCT": [
-    "KBOI"
-  ],
-  "BZN RADAR": [
-    "21MT",
-    "23MT",
-    "2MT5",
-    "2MT8",
-    "3MT6",
-    "9S5",
-    "9U1",
-    "K6S0",
-    "KBZN",
-    "KEKS",
-    "KLVM",
-    "KWYS",
-    "MT34",
-    "MT36",
-    "MT41",
-    "MT42",
-    "MT48",
-    "MT94"
-  ],
-  "MUO Range Control": [
-    "08U",
-    "10U",
-    "3U0",
-    "KMUO",
-    "U89",
-    "U91"
-  ],
-  "MSO Approach": [
-    "32S",
-    "52S"
-  ],
-  "International - Canada": [
-    "CZEG",
-    "CZWG"
-  ]
+  "BIL TRACON": {
+    "airports": [
+      "00U",
+      "03MT",
+      "0MT5",
+      "16MT",
+      "1MT2",
+      "1MT9",
+      "35MT",
+      "3MT3",
+      "44MT",
+      "49MT",
+      "50MT",
+      "5U7",
+      "63MT",
+      "6S1",
+      "6S3",
+      "6S8",
+      "80S",
+      "96MT",
+      "KBIL",
+      "MT13",
+      "MT25",
+      "MT40",
+      "MT55",
+      "MT57"
+    ],
+    "position_prefixes": [
+      "BIL"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "BIL"
+  },
+  "GTF GTF CTRD": {
+    "airports": [
+      "KGFA"
+    ],
+    "position_prefixes": [
+      "GTF"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "GTF"
+  },
+  "S56 Salt Lake City TRACON": {
+    "airports": [
+      "KHIF",
+      "KOGD",
+      "KPVU",
+      "KSLC",
+      "S56"
+    ],
+    "position_prefixes": [
+      "S56"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "S56"
+  },
+  "BOI RADAR": {
+    "airports": [
+      "KEUL",
+      "KMAN"
+    ],
+    "position_prefixes": [
+      "BOI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "BOI"
+  },
+  "BOI BOI ATCT": {
+    "airports": [
+      "KBOI"
+    ],
+    "position_prefixes": [
+      "BOI"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "BOI"
+  },
+  "BZN RADAR": {
+    "airports": [
+      "21MT",
+      "23MT",
+      "2MT5",
+      "2MT8",
+      "3MT6",
+      "9S5",
+      "9U1",
+      "K6S0",
+      "KBZN",
+      "KEKS",
+      "KLVM",
+      "KWYS",
+      "MT34",
+      "MT36",
+      "MT41",
+      "MT42",
+      "MT48",
+      "MT94"
+    ],
+    "position_prefixes": [
+      "BZN"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "BZN"
+  },
+  "MUO Range Control": {
+    "airports": [
+      "08U",
+      "10U",
+      "3U0",
+      "KMUO",
+      "U89",
+      "U91"
+    ],
+    "position_prefixes": [
+      "MUO"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "MUO"
+  },
+  "MSO Approach": {
+    "airports": [
+      "32S",
+      "52S"
+    ],
+    "position_prefixes": [
+      "MSO"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "MSO"
+  },
+  "International - Canada": {
+    "airports": [
+      "CZEG",
+      "CZWG"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

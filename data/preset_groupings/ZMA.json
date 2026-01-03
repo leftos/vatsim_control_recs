@@ -1,77 +1,216 @@
 {
-  "MIA Miami Sector": [
-    "KHST",
-    "KMIA",
-    "KTMB"
-  ],
-  "MIA Fort Lauderdale Sector": [
-    "KFLL",
-    "KFXE",
-    "KHWO",
-    "KMIA",
-    "KOPF",
-    "KPMP"
-  ],
-  "MIA Miami Tower": [
-    "KMIA"
-  ],
-  "MIA Fort Lauderdale Tower": [
-    "KFLL"
-  ],
-  "TPA Tampa": [
-    "KBKV",
-    "KBOW",
-    "KLAL",
-    "KMCF",
-    "KPIE",
-    "KSPG",
-    "KSRQ",
-    "KTPA"
-  ],
-  "TPA Tampa Tower": [
-    "KTPA"
-  ],
-  "PBI Palm Beach": [
-    "KBCT",
-    "KFPR",
-    "KPBI",
-    "KSUA",
-    "KVRB"
-  ],
-  "PBI Palm Beach Tower": [
-    "KPBI"
-  ],
-  "RSW Fort Myers": [
-    "KAPF",
-    "KFMY",
-    "KPGD",
-    "KRSW"
-  ],
-  "RSW Fort Myers Tower": [
-    "KRSW"
-  ],
-  "NQX Navy Key West": [
-    "KEYW",
-    "KNQX"
-  ],
-  "HST Homestead RAPCON": [
-    "KHST"
-  ],
-  "International - Bahamas": [
-    "MYAM",
-    "MYGF",
-    "MYNN"
-  ],
-  "International - Cuba": [
-    "MTEG",
-    "MUFH"
-  ],
-  "International - Dominican Republic": [
-    "MDCS",
-    "MDPP"
-  ],
-  "International - Turks & Caicos": [
-    "MBGT",
-    "MBPV"
-  ]
+  "MIA Miami Sector": {
+    "airports": [
+      "KHST",
+      "KMIA",
+      "KTMB"
+    ],
+    "position_prefixes": [
+      "MIA"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "MIA"
+  },
+  "MIA Fort Lauderdale Sector": {
+    "airports": [
+      "KFLL",
+      "KFXE",
+      "KHWO",
+      "KMIA",
+      "KOPF",
+      "KPMP"
+    ],
+    "position_prefixes": [
+      "MIA"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "MIA"
+  },
+  "MIA Miami Tower": {
+    "airports": [
+      "KMIA"
+    ],
+    "position_prefixes": [
+      "MIA"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "RMP",
+      "TWR"
+    ],
+    "facility_id": "MIA"
+  },
+  "MIA Fort Lauderdale Tower": {
+    "airports": [
+      "KFLL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "MIA"
+  },
+  "TPA Tampa": {
+    "airports": [
+      "KBKV",
+      "KBOW",
+      "KLAL",
+      "KMCF",
+      "KPIE",
+      "KSPG",
+      "KSRQ",
+      "KTPA"
+    ],
+    "position_prefixes": [
+      "TPA"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "TPA"
+  },
+  "TPA Tampa Tower": {
+    "airports": [
+      "KTPA"
+    ],
+    "position_prefixes": [
+      "TPA"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "TPA"
+  },
+  "PBI Palm Beach": {
+    "airports": [
+      "KBCT",
+      "KFPR",
+      "KPBI",
+      "KSUA",
+      "KVRB"
+    ],
+    "position_prefixes": [
+      "PBI"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "PBI"
+  },
+  "PBI Palm Beach Tower": {
+    "airports": [
+      "KPBI"
+    ],
+    "position_prefixes": [
+      "PBI"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "PBI"
+  },
+  "RSW Fort Myers": {
+    "airports": [
+      "KAPF",
+      "KFMY",
+      "KPGD",
+      "KRSW"
+    ],
+    "position_prefixes": [
+      "RSW"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "RSW"
+  },
+  "RSW Fort Myers Tower": {
+    "airports": [
+      "KRSW"
+    ],
+    "position_prefixes": [
+      "RSW"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "RSW"
+  },
+  "NQX Navy Key West": {
+    "airports": [
+      "KEYW",
+      "KNQX"
+    ],
+    "position_prefixes": [
+      "NQX"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "NQX"
+  },
+  "HST Homestead RAPCON": {
+    "airports": [
+      "KHST"
+    ],
+    "position_prefixes": [
+      "HST"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "HST"
+  },
+  "International - Bahamas": {
+    "airports": [
+      "MYAM",
+      "MYGF",
+      "MYNN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - Cuba": {
+    "airports": [
+      "MTEG",
+      "MUFH"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - Dominican Republic": {
+    "airports": [
+      "MDCS",
+      "MDPP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - Turks & Caicos": {
+    "airports": [
+      "MBGT",
+      "MBPV"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

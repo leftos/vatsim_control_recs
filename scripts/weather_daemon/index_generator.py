@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .config import DaemonConfig, ARTCC_NAMES, CATEGORY_COLORS
 from .artcc_boundaries import get_artcc_boundaries, get_artcc_center
+from .simaware_boundaries import get_all_grouping_boundaries
 
 # Continental US ARTCCs to display on the map (excludes oceanic/remote)
 CONUS_ARTCCS = {
@@ -288,6 +289,7 @@ def generate_index_page(
         timestamp=timestamp,
         tile_version=tile_version,
         unified_airport_data=unified_airport_data,
+        simaware_cache_dir=config.artcc_cache_dir,  # Reuse ARTCC cache dir for SimAware data
     )
 
     # Write index file
@@ -324,6 +326,7 @@ def generate_html(
     tile_version: int = 0,
     unified_airport_data: Optional[Dict[str, Any]] = None,
     use_tile_layer: bool = True,
+    simaware_cache_dir: Optional[Path] = None,
 ) -> str:
     """Generate the complete HTML content."""
 
@@ -396,44 +399,95 @@ def generate_html(
         key=lambda x: ARTCC_NAMES.get(x, x)
     )
 
+    # Collect all grouping names to fetch SimAware boundaries in batch
+    all_grouping_names = []
+    for artcc in sorted_artccs:
+        for g in artcc_groupings[artcc]:
+            all_grouping_names.append(g['name'])
+    if "custom" in artcc_groupings:
+        for g in artcc_groupings["custom"]:
+            all_grouping_names.append(g['name'])
+
+    # Fetch SimAware TRACON boundaries for all groupings (when cache dir is available)
+    simaware_boundaries = {}
+    if simaware_cache_dir:
+        print("    Fetching SimAware TRACON boundaries for groupings...")
+        simaware_boundaries = get_all_grouping_boundaries(all_grouping_names, simaware_cache_dir)
+
     for artcc in sorted_artccs:
         groupings = artcc_groupings[artcc]
         for g in sorted(groupings, key=lambda x: x['name']):
-            coords = g.get('airport_coords', [])
-            if coords:
-                # Convert to tuples for convex hull
-                coord_tuples = [(c[0], c[1]) for c in coords]
-                # Compute convex hull and add buffer
-                hull = compute_convex_hull(coord_tuples)
-                buffered = add_buffer_to_polygon(hull, buffer_nm=15)
-                # Convert to GeoJSON format [lon, lat]
-                polygon_coords = [[p[1], p[0]] for p in buffered]
-                # Close the polygon
-                if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
-                    polygon_coords.append(polygon_coords[0])
+            grouping_name = g['name']
 
+            # Check if we have a SimAware boundary for this grouping
+            if grouping_name in simaware_boundaries:
+                # Use SimAware TRACON boundary (already in (lat, lon) format)
+                # simaware_boundaries[name] is now a list of polygons (may be >1 if not neighbors)
+                simaware_polys = simaware_boundaries[grouping_name]
+                all_polygon_coords = []
+                for poly in simaware_polys:
+                    # Convert to GeoJSON format [lon, lat]
+                    polygon_coords = [[p[1], p[0]] for p in poly]
+                    # Close the polygon if not already closed
+                    if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
+                        polygon_coords.append(polygon_coords[0])
+                    all_polygon_coords.append(polygon_coords)
+            else:
+                # Fall back to convex hull of airport coordinates
+                coords = g.get('airport_coords', [])
+                all_polygon_coords = []
+                if coords:
+                    # Convert to tuples for convex hull
+                    coord_tuples = [(c[0], c[1]) for c in coords]
+                    # Compute convex hull and add buffer
+                    hull = compute_convex_hull(coord_tuples)
+                    buffered = add_buffer_to_polygon(hull, buffer_nm=15)
+                    # Convert to GeoJSON format [lon, lat]
+                    polygon_coords = [[p[1], p[0]] for p in buffered]
+                    # Close the polygon
+                    if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
+                        polygon_coords.append(polygon_coords[0])
+                    all_polygon_coords.append(polygon_coords)
+
+            if all_polygon_coords:
                 grouping_polygons[str(grouping_id)] = {
-                    'name': g['name'],
+                    'name': grouping_name,
                     'artcc': artcc,
-                    'coords': polygon_coords,
+                    'coords': all_polygon_coords,  # Now a list of polygons
                 }
             grouping_id += 1
 
     # Add custom groupings at the end
     if "custom" in artcc_groupings:
         for g in sorted(artcc_groupings["custom"], key=lambda x: x['name']):
-            coords = g.get('airport_coords', [])
-            if coords:
-                coord_tuples = [(c[0], c[1]) for c in coords]
-                hull = compute_convex_hull(coord_tuples)
-                buffered = add_buffer_to_polygon(hull, buffer_nm=15)
-                polygon_coords = [[p[1], p[0]] for p in buffered]
-                if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
-                    polygon_coords.append(polygon_coords[0])
+            grouping_name = g['name']
+
+            # Check if we have a SimAware boundary for this grouping
+            if grouping_name in simaware_boundaries:
+                simaware_polys = simaware_boundaries[grouping_name]
+                all_polygon_coords = []
+                for poly in simaware_polys:
+                    polygon_coords = [[p[1], p[0]] for p in poly]
+                    if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
+                        polygon_coords.append(polygon_coords[0])
+                    all_polygon_coords.append(polygon_coords)
+            else:
+                coords = g.get('airport_coords', [])
+                all_polygon_coords = []
+                if coords:
+                    coord_tuples = [(c[0], c[1]) for c in coords]
+                    hull = compute_convex_hull(coord_tuples)
+                    buffered = add_buffer_to_polygon(hull, buffer_nm=15)
+                    polygon_coords = [[p[1], p[0]] for p in buffered]
+                    if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
+                        polygon_coords.append(polygon_coords[0])
+                    all_polygon_coords.append(polygon_coords)
+
+            if all_polygon_coords:
                 grouping_polygons[str(grouping_id)] = {
-                    'name': g['name'],
+                    'name': grouping_name,
                     'artcc': None,  # No ARTCC for unmapped custom groupings
-                    'coords': polygon_coords,
+                    'coords': all_polygon_coords,  # Now a list of polygons
                 }
             grouping_id += 1
 
@@ -1028,17 +1082,24 @@ def generate_html(
 
             const data = groupingPolygons[groupingId];
             if (data && data.coords && data.coords.length > 0) {{
-                // Create polygon from coordinates
-                // Leaflet expects [lat, lon] but our coords are [lon, lat]
-                const latLngs = data.coords.map(c => [c[1], c[0]]);
+                // data.coords is now a list of polygons (may be >1 if there are gaps)
+                // Each polygon is an array of [lon, lat] points
+                const polygonLayers = data.coords.map(polyCoords => {{
+                    // Leaflet expects [lat, lon] but our coords are [lon, lat]
+                    const latLngs = polyCoords.map(c => [c[1], c[0]]);
+                    return L.polygon(latLngs, {{
+                        color: '#ffff00',
+                        weight: 2,
+                        fillColor: '#ffff00',
+                        fillOpacity: 0.2,
+                        dashArray: '5, 5',
+                    }});
+                }});
 
-                hoverPolygon = L.polygon(latLngs, {{
-                    color: '#ffff00',
-                    weight: 2,
-                    fillColor: '#ffff00',
-                    fillOpacity: 0.2,
-                    dashArray: '5, 5',
-                }}).addTo(map);
+                // Create a layer group if multiple polygons, or just use the single one
+                hoverPolygon = polygonLayers.length === 1
+                    ? polygonLayers[0].addTo(map)
+                    : L.layerGroup(polygonLayers).addTo(map);
 
                 // Zoom to ARTCC bounds (stable) instead of grouping bounds (jumpy)
                 if (data.artcc && artccBounds[data.artcc]) {{

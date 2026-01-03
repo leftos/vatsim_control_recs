@@ -1,7 +1,16 @@
 {
-  "HNL Honolulu ATCT": [
-    "KHHI",
-    "KHNL",
-    "KJRF"
-  ]
+  "HNL Honolulu ATCT": {
+    "airports": [
+      "KHHI",
+      "KHNL",
+      "KJRF"
+    ],
+    "position_prefixes": [
+      "HNL"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "HNL"
+  }
 }

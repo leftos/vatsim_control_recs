@@ -1,294 +1,605 @@
 {
-  "N90 Kennedy": [
-    "KFRG",
-    "KJFK"
-  ],
-  "N90 LaGuardia": [
-    "KDXR",
-    "KHPN",
-    "KLGA"
-  ],
-  "N90 Newark": [
-    "12N",
-    "13N",
-    "1N7",
-    "39N",
-    "47N",
-    "4N1",
-    "KCDW",
-    "KEWR",
-    "KFWN",
-    "KLDJ",
-    "KMMU",
-    "KSMQ",
-    "KTEB",
-    "N05",
-    "N07",
-    "N51"
-  ],
-  "N90 Islip": [
-    "03NY",
-    "1N2",
-    "21N",
-    "23N",
-    "42B",
-    "87N",
-    "KBDR",
-    "KFOK",
-    "KHVN",
-    "KHWV",
-    "KISP",
-    "KJPX",
-    "KJSD",
-    "KMTP",
-    "KOXC",
-    "KSNC"
-  ],
-  "N90 Liberty": [
-    "06N",
-    "20N",
-    "44N",
-    "46N",
-    "5NY5",
-    "KMGJ",
-    "KMSV",
-    "KPOU",
-    "KSWF",
-    "N45",
-    "N69",
-    "N72",
-    "N82",
-    "N89",
-    "NY35"
-  ],
-  "N90 New York Combined": [
-    "03NY",
-    "12N",
-    "13N",
-    "1N2",
-    "1N7",
-    "21N",
-    "23N",
-    "39N",
-    "42B",
-    "47N",
-    "4N1",
-    "87N",
-    "KBDR",
-    "KCDW",
-    "KDXR",
-    "KEWR",
-    "KFOK",
-    "KFRG",
-    "KFWN",
-    "KHPN",
-    "KHVN",
-    "KHWV",
-    "KISP",
-    "KJFK",
-    "KJPX",
-    "KJSD",
-    "KLDJ",
-    "KLGA",
-    "KMMU",
-    "KMTP",
-    "KOXC",
-    "KSMQ",
-    "KSNC",
-    "KTEB",
-    "N05",
-    "N07",
-    "N51"
-  ],
-  "N90 LaGuardia Cab": [
-    "KLGA"
-  ],
-  "N90 Kennedy Cab": [
-    "KJFK"
-  ],
-  "N90 Newark Cab": [
-    "KEWR",
-    "KLDJ"
-  ],
-  "N90 Teterboro Cab": [
-    "KTEB"
-  ],
-  "N90 Westchester Cab": [
-    "KHPN"
-  ],
-  "N90 Danbury Cab": [
-    "KDXR"
-  ],
-  "N90 Caldwell Cab": [
-    "KCDW"
-  ],
-  "N90 Bridgeport Cab": [
-    "KBDR"
-  ],
-  "N90 Suffolk County Cab": [
-    "KFOK"
-  ],
-  "N90 Republic Cab": [
-    "KFRG"
-  ],
-  "N90 Islip Cab": [
-    "KISP"
-  ],
-  "N90 New Haven Cab": [
-    "KHVN"
-  ],
-  "N90 East Hampton Cab": [
-    "KJPX"
-  ],
-  "N90 Oxford Cab": [
-    "KOXC"
-  ],
-  "N90 Morristown Cab": [
-    "KMMU"
-  ],
-  "N90 Poughkeepsie Cab": [
-    "KPOU"
-  ],
-  "N90 Stewart Cab": [
-    "KSWF"
-  ],
-  "PHL TRACON": [
-    "17N",
-    "19N",
-    "40N",
-    "58M",
-    "7N7",
-    "9N2",
-    "KCKZ",
-    "KDYL",
-    "KEVY",
-    "KILG",
-    "KLOM",
-    "KMQS",
-    "KNXX",
-    "KOQN",
-    "KPHL",
-    "KPNE",
-    "KPTW",
-    "KTTN",
-    "KUKT",
-    "KVAY",
-    "N10",
-    "N14",
-    "N47",
-    "N57",
-    "N73",
-    "NJ74"
-  ],
-  "PHL Philly Cab": [
-    "KPHL"
-  ],
-  "PHL Northeast Philly Cab": [
-    "KPNE"
-  ],
-  "PHL Trenton Cab": [
-    "KTTN"
-  ],
-  "PHL Wilmington Cab": [
-    "KILG"
-  ],
-  "ELM TRACAB": [
-    "KELM",
-    "KITH",
-    "KPEO",
-    "N03",
-    "N38"
-  ],
-  "ABE TRACON": [
-    "1N7",
-    "22N",
-    "69N",
-    "KABE",
-    "KXLL",
-    "N40",
-    "N43",
-    "N53",
-    "N85"
-  ],
-  "ABE Cab": [
-    "KABE"
-  ],
-  "AVP TRACON": [
-    "70N",
-    "76N",
-    "9N3",
-    "KAVP",
-    "KHZL",
-    "KMPO",
-    "KWBW"
-  ],
-  "AVP Cab": [
-    "KAVP"
-  ],
-  "BGM TRACON": [
-    "4N7",
-    "KBGM",
-    "KCZG",
-    "N27",
-    "NK68"
-  ],
-  "BGM Cab": [
-    "KBGM"
-  ],
-  "MDT TRACON": [
-    "9D4",
-    "KCXY",
-    "KLNS",
-    "KMDT",
-    "KMUI",
-    "KRDG",
-    "KSEG",
-    "KTHV",
-    "N68",
-    "N71",
-    "N76",
-    "N79",
-    "N94"
-  ],
-  "MDT Cab": [
-    "KMDT"
-  ],
-  "MDT Capital City Cab": [
-    "KCXY"
-  ],
-  "MDT Lancaster Cab": [
-    "KLNS"
-  ],
-  "MDT Reading Cab": [
-    "KRDG"
-  ],
-  "WRI RAPCON": [
-    "19N",
-    "2N6",
-    "3N6",
-    "3NJ1",
-    "3NJ6",
-    "JY73",
-    "KBLM",
-    "KMJX",
-    "KNEL",
-    "KVAY",
-    "KWRI",
-    "N12",
-    "N14",
-    "N81",
-    "N87",
-    "NJ20",
-    "NJ24",
-    "NJ46",
-    "NJ59",
-    "NJ60",
-    "NJ72"
-  ],
-  "WRI Cab": [
-    "KWRI"
-  ],
-  "International - Bermuda": [
-    "TXKF"
-  ]
+  "N90 Kennedy": {
+    "airports": [
+      "KFRG",
+      "KJFK"
+    ],
+    "position_prefixes": [
+      "JFK"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "N90"
+  },
+  "N90 LaGuardia": {
+    "airports": [
+      "KDXR",
+      "KHPN",
+      "KLGA"
+    ],
+    "position_prefixes": [
+      "LGA"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "N90"
+  },
+  "N90 Newark": {
+    "airports": [
+      "12N",
+      "13N",
+      "1N7",
+      "39N",
+      "47N",
+      "4N1",
+      "KCDW",
+      "KEWR",
+      "KFWN",
+      "KLDJ",
+      "KMMU",
+      "KSMQ",
+      "KTEB",
+      "N05",
+      "N07",
+      "N51"
+    ],
+    "position_prefixes": [
+      "EWR"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "N90"
+  },
+  "N90 Islip": {
+    "airports": [
+      "03NY",
+      "1N2",
+      "21N",
+      "23N",
+      "42B",
+      "87N",
+      "KBDR",
+      "KFOK",
+      "KHVN",
+      "KHWV",
+      "KISP",
+      "KJPX",
+      "KJSD",
+      "KMTP",
+      "KOXC",
+      "KSNC"
+    ],
+    "position_prefixes": [
+      "ISP"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "N90"
+  },
+  "N90 Liberty": {
+    "airports": [
+      "06N",
+      "20N",
+      "44N",
+      "46N",
+      "5NY5",
+      "KMGJ",
+      "KMSV",
+      "KPOU",
+      "KSWF",
+      "N45",
+      "N69",
+      "N72",
+      "N82",
+      "N89",
+      "NY35"
+    ],
+    "position_prefixes": [
+      "NY",
+      "SWF"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "N90"
+  },
+  "N90 New York Combined": {
+    "airports": [
+      "03NY",
+      "12N",
+      "13N",
+      "1N2",
+      "1N7",
+      "21N",
+      "23N",
+      "39N",
+      "42B",
+      "47N",
+      "4N1",
+      "87N",
+      "KBDR",
+      "KCDW",
+      "KDXR",
+      "KEWR",
+      "KFOK",
+      "KFRG",
+      "KFWN",
+      "KHPN",
+      "KHVN",
+      "KHWV",
+      "KISP",
+      "KJFK",
+      "KJPX",
+      "KJSD",
+      "KLDJ",
+      "KLGA",
+      "KMMU",
+      "KMTP",
+      "KOXC",
+      "KSMQ",
+      "KSNC",
+      "KTEB",
+      "N05",
+      "N07",
+      "N51"
+    ],
+    "position_prefixes": [
+      "NY"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "N90"
+  },
+  "N90 LaGuardia Cab": {
+    "airports": [
+      "KLGA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Kennedy Cab": {
+    "airports": [
+      "KJFK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Newark Cab": {
+    "airports": [
+      "KEWR",
+      "KLDJ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Teterboro Cab": {
+    "airports": [
+      "KTEB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Westchester Cab": {
+    "airports": [
+      "KHPN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Danbury Cab": {
+    "airports": [
+      "KDXR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Caldwell Cab": {
+    "airports": [
+      "KCDW"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Bridgeport Cab": {
+    "airports": [
+      "KBDR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Suffolk County Cab": {
+    "airports": [
+      "KFOK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Republic Cab": {
+    "airports": [
+      "KFRG"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Islip Cab": {
+    "airports": [
+      "KISP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 New Haven Cab": {
+    "airports": [
+      "KHVN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 East Hampton Cab": {
+    "airports": [
+      "KJPX"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Oxford Cab": {
+    "airports": [
+      "KOXC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Morristown Cab": {
+    "airports": [
+      "KMMU"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Poughkeepsie Cab": {
+    "airports": [
+      "KPOU"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "N90 Stewart Cab": {
+    "airports": [
+      "KSWF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "N90"
+  },
+  "PHL TRACON": {
+    "airports": [
+      "17N",
+      "19N",
+      "40N",
+      "58M",
+      "7N7",
+      "9N2",
+      "KCKZ",
+      "KDYL",
+      "KEVY",
+      "KILG",
+      "KLOM",
+      "KMQS",
+      "KNXX",
+      "KOQN",
+      "KPHL",
+      "KPNE",
+      "KPTW",
+      "KTTN",
+      "KUKT",
+      "KVAY",
+      "N10",
+      "N14",
+      "N47",
+      "N57",
+      "N73",
+      "NJ74"
+    ],
+    "position_prefixes": [
+      "PHL"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "PHL"
+  },
+  "PHL Philly Cab": {
+    "airports": [
+      "KPHL"
+    ],
+    "position_prefixes": [
+      "PHL"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "PHL"
+  },
+  "PHL Northeast Philly Cab": {
+    "airports": [
+      "KPNE"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PHL"
+  },
+  "PHL Trenton Cab": {
+    "airports": [
+      "KTTN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PHL"
+  },
+  "PHL Wilmington Cab": {
+    "airports": [
+      "KILG"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PHL"
+  },
+  "ELM TRACAB": {
+    "airports": [
+      "KELM",
+      "KITH",
+      "KPEO",
+      "N03",
+      "N38"
+    ],
+    "position_prefixes": [
+      "ELM"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "ELM"
+  },
+  "ABE TRACON": {
+    "airports": [
+      "1N7",
+      "22N",
+      "69N",
+      "KABE",
+      "KXLL",
+      "N40",
+      "N43",
+      "N53",
+      "N85"
+    ],
+    "position_prefixes": [
+      "ABE"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "ABE"
+  },
+  "ABE Cab": {
+    "airports": [
+      "KABE"
+    ],
+    "position_prefixes": [
+      "ABE"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "ABE"
+  },
+  "AVP TRACON": {
+    "airports": [
+      "70N",
+      "76N",
+      "9N3",
+      "KAVP",
+      "KHZL",
+      "KMPO",
+      "KWBW"
+    ],
+    "position_prefixes": [
+      "AVP"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "AVP"
+  },
+  "AVP Cab": {
+    "airports": [
+      "KAVP"
+    ],
+    "position_prefixes": [
+      "AVP"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "AVP"
+  },
+  "BGM TRACON": {
+    "airports": [
+      "4N7",
+      "KBGM",
+      "KCZG",
+      "N27",
+      "NK68"
+    ],
+    "position_prefixes": [
+      "BGM"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "BGM"
+  },
+  "BGM Cab": {
+    "airports": [
+      "KBGM"
+    ],
+    "position_prefixes": [
+      "BGM"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "BGM"
+  },
+  "MDT TRACON": {
+    "airports": [
+      "9D4",
+      "KCXY",
+      "KLNS",
+      "KMDT",
+      "KMUI",
+      "KRDG",
+      "KSEG",
+      "KTHV",
+      "N68",
+      "N71",
+      "N76",
+      "N79",
+      "N94"
+    ],
+    "position_prefixes": [
+      "MDT"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "MDT"
+  },
+  "MDT Cab": {
+    "airports": [
+      "KMDT"
+    ],
+    "position_prefixes": [
+      "MDT"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "MDT"
+  },
+  "MDT Capital City Cab": {
+    "airports": [
+      "KCXY"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "MDT"
+  },
+  "MDT Lancaster Cab": {
+    "airports": [
+      "KLNS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "MDT"
+  },
+  "MDT Reading Cab": {
+    "airports": [
+      "KRDG"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "MDT"
+  },
+  "WRI RAPCON": {
+    "airports": [
+      "19N",
+      "2N6",
+      "3N6",
+      "3NJ1",
+      "3NJ6",
+      "JY73",
+      "KBLM",
+      "KMJX",
+      "KNEL",
+      "KVAY",
+      "KWRI",
+      "N12",
+      "N14",
+      "N81",
+      "N87",
+      "NJ20",
+      "NJ24",
+      "NJ46",
+      "NJ59",
+      "NJ60",
+      "NJ72"
+    ],
+    "position_prefixes": [
+      "WRI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "WRI"
+  },
+  "WRI Cab": {
+    "airports": [
+      "KWRI"
+    ],
+    "position_prefixes": [
+      "WRI"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "WRI"
+  },
+  "International - Bermuda": {
+    "airports": [
+      "TXKF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

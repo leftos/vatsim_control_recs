@@ -1,44 +1,98 @@
 {
-  "SJA AREA 2": [
-    "KCPX",
-    "KRVR",
-    "KSIG",
-    "KSJU",
-    "KSTT",
-    "KSTX",
-    "KVQS",
-    "TUPG",
-    "TUPJ",
-    "TUPW",
-    "X63"
-  ],
-  "SJA BQN Tower": [
-    "KBQN"
-  ],
-  "International - Antigua": [
-    "TAPA"
-  ],
-  "International - British Virgin Islands": [
-    "TUPJ"
-  ],
-  "International - Dominican Republic": [
-    "MDCS",
-    "MDPC"
-  ],
-  "International - French Antilles": [
-    "TFFR"
-  ],
-  "International - Netherlands Antilles": [
-    "TNCF",
-    "TNCM"
-  ],
-  "International - St. Kitts": [
-    "TKPK"
-  ],
-  "International - Trinidad & Tobago": [
-    "TTZP"
-  ],
-  "International - Venezuela": [
-    "SVZM"
-  ]
+  "SJA AREA 2": {
+    "airports": [
+      "KCPX",
+      "KRVR",
+      "KSIG",
+      "KSJU",
+      "KSTT",
+      "KSTX",
+      "KVQS",
+      "TUPG",
+      "TUPJ",
+      "TUPW",
+      "X63"
+    ],
+    "position_prefixes": [
+      "SJU"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SJA"
+  },
+  "SJA BQN Tower": {
+    "airports": [
+      "KBQN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SJA"
+  },
+  "International - Antigua": {
+    "airports": [
+      "TAPA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - British Virgin Islands": {
+    "airports": [
+      "TUPJ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - Dominican Republic": {
+    "airports": [
+      "MDCS",
+      "MDPC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - French Antilles": {
+    "airports": [
+      "TFFR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - Netherlands Antilles": {
+    "airports": [
+      "TNCF",
+      "TNCM"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - St. Kitts": {
+    "airports": [
+      "TKPK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - Trinidad & Tobago": {
+    "airports": [
+      "TTZP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - Venezuela": {
+    "airports": [
+      "SVZM"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

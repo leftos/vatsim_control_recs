@@ -165,3 +165,5 @@ cache/artcc_boundaries/
 cache/weather_cache/
 cache/weather/
 temp/
+cache/simaware*
+cache/simaware_boundaries/

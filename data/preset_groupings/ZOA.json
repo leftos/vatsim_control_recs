@@ -1,236 +1,584 @@
 {
-  "FAT FAT": [
-    "KFAT"
-  ],
-  "NCT A": [
-    "E16",
-    "KCVH",
-    "KMRY",
-    "KNUQ",
-    "KOAR",
-    "KPAO",
-    "KRHV",
-    "KSJC",
-    "KSNS",
-    "KWVI"
-  ],
-  "NCT B": [
-    "KSQL"
-  ],
-  "NCT C": [
-    "1O3",
-    "C83",
-    "F34",
-    "KHWD",
-    "KLSN",
-    "KLVK",
-    "KMCE",
-    "KMER",
-    "KMOD",
-    "KSCK",
-    "KTCY",
-    "O27"
-  ],
-  "NCT D": [
-    "KHAF",
-    "KOAK",
-    "KSFO"
-  ],
-  "NCT E": [
-    "KAUN",
-    "KBAB",
-    "KGOO",
-    "KLHM",
-    "KMCC",
-    "KMHR",
-    "KMYV",
-    "KOVE",
-    "KPVF",
-    "KSAC",
-    "KSMF",
-    "O88"
-  ],
-  "NCT R": [
-    "KCXP",
-    "KMEV",
-    "KRNO",
-    "KRTS"
-  ],
-  "NCT Combined": [
-    "1O3",
-    "C83",
-    "E16",
-    "F34",
-    "KAUN",
-    "KBAB",
-    "KCVH",
-    "KCXP",
-    "KGOO",
-    "KHAF",
-    "KHWD",
-    "KLHM",
-    "KLSN",
-    "KLVK",
-    "KMCC",
-    "KMCE",
-    "KMER",
-    "KMEV",
-    "KMHR",
-    "KMOD",
-    "KMRY",
-    "KMYV",
-    "KNUQ",
-    "KOAK",
-    "KOAR",
-    "KOVE",
-    "KPAO",
-    "KPVF",
-    "KRHV",
-    "KRNO",
-    "KRTS",
-    "KSAC",
-    "KSCK",
-    "KSFO",
-    "KSJC",
-    "KSMF",
-    "KSNS",
-    "KSQL",
-    "KTCY",
-    "KWVI",
-    "O27",
-    "O88"
-  ],
-  "NCT Beale Tower": [
-    "KBAB"
-  ],
-  "NCT Chico Tower": [
-    "KCIC"
-  ],
-  "NCT Concord Tower": [
-    "KCCR"
-  ],
-  "NCT Hayward Tower": [
-    "KHWD"
-  ],
-  "NCT Livermore Tower": [
-    "KLVK"
-  ],
-  "NCT Mather Tower": [
-    "KMHR"
-  ],
-  "NCT Modesto Tower": [
-    "KMOD"
-  ],
-  "NCT Moffett Tower": [
-    "KNUQ"
-  ],
-  "NCT Monterey Tower": [
-    "KMRY"
-  ],
-  "NCT Napa Tower": [
-    "KAPC"
-  ],
-  "NCT Oakland Tower": [
-    "KOAK"
-  ],
-  "NCT Palo Alto Tower": [
-    "KPAO"
-  ],
-  "NCT Redding Tower": [
-    "KRDD"
-  ],
-  "NCT Reid Hillview Tower": [
-    "KRHV"
-  ],
-  "NCT Reno Tower": [
-    "KRNO"
-  ],
-  "NCT Sac Executive Tower": [
-    "KSAC"
-  ],
-  "NCT Sacramento Tower": [
-    "KSMF"
-  ],
-  "NCT Salinas Tower": [
-    "KSNS"
-  ],
-  "NCT San Carlos Tower": [
-    "KSQL"
-  ],
-  "NCT San Francisco Tower": [
-    "KSFO"
-  ],
-  "NCT San Jose Tower": [
-    "KSJC"
-  ],
-  "NCT Santa Rosa Tower": [
-    "KSTS"
-  ],
-  "NCT Stockton Tower": [
-    "KSCK"
-  ],
-  "NCT TMU": [
-    "KOAK",
-    "KRNO",
-    "KSFO",
-    "KSJC",
-    "KSMF"
-  ],
-  "KWA KWA": [
-    "PKWA"
-  ],
-  "O90 O90": [
-    "KHWD",
-    "KNUQ",
-    "KOAK",
-    "KPAO",
-    "KRHV",
-    "KSFO",
-    "KSJC",
-    "KSQL"
-  ],
-  "O90 SFO": [
-    "KSFO"
-  ],
-  "O90 OAK": [
-    "KOAK"
-  ],
-  "O90 HWD": [
-    "KHWD"
-  ],
-  "O90 NUQ": [
-    "KNUQ"
-  ],
-  "O90 PAO": [
-    "KPAO"
-  ],
-  "O90 SQL": [
-    "KSQL"
-  ],
-  "O90 SJC": [
-    "KSJC"
-  ],
-  "O90 RHV": [
-    "KRHV"
-  ],
-  "MC1 MCC": [
-    "KBAB",
-    "KMCC",
-    "KMHR",
-    "KSAC",
-    "KSMF"
-  ],
-  "SC1 SCK": [
-    "KLVK",
-    "KMER",
-    "KMOD",
-    "KSCK",
-    "KTCY"
-  ],
-  "MR1 MRY": [
-    "KMRY",
-    "KOAR",
-    "KSNS",
-    "KWVI"
-  ]
+  "FAT": {
+    "airports": [
+      "KFAT"
+    ],
+    "position_prefixes": [
+      "FAT"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "FAT"
+  },
+  "NCT A": {
+    "airports": [
+      "E16",
+      "KCVH",
+      "KMRY",
+      "KNUQ",
+      "KOAR",
+      "KPAO",
+      "KRHV",
+      "KSJC",
+      "KSNS",
+      "KWVI"
+    ],
+    "position_prefixes": [
+      "MRY",
+      "SJC"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "NCT"
+  },
+  "NCT B": {
+    "airports": [
+      "KSQL"
+    ],
+    "position_prefixes": [
+      "SFO"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "NCT"
+  },
+  "NCT C": {
+    "airports": [
+      "1O3",
+      "C83",
+      "F34",
+      "KHWD",
+      "KLSN",
+      "KLVK",
+      "KMCE",
+      "KMER",
+      "KMOD",
+      "KSCK",
+      "KTCY",
+      "O27"
+    ],
+    "position_prefixes": [
+      "MOD",
+      "OAK"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "NCT"
+  },
+  "NCT D": {
+    "airports": [
+      "KHAF",
+      "KOAK",
+      "KSFO"
+    ],
+    "position_prefixes": [
+      "OAK",
+      "SFO"
+    ],
+    "position_suffixes": [
+      "DEP"
+    ],
+    "facility_id": "NCT"
+  },
+  "NCT E": {
+    "airports": [
+      "KAUN",
+      "KBAB",
+      "KGOO",
+      "KLHM",
+      "KMCC",
+      "KMHR",
+      "KMYV",
+      "KOVE",
+      "KPVF",
+      "KSAC",
+      "KSMF",
+      "O88"
+    ],
+    "position_prefixes": [
+      "SMF"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "NCT"
+  },
+  "NCT R": {
+    "airports": [
+      "KCXP",
+      "KMEV",
+      "KRNO",
+      "KRTS"
+    ],
+    "position_prefixes": [
+      "RNO"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "NCT"
+  },
+  "NCT Combined": {
+    "airports": [
+      "1O3",
+      "C83",
+      "E16",
+      "F34",
+      "KAUN",
+      "KBAB",
+      "KCVH",
+      "KCXP",
+      "KGOO",
+      "KHAF",
+      "KHWD",
+      "KLHM",
+      "KLSN",
+      "KLVK",
+      "KMCC",
+      "KMCE",
+      "KMER",
+      "KMEV",
+      "KMHR",
+      "KMOD",
+      "KMRY",
+      "KMYV",
+      "KNUQ",
+      "KOAK",
+      "KOAR",
+      "KOVE",
+      "KPAO",
+      "KPVF",
+      "KRHV",
+      "KRNO",
+      "KRTS",
+      "KSAC",
+      "KSCK",
+      "KSFO",
+      "KSJC",
+      "KSMF",
+      "KSNS",
+      "KSQL",
+      "KTCY",
+      "KWVI",
+      "O27",
+      "O88"
+    ],
+    "position_prefixes": [
+      "NCT",
+      "SMF"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "NCT"
+  },
+  "NCT Beale Tower": {
+    "airports": [
+      "KBAB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Chico Tower": {
+    "airports": [
+      "KCIC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Concord Tower": {
+    "airports": [
+      "KCCR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Hayward Tower": {
+    "airports": [
+      "KHWD"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Livermore Tower": {
+    "airports": [
+      "KLVK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Mather Tower": {
+    "airports": [
+      "KMHR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Modesto Tower": {
+    "airports": [
+      "KMOD"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Moffett Tower": {
+    "airports": [
+      "KNUQ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Monterey Tower": {
+    "airports": [
+      "KMRY"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Napa Tower": {
+    "airports": [
+      "KAPC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Oakland Tower": {
+    "airports": [
+      "KOAK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Palo Alto Tower": {
+    "airports": [
+      "KPAO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Redding Tower": {
+    "airports": [
+      "KRDD"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Reid Hillview Tower": {
+    "airports": [
+      "KRHV"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Reno Tower": {
+    "airports": [
+      "KRNO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Sac Executive Tower": {
+    "airports": [
+      "KSAC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Sacramento Tower": {
+    "airports": [
+      "KSMF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Salinas Tower": {
+    "airports": [
+      "KSNS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT San Carlos Tower": {
+    "airports": [
+      "KSQL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT San Francisco Tower": {
+    "airports": [
+      "KSFO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT San Jose Tower": {
+    "airports": [
+      "KSJC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Santa Rosa Tower": {
+    "airports": [
+      "KSTS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT Stockton Tower": {
+    "airports": [
+      "KSCK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NCT"
+  },
+  "NCT TMU": {
+    "airports": [
+      "KOAK",
+      "KRNO",
+      "KSFO",
+      "KSJC",
+      "KSMF"
+    ],
+    "position_prefixes": [
+      "NCT"
+    ],
+    "position_suffixes": [
+      "TMU"
+    ],
+    "facility_id": "NCT"
+  },
+  "KWA": {
+    "airports": [
+      "PKWA"
+    ],
+    "position_prefixes": [
+      "KWA"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "KWA"
+  },
+  "O90": {
+    "airports": [
+      "KHWD",
+      "KNUQ",
+      "KOAK",
+      "KPAO",
+      "KRHV",
+      "KSFO",
+      "KSJC",
+      "KSQL"
+    ],
+    "position_prefixes": [
+      "BAY"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "O90"
+  },
+  "O90 SFO": {
+    "airports": [
+      "KSFO"
+    ],
+    "position_prefixes": [
+      "SFO"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "O90"
+  },
+  "O90 OAK": {
+    "airports": [
+      "KOAK"
+    ],
+    "position_prefixes": [
+      "OAK"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "O90"
+  },
+  "O90 HWD": {
+    "airports": [
+      "KHWD"
+    ],
+    "position_prefixes": [
+      "HWD"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "O90"
+  },
+  "O90 NUQ": {
+    "airports": [
+      "KNUQ"
+    ],
+    "position_prefixes": [
+      "NUQ"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "O90"
+  },
+  "O90 PAO": {
+    "airports": [
+      "KPAO"
+    ],
+    "position_prefixes": [
+      "PAO"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "O90"
+  },
+  "O90 SQL": {
+    "airports": [
+      "KSQL"
+    ],
+    "position_prefixes": [
+      "SQL"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "O90"
+  },
+  "O90 SJC": {
+    "airports": [
+      "KSJC"
+    ],
+    "position_prefixes": [
+      "SJC"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "O90"
+  },
+  "O90 RHV": {
+    "airports": [
+      "KRHV"
+    ],
+    "position_prefixes": [
+      "RHV"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "O90"
+  },
+  "MC1 MCC": {
+    "airports": [
+      "KBAB",
+      "KMCC",
+      "KMHR",
+      "KSAC",
+      "KSMF"
+    ],
+    "position_prefixes": [
+      "BAB",
+      "MHR",
+      "SAC",
+      "SMF"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "MC1"
+  },
+  "SC1 SCK": {
+    "airports": [
+      "KLVK",
+      "KMER",
+      "KMOD",
+      "KSCK",
+      "KTCY"
+    ],
+    "position_prefixes": [
+      "LVK",
+      "MOD",
+      "SCK"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "SC1"
+  },
+  "MR1 MRY": {
+    "airports": [
+      "KMRY",
+      "KOAR",
+      "KSNS",
+      "KWVI"
+    ],
+    "position_prefixes": [
+      "MRY",
+      "SNS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "MR1"
+  }
 }

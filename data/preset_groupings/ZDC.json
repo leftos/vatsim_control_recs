@@ -1,309 +1,532 @@
 {
-  "PCT Chesapeake": [
-    "0W3",
-    "1W5",
-    "2W2",
-    "3W3",
-    "6W6",
-    "9W8",
-    "KANP",
-    "KAPG",
-    "KBWI",
-    "KDMW",
-    "KEDG",
-    "KESN",
-    "KFME",
-    "KGAI",
-    "KMTN",
-    "KRJD",
-    "MD43",
-    "MD95",
-    "W18",
-    "W29",
-    "W42",
-    "W48",
-    "W50"
-  ],
-  "PCT Shenandoah": [
-    "2VA9",
-    "2VG2",
-    "KCJR",
-    "KEZF",
-    "KFDK",
-    "KFRR",
-    "KHEF",
-    "KHGR",
-    "KHWY",
-    "KIAD",
-    "KJYO",
-    "KMRB",
-    "KNYG",
-    "KOKV",
-    "KRMN",
-    "W05",
-    "W35"
-  ],
-  "PCT Mount Vernon": [
-    "2W5",
-    "KADW",
-    "KCGS",
-    "KDAA",
-    "KDCA",
-    "KNDY",
-    "KVKX",
-    "W00",
-    "W32"
-  ],
-  "PCT James River": [
-    "1N5",
-    "2W6",
-    "KAPH",
-    "KCGE",
-    "KCHO",
-    "KFCI",
-    "KFYJ",
-    "KGVE",
-    "KLKU",
-    "KMFV",
-    "KNHK",
-    "KNUI",
-    "KOFP",
-    "KOMH",
-    "KOXB",
-    "KPTB",
-    "KRIC",
-    "KSBY",
-    "KSHD",
-    "KTGI",
-    "KVBW",
-    "KWAL",
-    "KXSA",
-    "N06",
-    "VA39",
-    "W13",
-    "W41",
-    "W96"
-  ],
-  "PCT Consolidated": [
-    "0W3",
-    "1N5",
-    "1W5",
-    "2VA9",
-    "2VG2",
-    "2W2",
-    "2W5",
-    "2W6",
-    "3W3",
-    "6W6",
-    "9W8",
-    "KADW",
-    "KANP",
-    "KAPG",
-    "KAPH",
-    "KBWI",
-    "KCGE",
-    "KCGS",
-    "KCHO",
-    "KCJR",
-    "KDAA",
-    "KDCA",
-    "KDMW",
-    "KEDG",
-    "KESN",
-    "KEZF",
-    "KFCI",
-    "KFDK",
-    "KFME",
-    "KFRR",
-    "KFYJ",
-    "KGAI",
-    "KGVE",
-    "KHEF",
-    "KHGR",
-    "KHWY",
-    "KIAD",
-    "KJYO",
-    "KLKU",
-    "KMFV",
-    "KMRB",
-    "KMTN",
-    "KNDY",
-    "KNHK",
-    "KNSF",
-    "KNUI",
-    "KNYG",
-    "KOFP",
-    "KOKV",
-    "KOMH",
-    "KOXB",
-    "KPTB",
-    "KRIC",
-    "KRJD",
-    "KRMN",
-    "KSBY",
-    "KSHD",
-    "KTGI",
-    "KVBW",
-    "KVKX",
-    "KWAL",
-    "KXSA",
-    "MD43",
-    "MD95",
-    "N06",
-    "VA39",
-    "W00",
-    "W05",
-    "W13",
-    "W18",
-    "W29",
-    "W32",
-    "W35",
-    "W41",
-    "W42",
-    "W48",
-    "W50",
-    "W96"
-  ],
-  "PCT Andrews Tower": [
-    "KADW"
-  ],
-  "PCT Baltimore Tower": [
-    "KBWI"
-  ],
-  "PCT Charlottesville Tower": [
-    "KCHO"
-  ],
-  "PCT Davison Tower": [
-    "KDAA"
-  ],
-  "PCT Washington Tower": [
-    "KDCA"
-  ],
-  "PCT Easton Tower": [
-    "KESN"
-  ],
-  "PCT Manassas Tower": [
-    "KHEF"
-  ],
-  "PCT Dulles Tower": [
-    "KIAD"
-  ],
-  "PCT Martin Tower": [
-    "KMTN"
-  ],
-  "PCT Hagerstown Tower": [
-    "KHGR"
-  ],
-  "PCT Richmond Tower": [
-    "KRIC"
-  ],
-  "PCT Frederick Tower": [
-    "KFDK"
-  ],
-  "RDU TRACON": [
-    "5W5",
-    "KHNZ",
-    "KJNX",
-    "KLHZ",
-    "KRDU",
-    "KTDF",
-    "KTTA",
-    "W17"
-  ],
-  "ORF TRACON": [
-    "KAKQ",
-    "KCPK",
-    "KFAF",
-    "KFKN",
-    "KLFI",
-    "KNFE",
-    "KNGU",
-    "KNTU",
-    "KNVF",
-    "KONX",
-    "KORF",
-    "KPHF",
-    "KPVG",
-    "KSFQ"
-  ],
-  "ROA TRACON": [
-    "0V4",
-    "KBCB",
-    "KFVX",
-    "KLYH",
-    "KPSK",
-    "KROA",
-    "W24",
-    "W90",
-    "W91"
-  ],
-  "FAY TRACON": [
-    "43A",
-    "5W4",
-    "BQ1",
-    "KCTZ",
-    "KEYF",
-    "KFAY",
-    "KFBG",
-    "KHFF",
-    "KHRJ",
-    "KLBT",
-    "KMEB",
-    "KPOB",
-    "KRCZ",
-    "KSOP"
-  ],
-  "GSB RAPCON": [
-    "KDPL",
-    "KGSB",
-    "KGWW",
-    "KISO",
-    "W40"
-  ],
-  "DOV RAPCON": [
-    "0N4",
-    "33N",
-    "KDOV",
-    "MD1"
-  ],
-  "ACY TRACON": [
-    "26N",
-    "31E",
-    "KACY",
-    "KMIV",
-    "KOBI",
-    "KWWD",
-    "N81"
-  ],
-  "ILM TRACON": [
-    "KACZ",
-    "KILM",
-    "KOAJ",
-    "KSUT"
-  ],
-  "NKT RAPCON": [
-    "KEWN",
-    "KNCA",
-    "KNJM",
-    "KNKT"
-  ],
-  "NTU RAPCON": [
-    "KNFE",
-    "KNTU",
-    "KONX"
-  ],
-  "NHK RAPCON": [
-    "1N5",
-    "2W6",
-    "KCGE",
-    "KMFV",
-    "KNHK",
-    "KNUI",
-    "KOXB",
-    "KSBY",
-    "KTGI",
-    "KWAL",
-    "N06",
-    "W41"
-  ]
+  "PCT Chesapeake": {
+    "airports": [
+      "0W3",
+      "1W5",
+      "2W2",
+      "3W3",
+      "6W6",
+      "9W8",
+      "KANP",
+      "KAPG",
+      "KBWI",
+      "KDMW",
+      "KEDG",
+      "KESN",
+      "KFME",
+      "KGAI",
+      "KMTN",
+      "KRJD",
+      "MD43",
+      "MD95",
+      "W18",
+      "W29",
+      "W42",
+      "W48",
+      "W50"
+    ],
+    "position_prefixes": [
+      "BWI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "PCT"
+  },
+  "PCT Shenandoah": {
+    "airports": [
+      "2VA9",
+      "2VG2",
+      "KCJR",
+      "KEZF",
+      "KFDK",
+      "KFRR",
+      "KHEF",
+      "KHGR",
+      "KHWY",
+      "KIAD",
+      "KJYO",
+      "KMRB",
+      "KNYG",
+      "KOKV",
+      "KRMN",
+      "W05",
+      "W35"
+    ],
+    "position_prefixes": [
+      "IAD"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "PCT"
+  },
+  "PCT Mount Vernon": {
+    "airports": [
+      "2W5",
+      "KADW",
+      "KCGS",
+      "KDAA",
+      "KDCA",
+      "KNDY",
+      "KVKX",
+      "W00",
+      "W32"
+    ],
+    "position_prefixes": [
+      "DCA"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "PCT"
+  },
+  "PCT James River": {
+    "airports": [
+      "1N5",
+      "2W6",
+      "KAPH",
+      "KCGE",
+      "KCHO",
+      "KFCI",
+      "KFYJ",
+      "KGVE",
+      "KLKU",
+      "KMFV",
+      "KNHK",
+      "KNUI",
+      "KOFP",
+      "KOMH",
+      "KOXB",
+      "KPTB",
+      "KRIC",
+      "KSBY",
+      "KSHD",
+      "KTGI",
+      "KVBW",
+      "KWAL",
+      "KXSA",
+      "N06",
+      "VA39",
+      "W13",
+      "W41",
+      "W96"
+    ],
+    "position_prefixes": [
+      "CHO",
+      "RIC"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "PCT"
+  },
+  "PCT Consolidated": {
+    "airports": [
+      "0W3",
+      "1N5",
+      "1W5",
+      "2VA9",
+      "2VG2",
+      "2W2",
+      "2W5",
+      "2W6",
+      "3W3",
+      "6W6",
+      "9W8",
+      "KADW",
+      "KANP",
+      "KAPG",
+      "KAPH",
+      "KBWI",
+      "KCGE",
+      "KCGS",
+      "KCHO",
+      "KCJR",
+      "KDAA",
+      "KDCA",
+      "KDMW",
+      "KEDG",
+      "KESN",
+      "KEZF",
+      "KFCI",
+      "KFDK",
+      "KFME",
+      "KFRR",
+      "KFYJ",
+      "KGAI",
+      "KGVE",
+      "KHEF",
+      "KHGR",
+      "KHWY",
+      "KIAD",
+      "KJYO",
+      "KLKU",
+      "KMFV",
+      "KMRB",
+      "KMTN",
+      "KNDY",
+      "KNHK",
+      "KNSF",
+      "KNUI",
+      "KNYG",
+      "KOFP",
+      "KOKV",
+      "KOMH",
+      "KOXB",
+      "KPTB",
+      "KRIC",
+      "KRJD",
+      "KRMN",
+      "KSBY",
+      "KSHD",
+      "KTGI",
+      "KVBW",
+      "KVKX",
+      "KWAL",
+      "KXSA",
+      "MD43",
+      "MD95",
+      "N06",
+      "VA39",
+      "W00",
+      "W05",
+      "W13",
+      "W18",
+      "W29",
+      "W32",
+      "W35",
+      "W41",
+      "W42",
+      "W48",
+      "W50",
+      "W96"
+    ],
+    "position_prefixes": [
+      "BWI",
+      "IAD",
+      "PCT",
+      "RIC"
+    ],
+    "position_suffixes": [
+      "APP",
+      "FSS"
+    ],
+    "facility_id": "PCT"
+  },
+  "PCT Andrews Tower": {
+    "airports": [
+      "KADW"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Baltimore Tower": {
+    "airports": [
+      "KBWI"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Charlottesville Tower": {
+    "airports": [
+      "KCHO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Davison Tower": {
+    "airports": [
+      "KDAA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Washington Tower": {
+    "airports": [
+      "KDCA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Easton Tower": {
+    "airports": [
+      "KESN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Manassas Tower": {
+    "airports": [
+      "KHEF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Dulles Tower": {
+    "airports": [
+      "KIAD"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Martin Tower": {
+    "airports": [
+      "KMTN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Hagerstown Tower": {
+    "airports": [
+      "KHGR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Richmond Tower": {
+    "airports": [
+      "KRIC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "PCT Frederick Tower": {
+    "airports": [
+      "KFDK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PCT"
+  },
+  "RDU TRACON": {
+    "airports": [
+      "5W5",
+      "KHNZ",
+      "KJNX",
+      "KLHZ",
+      "KRDU",
+      "KTDF",
+      "KTTA",
+      "W17"
+    ],
+    "position_prefixes": [
+      "RDU"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "DEP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "RDU"
+  },
+  "ORF TRACON": {
+    "airports": [
+      "KAKQ",
+      "KCPK",
+      "KFAF",
+      "KFKN",
+      "KLFI",
+      "KNFE",
+      "KNGU",
+      "KNTU",
+      "KNVF",
+      "KONX",
+      "KORF",
+      "KPHF",
+      "KPVG",
+      "KSFQ"
+    ],
+    "position_prefixes": [
+      "ORF"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "ORF"
+  },
+  "ROA TRACON": {
+    "airports": [
+      "0V4",
+      "KBCB",
+      "KFVX",
+      "KLYH",
+      "KPSK",
+      "KROA",
+      "W24",
+      "W90",
+      "W91"
+    ],
+    "position_prefixes": [
+      "ROA"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "ROA"
+  },
+  "FAY TRACON": {
+    "airports": [
+      "43A",
+      "5W4",
+      "BQ1",
+      "KCTZ",
+      "KEYF",
+      "KFAY",
+      "KFBG",
+      "KHFF",
+      "KHRJ",
+      "KLBT",
+      "KMEB",
+      "KPOB",
+      "KRCZ",
+      "KSOP"
+    ],
+    "position_prefixes": [
+      "FAY"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "FAY"
+  },
+  "GSB RAPCON": {
+    "airports": [
+      "KDPL",
+      "KGSB",
+      "KGWW",
+      "KISO",
+      "W40"
+    ],
+    "position_prefixes": [
+      "GSB"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "GSB"
+  },
+  "DOV RAPCON": {
+    "airports": [
+      "0N4",
+      "33N",
+      "KDOV",
+      "MD1"
+    ],
+    "position_prefixes": [
+      "DOV"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "DOV"
+  },
+  "ACY TRACON": {
+    "airports": [
+      "26N",
+      "31E",
+      "KACY",
+      "KMIV",
+      "KOBI",
+      "KWWD",
+      "N81"
+    ],
+    "position_prefixes": [
+      "ACY"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "ACY"
+  },
+  "ILM TRACON": {
+    "airports": [
+      "KACZ",
+      "KILM",
+      "KOAJ",
+      "KSUT"
+    ],
+    "position_prefixes": [
+      "ILM"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "ILM"
+  },
+  "NKT RAPCON": {
+    "airports": [
+      "KEWN",
+      "KNCA",
+      "KNJM",
+      "KNKT"
+    ],
+    "position_prefixes": [
+      "NKT"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "NKT"
+  },
+  "NTU RAPCON": {
+    "airports": [
+      "KNFE",
+      "KNTU",
+      "KONX"
+    ],
+    "position_prefixes": [
+      "NTU"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "NTU"
+  },
+  "NHK RAPCON": {
+    "airports": [
+      "1N5",
+      "2W6",
+      "KCGE",
+      "KMFV",
+      "KNHK",
+      "KNUI",
+      "KOXB",
+      "KSBY",
+      "KTGI",
+      "KWAL",
+      "N06",
+      "W41"
+    ],
+    "position_prefixes": [
+      "NHK"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "NHK"
+  }
 }

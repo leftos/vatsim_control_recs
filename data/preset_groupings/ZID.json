@@ -1,265 +1,492 @@
 {
-  "SDF Louisville TRACON": [
-    "6I2",
-    "I93",
-    "KBFR",
-    "KBRY",
-    "KEKX",
-    "KFRH",
-    "KFTK",
-    "KIMS",
-    "KJVY",
-    "KLOU",
-    "KSDF",
-    "KSER"
-  ],
-  "SDF Louisville Tower": [
-    "KSDF"
-  ],
-  "SDF Bowman Tower": [
-    "KLOU"
-  ],
-  "IND Indianapolis TRACON": [
-    "2R2",
-    "5I4",
-    "81II",
-    "8A4",
-    "I34",
-    "I99",
-    "IN35",
-    "IN74",
-    "IN84",
-    "KAID",
-    "KBAK",
-    "KCFJ",
-    "KEYE",
-    "KGEZ",
-    "KGPC",
-    "KHBE",
-    "KHFY",
-    "KIND",
-    "KMIE",
-    "KMQJ",
-    "KOVO",
-    "KTYQ",
-    "KUMP",
-    "KUWL"
-  ],
-  "IND Indianapolis Tower": [
-    "KIND"
-  ],
-  "LEX Lexington TRACON": [
-    "0I8",
-    "27K",
-    "6I2",
-    "I50",
-    "KDVK",
-    "KFFT",
-    "KIOB",
-    "KLEX",
-    "KRGA"
-  ],
-  "LEX Lexington Tower": [
-    "KLEX"
-  ],
-  "CVG Cincinnati TRACON": [
-    "I67",
-    "I69",
-    "K62",
-    "KCVG",
-    "KHAO",
-    "KHLB",
-    "KLUK",
-    "KOXD"
-  ],
-  "CVG Cincinnati Tower": [
-    "KCVG"
-  ],
-  "CVG Lunken Tower": [
-    "KLUK"
-  ],
-  "EVV Evansville TRACON": [
-    "2I0",
-    "KAJG",
-    "KCUL",
-    "KDCY",
-    "KEHR",
-    "KEVV",
-    "KHNB",
-    "KJQD",
-    "KLWV",
-    "KOWB",
-    "KTEL",
-    "KTWT",
-    "KY8"
-  ],
-  "EVV Evansville Tower": [
-    "KEVV"
-  ],
-  "HTS Huntington TRACON": [
-    "12V",
-    "3I2",
-    "I18",
-    "KDWU",
-    "KGAS",
-    "KHTS",
-    "KJRO",
-    "KPMH",
-    "KSJS",
-    "KUNI",
-    "OH23",
-    "OH62"
-  ],
-  "HTS Huntington Tower": [
-    "KHTS"
-  ],
-  "HUF Hulman TRACON": [
-    "0I2",
-    "1H8",
-    "3I3",
-    "60II",
-    "KBMG",
-    "KHUF",
-    "KPRG",
-    "KRSV",
-    "KSIV"
-  ],
-  "HUF Hulman Tower": [
-    "KHUF"
-  ],
-  "CMH Columbus Consolidated TRACON": [
-    "0OH8",
-    "11OH",
-    "2I7",
-    "3OH0",
-    "40I",
-    "4I3",
-    "4I9",
-    "7OA7",
-    "9OI9",
-    "I17",
-    "I22",
-    "I23",
-    "I44",
-    "I54",
-    "I66",
-    "I68",
-    "I73",
-    "I74",
-    "I95",
-    "IN68",
-    "KAOH",
-    "KAXV",
-    "KCEV",
-    "KCMH",
-    "KCQA",
-    "KCYO",
-    "KDAY",
-    "KDLZ",
-    "KEDJ",
-    "KFFO",
-    "KGDK",
-    "KILN",
-    "KLCK",
-    "KLHQ",
-    "KMGY",
-    "KMRT",
-    "KMWO",
-    "KOSU",
-    "KRID",
-    "KRZT",
-    "KSCA",
-    "KSGH",
-    "KTZR",
-    "KUYF",
-    "KVES",
-    "KVTA",
-    "OH01",
-    "OH04",
-    "OH46",
-    "OH71",
-    "OH95"
-  ],
-  "CMH Columbus Tower": [
-    "KCMH"
-  ],
-  "CMH Columbus West": [
-    "0OH8",
-    "3I7",
-    "3OH0",
-    "40I",
-    "7OA7",
-    "I17",
-    "I22",
-    "I44",
-    "I54",
-    "I66",
-    "I68",
-    "I73",
-    "I74",
-    "I95",
-    "IN68",
-    "KAOH",
-    "KAXV",
-    "KCEV",
-    "KCQA",
-    "KDAY",
-    "KEDJ",
-    "KFFO",
-    "KGDK",
-    "KILN",
-    "KMGY",
-    "KMWO",
-    "KRID",
-    "KSCA",
-    "KSGH",
-    "KUYF",
-    "KVES",
-    "OH46",
-    "OH71"
-  ],
-  "CMH Columbus East": [
-    "0OH1",
-    "0OH4",
-    "11OH",
-    "4I3",
-    "4I9",
-    "9OI9",
-    "I23",
-    "KCMH",
-    "KCYO",
-    "KDLZ",
-    "KLCK",
-    "KLHQ",
-    "KMRT",
-    "KOSU",
-    "KRZT",
-    "KTZR",
-    "KVTA",
-    "OH95"
-  ],
-  "CMH Dayton Tower": [
-    "KDAY"
-  ],
-  "CMH Patterson Tower": [
-    "KFFO"
-  ],
-  "CMH Rickenbacker Tower": [
-    "KLCK"
-  ],
-  "CMH State Tower": [
-    "KOSU"
-  ],
-  "CRW Charleston TRACON": [
-    "12V",
-    "6L4",
-    "I16",
-    "KBKW",
-    "KCRW",
-    "KSXL",
-    "KUSW"
-  ],
-  "CRW Charleston Tower": [
-    "KCRW"
-  ]
+  "SDF Louisville TRACON": {
+    "airports": [
+      "6I2",
+      "I93",
+      "KBFR",
+      "KBRY",
+      "KEKX",
+      "KFRH",
+      "KFTK",
+      "KIMS",
+      "KJVY",
+      "KLOU",
+      "KSDF",
+      "KSER"
+    ],
+    "position_prefixes": [
+      "SDF"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SDF"
+  },
+  "SDF Louisville Tower": {
+    "airports": [
+      "KSDF"
+    ],
+    "position_prefixes": [
+      "SDF"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "SDF"
+  },
+  "SDF Bowman Tower": {
+    "airports": [
+      "KLOU"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SDF"
+  },
+  "IND Indianapolis TRACON": {
+    "airports": [
+      "2R2",
+      "5I4",
+      "81II",
+      "8A4",
+      "I34",
+      "I99",
+      "IN35",
+      "IN74",
+      "IN84",
+      "KAID",
+      "KBAK",
+      "KCFJ",
+      "KEYE",
+      "KGEZ",
+      "KGPC",
+      "KHBE",
+      "KHFY",
+      "KIND",
+      "KMIE",
+      "KMQJ",
+      "KOVO",
+      "KTYQ",
+      "KUMP",
+      "KUWL"
+    ],
+    "position_prefixes": [
+      "IND"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "IND"
+  },
+  "IND Indianapolis Tower": {
+    "airports": [
+      "KIND"
+    ],
+    "position_prefixes": [
+      "IND"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "IND"
+  },
+  "LEX Lexington TRACON": {
+    "airports": [
+      "0I8",
+      "27K",
+      "6I2",
+      "I50",
+      "KDVK",
+      "KFFT",
+      "KIOB",
+      "KLEX",
+      "KRGA"
+    ],
+    "position_prefixes": [
+      "LEX"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "LEX"
+  },
+  "LEX Lexington Tower": {
+    "airports": [
+      "KLEX"
+    ],
+    "position_prefixes": [
+      "LEX"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "LEX"
+  },
+  "CVG Cincinnati TRACON": {
+    "airports": [
+      "I67",
+      "I69",
+      "K62",
+      "KCVG",
+      "KHAO",
+      "KHLB",
+      "KLUK",
+      "KOXD"
+    ],
+    "position_prefixes": [
+      "CVG"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CVG"
+  },
+  "CVG Cincinnati Tower": {
+    "airports": [
+      "KCVG"
+    ],
+    "position_prefixes": [
+      "CVG"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "CVG"
+  },
+  "CVG Lunken Tower": {
+    "airports": [
+      "KLUK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CVG"
+  },
+  "EVV Evansville TRACON": {
+    "airports": [
+      "2I0",
+      "KAJG",
+      "KCUL",
+      "KDCY",
+      "KEHR",
+      "KEVV",
+      "KHNB",
+      "KJQD",
+      "KLWV",
+      "KOWB",
+      "KTEL",
+      "KTWT",
+      "KY8"
+    ],
+    "position_prefixes": [
+      "EVV"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "EVV"
+  },
+  "EVV Evansville Tower": {
+    "airports": [
+      "KEVV"
+    ],
+    "position_prefixes": [
+      "EVV"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "EVV"
+  },
+  "HTS Huntington TRACON": {
+    "airports": [
+      "12V",
+      "3I2",
+      "I18",
+      "KDWU",
+      "KGAS",
+      "KHTS",
+      "KJRO",
+      "KPMH",
+      "KSJS",
+      "KUNI",
+      "OH23",
+      "OH62"
+    ],
+    "position_prefixes": [
+      "HTS"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "HTS"
+  },
+  "HTS Huntington Tower": {
+    "airports": [
+      "KHTS"
+    ],
+    "position_prefixes": [
+      "HTS"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "HTS"
+  },
+  "HUF Hulman TRACON": {
+    "airports": [
+      "0I2",
+      "1H8",
+      "3I3",
+      "60II",
+      "KBMG",
+      "KHUF",
+      "KPRG",
+      "KRSV",
+      "KSIV"
+    ],
+    "position_prefixes": [
+      "HUF"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "HUF"
+  },
+  "HUF Hulman Tower": {
+    "airports": [
+      "KHUF"
+    ],
+    "position_prefixes": [
+      "HUF"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "HUF"
+  },
+  "CMH Columbus Consolidated TRACON": {
+    "airports": [
+      "0OH8",
+      "11OH",
+      "2I7",
+      "3OH0",
+      "40I",
+      "4I3",
+      "4I9",
+      "7OA7",
+      "9OI9",
+      "I17",
+      "I22",
+      "I23",
+      "I44",
+      "I54",
+      "I66",
+      "I68",
+      "I73",
+      "I74",
+      "I95",
+      "IN68",
+      "KAOH",
+      "KAXV",
+      "KCEV",
+      "KCMH",
+      "KCQA",
+      "KCYO",
+      "KDAY",
+      "KDLZ",
+      "KEDJ",
+      "KFFO",
+      "KGDK",
+      "KILN",
+      "KLCK",
+      "KLHQ",
+      "KMGY",
+      "KMRT",
+      "KMWO",
+      "KOSU",
+      "KRID",
+      "KRZT",
+      "KSCA",
+      "KSGH",
+      "KTZR",
+      "KUYF",
+      "KVES",
+      "KVTA",
+      "OH01",
+      "OH04",
+      "OH46",
+      "OH71",
+      "OH95"
+    ],
+    "position_prefixes": [
+      "CMH"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CMH"
+  },
+  "CMH Columbus Tower": {
+    "airports": [
+      "KCMH"
+    ],
+    "position_prefixes": [
+      "CMH"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "CMH"
+  },
+  "CMH Columbus West": {
+    "airports": [
+      "0OH8",
+      "3I7",
+      "3OH0",
+      "40I",
+      "7OA7",
+      "I17",
+      "I22",
+      "I44",
+      "I54",
+      "I66",
+      "I68",
+      "I73",
+      "I74",
+      "I95",
+      "IN68",
+      "KAOH",
+      "KAXV",
+      "KCEV",
+      "KCQA",
+      "KDAY",
+      "KEDJ",
+      "KFFO",
+      "KGDK",
+      "KILN",
+      "KMGY",
+      "KMWO",
+      "KRID",
+      "KSCA",
+      "KSGH",
+      "KUYF",
+      "KVES",
+      "OH46",
+      "OH71"
+    ],
+    "position_prefixes": [
+      "DAY"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CMH"
+  },
+  "CMH Columbus East": {
+    "airports": [
+      "0OH1",
+      "0OH4",
+      "11OH",
+      "4I3",
+      "4I9",
+      "9OI9",
+      "I23",
+      "KCMH",
+      "KCYO",
+      "KDLZ",
+      "KLCK",
+      "KLHQ",
+      "KMRT",
+      "KOSU",
+      "KRZT",
+      "KTZR",
+      "KVTA",
+      "OH95"
+    ],
+    "position_prefixes": [
+      "CMH"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CMH"
+  },
+  "CMH Dayton Tower": {
+    "airports": [
+      "KDAY"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CMH"
+  },
+  "CMH Patterson Tower": {
+    "airports": [
+      "KFFO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CMH"
+  },
+  "CMH Rickenbacker Tower": {
+    "airports": [
+      "KLCK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CMH"
+  },
+  "CMH State Tower": {
+    "airports": [
+      "KOSU"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CMH"
+  },
+  "CRW Charleston TRACON": {
+    "airports": [
+      "12V",
+      "6L4",
+      "I16",
+      "KBKW",
+      "KCRW",
+      "KSXL",
+      "KUSW"
+    ],
+    "position_prefixes": [
+      "CRW"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CRW"
+  },
+  "CRW Charleston Tower": {
+    "airports": [
+      "KCRW"
+    ],
+    "position_prefixes": [
+      "CRW"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "CRW"
+  }
 }

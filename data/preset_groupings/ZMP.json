@@ -1,167 +1,384 @@
 {
-  "M98 M98": [
-    "09Y",
-    "0MN9",
-    "0MY0",
-    "10D",
-    "11MN",
-    "12Y",
-    "14WI",
-    "18Y",
-    "1MN8",
-    "21D",
-    "21WI",
-    "22Y",
-    "25D",
-    "25MY",
-    "3T3",
-    "44MN",
-    "46WI",
-    "48MN",
-    "4MN3",
-    "64MN",
-    "69WI",
-    "6MN9",
-    "6WI2",
-    "76WI",
-    "7MN1",
-    "7Y3",
-    "8WI9",
-    "8Y2",
-    "8Y4",
-    "8Y6",
-    "97MN",
-    "9MN4",
-    "KACQ",
-    "KAHH",
-    "KBDH",
-    "KCBG",
-    "KCFE",
-    "KFBL",
-    "KGYL",
-    "KLVN",
-    "KMGG",
-    "KOEO",
-    "KRGK",
-    "KRNH",
-    "KSGS",
-    "KSYN",
-    "MN07",
-    "WI14"
-  ],
-  "M98 MSP": [
-    "KMSP"
-  ],
-  "M98 FCM": [
-    "KFCM"
-  ],
-  "M98 STP": [
-    "KSTP"
-  ],
-  "M98 ANE": [
-    "KANE"
-  ],
-  "M98 MIC": [
-    "KMIC"
-  ],
-  "R90 R90": [
-    "KCBF",
-    "KLNK",
-    "KMLE",
-    "KOFF",
-    "KOMA"
-  ],
-  "GRB GRB": [
-    "92C",
-    "KCLI",
-    "KEZS",
-    "KGRB",
-    "KMNM",
-    "KMTW",
-    "KOCG",
-    "KSUE"
-  ],
-  "GRB TVC": [
-    "KTVC"
-  ],
-  "GRB ATW": [
-    "KATW"
-  ],
-  "DSM DSM": [
-    "KAMW",
-    "KDSM",
-    "KIKV",
-    "KTNU"
-  ],
-  "RST RST": [
-    "KAEL",
-    "KAUM",
-    "KFKA",
-    "KOWA",
-    "KRST"
-  ],
-  "DLH DLH": [
-    "KDLH",
-    "KEVM",
-    "KHIB",
-    "KMZH",
-    "KSUW"
-  ],
-  "BIS BIS": [
-    "KBIS",
-    "KHZE",
-    "Y19"
-  ],
-  "FAR FAR": [
-    "KFAR",
-    "KJKJ"
-  ],
-  "SUX SUX": [
-    "0C4",
-    "7K7",
-    "7K8",
-    "KLCG",
-    "KLRJ",
-    "KMEY",
-    "KSUX",
-    "KSXK",
-    "KVMR"
-  ],
-  "FSD FSD": [
-    "7G9",
-    "KFSD",
-    "KLYV",
-    "KMDS",
-    "KPQN",
-    "KRRQ",
-    "Y14"
-  ],
-  "APN APN": [
-    "KAPN",
-    "KPZQ"
-  ],
-  "RDR RDR": [
-    "2L1",
-    "3H4",
-    "D37",
-    "D41",
-    "D56",
-    "KCKN",
-    "KGAF",
-    "KRDR"
-  ],
-  "RDR GFK": [
-    "KGFK"
-  ],
-  "MIB MIB": [
-    "KHBC",
-    "KMIB",
-    "KMOT"
-  ],
-  "International - Canada": [
-    "CYQT",
-    "CYWG",
-    "CZWG",
-    "CZYZ"
-  ]
+  "M98": {
+    "airports": [
+      "09Y",
+      "0MN9",
+      "0MY0",
+      "10D",
+      "11MN",
+      "12Y",
+      "14WI",
+      "18Y",
+      "1MN8",
+      "21D",
+      "21WI",
+      "22Y",
+      "25D",
+      "25MY",
+      "3T3",
+      "44MN",
+      "46WI",
+      "48MN",
+      "4MN3",
+      "64MN",
+      "69WI",
+      "6MN9",
+      "6WI2",
+      "76WI",
+      "7MN1",
+      "7Y3",
+      "8WI9",
+      "8Y2",
+      "8Y4",
+      "8Y6",
+      "97MN",
+      "9MN4",
+      "KACQ",
+      "KAHH",
+      "KBDH",
+      "KCBG",
+      "KCFE",
+      "KFBL",
+      "KGYL",
+      "KLVN",
+      "KMGG",
+      "KOEO",
+      "KRGK",
+      "KRNH",
+      "KSGS",
+      "KSYN",
+      "MN07",
+      "WI14"
+    ],
+    "position_prefixes": [
+      "MSP"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "M98"
+  },
+  "M98 MSP": {
+    "airports": [
+      "KMSP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "M98"
+  },
+  "M98 FCM": {
+    "airports": [
+      "KFCM"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "M98"
+  },
+  "M98 STP": {
+    "airports": [
+      "KSTP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "M98"
+  },
+  "M98 ANE": {
+    "airports": [
+      "KANE"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "M98"
+  },
+  "M98 MIC": {
+    "airports": [
+      "KMIC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "M98"
+  },
+  "R90": {
+    "airports": [
+      "KCBF",
+      "KLNK",
+      "KMLE",
+      "KOFF",
+      "KOMA"
+    ],
+    "position_prefixes": [
+      "LNK",
+      "OMA"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "R90"
+  },
+  "R90 Omaha TRACON": {
+    "airports": [
+      "KLNK",
+      "KOFF",
+      "KOMA",
+      "R90"
+    ],
+    "position_prefixes": [
+      "R90"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "R90"
+  },
+  "GRB": {
+    "airports": [
+      "92C",
+      "KCLI",
+      "KEZS",
+      "KGRB",
+      "KMNM",
+      "KMTW",
+      "KOCG",
+      "KSUE"
+    ],
+    "position_prefixes": [
+      "GRB"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "GRB"
+  },
+  "GRB TVC": {
+    "airports": [
+      "KTVC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "GRB"
+  },
+  "GRB ATW": {
+    "airports": [
+      "KATW"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "GRB"
+  },
+  "DSM": {
+    "airports": [
+      "KAMW",
+      "KDSM",
+      "KIKV",
+      "KTNU"
+    ],
+    "position_prefixes": [
+      "DSM"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "DEP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "DSM"
+  },
+  "RST": {
+    "airports": [
+      "KAEL",
+      "KAUM",
+      "KFKA",
+      "KOWA",
+      "KRST"
+    ],
+    "position_prefixes": [
+      "RST"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "RST"
+  },
+  "DLH": {
+    "airports": [
+      "KDLH",
+      "KEVM",
+      "KHIB",
+      "KMZH",
+      "KSUW"
+    ],
+    "position_prefixes": [
+      "DLH"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "DLH"
+  },
+  "BIS": {
+    "airports": [
+      "KBIS",
+      "KHZE",
+      "Y19"
+    ],
+    "position_prefixes": [
+      "BIS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "BIS"
+  },
+  "FAR": {
+    "airports": [
+      "KFAR",
+      "KJKJ"
+    ],
+    "position_prefixes": [
+      "FAR"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "FAR"
+  },
+  "SUX": {
+    "airports": [
+      "0C4",
+      "7K7",
+      "7K8",
+      "KLCG",
+      "KLRJ",
+      "KMEY",
+      "KSUX",
+      "KSXK",
+      "KVMR"
+    ],
+    "position_prefixes": [
+      "SUX"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "SUX"
+  },
+  "FSD": {
+    "airports": [
+      "7G9",
+      "KFSD",
+      "KLYV",
+      "KMDS",
+      "KPQN",
+      "KRRQ",
+      "Y14"
+    ],
+    "position_prefixes": [
+      "FSD"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "FSD"
+  },
+  "APN": {
+    "airports": [
+      "KAPN",
+      "KPZQ"
+    ],
+    "position_prefixes": [
+      "APN"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "APN"
+  },
+  "RDR": {
+    "airports": [
+      "2L1",
+      "3H4",
+      "D37",
+      "D41",
+      "D56",
+      "KCKN",
+      "KGAF",
+      "KRDR"
+    ],
+    "position_prefixes": [
+      "RDR"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "RDR"
+  },
+  "RDR GFK": {
+    "airports": [
+      "KGFK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "RDR"
+  },
+  "MIB": {
+    "airports": [
+      "KHBC",
+      "KMIB",
+      "KMOT"
+    ],
+    "position_prefixes": [
+      "MIB"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "MIB"
+  },
+  "MIB Minot ATCT/RAPCON": {
+    "airports": [
+      "KMIB",
+      "KMOT"
+    ],
+    "position_prefixes": [
+      "MIB"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "MIB"
+  },
+  "International - Canada": {
+    "airports": [
+      "CYQT",
+      "CYWG",
+      "CZWG",
+      "CZYZ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

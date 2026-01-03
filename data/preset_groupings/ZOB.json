@@ -1,138 +1,415 @@
 {
-  "D21 Detroit TRACON": [
-    "CYQG",
-    "KARB",
-    "KDET",
-    "KDTW",
-    "KPTK",
-    "KYIP"
-  ],
-  "D21 Metro ATCT": [
-    "KDTW"
-  ],
-  "D21 Pontiac ATCT": [
-    "KPTK"
-  ],
-  "D21 Ann Arbor ATCT": [
-    "KARB"
-  ],
-  "D21 Detroit City ATCT": [
-    "KDET"
-  ],
-  "D21 Willow Run ATCT": [
-    "KYIP"
-  ],
-  "CLE Cleveland TRACON": [
-    "KBKL",
-    "KCAK",
-    "KCGF",
-    "KCLE",
-    "KMFD"
-  ],
-  "CLE Cleveland ATCT": [
-    "KCLE"
-  ],
-  "CLE Lakefront ATCT": [
-    "KBKL"
-  ],
-  "CLE County ATCT": [
-    "KCGF"
-  ],
-  "CLE Akron-Canton ATCT": [
-    "KCAK"
-  ],
-  "CLE Mansfield ATCT": [
-    "KMFD"
-  ],
-  "BUF Buffalo TRACON": [
-    "KBUF",
-    "KERI",
-    "KIAG"
-  ],
-  "BUF Buffalo ATCT": [
-    "KBUF"
-  ],
-  "PIT Pittsburgh TRACON": [
-    "KAGC",
-    "KBVI",
-    "KHLG",
-    "KPIT"
-  ],
-  "PIT Pittsburgh ATCT": [
-    "KPIT"
-  ],
-  "PIT Allegheny ATCT": [
-    "KAGC"
-  ],
-  "PIT Beaver County ATCT": [
-    "KBVI"
-  ],
-  "LAN Great Lakes TRACON": [
-    "KFNT",
-    "KJXN",
-    "KLAN",
-    "KMBS"
-  ],
-  "LAN Lansing ATCT": [
-    "KLAN"
-  ],
-  "LAN Flint ATCT": [
-    "KFNT"
-  ],
-  "LAN Saginaw ATCT": [
-    "KMDS"
-  ],
-  "ROC Rochester TRACON": [
-    "KROC"
-  ],
-  "ROC Rochester ATCT": [
-    "KROC"
-  ],
-  "CKB Clarksburg TRACON": [
-    "KCKB",
-    "KMGW"
-  ],
-  "CKB Clarksburg ATCT": [
-    "KCKB"
-  ],
-  "TOL Toledo TRACON": [
-    "KTOL"
-  ],
-  "TOL Toledo ATCT": [
-    "KTOL"
-  ],
-  "YNG Youngstown TRACON": [
-    "KFKL",
-    "KYNG"
-  ],
-  "YNG Youngstown ATCT": [
-    "KTNG"
-  ],
-  "MTC Selfridge RAPCON": [
-    "KMTC"
-  ],
-  "JST Johnstown RAPCON": [
-    "2G9",
-    "6P7",
-    "9G8",
-    "KAOO",
-    "KCBE",
-    "KHMZ",
-    "KIDI",
-    "KJST",
-    "KLBE"
-  ],
-  "JST Johnstown ATCT": [
-    "KJST"
-  ],
-  "JST Arnold Palmer ATCT": [
-    "KLBE"
-  ],
-  "International - Canada": [
-    "CYQG",
-    "CYTR",
-    "CYYZ",
-    "CZUL",
-    "CZYZ"
-  ]
+  "D21 Detroit TRACON": {
+    "airports": [
+      "CYQG",
+      "KARB",
+      "KDET",
+      "KDTW",
+      "KPTK",
+      "KYIP"
+    ],
+    "position_prefixes": [
+      "DTW"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "D21"
+  },
+  "D21 Metro ATCT": {
+    "airports": [
+      "KDTW"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D21"
+  },
+  "D21 Pontiac ATCT": {
+    "airports": [
+      "KPTK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D21"
+  },
+  "D21 Ann Arbor ATCT": {
+    "airports": [
+      "KARB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D21"
+  },
+  "D21 Detroit City ATCT": {
+    "airports": [
+      "KDET"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D21"
+  },
+  "D21 Willow Run ATCT": {
+    "airports": [
+      "KYIP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D21"
+  },
+  "CLE Cleveland TRACON": {
+    "airports": [
+      "KBKL",
+      "KCAK",
+      "KCGF",
+      "KCLE",
+      "KMFD"
+    ],
+    "position_prefixes": [
+      "CAK",
+      "CLE",
+      "MFD"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "CLE"
+  },
+  "CLE Cleveland ATCT": {
+    "airports": [
+      "KCLE"
+    ],
+    "position_prefixes": [
+      "CLE"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "CLE"
+  },
+  "CLE Lakefront ATCT": {
+    "airports": [
+      "KBKL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CLE"
+  },
+  "CLE County ATCT": {
+    "airports": [
+      "KCGF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CLE"
+  },
+  "CLE Akron-Canton ATCT": {
+    "airports": [
+      "KCAK"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CLE"
+  },
+  "CLE Mansfield ATCT": {
+    "airports": [
+      "KMFD"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CLE"
+  },
+  "BUF Buffalo TRACON": {
+    "airports": [
+      "KBUF",
+      "KERI",
+      "KIAG"
+    ],
+    "position_prefixes": [
+      "BUF",
+      "ERI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "BUF"
+  },
+  "BUF Buffalo ATCT": {
+    "airports": [
+      "KBUF"
+    ],
+    "position_prefixes": [
+      "BUF"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "BUF"
+  },
+  "PIT Pittsburgh TRACON": {
+    "airports": [
+      "KAGC",
+      "KBVI",
+      "KHLG",
+      "KPIT"
+    ],
+    "position_prefixes": [
+      "PIT"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "PIT"
+  },
+  "PIT Pittsburgh ATCT": {
+    "airports": [
+      "KPIT"
+    ],
+    "position_prefixes": [
+      "PIT"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "PIT"
+  },
+  "PIT Allegheny ATCT": {
+    "airports": [
+      "KAGC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PIT"
+  },
+  "PIT Beaver County ATCT": {
+    "airports": [
+      "KBVI"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "PIT"
+  },
+  "LAN Great Lakes TRACON": {
+    "airports": [
+      "KFNT",
+      "KJXN",
+      "KLAN",
+      "KMBS"
+    ],
+    "position_prefixes": [
+      "LAN"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "LAN"
+  },
+  "LAN Lansing ATCT": {
+    "airports": [
+      "KLAN"
+    ],
+    "position_prefixes": [
+      "LAN"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "LAN"
+  },
+  "LAN Flint ATCT": {
+    "airports": [
+      "KFNT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "LAN"
+  },
+  "LAN Saginaw ATCT": {
+    "airports": [
+      "KMDS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "LAN"
+  },
+  "ROC Rochester TRACON": {
+    "airports": [
+      "KROC"
+    ],
+    "position_prefixes": [
+      "ROC"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "ROC"
+  },
+  "ROC Rochester ATCT": {
+    "airports": [
+      "KROC"
+    ],
+    "position_prefixes": [
+      "ROC"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "ROC"
+  },
+  "CKB Clarksburg TRACON": {
+    "airports": [
+      "KCKB",
+      "KMGW"
+    ],
+    "position_prefixes": [
+      "CKB"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CKB"
+  },
+  "CKB Clarksburg ATCT": {
+    "airports": [
+      "KCKB"
+    ],
+    "position_prefixes": [
+      "CKB"
+    ],
+    "position_suffixes": [
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "CKB"
+  },
+  "TOL Toledo TRACON": {
+    "airports": [
+      "KTOL"
+    ],
+    "position_prefixes": [
+      "TOL"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "TOL"
+  },
+  "TOL Toledo ATCT": {
+    "airports": [
+      "KTOL"
+    ],
+    "position_prefixes": [
+      "TOL"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "TOL"
+  },
+  "YNG Youngstown TRACON": {
+    "airports": [
+      "KFKL",
+      "KYNG"
+    ],
+    "position_prefixes": [
+      "YNG"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "YNG"
+  },
+  "YNG Youngstown ATCT": {
+    "airports": [
+      "KTNG"
+    ],
+    "position_prefixes": [
+      "YNG"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "YNG"
+  },
+  "MTC Selfridge RAPCON": {
+    "airports": [
+      "KMTC"
+    ],
+    "position_prefixes": [
+      "MTC"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "MTC"
+  },
+  "JST Johnstown RAPCON": {
+    "airports": [
+      "2G9",
+      "6P7",
+      "9G8",
+      "KAOO",
+      "KCBE",
+      "KHMZ",
+      "KIDI",
+      "KJST",
+      "KLBE"
+    ],
+    "position_prefixes": [
+      "JST"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "JST"
+  },
+  "JST Johnstown ATCT": {
+    "airports": [
+      "KJST"
+    ],
+    "position_prefixes": [
+      "JST"
+    ],
+    "position_suffixes": [
+      "TWR"
+    ],
+    "facility_id": "JST"
+  },
+  "JST Arnold Palmer ATCT": {
+    "airports": [
+      "KLBE"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "JST"
+  },
+  "International - Canada": {
+    "airports": [
+      "CYQG",
+      "CYTR",
+      "CYYZ",
+      "CZUL",
+      "CZYZ"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

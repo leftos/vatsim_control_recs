@@ -1,95 +1,255 @@
 {
-  "D01 Denver": [
-    "18V",
-    "KAPA",
-    "KBDU",
-    "KBJC",
-    "KCFO",
-    "KDEN",
-    "KFNL",
-    "KGXY",
-    "KLMO"
-  ],
-  "D01 Pueblo": [
-    "1V6",
-    "46CO",
-    "7CO8",
-    "80CO",
-    "99CO",
-    "CO80",
-    "KPUB"
-  ],
-  "D01 Junction": [
-    "10CO",
-    "KGJT"
-  ],
-  "D01 DEN TWR": [
-    "KDEN"
-  ],
-  "D01 GJT TWR": [
-    "KGJT"
-  ],
-  "D01 PUB TWR": [
-    "KPUB"
-  ],
-  "D01 FNL TWR": [
-    "KFNL"
-  ],
-  "D01 APA TWR": [
-    "KAPA"
-  ],
-  "D01 BJC TWR": [
-    "KBJC"
-  ],
-  "D01 CFO TWR": [
-    "KCFO"
-  ],
-  "D01 Hidden": [
-    "18V",
-    "KAPA",
-    "KBDU",
-    "KBJC",
-    "KCFO",
-    "KDEN",
-    "KFNL",
-    "KGXY",
-    "KLMO"
-  ],
-  "COS COS": [
-    "5V4",
-    "CO4",
-    "CO90",
-    "KAFF",
-    "KCOS",
-    "KFCS",
-    "KFLY"
-  ],
-  "CPR CPR": [
-    "45WY",
-    "KCPR",
-    "KHAD"
-  ],
-  "RCA RCA": [
-    "3SD2",
-    "49B",
-    "6V4",
-    "KCUT",
-    "KRAP",
-    "KRCA",
-    "KSPF"
-  ],
-  "ASE ASE": [
-    "KASE"
-  ],
-  "CYS Cheyenne": [
-    "82V",
-    "KCYS",
-    "KFEW",
-    "WY05",
-    "WY45",
-    "WY46"
-  ],
-  "EGE EGE": [
-    "KEGE"
-  ]
+  "D01 Denver": {
+    "airports": [
+      "18V",
+      "KAPA",
+      "KBDU",
+      "KBJC",
+      "KCFO",
+      "KDEN",
+      "KFNL",
+      "KGXY",
+      "KLMO"
+    ],
+    "position_prefixes": [
+      "DEN"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "D01"
+  },
+  "D01 Pueblo": {
+    "airports": [
+      "1V6",
+      "46CO",
+      "7CO8",
+      "80CO",
+      "99CO",
+      "CO80",
+      "KPUB"
+    ],
+    "position_prefixes": [
+      "PUB"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "D01"
+  },
+  "D01 Junction": {
+    "airports": [
+      "10CO",
+      "KGJT"
+    ],
+    "position_prefixes": [
+      "GJT"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "D01"
+  },
+  "D01 DEN TWR": {
+    "airports": [
+      "KDEN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D01"
+  },
+  "D01 GJT TWR": {
+    "airports": [
+      "KGJT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D01"
+  },
+  "D01 PUB TWR": {
+    "airports": [
+      "KPUB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D01"
+  },
+  "D01 FNL TWR": {
+    "airports": [
+      "KFNL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D01"
+  },
+  "D01 APA TWR": {
+    "airports": [
+      "KAPA"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D01"
+  },
+  "D01 BJC TWR": {
+    "airports": [
+      "KBJC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D01"
+  },
+  "D01 CFO TWR": {
+    "airports": [
+      "KCFO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D01"
+  },
+  "D01 Hidden": {
+    "airports": [
+      "18V",
+      "KAPA",
+      "KBDU",
+      "KBJC",
+      "KCFO",
+      "KDEN",
+      "KFNL",
+      "KGXY",
+      "KLMO"
+    ],
+    "position_prefixes": [
+      "ZDV"
+    ],
+    "position_suffixes": [
+      "CTR"
+    ],
+    "facility_id": "D01"
+  },
+  "COS": {
+    "airports": [
+      "5V4",
+      "CO4",
+      "CO90",
+      "KAFF",
+      "KCOS",
+      "KFCS",
+      "KFLY"
+    ],
+    "position_prefixes": [
+      "COS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "COS"
+  },
+  "COS Springs ATCT/TRACON": {
+    "airports": [
+      "KAFF",
+      "KCOS",
+      "KFCS"
+    ],
+    "position_prefixes": [
+      "COS"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "COS"
+  },
+  "CPR": {
+    "airports": [
+      "45WY",
+      "KCPR",
+      "KHAD"
+    ],
+    "position_prefixes": [
+      "CPR"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "CPR"
+  },
+  "RCA": {
+    "airports": [
+      "3SD2",
+      "49B",
+      "6V4",
+      "KCUT",
+      "KRAP",
+      "KRCA",
+      "KSPF"
+    ],
+    "position_prefixes": [
+      "RCA"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "RCA"
+  },
+  "RCA Ellsworth RAPCON/ATCT": {
+    "airports": [
+      "KRAP",
+      "KRCA"
+    ],
+    "position_prefixes": [
+      "RCA"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "RCA"
+  },
+  "ASE": {
+    "airports": [
+      "KASE"
+    ],
+    "position_prefixes": [
+      "ASE"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "ASE"
+  },
+  "CYS Cheyenne": {
+    "airports": [
+      "82V",
+      "KCYS",
+      "KFEW",
+      "WY05",
+      "WY45",
+      "WY46"
+    ],
+    "position_prefixes": [
+      "CYS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "CYS"
+  },
+  "EGE": {
+    "airports": [
+      "KEGE"
+    ],
+    "position_prefixes": [
+      "EGE"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "EGE"
+  }
 }

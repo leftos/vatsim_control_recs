@@ -1,188 +1,473 @@
 {
-  "ACT ACT": [
-    "68F",
-    "7F7",
-    "KACT",
-    "KCNW",
-    "KGOP",
-    "KHLR",
-    "KINJ",
-    "KLXY",
-    "KPWG",
-    "T15"
-  ],
-  "GGG GGG": [
-    "07F",
-    "F51",
-    "KGGG",
-    "KJDD",
-    "KJSO",
-    "KJXI",
-    "KRFI",
-    "KTYR"
-  ],
-  "SHV SHV": [
-    "3F3",
-    "3F4",
-    "4F2",
-    "KASL",
-    "KBAD",
-    "KDTN",
-    "KMNE",
-    "KSHV",
-    "KSPH"
-  ],
-  "MLU MLU": [
-    "F88",
-    "KBQP",
-    "KMLU",
-    "KRSN",
-    "M79"
-  ],
-  "D10 D10": [
-    "1F7",
-    "25XS",
-    "2TE2",
-    "30F",
-    "4T2",
-    "4TX2",
-    "50F",
-    "52F",
-    "7TX4",
-    "9F9",
-    "F41",
-    "F46",
-    "F69",
-    "KADS",
-    "KAFW",
-    "KCPT",
-    "KDAL",
-    "KDFW",
-    "KDTO",
-    "KFTW",
-    "KFWS",
-    "KGKY",
-    "KGPM",
-    "KHQZ",
-    "KJWY",
-    "KLNC",
-    "KLUD",
-    "KNFW",
-    "KRBD",
-    "KTKI",
-    "KWEA",
-    "T31",
-    "T56",
-    "T67"
-  ],
-  "D10 DFW": [
-    "KDFW"
-  ],
-  "D10 DAL": [
-    "KDAL"
-  ],
-  "D10 AFW": [
-    "7TX4",
-    "KAFW"
-  ],
-  "D10 FTW": [
-    "KFTW"
-  ],
-  "D10 FWS": [
-    "KFWS"
-  ],
-  "D10 DTO": [
-    "4TX8",
-    "74T",
-    "KDTO"
-  ],
-  "D10 GKY": [
-    "KGKY"
-  ],
-  "D10 GPM": [
-    "KGPM"
-  ],
-  "D10 RBD": [
-    "KRBD"
-  ],
-  "D10 ADS": [
-    "F69",
-    "KADS"
-  ],
-  "D10 TKI": [
-    "KTKI"
-  ],
-  "OKC OKC": [
-    "1K4",
-    "3O3",
-    "KCHK",
-    "KGOK",
-    "KHMY",
-    "KHSD",
-    "KOKC",
-    "KOUN",
-    "KPWA",
-    "KRCE",
-    "KRQO",
-    "KSNL",
-    "KTIK"
-  ],
-  "FSI Fort Sill": [
-    "KDUC",
-    "KFSI",
-    "KLAW"
-  ],
-  "ABI ABI": [
-    "3F2",
-    "77F",
-    "F56",
-    "KABI",
-    "KDYS",
-    "KGZN",
-    "KSWW",
-    "T23"
-  ],
-  "LBB LBB": [
-    "2F4",
-    "41F",
-    "5F1",
-    "8F3",
-    "F49",
-    "F83",
-    "KBFE",
-    "KLBB",
-    "KLIU",
-    "KLLN",
-    "KPVW"
-  ],
-  "MAF MAF": [
-    "E11",
-    "E30",
-    "KMAF",
-    "KMDD",
-    "KODO",
-    "KSJT"
-  ],
-  "SPS SPS": [
-    "F14",
-    "KCWC",
-    "KSPS"
-  ],
-  "LTS LTS": [
-    "2K4",
-    "F05",
-    "KAXS",
-    "KFDR",
-    "KHBR",
-    "KLTS",
-    "O35"
-  ],
-  "GRK GRK": [
-    "KGRK",
-    "KHLR",
-    "KILE",
-    "KLZZ",
-    "KMNZ",
-    "KTPL"
-  ]
+  "ACT": {
+    "airports": [
+      "68F",
+      "7F7",
+      "KACT",
+      "KCNW",
+      "KGOP",
+      "KHLR",
+      "KINJ",
+      "KLXY",
+      "KPWG",
+      "T15"
+    ],
+    "position_prefixes": [
+      "ACT"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "ACT"
+  },
+  "ACT Waco ATCT/TRACON": {
+    "airports": [
+      "KACT",
+      "KCNW"
+    ],
+    "position_prefixes": [
+      "ACT"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "ACT"
+  },
+  "GGG": {
+    "airports": [
+      "07F",
+      "F51",
+      "KGGG",
+      "KJDD",
+      "KJSO",
+      "KJXI",
+      "KRFI",
+      "KTYR"
+    ],
+    "position_prefixes": [
+      "GGG"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "GGG"
+  },
+  "GGG Longview ATCT/TRACON": {
+    "airports": [
+      "KGGG",
+      "KTYR"
+    ],
+    "position_prefixes": [
+      "GGG"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "GGG"
+  },
+  "SHV": {
+    "airports": [
+      "3F3",
+      "3F4",
+      "4F2",
+      "KASL",
+      "KBAD",
+      "KDTN",
+      "KMNE",
+      "KSHV",
+      "KSPH"
+    ],
+    "position_prefixes": [
+      "SHV"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "SHV"
+  },
+  "SHV Shreveport ATCT/RAPCON": {
+    "airports": [
+      "KBAD",
+      "KDTN",
+      "KSHV"
+    ],
+    "position_prefixes": [
+      "SHV"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SHV"
+  },
+  "MLU": {
+    "airports": [
+      "F88",
+      "KBQP",
+      "KMLU",
+      "KRSN",
+      "M79"
+    ],
+    "position_prefixes": [
+      "MLU"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "MLU"
+  },
+  "D10": {
+    "airports": [
+      "1F7",
+      "25XS",
+      "2TE2",
+      "30F",
+      "4T2",
+      "4TX2",
+      "50F",
+      "52F",
+      "7TX4",
+      "9F9",
+      "F41",
+      "F46",
+      "F69",
+      "KADS",
+      "KAFW",
+      "KCPT",
+      "KDAL",
+      "KDFW",
+      "KDTO",
+      "KFTW",
+      "KFWS",
+      "KGKY",
+      "KGPM",
+      "KHQZ",
+      "KJWY",
+      "KLNC",
+      "KLUD",
+      "KNFW",
+      "KRBD",
+      "KTKI",
+      "KWEA",
+      "T31",
+      "T56",
+      "T67"
+    ],
+    "position_prefixes": [
+      "D10"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "D10"
+  },
+  "D10 DFW": {
+    "airports": [
+      "KDFW"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 DAL": {
+    "airports": [
+      "KDAL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 AFW": {
+    "airports": [
+      "7TX4",
+      "KAFW"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 FTW": {
+    "airports": [
+      "KFTW"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 FWS": {
+    "airports": [
+      "KFWS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 DTO": {
+    "airports": [
+      "4TX8",
+      "74T",
+      "KDTO"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 GKY": {
+    "airports": [
+      "KGKY"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 GPM": {
+    "airports": [
+      "KGPM"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 RBD": {
+    "airports": [
+      "KRBD"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 ADS": {
+    "airports": [
+      "F69",
+      "KADS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "D10 TKI": {
+    "airports": [
+      "KTKI"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "D10"
+  },
+  "OKC": {
+    "airports": [
+      "1K4",
+      "3O3",
+      "KCHK",
+      "KGOK",
+      "KHMY",
+      "KHSD",
+      "KOKC",
+      "KOUN",
+      "KPWA",
+      "KRCE",
+      "KRQO",
+      "KSNL",
+      "KTIK"
+    ],
+    "position_prefixes": [
+      "OKC"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "OKC"
+  },
+  "OKC Oklahoma City ATCT/TRACON": {
+    "airports": [
+      "KOKC",
+      "KOUN",
+      "KPWA",
+      "KTIK"
+    ],
+    "position_prefixes": [
+      "OKC"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "OKC"
+  },
+  "FSI Fort Sill": {
+    "airports": [
+      "KDUC",
+      "KFSI",
+      "KLAW"
+    ],
+    "position_prefixes": [
+      "FSI"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "FSI"
+  },
+  "ABI": {
+    "airports": [
+      "3F2",
+      "77F",
+      "F56",
+      "KABI",
+      "KDYS",
+      "KGZN",
+      "KSWW",
+      "T23"
+    ],
+    "position_prefixes": [
+      "ABI"
+    ],
+    "position_suffixes": [
+      "APP",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "ABI"
+  },
+  "ABI Abilene ATCT/TRACON": {
+    "airports": [
+      "KABI",
+      "KDYS"
+    ],
+    "position_prefixes": [
+      "ABI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "ABI"
+  },
+  "LBB": {
+    "airports": [
+      "2F4",
+      "41F",
+      "5F1",
+      "8F3",
+      "F49",
+      "F83",
+      "KBFE",
+      "KLBB",
+      "KLIU",
+      "KLLN",
+      "KPVW"
+    ],
+    "position_prefixes": [
+      "LBB"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "LBB"
+  },
+  "MAF": {
+    "airports": [
+      "E11",
+      "E30",
+      "KMAF",
+      "KMDD",
+      "KODO",
+      "KSJT"
+    ],
+    "position_prefixes": [
+      "MAF"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "MAF"
+  },
+  "MAF Midland ATCT/TRACON": {
+    "airports": [
+      "KMAF",
+      "KSJT"
+    ],
+    "position_prefixes": [
+      "MAF"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "MAF"
+  },
+  "SPS": {
+    "airports": [
+      "F14",
+      "KCWC",
+      "KSPS"
+    ],
+    "position_prefixes": [
+      "SPS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "SPS"
+  },
+  "LTS": {
+    "airports": [
+      "2K4",
+      "F05",
+      "KAXS",
+      "KFDR",
+      "KHBR",
+      "KLTS",
+      "O35"
+    ],
+    "position_prefixes": [
+      "LTS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "LTS"
+  },
+  "GRK": {
+    "airports": [
+      "KGRK",
+      "KHLR",
+      "KILE",
+      "KLZZ",
+      "KMNZ",
+      "KTPL"
+    ],
+    "position_prefixes": [
+      "GRK"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "GRK"
+  },
+  "GRK Robert Gray AAF ATCT/RAPCON": {
+    "airports": [
+      "KGRK",
+      "KHLR"
+    ],
+    "position_prefixes": [
+      "GRK"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "GRK"
+  }
 }

@@ -9,14 +9,16 @@ Includes:
 - TRACON sector areas from starsConfiguration.areas (underlyingAirports)
 - Tower groupings from childFacilities
 - International airports from nonNasFacilityIds
+- Position prefixes for SimAware boundary matching
 """
 
 import json
+import re
 import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -101,20 +103,90 @@ def is_airport_code(code: str) -> bool:
     return True
 
 
+def extract_position_prefix(callsign: str) -> Optional[str]:
+    """
+    Extract the position prefix from a callsign.
+
+    Examples:
+        SFO_B_APP -> SFO
+        OAK_DEP -> OAK
+        NCT_APP -> NCT
+        FAT_F_APP -> FAT
+    """
+    if not callsign:
+        return None
+    # Split by underscore and take first part
+    parts = callsign.upper().split('_')
+    if parts:
+        return parts[0]
+    return None
+
+
+def extract_position_suffix(callsign: str) -> Optional[str]:
+    """
+    Extract the position suffix from a callsign.
+
+    Examples:
+        SFO_B_APP -> APP
+        OAK_DEP -> DEP
+        SFO_TWR -> TWR
+    """
+    if not callsign:
+        return None
+    parts = callsign.upper().split('_')
+    if len(parts) >= 2:
+        return parts[-1]  # Last part is the suffix
+    return None
+
+
+def get_area_position_info(
+    facility: Dict[str, Any],
+    area_id: str
+) -> Tuple[Set[str], Set[str]]:
+    """
+    Get position prefixes and suffixes for an area.
+
+    Searches through facility positions to find those assigned to this area.
+
+    Returns:
+        Tuple of (prefixes, suffixes) sets
+    """
+    prefixes: Set[str] = set()
+    suffixes: Set[str] = set()
+
+    positions = facility.get('positions', [])
+    for pos in positions:
+        pos_stars = pos.get('starsConfiguration', {})
+        pos_area_id = pos_stars.get('areaId', '')
+
+        if pos_area_id == area_id:
+            callsign = pos.get('callsign', '')
+            prefix = extract_position_prefix(callsign)
+            suffix = extract_position_suffix(callsign)
+            if prefix:
+                prefixes.add(prefix)
+            if suffix:
+                suffixes.add(suffix)
+
+    return prefixes, suffixes
+
+
 def extract_areas_from_facility(
     facility: Dict[str, Any],
     facility_id: str,
-    groupings: Dict[str, List[str]]
+    groupings: Dict[str, Dict[str, Any]]
 ) -> None:
     """
     Extract sector areas from starsConfiguration.areas.
 
     Each area has underlyingAirports which maps to a sector grouping.
+    Also extracts position prefixes for SimAware boundary matching.
     """
     stars = facility.get('starsConfiguration', {})
     areas = stars.get('areas', [])
 
     for area in areas:
+        area_id = area.get('id', '')
         area_name = area.get('name', '')
         underlying = area.get('underlyingAirports', [])
 
@@ -129,8 +201,21 @@ def extract_areas_from_facility(
         airports = [normalize_icao(code) for code in underlying if is_airport_code(code)]
 
         if airports:
-            group_name = f"{facility_id} {area_name}"
-            groupings[group_name] = sorted(set(airports))
+            # Avoid duplicate names like "FAT FAT" -> just use "FAT"
+            if area_name.upper() == facility_id.upper():
+                group_name = facility_id
+            else:
+                group_name = f"{facility_id} {area_name}"
+
+            # Get position prefixes and suffixes for this area
+            prefixes, suffixes = get_area_position_info(facility, area_id)
+
+            groupings[group_name] = {
+                "airports": sorted(set(airports)),
+                "position_prefixes": sorted(prefixes) if prefixes else None,
+                "position_suffixes": sorted(suffixes) if suffixes else None,
+                "facility_id": facility_id,
+            }
 
 
 def extract_airports_from_facility(facility: Dict[str, Any], collected: Set[str]) -> None:
@@ -147,7 +232,7 @@ def extract_airports_from_facility(facility: Dict[str, Any], collected: Set[str]
 
 def process_facility_hierarchy(
     facility: Dict[str, Any],
-    groupings: Dict[str, List[str]],
+    groupings: Dict[str, Dict[str, Any]],
     depth: int = 0
 ) -> None:
     """
@@ -176,8 +261,12 @@ def process_facility_hierarchy(
 
         if airports and facility_type in ('AtctTracon', 'Tracon', 'AtctRapcon', 'Rapcon'):
             # Create combined grouping for the facility
-            group_name = f"{facility_id} {facility_name}"
-            group_name = group_name.replace('  ', ' ').strip()
+            # Avoid duplicate names like "FAT FAT" -> just use "FAT"
+            if facility_name.upper() == facility_id.upper():
+                group_name = facility_id
+            else:
+                group_name = f"{facility_id} {facility_name}"
+                group_name = group_name.replace('  ', ' ').strip()
 
             # Only add if we don't already have sector-level groupings
             sector_prefix = f"{facility_id} "
@@ -185,7 +274,12 @@ def process_facility_hierarchy(
                             for k in groupings)
 
             if not has_sectors:
-                groupings[group_name] = sorted(airports)
+                groupings[group_name] = {
+                    "airports": sorted(airports),
+                    "position_prefixes": [facility_id],  # Main facility prefix
+                    "position_suffixes": ["APP"],
+                    "facility_id": facility_id,
+                }
 
     # Recurse into children
     for child in children:
@@ -194,7 +288,7 @@ def process_facility_hierarchy(
 
 def add_international_airports(
     facility: Dict[str, Any],
-    groupings: Dict[str, List[str]]
+    groupings: Dict[str, Dict[str, Any]]
 ) -> int:
     """Add international airports from nonNasFacilityIds."""
     non_nas = facility.get('nonNasFacilityIds', [])
@@ -218,15 +312,20 @@ def add_international_airports(
     count = 0
     for country, airports in sorted(by_country.items()):
         group_name = f"International - {country}"
-        groupings[group_name] = sorted(airports)
+        groupings[group_name] = {
+            "airports": sorted(airports),
+            "position_prefixes": None,  # International airports don't have vNAS positions
+            "position_suffixes": None,
+            "facility_id": None,
+        }
         count += 1
 
     return count
 
 
-def generate_artcc_groupings(artcc: str, data: Dict[str, Any]) -> Dict[str, List[str]]:
+def generate_artcc_groupings(artcc: str, data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """Generate groupings for an ARTCC from vNAS data."""
-    groupings: Dict[str, List[str]] = {}
+    groupings: Dict[str, Dict[str, Any]] = {}
 
     facility = data.get('facility', {})
 

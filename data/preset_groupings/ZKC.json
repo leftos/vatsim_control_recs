@@ -1,183 +1,377 @@
 {
-  "MCI TRACON": [
-    "0C1",
-    "0N0",
-    "3EX",
-    "3GV",
-    "63K",
-    "K34",
-    "K59",
-    "KEZZ",
-    "KFLV",
-    "KIXD",
-    "KLXT",
-    "KMCI",
-    "KMKC",
-    "KOJC",
-    "KSTJ"
-  ],
-  "MCI MCI Local": [
-    "KMCI"
-  ],
-  "MCI MKC Local": [
-    "KMKC"
-  ],
-  "MCI OJC Local": [
-    "KOJC"
-  ],
-  "T75 T75 Combined": [
-    "1H0",
-    "3LF",
-    "5K1",
-    "C15",
-    "I24",
-    "KAAA",
-    "KALN",
-    "KBLV",
-    "KBMI",
-    "KCPS",
-    "KFES",
-    "KFYG",
-    "KIJX",
-    "KPIA",
-    "KSAR",
-    "KSET",
-    "KSPI",
-    "KSTL",
-    "KSUS",
-    "KTAZ",
-    "M71"
-  ],
-  "T75 St. Louis ATCT": [
-    "KSTL"
-  ],
-  "T75 Spirit ATCT": [
-    "KSUS"
-  ],
-  "T75 Downtown ATCT": [
-    "KCPS"
-  ],
-  "T75 Alton ATCT": [
-    "KALN"
-  ],
-  "T75 Scott ATCT": [
-    "KBLV"
-  ],
-  "T75 Springfield (T75)": [
-    "KSPI"
-  ],
-  "T75 Peoria (T75)": [
-    "KBMI",
-    "KPIA"
-  ],
-  "T75 St. Louis (T75)": [
-    "KALN",
-    "KBLV",
-    "KCPS",
-    "KSTL",
-    "KSUS"
-  ],
-  "ICT TRACON": [
-    "1K1",
-    "3AU",
-    "47K",
-    "55K",
-    "71K",
-    "8K2",
-    "9K8",
-    "KAAO",
-    "KANY",
-    "KBEC",
-    "KEGT",
-    "KEQA",
-    "KHUT",
-    "KIAB",
-    "KICT",
-    "KMPR",
-    "M66"
-  ],
-  "ICT ICT Local": [
-    "KICT"
-  ],
-  "ICT IAB Local": [
-    "KIAB"
-  ],
-  "ICT HUT Local": [
-    "KHUT"
-  ],
-  "TUL TRACON": [
-    "1H6",
-    "2F6",
-    "2K9",
-    "H71",
-    "KGCM",
-    "KOKM",
-    "KOWP",
-    "KRVS",
-    "KTUL",
-    "O38"
-  ],
-  "TUL TUL LOCAL": [
-    "KTUL"
-  ],
-  "SGF Springfield": [
-    "03B",
-    "19T",
-    "2H2",
-    "2M5",
-    "3DW",
-    "63M",
-    "94K",
-    "H17",
-    "H58",
-    "H79",
-    "K15",
-    "KAIZ",
-    "KAOV",
-    "KBBG",
-    "KCOU",
-    "KFTT",
-    "KFWB",
-    "KHFJ",
-    "KJEF",
-    "KLBO",
-    "KMYJ",
-    "KOZS",
-    "KPLK",
-    "KSGF",
-    "KVER",
-    "M17",
-    "MO3"
-  ],
-  "SGF Mizzou": [
-    "KCOU",
-    "KJEF"
-  ],
-  "END RAPCON": [
-    "1K5",
-    "1OK",
-    "4O5",
-    "6K4",
-    "KAVK",
-    "KCKA",
-    "KEND",
-    "KJWG",
-    "KWDG",
-    "O53",
-    "O65"
-  ],
-  "END TOWER": [
-    "KEND"
-  ],
-  "SZL TRACON": [
-    "0R2",
-    "3VS",
-    "KDMO",
-    "KGLY",
-    "KHIG",
-    "KMHL",
-    "KRAW",
-    "KRCM",
-    "KSZL"
-  ]
+  "MCI TRACON": {
+    "airports": [
+      "0C1",
+      "0N0",
+      "3EX",
+      "3GV",
+      "63K",
+      "K34",
+      "K59",
+      "KEZZ",
+      "KFLV",
+      "KIXD",
+      "KLXT",
+      "KMCI",
+      "KMKC",
+      "KOJC",
+      "KSTJ"
+    ],
+    "position_prefixes": [
+      "KC"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "MCI"
+  },
+  "MCI MCI Local": {
+    "airports": [
+      "KMCI"
+    ],
+    "position_prefixes": [
+      "MCI"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "MCI"
+  },
+  "MCI MKC Local": {
+    "airports": [
+      "KMKC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "MCI"
+  },
+  "MCI OJC Local": {
+    "airports": [
+      "KOJC"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "MCI"
+  },
+  "T75 T75 Combined": {
+    "airports": [
+      "1H0",
+      "3LF",
+      "5K1",
+      "C15",
+      "I24",
+      "KAAA",
+      "KALN",
+      "KBLV",
+      "KBMI",
+      "KCPS",
+      "KFES",
+      "KFYG",
+      "KIJX",
+      "KPIA",
+      "KSAR",
+      "KSET",
+      "KSPI",
+      "KSTL",
+      "KSUS",
+      "KTAZ",
+      "M71"
+    ],
+    "position_prefixes": [
+      "STL",
+      "T75"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "T75"
+  },
+  "T75 St. Louis ATCT": {
+    "airports": [
+      "KSTL"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "T75"
+  },
+  "T75 Spirit ATCT": {
+    "airports": [
+      "KSUS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "T75"
+  },
+  "T75 Downtown ATCT": {
+    "airports": [
+      "KCPS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "T75"
+  },
+  "T75 Alton ATCT": {
+    "airports": [
+      "KALN"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "T75"
+  },
+  "T75 Scott ATCT": {
+    "airports": [
+      "KBLV"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "T75"
+  },
+  "T75 Springfield (T75)": {
+    "airports": [
+      "KSPI"
+    ],
+    "position_prefixes": [
+      "SPI"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "T75"
+  },
+  "T75 Peoria (T75)": {
+    "airports": [
+      "KBMI",
+      "KPIA"
+    ],
+    "position_prefixes": [
+      "PIA"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "T75"
+  },
+  "T75 St. Louis (T75)": {
+    "airports": [
+      "KALN",
+      "KBLV",
+      "KCPS",
+      "KSTL",
+      "KSUS"
+    ],
+    "position_prefixes": [
+      "STL"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP"
+    ],
+    "facility_id": "T75"
+  },
+  "ICT TRACON": {
+    "airports": [
+      "1K1",
+      "3AU",
+      "47K",
+      "55K",
+      "71K",
+      "8K2",
+      "9K8",
+      "KAAO",
+      "KANY",
+      "KBEC",
+      "KEGT",
+      "KEQA",
+      "KHUT",
+      "KIAB",
+      "KICT",
+      "KMPR",
+      "M66"
+    ],
+    "position_prefixes": [
+      "ICT"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "ICT"
+  },
+  "ICT ICT Local": {
+    "airports": [
+      "KICT"
+    ],
+    "position_prefixes": [
+      "ICT"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "ICT"
+  },
+  "ICT IAB Local": {
+    "airports": [
+      "KIAB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "ICT"
+  },
+  "ICT HUT Local": {
+    "airports": [
+      "KHUT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "ICT"
+  },
+  "TUL TRACON": {
+    "airports": [
+      "1H6",
+      "2F6",
+      "2K9",
+      "H71",
+      "KGCM",
+      "KOKM",
+      "KOWP",
+      "KRVS",
+      "KTUL",
+      "O38"
+    ],
+    "position_prefixes": [
+      "TUL"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "TUL"
+  },
+  "TUL TUL LOCAL": {
+    "airports": [
+      "KTUL"
+    ],
+    "position_prefixes": [
+      "TUL"
+    ],
+    "position_suffixes": [
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "TUL"
+  },
+  "SGF Springfield": {
+    "airports": [
+      "03B",
+      "19T",
+      "2H2",
+      "2M5",
+      "3DW",
+      "63M",
+      "94K",
+      "H17",
+      "H58",
+      "H79",
+      "K15",
+      "KAIZ",
+      "KAOV",
+      "KBBG",
+      "KCOU",
+      "KFTT",
+      "KFWB",
+      "KHFJ",
+      "KJEF",
+      "KLBO",
+      "KMYJ",
+      "KOZS",
+      "KPLK",
+      "KSGF",
+      "KVER",
+      "M17",
+      "MO3"
+    ],
+    "position_prefixes": [
+      "SGF"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "TWR"
+    ],
+    "facility_id": "SGF"
+  },
+  "SGF Mizzou": {
+    "airports": [
+      "KCOU",
+      "KJEF"
+    ],
+    "position_prefixes": [
+      "MZU"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "SGF"
+  },
+  "END RAPCON": {
+    "airports": [
+      "1K5",
+      "1OK",
+      "4O5",
+      "6K4",
+      "KAVK",
+      "KCKA",
+      "KEND",
+      "KJWG",
+      "KWDG",
+      "O53",
+      "O65"
+    ],
+    "position_prefixes": [
+      "END"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "END"
+  },
+  "END TOWER": {
+    "airports": [
+      "KEND"
+    ],
+    "position_prefixes": [
+      "END"
+    ],
+    "position_suffixes": [
+      "TWR"
+    ],
+    "facility_id": "END"
+  },
+  "SZL TRACON": {
+    "airports": [
+      "0R2",
+      "3VS",
+      "KDMO",
+      "KGLY",
+      "KHIG",
+      "KMHL",
+      "KRAW",
+      "KRCM",
+      "KSZL"
+    ],
+    "position_prefixes": [
+      "SZL"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEL",
+      "GND",
+      "TWR"
+    ],
+    "facility_id": "SZL"
+  }
 }

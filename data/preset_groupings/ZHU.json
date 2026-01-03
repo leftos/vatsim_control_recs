@@ -1,221 +1,474 @@
 {
-  "AUS TRACON": [
-    "3R9",
-    "3T5",
-    "50R",
-    "84R",
-    "88R",
-    "KAUS",
-    "KEDC",
-    "KGTU",
-    "KGYB",
-    "KHYI",
-    "KRYW",
-    "T20",
-    "T74",
-    "T91"
-  ],
-  "AUS GTU TOWER MAPS": [
-    "KGTU"
-  ],
-  "AUS HYI TOWER MAPS": [
-    "KHYI"
-  ],
-  "AUS AUS TOWER": [
-    "KAUS"
-  ],
-  "I90 Beaumont": [
-    "KBMT",
-    "KBPT",
-    "KORG"
-  ],
-  "I90 College Station": [
-    "KCFD",
-    "KCLL",
-    "KELA"
-  ],
-  "I90 Consolidated": [
-    "11R",
-    "45R",
-    "54T",
-    "60R",
-    "6R3",
-    "KARM",
-    "KAXH",
-    "KBMT",
-    "KBPT",
-    "KBYY",
-    "KCFD",
-    "KCLL",
-    "KCXO",
-    "KDWH",
-    "KEFD",
-    "KELA",
-    "KGLS",
-    "KHOU",
-    "KHPY",
-    "KIAH",
-    "KIWS",
-    "KLBX",
-    "KLVJ",
-    "KORG",
-    "KRCK",
-    "KRWV",
-    "KSGR",
-    "KTME",
-    "T00",
-    "T35",
-    "T41",
-    "T51",
-    "T78"
-  ],
-  "I90 IAH Tower": [
-    "KIAH"
-  ],
-  "I90 HOU Tower": [
-    "KHOU"
-  ],
-  "SAT TRACON": [
-    "5C1",
-    "KBAZ",
-    "KCVB",
-    "KPEZ",
-    "KRND",
-    "KSAT",
-    "KSKF",
-    "KSSF"
-  ],
-  "SAT SAT TOWER": [
-    "KSAT"
-  ],
-  "DLF DLF RAPCON": [
-    "5T9",
-    "KDLF",
-    "KDRT",
-    "KECU",
-    "T70"
-  ],
-  "DLF DLF TOWER": [
-    "KDLF"
-  ],
-  "NQI NQI RATCF": [
-    "07R",
-    "67T",
-    "KALI",
-    "KBKS",
-    "KIKG",
-    "KNOG",
-    "KNQI"
-  ],
-  "NQI NQI TOWER": [
-    "KNQI"
-  ],
-  "LCH TRACON": [
-    "3R7",
-    "5R8",
-    "6R1",
-    "KCWF",
-    "KLCH",
-    "KUXL"
-  ],
-  "LCH LCH TOWER": [
-    "KLCH"
-  ],
-  "CRP Corpus TRACON": [
-    "KCRP",
-    "KNGP",
-    "KNGW",
-    "KNWL"
-  ],
-  "CRP Valley TRACON": [
-    "KBRO",
-    "KHRL",
-    "KMFE"
-  ],
-  "CRP LRD TOWER": [
-    "KLRD"
-  ],
-  "CRP CRP TOWER": [
-    "KCRP"
-  ],
-  "LFT TRACON": [
-    "3R2",
-    "4R7",
-    "KARA",
-    "KIYA",
-    "KLFT",
-    "KOPL"
-  ],
-  "LFT LFT TOWER": [
-    "KLFT"
-  ],
-  "GPT TRACON": [
-    "5R2",
-    "KBIX",
-    "KGPT",
-    "KHSA",
-    "KMJD",
-    "M13",
-    "M24"
-  ],
-  "GPT GPT TOWER": [
-    "KGPT"
-  ],
-  "MOB TRACON": [
-    "1R8",
-    "KBFM",
-    "KCQF",
-    "KJKA",
-    "KMOB",
-    "KPQL"
-  ],
-  "MOB MOB TOWER": [
-    "KMOB"
-  ],
-  "BTR TRACON": [
-    "7L9",
-    "KBTR",
-    "KHZR",
-    "KREG"
-  ],
-  "BTR BTR TOWER": [
-    "KBTR"
-  ],
-  "POE POE ARAC": [
-    "3R4",
-    "KACP",
-    "KAEX",
-    "KDRI",
-    "KESF",
-    "KIER",
-    "KMKV",
-    "KPOE"
-  ],
-  "POE POE TOWER": [
-    "KPOE"
-  ],
-  "MSY TRACON": [
-    "KAPS",
-    "KASD",
-    "KHDC",
-    "KHUM",
-    "KMSY",
-    "KNBG",
-    "KNEW",
-    "KPTN"
-  ],
-  "MSY MSY TOWER": [
-    "KMSY"
-  ],
-  "International - Cuba": [
-    "MUFH"
-  ],
-  "International - Mexico": [
-    "MMID",
-    "MMMA",
-    "MMMY",
-    "MMNL",
-    "MMRX",
-    "MMTY"
-  ]
+  "AUS TRACON": {
+    "airports": [
+      "3R9",
+      "3T5",
+      "50R",
+      "84R",
+      "88R",
+      "KAUS",
+      "KEDC",
+      "KGTU",
+      "KGYB",
+      "KHYI",
+      "KRYW",
+      "T20",
+      "T74",
+      "T91"
+    ],
+    "position_prefixes": [
+      "AUS"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "AUS"
+  },
+  "AUS GTU TOWER MAPS": {
+    "airports": [
+      "KGTU"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "AUS"
+  },
+  "AUS HYI TOWER MAPS": {
+    "airports": [
+      "KHYI"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "AUS"
+  },
+  "AUS AUS TOWER": {
+    "airports": [
+      "KAUS"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "AUS"
+  },
+  "I90 Beaumont": {
+    "airports": [
+      "KBMT",
+      "KBPT",
+      "KORG"
+    ],
+    "position_prefixes": [
+      "I90"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "I90"
+  },
+  "I90 College Station": {
+    "airports": [
+      "KCFD",
+      "KCLL",
+      "KELA"
+    ],
+    "position_prefixes": [
+      "I90"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "I90"
+  },
+  "I90 Consolidated": {
+    "airports": [
+      "11R",
+      "45R",
+      "54T",
+      "60R",
+      "6R3",
+      "KARM",
+      "KAXH",
+      "KBMT",
+      "KBPT",
+      "KBYY",
+      "KCFD",
+      "KCLL",
+      "KCXO",
+      "KDWH",
+      "KEFD",
+      "KELA",
+      "KGLS",
+      "KHOU",
+      "KHPY",
+      "KIAH",
+      "KIWS",
+      "KLBX",
+      "KLVJ",
+      "KORG",
+      "KRCK",
+      "KRWV",
+      "KSGR",
+      "KTME",
+      "T00",
+      "T35",
+      "T41",
+      "T51",
+      "T78"
+    ],
+    "position_prefixes": [
+      "I90"
+    ],
+    "position_suffixes": [
+      "APP",
+      "DEP",
+      "TMU"
+    ],
+    "facility_id": "I90"
+  },
+  "I90 IAH Tower": {
+    "airports": [
+      "KIAH"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "I90"
+  },
+  "I90 HOU Tower": {
+    "airports": [
+      "KHOU"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "I90"
+  },
+  "SAT TRACON": {
+    "airports": [
+      "5C1",
+      "KBAZ",
+      "KCVB",
+      "KPEZ",
+      "KRND",
+      "KSAT",
+      "KSKF",
+      "KSSF"
+    ],
+    "position_prefixes": [
+      "SAT"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "SAT"
+  },
+  "SAT SAT TOWER": {
+    "airports": [
+      "KSAT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "SAT"
+  },
+  "DLF DLF RAPCON": {
+    "airports": [
+      "5T9",
+      "KDLF",
+      "KDRT",
+      "KECU",
+      "T70"
+    ],
+    "position_prefixes": [
+      "DLF"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "DLF"
+  },
+  "DLF DLF TOWER": {
+    "airports": [
+      "KDLF"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "DLF"
+  },
+  "NQI NQI RATCF": {
+    "airports": [
+      "07R",
+      "67T",
+      "KALI",
+      "KBKS",
+      "KIKG",
+      "KNOG",
+      "KNQI"
+    ],
+    "position_prefixes": [
+      "NQI"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "NQI"
+  },
+  "NQI NQI TOWER": {
+    "airports": [
+      "KNQI"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "NQI"
+  },
+  "LCH TRACON": {
+    "airports": [
+      "3R7",
+      "5R8",
+      "6R1",
+      "KCWF",
+      "KLCH",
+      "KUXL"
+    ],
+    "position_prefixes": [
+      "LCH"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "LCH"
+  },
+  "LCH LCH TOWER": {
+    "airports": [
+      "KLCH"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "LCH"
+  },
+  "CRP Corpus TRACON": {
+    "airports": [
+      "KCRP",
+      "KNGP",
+      "KNGW",
+      "KNWL"
+    ],
+    "position_prefixes": [
+      "CRP"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "CRP"
+  },
+  "CRP Valley TRACON": {
+    "airports": [
+      "KBRO",
+      "KHRL",
+      "KMFE"
+    ],
+    "position_prefixes": [
+      "VLY"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "CRP"
+  },
+  "CRP LRD TOWER": {
+    "airports": [
+      "KLRD"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CRP"
+  },
+  "CRP CRP TOWER": {
+    "airports": [
+      "KCRP"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "CRP"
+  },
+  "LFT TRACON": {
+    "airports": [
+      "3R2",
+      "4R7",
+      "KARA",
+      "KIYA",
+      "KLFT",
+      "KOPL"
+    ],
+    "position_prefixes": [
+      "LFT"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "LFT"
+  },
+  "LFT LFT TOWER": {
+    "airports": [
+      "KLFT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "LFT"
+  },
+  "GPT TRACON": {
+    "airports": [
+      "5R2",
+      "KBIX",
+      "KGPT",
+      "KHSA",
+      "KMJD",
+      "M13",
+      "M24"
+    ],
+    "position_prefixes": [
+      "GPT"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "GPT"
+  },
+  "GPT GPT TOWER": {
+    "airports": [
+      "KGPT"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "GPT"
+  },
+  "MOB TRACON": {
+    "airports": [
+      "1R8",
+      "KBFM",
+      "KCQF",
+      "KJKA",
+      "KMOB",
+      "KPQL"
+    ],
+    "position_prefixes": [
+      "MOB"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "MOB"
+  },
+  "MOB MOB TOWER": {
+    "airports": [
+      "KMOB"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "MOB"
+  },
+  "BTR TRACON": {
+    "airports": [
+      "7L9",
+      "KBTR",
+      "KHZR",
+      "KREG"
+    ],
+    "position_prefixes": [
+      "BTR"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "BTR"
+  },
+  "BTR BTR TOWER": {
+    "airports": [
+      "KBTR"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "BTR"
+  },
+  "POE POE ARAC": {
+    "airports": [
+      "3R4",
+      "KACP",
+      "KAEX",
+      "KDRI",
+      "KESF",
+      "KIER",
+      "KMKV",
+      "KPOE"
+    ],
+    "position_prefixes": [
+      "POE"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "POE"
+  },
+  "POE POE TOWER": {
+    "airports": [
+      "KPOE"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "POE"
+  },
+  "MSY TRACON": {
+    "airports": [
+      "KAPS",
+      "KASD",
+      "KHDC",
+      "KHUM",
+      "KMSY",
+      "KNBG",
+      "KNEW",
+      "KPTN"
+    ],
+    "position_prefixes": [
+      "MSY"
+    ],
+    "position_suffixes": [
+      "APP",
+      "TWR"
+    ],
+    "facility_id": "MSY"
+  },
+  "MSY MSY TOWER": {
+    "airports": [
+      "KMSY"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": "MSY"
+  },
+  "International - Cuba": {
+    "airports": [
+      "MUFH"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  },
+  "International - Mexico": {
+    "airports": [
+      "MMID",
+      "MMMA",
+      "MMMY",
+      "MMNL",
+      "MMRX",
+      "MMTY"
+    ],
+    "position_prefixes": null,
+    "position_suffixes": null,
+    "facility_id": null
+  }
 }

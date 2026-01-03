@@ -644,8 +644,8 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
                 with open(json_file, 'r') as f:
                     artcc_groupings = json.load(f)
 
-                for grouping_name, airports in artcc_groupings.items():
-                    # Resolve nested groupings
+                for grouping_name in artcc_groupings:
+                    # Resolve nested groupings (airports resolved from all_groupings)
                     resolved = resolve_grouping_recursively(grouping_name, all_groupings)
                     if resolved:
                         groupings_to_process[grouping_name] = (list(resolved), artcc)
@@ -1012,7 +1012,7 @@ def generate_index_only(config: DaemonConfig) -> Dict[str, str]:
                 with open(json_file, 'r') as f:
                     artcc_groupings = json.load(f)
 
-                for grouping_name, airports in artcc_groupings.items():
+                for grouping_name in artcc_groupings:
                     resolved = resolve_grouping_recursively(grouping_name, all_groupings)
                     if resolved:
                         groupings_to_process[grouping_name] = (list(resolved), artcc)
@@ -1167,7 +1167,7 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
                 with open(json_file, 'r') as f:
                     artcc_groupings = json.load(f)
 
-                for grouping_name, airports in artcc_groupings.items():
+                for grouping_name in artcc_groupings:
                     resolved = resolve_grouping_recursively(grouping_name, all_groupings)
                     if resolved:
                         groupings_to_process[grouping_name] = (list(resolved), artcc)

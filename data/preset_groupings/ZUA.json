@@ -1,7 +1,16 @@
 {
-  "GUM Guam International": [
-    "KGSN",
-    "KGUM",
-    "KUAM"
-  ]
+  "GUM Guam International": {
+    "airports": [
+      "KGSN",
+      "KGUM",
+      "KUAM"
+    ],
+    "position_prefixes": [
+      "GUM"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "GUM"
+  }
 }
