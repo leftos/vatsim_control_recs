@@ -582,7 +582,7 @@ class FlightBoardScreen(ModalScreen):
         for icao in airports:
             metar = metars.get(icao, '')
             if metar:
-                category, _ = get_flight_category(metar)
+                category = get_flight_category(metar)
                 self._previous_weather[icao] = category
 
         # Build baseline runway state from ATIS
@@ -622,7 +622,7 @@ class FlightBoardScreen(ModalScreen):
             if not metar:
                 continue
 
-            new_category, _ = get_flight_category(metar)
+            new_category = get_flight_category(metar)
             old_category = self._previous_weather.get(icao)
 
             # If we have a previous category and it changed, show notification

@@ -6,7 +6,6 @@ a bounding box-based approach using aviationweather.gov's bbox parameter.
 """
 
 import json
-import sys
 import time
 import urllib.request
 import urllib.error
@@ -15,10 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
-# Add parent paths for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from artcc_boundaries import get_artcc_boundaries
+from .artcc_boundaries import get_artcc_boundaries
 
 
 def get_artcc_bbox(artcc_code: str, cache_dir: Path) -> Optional[Tuple[float, float, float, float]]:
