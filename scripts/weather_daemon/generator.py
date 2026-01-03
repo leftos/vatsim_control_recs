@@ -536,6 +536,9 @@ class WeatherBriefingGenerator:
         """
         Find the most common METAR observation time and airports with different times.
 
+        Biases towards XX53 times since that's the standard METAR issuance time
+        (METARs are typically issued at 53 minutes past the hour).
+
         Returns:
             Tuple of (most_common_time, set of airports with different times)
         """
@@ -557,7 +560,19 @@ class WeatherBriefingGenerator:
             return (None, set())
 
         # Find most common time
-        most_common_hhmm = time_counts.most_common(1)[0][0]
+        most_common_hhmm, most_common_count = time_counts.most_common(1)[0]
+        total_count = sum(time_counts.values())
+
+        # Bias towards XX53 times (standard METAR issuance time)
+        # Find any XX53 time and prefer it if it has reasonable representation
+        xx53_times = [(hhmm, count) for hhmm, count in time_counts.items() if hhmm[2:] == '53']
+        if xx53_times:
+            # Get the most common XX53 time (could be different hours)
+            best_xx53, xx53_count = max(xx53_times, key=lambda x: x[1])
+
+            # Use XX53 if it has at least 25% of total OR at least 60% of the most common count
+            if xx53_count >= total_count * 0.25 or xx53_count >= most_common_count * 0.6:
+                most_common_hhmm = best_xx53
 
         # Find airports with different times
         different_airports = {
@@ -739,7 +754,7 @@ class WeatherBriefingGenerator:
         if common_obs_hhmm:
             now = datetime.now(timezone.utc)
             date_str = now.strftime("%Y-%m-%d")
-            obs_time_str = f"{common_obs_hhmm[:2]}:{common_obs_hhmm[2:]}Z"
+            obs_time_str = f"{common_obs_hhmm}Z"
             console.print(f"METARs from: [#aaaaff]{date_str} {obs_time_str}[/#aaaaff]\n")
         else:
             # Fallback if no observation times found

@@ -706,13 +706,6 @@ def generate_html(
             display: inline-block;
         }}
 
-        .sidebar-header .zulu-clock .zulu-label {{
-            font-size: 0.7rem;
-            color: #888;
-            font-weight: 400;
-            margin-left: 6px;
-        }}
-
         .legend {{
             display: flex;
             gap: 10px;
@@ -1184,7 +1177,7 @@ def generate_html(
         <div class="sidebar">
             <div class="sidebar-header">
                 <h1>VATSIM Weather Briefings</h1>
-                <div class="zulu-clock"><span id="zulu-time">--:--:--</span><span class="zulu-label">ZULU</span></div>
+                <div class="zulu-clock"><span id="zulu-time">--:--:--Z</span></div>
                 <div class="timestamp">Updated: {timestamp}</div>
                 <div class="next-update">Next update: <span id="countdown">5:00</span></div>
                 <div class="legend">
@@ -1664,7 +1657,7 @@ def generate_html(
             const hours = now.getUTCHours().toString().padStart(2, '0');
             const minutes = now.getUTCMinutes().toString().padStart(2, '0');
             const seconds = now.getUTCSeconds().toString().padStart(2, '0');
-            zuluTimeEl.textContent = `${{hours}}:${{minutes}}:${{seconds}}`;
+            zuluTimeEl.textContent = `${{hours}}:${{minutes}}:${{seconds}}Z`;
         }}
 
         // Update Zulu clock immediately and every second
