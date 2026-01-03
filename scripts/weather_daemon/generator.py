@@ -104,7 +104,7 @@ class ProgressTracker:
         self.last_logged_pct = -log_interval_pct  # Ensure first update logs
         self.start_time = datetime.now(timezone.utc)
 
-    def update(self, completed: int = None, increment: int = 1) -> None:
+    def update(self, completed: Optional[int] = None, increment: int = 1) -> None:
         """Update progress and print/log if at interval."""
         if completed is not None:
             self.completed = completed

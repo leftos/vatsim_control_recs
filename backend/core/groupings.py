@@ -128,7 +128,7 @@ def load_artcc_groupings(unified_data: Dict[str, Dict[str, Any]]) -> Dict[str, L
     return artcc_groupings
 
 
-def load_custom_groupings(filename: str = None) -> Optional[Dict[str, List[str]]]:
+def load_custom_groupings(filename: Optional[str] = None) -> Optional[Dict[str, List[str]]]:
     """
     Load custom airport groupings from JSON file(s).
 
@@ -213,8 +213,8 @@ def load_preset_groupings() -> Dict[str, List[str]]:
 
 
 def load_all_groupings(
-    custom_groupings_filename: str = None,
-    unified_data: Dict[str, Dict[str, Any]] = None
+    custom_groupings_filename: Optional[str] = None,
+    unified_data: Optional[Dict[str, Dict[str, Any]]] = None
 ) -> Dict[str, List[str]]:
     """
     Load and merge all groupings sources in order of precedence:

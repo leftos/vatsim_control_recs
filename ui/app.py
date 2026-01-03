@@ -1027,12 +1027,13 @@ class VATSIMControlApp(App):
         from . import config
         from backend import find_airports_near_position
 
-        all_airports = set()
         primary = list(airports)  # Departure and arrival are primary
+        # Build ordered list: primary airports first, then others
+        ordered_airports = list(primary)
+        seen = set(primary)
 
         # Add nearby airports for each flight endpoint
         for icao in airports:
-            all_airports.add(icao)
             airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {}) if config.UNIFIED_AIRPORT_DATA else {}
             lat = airport_info.get('latitude')
             lon = airport_info.get('longitude')
@@ -1044,13 +1045,17 @@ class VATSIMControlApp(App):
                     radius_nm=30.0,
                     max_results=10
                 )
-                all_airports.update(nearby)
+                for apt in nearby:
+                    if apt not in seen:
+                        ordered_airports.append(apt)
+                        seen.add(apt)
 
         title = f"{callsign} Route"
         briefing_screen = WeatherBriefingScreen(
             grouping_name=title,
-            airports=list(all_airports),
-            primary_airports=primary
+            airports=ordered_airports,
+            primary_airports=primary,
+            is_flight_route=True
         )
         self.push_screen(briefing_screen)
 

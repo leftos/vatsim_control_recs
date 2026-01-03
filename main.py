@@ -118,9 +118,9 @@ def ensure_venv_and_restart():
     sys.exit(result)
 
 
-def parse_requirements(requirements_path):
+def parse_requirements(requirements_path: str) -> list[str]:
     """Parse requirements.txt and return list of package names."""
-    packages = []
+    packages: list[str] = []
     with open(requirements_path, 'r') as f:
         for line in f:
             line = line.strip()
@@ -144,7 +144,7 @@ def ensure_requirements_installed():
         return False
 
     # Mapping for packages where pip name differs from import name
-    import_name_map = {
+    import_name_map: dict[str, str] = {
         'Pillow': 'PIL',
     }
 

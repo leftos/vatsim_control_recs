@@ -139,7 +139,7 @@ class WeatherBriefingScreen(ModalScreen):
         Binding("p", "print", "Print"),
     ]
 
-    def __init__(self, grouping_name: str, airports: List[str], primary_airports: Optional[List[str]] = None):
+    def __init__(self, grouping_name: str, airports: List[str], primary_airports: Optional[List[str]] = None, is_flight_route: bool = False):
         """
         Initialize the weather briefing modal.
 
@@ -147,11 +147,13 @@ class WeatherBriefingScreen(ModalScreen):
             grouping_name: Name of the grouping/sector
             airports: List of airport ICAO codes in this grouping
             primary_airports: Optional list of primary airports to highlight at the top
+            is_flight_route: If True, display airports in route order without area clustering
         """
         super().__init__()
         self.grouping_name = grouping_name
         self.airports = airports
         self.primary_airports = primary_airports or []
+        self.is_flight_route = is_flight_route
         self.weather_data: Dict[str, Dict[str, Any]] = {}
         self._pending_tasks: list = []
 
@@ -339,53 +341,61 @@ class WeatherBriefingScreen(ModalScreen):
         # Build content sections
         sections = []
 
-        # Primary airports section (highlighted at the top)
-        if self.primary_airports:
-            primary_section_lines = ["[bold cyan]━━━ REQUESTED ━━━[/bold cyan]"]
-            for icao in self.primary_airports:
+        # For flight routes, show all airports in route order without clustering
+        if self.is_flight_route:
+            for icao in self.airports:
                 data = self.weather_data.get(icao, {})
                 if data:
-                    card = self._build_airport_card(icao, data, is_primary=True)
-                    primary_section_lines.append(card)
-            if len(primary_section_lines) > 1:  # Has content beyond header
-                sections.append("\n".join(primary_section_lines))
+                    is_primary = icao in self.primary_airports
+                    card = self._build_airport_card(icao, data, is_primary=is_primary)
+                    sections.append(card)
+        else:
+            # Primary airports section (highlighted at the top)
+            if self.primary_airports:
+                primary_section_lines = ["[bold cyan]━━━ REQUESTED ━━━[/bold cyan]"]
+                for icao in self.primary_airports:
+                    data = self.weather_data.get(icao, {})
+                    if data:
+                        card = self._build_airport_card(icao, data, is_primary=True)
+                        primary_section_lines.append(card)
+                if len(primary_section_lines) > 1:  # Has content beyond header
+                    sections.append("\n".join(primary_section_lines))
+            # Use area-based grouping (centered around ATIS airports)
+            # First, temporarily exclude primary airports from weather_data for grouping
+            original_weather_data = self.weather_data
+            if self.primary_airports:
+                self.weather_data = {
+                    k: v for k, v in self.weather_data.items()
+                    if k not in self.primary_airports
+                }
 
-        # Use area-based grouping (centered around ATIS airports)
-        # First, temporarily exclude primary airports from weather_data for grouping
-        original_weather_data = self.weather_data
-        if self.primary_airports:
-            self.weather_data = {
-                k: v for k, v in self.weather_data.items()
-                if k not in self.primary_airports
-            }
+            # Create area groups
+            area_groups = self._create_area_groups()
 
-        # Create area groups
-        area_groups = self._create_area_groups()
+            # Restore original weather_data
+            self.weather_data = original_weather_data
 
-        # Restore original weather_data
-        self.weather_data = original_weather_data
+            # Build area sections
+            for area in area_groups:
+                if not area['airports']:
+                    continue
 
-        # Build area sections
-        for area in area_groups:
-            if not area['airports']:
-                continue
+                # Count categories and build summary using shared functions
+                area_cats = count_area_categories(area['airports'])
+                area_summary = build_area_summary(area_cats, color_scheme="ui")
 
-            # Count categories and build summary using shared functions
-            area_cats = count_area_categories(area['airports'])
-            area_summary = build_area_summary(area_cats, color_scheme="ui")
+                # Section header with area name and summary
+                section_header = f"[bold cyan]━━━ {area['name'].upper()} ━━━[/bold cyan]"
+                if area_summary:
+                    section_header += f"\n{area_summary}"
+                section_lines = [section_header]
 
-            # Section header with area name and summary
-            section_header = f"[bold cyan]━━━ {area['name'].upper()} ━━━[/bold cyan]"
-            if area_summary:
-                section_header += f"\n{area_summary}"
-            section_lines = [section_header]
+                # Airport cards in this area
+                for icao, data, _size in area['airports']:
+                    card = self._build_airport_card(icao, data)
+                    section_lines.append(card)
 
-            # Airport cards in this area
-            for icao, data, _size in area['airports']:
-                card = self._build_airport_card(icao, data)
-                section_lines.append(card)
-
-            sections.append("\n".join(section_lines))
+                sections.append("\n".join(section_lines))
 
         content_widget = self.query_one("#briefing-content", Static)
         content_widget.update("\n\n".join(sections) if sections else "[dim]No weather data available[/dim]")
@@ -599,26 +609,55 @@ class WeatherBriefingScreen(ModalScreen):
             console.print(" | ".join(summary_parts))
         console.print()
 
-        # Create area groups (centered around ATIS airports)
-        area_groups = self._create_area_groups()
+        # For flight routes, show all airports in route order without clustering
+        if self.is_flight_route:
+            for icao in self.airports:
+                data = self.weather_data.get(icao, {})
+                if data:
+                    is_primary = icao in self.primary_airports
+                    card = self._build_airport_card(icao, data, is_primary=is_primary)
+                    console.print(card)
+                    console.print()
+        else:
+            # Print primary airports first
+            if self.primary_airports:
+                console.print("[bold cyan]━━━ REQUESTED ━━━[/bold cyan]")
+                for icao in self.primary_airports:
+                    data = self.weather_data.get(icao, {})
+                    if data:
+                        card = self._build_airport_card(icao, data, is_primary=True)
+                        console.print(card)
+                console.print()
 
-        # Build content with area sections
-        for area in area_groups:
-            if not area['airports']:
-                continue
+            # Create area groups (centered around ATIS airports)
+            # Exclude primary airports from grouping
+            original_weather_data = self.weather_data
+            if self.primary_airports:
+                self.weather_data = {
+                    k: v for k, v in self.weather_data.items()
+                    if k not in self.primary_airports
+                }
 
-            # Area header and summary
-            area_cats = count_area_categories(area['airports'])
-            area_summary = build_area_summary(area_cats, color_scheme="ui")
+            area_groups = self._create_area_groups()
+            self.weather_data = original_weather_data
 
-            console.print(f"[bold cyan]━━━ {area['name'].upper()} ━━━[/bold cyan]")
-            if area_summary:
-                console.print(area_summary)
+            # Build content with area sections
+            for area in area_groups:
+                if not area['airports']:
+                    continue
 
-            for icao, data, _size in area['airports']:
-                card = self._build_airport_card(icao, data)
-                console.print(card)
-            console.print()
+                # Area header and summary
+                area_cats = count_area_categories(area['airports'])
+                area_summary = build_area_summary(area_cats, color_scheme="ui")
+
+                console.print(f"[bold cyan]━━━ {area['name'].upper()} ━━━[/bold cyan]")
+                if area_summary:
+                    console.print(area_summary)
+
+                for icao, data, _size in area['airports']:
+                    card = self._build_airport_card(icao, data)
+                    console.print(card)
+                console.print()
 
         # Export to HTML
         html_content = console.export_html(inline_styles=True)

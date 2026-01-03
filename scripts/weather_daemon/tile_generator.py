@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 from PIL import Image
-from scipy.spatial import cKDTree
+from scipy.spatial import cKDTree  # type: ignore[attr-defined]
 
 logger = logging.getLogger("weather_daemon")
 

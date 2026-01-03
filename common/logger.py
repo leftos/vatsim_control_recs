@@ -146,14 +146,7 @@ def get_log_file_path() -> str:
     return _get_log_file()
 
 
-# For backwards compatibility - these are now computed lazily
-@property
-def LOGS_DIR() -> str:
-    """Get the logs directory (for backwards compatibility)."""
-    return _get_logs_dir()
-
-
-# Expose LOGS_DIR and LOG_FILE as module-level variables that are lazily evaluated
+# Expose LOGS_DIR and LOG_FILE as module-level proxy objects that are lazily evaluated
 class _PathProxy:
     """Proxy class to provide lazy path access."""
     def __init__(self, getter):

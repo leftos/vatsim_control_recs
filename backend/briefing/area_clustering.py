@@ -5,7 +5,7 @@ This module provides shared clustering functionality used by both the
 UI weather briefing modal and the weather daemon HTML generator.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 
 from backend.core.calculations import haversine_distance_nm
 from backend.data.weather_parsing import get_airport_size_priority as _get_size_priority
@@ -13,6 +13,7 @@ from backend.data.weather_parsing import get_airport_size_priority as _get_size_
 
 # Type aliases for clarity
 AirportEntry = Tuple[str, Dict[str, Any], int, Optional[Tuple[float, float]]]  # (icao, data, size_priority, coords)
+ValidAirportEntry = Tuple[str, Dict[str, Any], int, Tuple[float, float]]  # Same but with non-None coords
 AirportMember = Tuple[str, Dict[str, Any], int]  # (icao, data, size_priority)
 
 
@@ -154,17 +155,20 @@ class AreaClusterer:
         Returns:
             List of clusters, each containing airport tuples
         """
-        valid_airports = [a for a in airports if a[3] is not None]
+        # Filter to airports with valid coordinates
+        valid_airports: List[ValidAirportEntry] = [
+            cast(ValidAirportEntry, a) for a in airports if a[3] is not None
+        ]
 
         if not valid_airports:
             return []
 
         if len(valid_airports) <= k:
-            return [[a] for a in valid_airports]
+            return [[cast(AirportEntry, va)] for va in valid_airports]
 
         # Initialize centroids using k-means++ style selection
         sorted_by_size = sorted(valid_airports, key=lambda x: (x[2], x[0]))
-        centroids = [sorted_by_size[0][3]]  # First centroid is largest airport
+        centroids: List[Tuple[float, float]] = [sorted_by_size[0][3]]  # First centroid is largest airport
 
         remaining = sorted_by_size[1:]
         while len(centroids) < k and remaining:
@@ -182,10 +186,10 @@ class AreaClusterer:
             centroids.append(selected[3])
             remaining.remove(selected)
 
-        clusters: List[List[AirportEntry]] = [[] for _ in range(k)]
+        clusters: List[List[ValidAirportEntry]] = [[] for _ in range(k)]
 
         for _ in range(max_iterations):
-            new_clusters: List[List[AirportEntry]] = [[] for _ in range(k)]
+            new_clusters: List[List[ValidAirportEntry]] = [[] for _ in range(k)]
 
             for airport in valid_airports:
                 coords = airport[3]
@@ -219,7 +223,8 @@ class AreaClusterer:
 
             centroids = new_centroids
 
-        return [c for c in clusters if c]
+        # Cast back to AirportEntry (ValidAirportEntry is a subtype)
+        return [cast(List[AirportEntry], c) for c in clusters if c]
 
     def generate_area_name(self, centers: List[AirportEntry]) -> str:
         """
@@ -236,7 +241,7 @@ class AreaClusterer:
         for icao, data, size_priority, coords in centers:
             city = self.get_airport_city(icao)
             if not city and self.disambiguator:
-                city = self.disambiguator.get_display_name(icao)
+                city = self.disambiguator.get_pretty_name(icao)
             if not city:
                 city = icao
 
