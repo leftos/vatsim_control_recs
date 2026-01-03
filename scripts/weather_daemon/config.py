@@ -91,6 +91,7 @@ ARTCC_NAMES = {
     'ZSE': 'Seattle',
     'ZSU': 'San Juan',
     'ZTL': 'Atlanta',
+    'ZUA': 'Guam',
 }
 
 # Category colors (Rich markup colors)
