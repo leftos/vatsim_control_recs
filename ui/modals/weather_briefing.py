@@ -234,63 +234,62 @@ def _parse_taf_changes(
         current_ceil: Current ceiling in feet (for trend comparison)
 
     Returns:
-        List of changes with type, time, predicted category, detailed conditions, and trend
+        List of changes with type, time, predicted category, detailed conditions, and trend.
+        Trend is calculated relative to the previous forecast period (or current METAR for first).
     """
     changes = []
     if not taf:
         return changes
 
+    # Collect all forecast groups with their positions for document-order processing
+    all_groups = []
+
     # Parse FM groups: FM251800 ...conditions...
     fm_pattern = r'FM(\d{6})\s+([^\n]+?)(?=\s+FM|\s+TEMPO|\s+BECMG|\s+PROB|$)'
     for match in re.finditer(fm_pattern, taf, re.DOTALL):
-        time_str = match.group(1)
-        conditions = match.group(2)
-
-        # Parse detailed forecast conditions
-        details = _parse_taf_forecast_details(conditions)
-        predicted_cat = details['category']
-
-        # Calculate trend using smarter logic
-        trend = _calculate_trend(
-            current_vis, current_ceil, current_category,
-            details['visibility_sm'], details['ceiling_ft'], predicted_cat
-        )
-
-        changes.append({
+        all_groups.append({
+            'pos': match.start(),
             'type': 'FM',
-            'time_str': time_str,
-            'category': predicted_cat,
-            'visibility_sm': details['visibility_sm'],
-            'ceiling_ft': details['ceiling_ft'],
-            'ceiling_layer': details['ceiling_layer'],
-            'wind': details['wind'],
-            'phenomena': details['phenomena'],
-            'trend': trend,
-            'is_improvement': trend == 'improving',
-            'is_deterioration': trend == 'worsening',
+            'time_str': match.group(1),
+            'conditions': match.group(2),
+            'updates_baseline': True,  # FM groups update the baseline
         })
 
     # Parse TEMPO/BECMG groups
     tempo_becmg_pattern = r'(TEMPO|BECMG)\s+(\d{4})/(\d{4})\s+([^\n]+?)(?=\s+TEMPO|\s+BECMG|\s+FM|\s+PROB|$)'
     for match in re.finditer(tempo_becmg_pattern, taf, re.DOTALL):
-        change_type = match.group(1)
-        from_time = match.group(2)
-        to_time = match.group(3)
-        conditions = match.group(4)
+        all_groups.append({
+            'pos': match.start(),
+            'type': match.group(1),
+            'time_str': f"{match.group(2)}/{match.group(3)}",
+            'conditions': match.group(4),
+            'updates_baseline': False,  # TEMPO/BECMG don't update baseline
+        })
 
+    # Sort by position in document (chronological order in TAF)
+    all_groups.sort(key=lambda x: x['pos'])
+
+    # Track the "baseline" conditions for trend comparison
+    # Starts with current METAR, updates after each FM period
+    baseline_vis = current_vis
+    baseline_ceil = current_ceil
+    baseline_cat = current_category
+
+    # Process groups in document order
+    for group in all_groups:
         # Parse detailed forecast conditions
-        details = _parse_taf_forecast_details(conditions)
+        details = _parse_taf_forecast_details(group['conditions'])
         predicted_cat = details['category']
 
-        # Calculate trend using smarter logic
+        # Calculate trend relative to current baseline
         trend = _calculate_trend(
-            current_vis, current_ceil, current_category,
+            baseline_vis, baseline_ceil, baseline_cat,
             details['visibility_sm'], details['ceiling_ft'], predicted_cat
         )
 
         changes.append({
-            'type': change_type,
-            'time_str': f"{from_time}/{to_time}",
+            'type': group['type'],
+            'time_str': group['time_str'],
             'category': predicted_cat,
             'visibility_sm': details['visibility_sm'],
             'ceiling_ft': details['ceiling_ft'],
@@ -301,6 +300,12 @@ def _parse_taf_changes(
             'is_improvement': trend == 'improving',
             'is_deterioration': trend == 'worsening',
         })
+
+        # FM groups update the baseline for subsequent comparisons
+        if group['updates_baseline']:
+            baseline_vis = details['visibility_sm']
+            baseline_ceil = details['ceiling_ft']
+            baseline_cat = predicted_cat
 
     return changes
 
