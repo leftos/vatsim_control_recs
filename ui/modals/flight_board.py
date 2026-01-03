@@ -650,17 +650,26 @@ class FlightBoardScreen(ModalScreen):
             old_runways = self._previous_runways.get(icao)
 
             # If we have previous runways and they changed, show notification
+            # Only notify when BOTH old and new have actual runway data to avoid
+            # flip-flop notifications caused by intermittent parsing failures or
+            # transient ATIS data gaps
             if old_runways:
                 old_landing, old_departing = old_runways
-                if new_landing != old_landing or new_departing != old_departing:
-                    self._show_runway_notification(
-                        icao,
-                        new_landing, new_departing,
-                        old_landing, old_departing
-                    )
+                old_has_runways = old_landing or old_departing
+                new_has_runways = new_landing or new_departing
 
-            # Update baseline
-            self._previous_runways[icao] = (new_landing, new_departing)
+                if old_has_runways and new_has_runways:
+                    if new_landing != old_landing or new_departing != old_departing:
+                        self._show_runway_notification(
+                            icao,
+                            new_landing, new_departing,
+                            old_landing, old_departing
+                        )
+
+            # Update baseline only if we have runway data (avoid overwriting
+            # good data with empty sets from transient parsing failures)
+            if new_landing or new_departing:
+                self._previous_runways[icao] = (new_landing, new_departing)
 
     def _show_weather_notification(self, icao: str, new_category: str, old_category: str, has_atis: bool = False) -> None:
         """Show a weather change notification toast, with flashing if airport has ATIS."""
