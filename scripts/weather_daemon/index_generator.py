@@ -955,6 +955,30 @@ def generate_html(
             background: #2a6ace;
         }}
 
+        .modal-time-info {{
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-size: 0.9rem;
+            color: #b8b8b8;
+        }}
+
+        .modal-time-info .zulu {{
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: #4fc3f7;
+        }}
+
+        .modal-time-info .countdown {{
+            color: #aaa;
+        }}
+
+        .modal-time-info .countdown span {{
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: #ffd54f;
+        }}
+
         .modal-body {{
             height: calc(100% - 56px);
         }}
@@ -1161,6 +1185,10 @@ def generate_html(
         <div class="modal-container">
             <div class="modal-header">
                 <span class="modal-title" id="modal-title">Weather Briefing</span>
+                <div class="modal-time-info">
+                    <span class="zulu" id="modal-zulu-time">--:--:--Z</span>
+                    <span class="countdown">Next update: <span id="modal-countdown">5:00</span></span>
+                </div>
                 <div class="modal-actions">
                     <button class="modal-open-tab" id="modal-open-tab">Open in New Tab</button>
                     <button class="modal-close" id="modal-close">&times;</button>
@@ -1738,13 +1766,16 @@ def generate_html(
 
         // Live Zulu clock
         const zuluTimeEl = document.getElementById('zulu-time');
+        const modalZuluTimeEl = document.getElementById('modal-zulu-time');
 
         function updateZuluClock() {{
             const now = new Date();
             const hours = now.getUTCHours().toString().padStart(2, '0');
             const minutes = now.getUTCMinutes().toString().padStart(2, '0');
             const seconds = now.getUTCSeconds().toString().padStart(2, '0');
-            zuluTimeEl.textContent = `${{hours}}:${{minutes}}:${{seconds}}Z`;
+            const timeStr = `${{hours}}:${{minutes}}:${{seconds}}Z`;
+            zuluTimeEl.textContent = timeStr;
+            modalZuluTimeEl.textContent = timeStr;
         }}
 
         // Update Zulu clock immediately and every second
@@ -1755,11 +1786,14 @@ def generate_html(
         const REFRESH_INTERVAL = 5 * 60; // seconds
         let secondsRemaining = REFRESH_INTERVAL;
         const countdownEl = document.getElementById('countdown');
+        const modalCountdownEl = document.getElementById('modal-countdown');
 
         function updateCountdown() {{
             const minutes = Math.floor(secondsRemaining / 60);
             const seconds = secondsRemaining % 60;
-            countdownEl.textContent = `${{minutes}}:${{seconds.toString().padStart(2, '0')}}`;
+            const countdownStr = `${{minutes}}:${{seconds.toString().padStart(2, '0')}}`;
+            countdownEl.textContent = countdownStr;
+            modalCountdownEl.textContent = countdownStr;
 
             if (secondsRemaining <= 0) {{
                 // Reload page with map state preserved

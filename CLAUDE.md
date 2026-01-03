@@ -241,3 +241,39 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 ## Debugging
 
 Debug logs are written to `debug_logs/debug_YYYYMMDD.log`. Logs older than 7 days are automatically cleaned on startup. Use `ui.debug_logger.debug()` for UI debugging.
+
+## Weather Daemon
+
+The weather daemon generates weather briefing pages for the website at `https://leftos.dev/weather/`. It runs on a Linux server and is managed via PowerShell scripts from Windows.
+
+### PowerShell Scripts (`scripts/weather_daemon/service/`)
+
+**Testing locally:**
+- `LocalTest.ps1 [stages]` - Generate weather briefings locally and open in browser
+  - `.\LocalTest.ps1` - Full generation (all stages)
+  - `.\LocalTest.ps1 index` - Index page only (fastest for UI changes)
+  - `.\LocalTest.ps1 tiles,index` - Tiles and index only
+  - Output goes to `test_output/`
+
+**Deployment to server:**
+- `QuickDeploy.ps1` - Git pull on server and regenerate (requires changes to be pushed first)
+- `Deploy.ps1` - Full deployment via rsync (for Linux/WSL only, uses bash)
+
+**Server management:**
+- `Status.ps1` - Check daemon status and recent logs
+- `Logs.ps1` - View daemon logs
+- `Restart.ps1` - Restart the daemon timer
+- `RunNow.ps1` - Trigger immediate regeneration on server
+
+**Regeneration scripts (on server):**
+- `RegenIndex.ps1` - Regenerate only the index page
+- `RegenHtml.ps1` - Regenerate HTML briefings
+- `RegenTiles.ps1` - Regenerate map tiles
+- `RegenCached.ps1` - Regenerate using cached weather data
+
+### Typical Development Workflow
+
+1. Make changes to generator code (`index_generator.py`, `generator.py`, etc.)
+2. Test locally: `.\LocalTest.ps1 index` (for UI changes) or `.\LocalTest.ps1` (full test)
+3. Commit and push changes
+4. Deploy: `.\QuickDeploy.ps1`
