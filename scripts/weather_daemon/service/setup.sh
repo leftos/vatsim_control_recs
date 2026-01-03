@@ -104,10 +104,11 @@ if [ -f "$NGINX_CONF" ]; then
         autoindex_exact_size off;\
         autoindex_localtime on;\
 \
-        # Cache HTML files for 5 minutes\
+        # Disable caching for HTML files (briefings update every 15 minutes)\
         location ~* \\.html$ {\
-            expires 5m;\
-            add_header Cache-Control "public, must-revalidate";\
+            expires -1;\
+            add_header Cache-Control "no-cache, no-store, must-revalidate";\
+            add_header Pragma "no-cache";\
         }\
     }' "$NGINX_CONF"
         echo -e "${CYAN}Added weather location to nginx config${NC}"
