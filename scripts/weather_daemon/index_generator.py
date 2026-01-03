@@ -1504,9 +1504,6 @@ def generate_html(
         // Restore sidebar state on page load
         restoreSidebarState();
 
-        // Restore modal state on page load (after sidebar, so modal appears on top)
-        restoreModalState();
-
         // Function to scroll to ARTCC section from map popup
         function scrollToArtcc(artcc) {{
             const section = document.querySelector(`[data-artcc="${{artcc}}"]`);
@@ -1600,6 +1597,9 @@ def generate_html(
                 openBriefingModal(url, title);
             }});
         }});
+
+        // Restore modal state on page load (after modal elements are initialized)
+        restoreModalState();
 
         // Airport markers data
         const airportMarkers = {json.dumps(airport_markers or [])};
