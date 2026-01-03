@@ -143,12 +143,18 @@ def ensure_requirements_installed():
         print("Error: requirements.txt not found")
         return False
 
+    # Mapping for packages where pip name differs from import name
+    import_name_map = {
+        'Pillow': 'PIL',
+    }
+
     # Parse requirements and check each package
     packages = parse_requirements(requirements_path)
     missing = []
     for package in packages:
+        import_name = import_name_map.get(package, package)
         try:
-            importlib.import_module(package)
+            importlib.import_module(import_name)
         except ImportError:
             missing.append(package)
 
