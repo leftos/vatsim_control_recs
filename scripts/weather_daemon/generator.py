@@ -814,8 +814,8 @@ class WeatherBriefingGenerator:
 
         html_content = html_content.replace(
             '</style>',
-            '''pre { margin: 0; padding: 0; white-space: pre-wrap; word-wrap: break-word; max-width: 100ch; }
-body { margin: 20px; background: #1a1a1a; color: #e0e0e0; }
+            '''pre { margin: 0; padding: 0; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; }
+body { margin: 20px; background: #1a1a1a; color: #e0e0e0; max-width: 100%; }
 </style>'''
         )
         html_content = html_content.replace('<body>\n    <pre', '<body>\n<pre')
