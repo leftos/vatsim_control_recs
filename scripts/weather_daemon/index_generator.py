@@ -278,6 +278,7 @@ def generate_index_page(
     # Generate timestamp
     now = datetime.now(timezone.utc)
     timestamp = now.strftime("%Y-%m-%d %H:%M:%SZ")
+    cache_buster = int(now.timestamp())
 
     # Build the HTML
     html_content = generate_html(
@@ -285,6 +286,7 @@ def generate_index_page(
         artcc_groupings=artcc_groupings,
         artcc_stats=artcc_stats,
         timestamp=timestamp,
+        cache_buster=cache_buster,
         unified_airport_data=unified_airport_data,
     )
 
@@ -319,6 +321,7 @@ def generate_html(
     artcc_groupings: Dict[str, List[Dict[str, Any]]],
     artcc_stats: Dict[str, Dict[str, int]],
     timestamp: str,
+    cache_buster: int = 0,
     unified_airport_data: Optional[Dict[str, Any]] = None,
     use_tile_layer: bool = True,
 ) -> str:
@@ -442,6 +445,9 @@ def generate_html(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>VATSIM Weather Briefings</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
@@ -558,8 +564,8 @@ def generate_html(
             font-weight: 600;
         }}
 
-        .stat-lifr {{ background: rgba(255, 0, 255, 0.3); color: #ff77ff; }}
-        .stat-ifr {{ background: rgba(255, 0, 0, 0.3); color: #ff6666; }}
+        .stat-lifr {{ background: rgba(255, 0, 255, 0.3); color: #ffaaff; }}
+        .stat-ifr {{ background: rgba(255, 0, 0, 0.3); color: #ff9999; }}
         .stat-mvfr {{ background: rgba(85, 153, 255, 0.3); color: #77aaff; }}
         .stat-vfr {{ background: rgba(0, 255, 0, 0.3); color: #66ff66; }}
 
@@ -758,6 +764,11 @@ def generate_html(
             background: #1a1a2e;
         }}
 
+        .leaflet-tile {{
+            border: none !important;
+            outline: none !important;
+        }}
+
         .airport-tooltip {{
             background: #16213e;
             color: #e0e0e0;
@@ -899,7 +910,8 @@ def generate_html(
 
         // Weather overlay tile layer (pre-rendered tiles, zoom 4-7)
         // minNativeZoom/maxNativeZoom let Leaflet scale tiles for zooms outside 4-7
-        const weatherTileLayer = L.tileLayer('tiles/{{z}}/{{x}}/{{y}}.png', {{
+        // Cache buster prevents stale tiles from being served
+        const weatherTileLayer = L.tileLayer('tiles/{{z}}/{{x}}/{{y}}.png?v={cache_buster}', {{
             opacity: 1.0,
             minNativeZoom: 4,  // Use zoom 4 tiles for zoom 3 and below
             maxNativeZoom: 7,  // Use zoom 7 tiles for zoom 8 and above
@@ -1100,7 +1112,8 @@ def generate_html(
         function openBriefingModal(url, title) {{
             currentBriefingUrl = url;
             modalTitle.textContent = title;
-            modalIframe.src = url;
+            // Add cache buster to prevent stale briefings
+            modalIframe.src = url + '?v={cache_buster}';
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
         }}

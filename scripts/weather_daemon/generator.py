@@ -1005,6 +1005,15 @@ class WeatherBriefingGenerator:
 
         html_content = console.export_html(inline_styles=True)
 
+        # Add cache control meta tags to prevent browser caching
+        html_content = html_content.replace(
+            '<head>',
+            '''<head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">'''
+        )
+
         html_content = html_content.replace(
             '</style>',
             '''pre { margin: 0; padding: 0; white-space: pre-wrap; word-wrap: break-word; max-width: 100ch; }

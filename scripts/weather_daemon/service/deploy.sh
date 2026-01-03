@@ -42,72 +42,50 @@ fi
 
 echo -e "${CYAN}Resolved to: $SERVER_IP${NC}"
 
-# Files to deploy (relative to project root)
-FILES=(
-    "scripts/weather_daemon/__init__.py"
-    "scripts/weather_daemon/cli.py"
-    "scripts/weather_daemon/config.py"
-    "scripts/weather_daemon/generator.py"
-    "scripts/weather_daemon/index_generator.py"
-    "scripts/weather_daemon/artcc_boundaries.py"
-    "scripts/weather_daemon/service/weather-daemon.service"
-    "scripts/weather_daemon/service/weather-daemon.timer"
-    "backend/__init__.py"
-    "backend/core/__init__.py"
-    "backend/core/analysis.py"
-    "backend/core/calculations.py"
-    "backend/core/groupings.py"
-    "backend/core/models.py"
-    "backend/core/flights.py"
-    "backend/core/controllers.py"
-    "backend/data/__init__.py"
-    "backend/data/loaders.py"
-    "backend/data/weather.py"
-    "backend/data/vatsim_api.py"
-    "backend/data/atis_filter.py"
-    "backend/cache/__init__.py"
-    "backend/cache/manager.py"
-    "backend/config/__init__.py"
-    "backend/config/constants.py"
-    "ui/__init__.py"
-    "ui/config.py"
-    "ui/modals/__init__.py"
-    "ui/modals/metar_info.py"
-    "airport_disambiguator/__init__.py"
-    "airport_disambiguator/disambiguator.py"
-    "airport_disambiguator/disambiguation_engine.py"
-    "airport_disambiguator/entity_extractor.py"
-    "airport_disambiguator/name_processor.py"
+# Stop the timer and service before deployment
+echo -e "${YELLOW}Stopping weather daemon timer and service...${NC}"
+ssh "$USER@$SERVER_IP" "systemctl stop weather-daemon.timer 2>/dev/null || true; systemctl stop weather-daemon.service 2>/dev/null || true"
+echo -e "${CYAN}Services stopped${NC}"
+
+# Directories to deploy (will sync all files recursively)
+DIRECTORIES=(
+    "scripts/weather_daemon"
+    "backend"
+    "ui"
+    "airport_disambiguator"
+    "data"
+)
+
+# Root-level files to deploy
+ROOT_FILES=(
     "common.py"
-    "data/APT_BASE.csv"
-    "data/airports.json"
-    "data/iata-icao.csv"
-    "data/custom_groupings.json"
     "requirements.txt"
 )
 
 echo -e "${YELLOW}Creating directory structure on remote...${NC}"
-ssh "$USER@$SERVER_IP" "mkdir -p $REMOTE_PATH/scripts/weather_daemon/service $REMOTE_PATH/backend/core $REMOTE_PATH/backend/data $REMOTE_PATH/backend/cache $REMOTE_PATH/backend/config $REMOTE_PATH/ui/modals $REMOTE_PATH/airport_disambiguator $REMOTE_PATH/data/preset_groupings"
+ssh "$USER@$SERVER_IP" "mkdir -p $REMOTE_PATH"
 
-echo -e "${YELLOW}Uploading files...${NC}"
-for file in "${FILES[@]}"; do
-    local_file="$PROJECT_ROOT/$file"
-    if [ -f "$local_file" ]; then
-        remote_dir=$(dirname "$REMOTE_PATH/$file")
-        echo -e "${CYAN}  $file${NC}"
-        scp "$local_file" "$USER@$SERVER_IP:$REMOTE_PATH/$file"
+echo -e "${YELLOW}Syncing directories...${NC}"
+for dir in "${DIRECTORIES[@]}"; do
+    if [ -d "$PROJECT_ROOT/$dir" ]; then
+        echo -e "${CYAN}  $dir/${NC}"
+        rsync -av --delete \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            --exclude '.git' \
+            "$PROJECT_ROOT/$dir/" "$USER@$SERVER_IP:$REMOTE_PATH/$dir/"
     else
-        echo -e "${YELLOW}  Warning: $file not found${NC}"
+        echo -e "${YELLOW}  Warning: $dir not found${NC}"
     fi
 done
 
-# Upload preset groupings
-echo -e "${YELLOW}Uploading preset groupings...${NC}"
-for json_file in "$PROJECT_ROOT/data/preset_groupings/"*.json; do
-    if [ -f "$json_file" ]; then
-        filename=$(basename "$json_file")
-        echo -e "${CYAN}  preset_groupings/$filename${NC}"
-        scp "$json_file" "$USER@$SERVER_IP:$REMOTE_PATH/data/preset_groupings/"
+echo -e "${YELLOW}Uploading root files...${NC}"
+for file in "${ROOT_FILES[@]}"; do
+    if [ -f "$PROJECT_ROOT/$file" ]; then
+        echo -e "${CYAN}  $file${NC}"
+        scp "$PROJECT_ROOT/$file" "$USER@$SERVER_IP:$REMOTE_PATH/$file"
+    else
+        echo -e "${YELLOW}  Warning: $file not found${NC}"
     fi
 done
 
@@ -120,6 +98,12 @@ ssh "$USER@$SERVER_IP" "cd $REMOTE_PATH && source .venv/bin/activate && pip inst
 echo -e "${YELLOW}Running weather generation...${NC}"
 ssh "$USER@$SERVER_IP" "cd $REMOTE_PATH && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather"
 
+# Restart the timer (which will trigger the service on schedule)
+echo -e "${YELLOW}Restarting weather daemon timer...${NC}"
+ssh "$USER@$SERVER_IP" "systemctl enable weather-daemon.timer && systemctl start weather-daemon.timer"
+echo -e "${CYAN}Timer restarted${NC}"
+
 echo ""
 echo -e "${GREEN}=== Deployment Complete! ===${NC}"
 echo -e "${CYAN}Weather briefings updated at https://leftos.dev/weather/${NC}"
+echo -e "${CYAN}Timer active - next run in ~15 minutes${NC}"
