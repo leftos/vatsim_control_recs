@@ -157,3 +157,6 @@ Thumbs.db
 data/runways_metadata.txt
 data/runways.csv
 data/cifp/FAACIFP*
+
+test_artcc_cache/
+test_output/
