@@ -451,9 +451,9 @@ def _format_taf_relative_time(time_str: str) -> str:
             time_label = f"{days:2d}d"
 
         if diff_seconds > 0:
-            return f" [dim](in {time_label})[/dim]"
+            return f" [#999999](in {time_label})[/#999999]"
         else:
-            return f" [dim]({time_label} ago)[/dim]"
+            return f" [#999999]({time_label} ago)[/#999999]"
 
     except (ValueError, AttributeError):
         return ""
@@ -867,9 +867,9 @@ class WeatherBriefingGenerator:
                 trend = change.get('trend', 'stable')
 
                 if trend == 'worsening':
-                    indicator = "[red bold]▼[/red bold]"
+                    indicator = "[#ff9999 bold]▼[/#ff9999 bold]"
                 else:
-                    indicator = "[green bold]▲[/green bold]"
+                    indicator = "[#66ff66 bold]▲[/#66ff66 bold]"
 
                 relative_time = _format_taf_relative_time(time_str)
                 pred_color = CATEGORY_COLORS.get(pred_category, 'white')
@@ -953,7 +953,7 @@ class WeatherBriefingGenerator:
             filtered_text = filter_atis_text(raw_text)
             if filtered_text:
                 display_text = colorize_atis_text(filtered_text, atis_code)
-                lines.append(f"  [dim]{display_text}[/dim]")
+                lines.append(f"  [#aaaaaa]{display_text}[/#aaaaaa]")
 
         return "\n".join(lines)
 
@@ -969,7 +969,7 @@ class WeatherBriefingGenerator:
         zulu_str = now.strftime("%Y-%m-%d %H%MZ")
         local_str = now.astimezone().strftime("%H:%M LT")
         console.print(f"[bold]Weather Briefing: {self.grouping_name}[/bold]")
-        console.print(f"Generated: {zulu_str} ({local_str})\n")
+        console.print(f"Generated: [#aaaaff]{zulu_str}[/#aaaaff] ([#ffcc66]{local_str}[/#ffcc66])\n")
 
         category_counts = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0, "UNK": 0}
         for data in self.weather_data.values():
@@ -978,13 +978,13 @@ class WeatherBriefingGenerator:
 
         summary_parts = []
         if category_counts["LIFR"] > 0:
-            summary_parts.append(f"[magenta]{category_counts['LIFR']} LIFR[/magenta]")
+            summary_parts.append(f"[#ffaaff]{category_counts['LIFR']} LIFR[/#ffaaff]")
         if category_counts["IFR"] > 0:
-            summary_parts.append(f"[red]{category_counts['IFR']} IFR[/red]")
+            summary_parts.append(f"[#ff9999]{category_counts['IFR']} IFR[/#ff9999]")
         if category_counts["MVFR"] > 0:
-            summary_parts.append(f"[#5599ff]{category_counts['MVFR']} MVFR[/#5599ff]")
+            summary_parts.append(f"[#77bbff]{category_counts['MVFR']} MVFR[/#77bbff]")
         if category_counts["VFR"] > 0:
-            summary_parts.append(f"[#00ff00]{category_counts['VFR']} VFR[/#00ff00]")
+            summary_parts.append(f"[#66ff66]{category_counts['VFR']} VFR[/#66ff66]")
 
         if summary_parts:
             console.print(" | ".join(summary_parts))
@@ -996,7 +996,7 @@ class WeatherBriefingGenerator:
             if not area['airports']:
                 continue
 
-            console.print(f"[bold cyan]━━━ {area['name'].upper()} ━━━[/bold cyan]")
+            console.print(f"[bold #66cccc]━━━ {area['name'].upper()} ━━━[/bold #66cccc]")
 
             for icao, data, _size in area['airports']:
                 card = self._build_airport_card(icao, data)
@@ -1418,49 +1418,53 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
         generated_files=generated_files,
     )
 
-    # Generate weather overlay tiles
-    print("  Generating weather overlay tiles...")
-    logger.info("Generating weather overlay tiles")
+    # Generate weather overlay tiles (if enabled)
+    if config.generate_tiles:
+        print("  Generating weather overlay tiles...")
+        logger.info("Generating weather overlay tiles")
 
-    # Collect all airport weather data for tile generation
-    all_airport_weather: Dict[str, Dict] = {}
-    for artcc, groupings in artcc_groupings_map.items():
-        for g in groupings:
-            for point in g.get('airport_weather_points', []):
-                icao = point.get('icao')
-                if icao and icao not in all_airport_weather:
-                    all_airport_weather[icao] = point
+        # Collect all airport weather data for tile generation
+        all_airport_weather: Dict[str, Dict] = {}
+        for artcc, groupings in artcc_groupings_map.items():
+            for g in groupings:
+                for point in g.get('airport_weather_points', []):
+                    icao = point.get('icao')
+                    if icao and icao not in all_airport_weather:
+                        all_airport_weather[icao] = point
 
-    valid_weather_count = sum(1 for ap in all_airport_weather.values()
-                               if ap.get('category') in {'VFR', 'MVFR', 'IFR', 'LIFR'})
-    print(f"    Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
-    logger.info(f"Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
+        valid_weather_count = sum(1 for ap in all_airport_weather.values()
+                                   if ap.get('category') in {'VFR', 'MVFR', 'IFR', 'LIFR'})
+        print(f"    Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
+        logger.info(f"Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
 
-    # Get ARTCC boundaries for tile generation
-    from .index_generator import CONUS_ARTCCS
-    artcc_boundaries = get_artcc_boundaries(config.artcc_cache_dir)
+        # Get ARTCC boundaries for tile generation
+        from .index_generator import CONUS_ARTCCS
+        artcc_boundaries = get_artcc_boundaries(config.artcc_cache_dir)
 
-    print(f"    Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
-    logger.info(f"Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
+        print(f"    Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
+        logger.info(f"Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
 
-    if not all_airport_weather:
-        print("    WARNING: No airport weather data collected - skipping tile generation")
-        logger.warning("No airport weather data collected - skipping tile generation")
+        if not all_airport_weather:
+            print("    WARNING: No airport weather data collected - skipping tile generation")
+            logger.warning("No airport weather data collected - skipping tile generation")
+        else:
+            # Generate tiles (zoom 4-7: continental to regional view)
+            tiles_dir = config.output_dir / "tiles"
+            tile_results = generate_weather_tiles(
+                artcc_boundaries=artcc_boundaries,
+                airport_weather=all_airport_weather,
+                output_dir=tiles_dir,
+                conus_artccs=CONUS_ARTCCS,
+                zoom_levels=(4, 5, 6, 7),
+                max_workers=2,  # Keep low for memory-constrained servers
+            )
+
+            total_tiles = sum(tile_results.values())
+            print(f"    Generated {total_tiles} weather tiles")
+            logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
     else:
-        # Generate tiles (zoom 4-7: continental to regional view)
-        tiles_dir = config.output_dir / "tiles"
-        tile_results = generate_weather_tiles(
-            artcc_boundaries=artcc_boundaries,
-            airport_weather=all_airport_weather,
-            output_dir=tiles_dir,
-            conus_artccs=CONUS_ARTCCS,
-            zoom_levels=(4, 5, 6, 7),
-            max_workers=2,  # Keep low for memory-constrained servers
-        )
-
-        total_tiles = sum(tile_results.values())
-        print(f"    Generated {total_tiles} weather tiles")
-        logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
+        print("  Skipping tile generation (--no-tiles)")
+        logger.info("Skipping tile generation (--no-tiles)")
 
     # Generate index if enabled
     if config.generate_index:
@@ -1812,49 +1816,53 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
         generated_files=generated_files,
     )
 
-    # Generate weather overlay tiles
-    print("  Generating weather overlay tiles...")
-    logger.info("Generating weather overlay tiles")
+    # Generate weather overlay tiles (if enabled)
+    if config.generate_tiles:
+        print("  Generating weather overlay tiles...")
+        logger.info("Generating weather overlay tiles")
 
-    # Collect all airport weather data for tile generation
-    all_airport_weather: Dict[str, Dict] = {}
-    for artcc, groupings in artcc_groupings_map.items():
-        for g in groupings:
-            for point in g.get('airport_weather_points', []):
-                icao = point.get('icao')
-                if icao and icao not in all_airport_weather:
-                    all_airport_weather[icao] = point
+        # Collect all airport weather data for tile generation
+        all_airport_weather: Dict[str, Dict] = {}
+        for artcc, groupings in artcc_groupings_map.items():
+            for g in groupings:
+                for point in g.get('airport_weather_points', []):
+                    icao = point.get('icao')
+                    if icao and icao not in all_airport_weather:
+                        all_airport_weather[icao] = point
 
-    valid_weather_count = sum(1 for ap in all_airport_weather.values()
-                               if ap.get('category') in {'VFR', 'MVFR', 'IFR', 'LIFR'})
-    print(f"    Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
-    logger.info(f"Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
+        valid_weather_count = sum(1 for ap in all_airport_weather.values()
+                                   if ap.get('category') in {'VFR', 'MVFR', 'IFR', 'LIFR'})
+        print(f"    Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
+        logger.info(f"Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)")
 
-    # Get ARTCC boundaries for tile generation
-    from .index_generator import CONUS_ARTCCS
-    artcc_boundaries = get_artcc_boundaries(config.artcc_cache_dir)
+        # Get ARTCC boundaries for tile generation
+        from .index_generator import CONUS_ARTCCS
+        artcc_boundaries = get_artcc_boundaries(config.artcc_cache_dir)
 
-    print(f"    Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
-    logger.info(f"Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
+        print(f"    Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
+        logger.info(f"Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS")
 
-    if not all_airport_weather:
-        print("    WARNING: No airport weather data collected - skipping tile generation")
-        logger.warning("No airport weather data collected - skipping tile generation")
+        if not all_airport_weather:
+            print("    WARNING: No airport weather data collected - skipping tile generation")
+            logger.warning("No airport weather data collected - skipping tile generation")
+        else:
+            # Generate tiles (zoom 4-7: continental to regional view)
+            tiles_dir = config.output_dir / "tiles"
+            tile_results = generate_weather_tiles(
+                artcc_boundaries=artcc_boundaries,
+                airport_weather=all_airport_weather,
+                output_dir=tiles_dir,
+                conus_artccs=CONUS_ARTCCS,
+                zoom_levels=(4, 5, 6, 7),
+                max_workers=2,  # Keep low for memory-constrained servers
+            )
+
+            total_tiles = sum(tile_results.values())
+            print(f"    Generated {total_tiles} weather tiles")
+            logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
     else:
-        # Generate tiles (zoom 4-7: continental to regional view)
-        tiles_dir = config.output_dir / "tiles"
-        tile_results = generate_weather_tiles(
-            artcc_boundaries=artcc_boundaries,
-            airport_weather=all_airport_weather,
-            output_dir=tiles_dir,
-            conus_artccs=CONUS_ARTCCS,
-            zoom_levels=(4, 5, 6, 7),
-            max_workers=2,  # Keep low for memory-constrained servers
-        )
-
-        total_tiles = sum(tile_results.values())
-        print(f"    Generated {total_tiles} weather tiles")
-        logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
+        print("  Skipping tile generation (--no-tiles)")
+        logger.info("Skipping tile generation (--no-tiles)")
 
     # Generate index if enabled
     if config.generate_index:

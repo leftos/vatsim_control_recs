@@ -48,6 +48,9 @@ class DaemonConfig:
     # Generate index page
     generate_index: bool = True
 
+    # Generate weather overlay tiles
+    generate_tiles: bool = True
+
     # Server timezone for display (e.g., 'America/Los_Angeles')
     # If None, uses UTC
     display_timezone: Optional[str] = None
@@ -94,11 +97,11 @@ ARTCC_NAMES = {
     'ZUA': 'Guam',
 }
 
-# Category colors (Rich markup colors)
+# Category colors (Rich markup colors - bright versions for dark backgrounds)
 CATEGORY_COLORS = {
-    'LIFR': 'magenta',
-    'IFR': 'red',
-    'MVFR': '#5599ff',
-    'VFR': '#00ff00',
+    'LIFR': '#ffaaff',  # Bright magenta
+    'IFR': '#ff9999',   # Bright red
+    'MVFR': '#77bbff',  # Bright blue
+    'VFR': '#66ff66',   # Bright green
     'UNK': 'white',
 }

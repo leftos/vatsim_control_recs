@@ -106,6 +106,12 @@ Examples:
     )
 
     parser.add_argument(
+        "--no-tiles",
+        action="store_true",
+        help="Skip generating weather overlay tiles (HTML pages only)",
+    )
+
+    parser.add_argument(
         "--index-only",
         action="store_true",
         help="Only regenerate the index page (no weather fetch, no briefings)",
@@ -170,6 +176,9 @@ Examples:
 
     if args.no_index:
         config.generate_index = False
+
+    if args.no_tiles:
+        config.generate_tiles = False
 
     if args.workers:
         config.max_workers = args.workers

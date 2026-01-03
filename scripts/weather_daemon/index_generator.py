@@ -774,12 +774,7 @@ def generate_html(
             background: #1a1a2e;
         }}
 
-        .weather-overlay-layer img.leaflet-tile {{
-            /* Prevent gaps between weather tiles by slightly overlapping */
-            margin: -0.5px !important;
-            width: calc(100% + 1px) !important;
-            height: calc(100% + 1px) !important;
-        }}
+        /* Tile gap fix removed - was causing tiles to not render */
 
         .airport-tooltip {{
             background: #16213e;
