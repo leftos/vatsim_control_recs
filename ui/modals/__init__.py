@@ -21,6 +21,7 @@ from .help_modal import HelpScreen
 from .command_palette import CommandPaletteScreen
 from .weather_briefing import WeatherBriefingScreen
 from .route_weather import RouteWeatherScreen
+from .flight_briefing import FlightWeatherBriefingScreen
 
 __all__ = [
     'WindInfoScreen',
@@ -39,4 +40,5 @@ __all__ = [
     'CommandPaletteScreen',
     'WeatherBriefingScreen',
     'RouteWeatherScreen',
+    'FlightWeatherBriefingScreen',
 ]

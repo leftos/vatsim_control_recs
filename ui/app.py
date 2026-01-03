@@ -8,7 +8,7 @@ import os
 import sys
 import threading
 from datetime import datetime, timezone
-from typing import List, Any, Tuple
+from typing import List, Any, Tuple, Optional
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, TabbedContent, TabPane, Footer, Input, Static
 from textual.binding import Binding
@@ -20,7 +20,7 @@ from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
 from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, GoToScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen, FlightInfoScreen, DiversionModal, WeatherBriefingScreen
+from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, GoToScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen, FlightInfoScreen, DiversionModal, WeatherBriefingScreen, FlightWeatherBriefingScreen
 
 
 def set_terminal_title(title: str) -> None:
@@ -961,14 +961,21 @@ class VATSIMControlApp(App):
             # User typed airport ICAO code(s) directly
             self._open_airport_weather_briefing(data)
         elif name == "flight":
-            # Flight selected - open briefing for departure/arrival
+            # Flight selected - open full flight weather briefing
             flight_plan = data.get('flight_plan') or {}
             callsign = data.get('callsign', 'Flight')
             departure = flight_plan.get('departure', '')
             arrival = flight_plan.get('arrival', '')
-            airports = [a for a in [departure, arrival] if a]
-            if airports:
-                self._open_flight_weather_briefing(callsign, airports)
+            if departure and arrival:
+                self._open_flight_weather_briefing(
+                    callsign=callsign,
+                    departure=departure,
+                    arrival=arrival,
+                    alternate=flight_plan.get('alternate', ''),
+                    route=flight_plan.get('route', ''),
+                    cruise_altitude=self._parse_altitude(flight_plan.get('altitude', '')),
+                    groundspeed=data.get('groundspeed', 0)
+                )
             else:
                 self.notify("No departure/arrival in flight plan", severity="warning")
         elif isinstance(data, list) and len(data) == 1:
@@ -1022,40 +1029,41 @@ class VATSIMControlApp(App):
         )
         self.push_screen(briefing_screen)
 
-    def _open_flight_weather_briefing(self, callsign: str, airports: list) -> None:
-        """Open weather briefing for a flight's departure and arrival airports."""
-        from . import config
-        from backend import find_airports_near_position
+    def _parse_altitude(self, altitude_str: str) -> Optional[int]:
+        """Parse altitude string to feet."""
+        if not altitude_str:
+            return None
+        try:
+            # Handle FL350 format
+            if altitude_str.upper().startswith('FL'):
+                return int(altitude_str[2:]) * 100
+            # Handle raw number (assumed to be flight level or feet)
+            val = int(altitude_str)
+            if val < 1000:
+                return val * 100  # Assume flight level
+            return val
+        except (ValueError, TypeError):
+            return None
 
-        primary = list(airports)  # Departure and arrival are primary
-        # Build ordered list: primary airports first, then others
-        ordered_airports = list(primary)
-        seen = set(primary)
-
-        # Add nearby airports for each flight endpoint
-        for icao in airports:
-            airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {}) if config.UNIFIED_AIRPORT_DATA else {}
-            lat = airport_info.get('latitude')
-            lon = airport_info.get('longitude')
-
-            if lat and lon:
-                nearby = find_airports_near_position(
-                    lat, lon,
-                    config.UNIFIED_AIRPORT_DATA or {},
-                    radius_nm=30.0,
-                    max_results=10
-                )
-                for apt in nearby:
-                    if apt not in seen:
-                        ordered_airports.append(apt)
-                        seen.add(apt)
-
-        title = f"{callsign} Route"
-        briefing_screen = WeatherBriefingScreen(
-            grouping_name=title,
-            airports=ordered_airports,
-            primary_airports=primary,
-            is_flight_route=True
+    def _open_flight_weather_briefing(
+        self,
+        callsign: str,
+        departure: str,
+        arrival: str,
+        alternate: Optional[str] = None,
+        route: Optional[str] = None,
+        cruise_altitude: Optional[int] = None,
+        groundspeed: Optional[int] = None
+    ) -> None:
+        """Open full flight weather briefing with enroute weather."""
+        briefing_screen = FlightWeatherBriefingScreen(
+            callsign=callsign,
+            departure=departure,
+            arrival=arrival,
+            alternate=alternate if alternate else None,
+            route=route,
+            cruise_altitude=cruise_altitude,
+            groundspeed=groundspeed if groundspeed and groundspeed > 50 else None
         )
         self.push_screen(briefing_screen)
 

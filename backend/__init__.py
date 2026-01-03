@@ -69,6 +69,15 @@ from backend.data.runways import (
     get_runway_summary
 )
 
+# Import route utilities
+from backend.core.route import (
+    sample_route_points,
+    find_enroute_airports,
+    parse_route_waypoints,
+    format_ete,
+    interpolate_great_circle,
+)
+
 # Import cache functions
 from backend.cache.manager import (
     save_weather_cache,

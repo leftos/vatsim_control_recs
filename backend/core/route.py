@@ -150,7 +150,7 @@ def sample_route_points(
 def find_enroute_airports(
     sample_points: List[Tuple[float, float, float]],
     airports_data: Dict[str, Dict[str, Any]],
-    search_radius_nm: float = 50.0,
+    search_radius_nm: float = 100.0,
     prefer_metar: bool = True
 ) -> List[Dict[str, Any]]:
     """
@@ -187,25 +187,40 @@ def find_enroute_airports(
 
             data = airports_data.get(icao, {})
 
-            # Score based on airport type and size
+            # Score based on indicators of airport size/importance
             score = 0
-            apt_type = data.get('type', '')
-            if apt_type == 'large_airport':
-                score += 100
-            elif apt_type == 'medium_airport':
+
+            # FAR 139 certification indicates commercial service airports
+            far139 = data.get('far139', '')
+            if far139:
+                score += 80
+
+            # Towered airports are generally larger
+            tower_type = data.get('tower_type', '')
+            if tower_type == 'ATCT':
                 score += 50
-            elif apt_type == 'small_airport':
+            elif tower_type == 'NON-ATCT':
+                score += 5
+
+            # Check name for indicators of major airports
+            name = data.get('name', '').upper()
+            if 'INTL' in name or 'INTERNATIONAL' in name:
+                score += 100
+            elif 'REGIONAL' in name or 'RGNL' in name:
+                score += 40
+            elif 'MUNICIPAL' in name or 'MUNI' in name:
+                score += 20
+
+            # ICAO codes starting with K (US) that are 4 chars are more likely major
+            if icao.startswith('K') and len(icao) == 4:
                 score += 10
 
-            # Prefer airports with "international" or major designations
-            name = data.get('name', '').lower()
-            if 'international' in name:
-                score += 30
-            if 'regional' in name:
-                score += 10
+            # Penalize airports with very short names (often private)
+            if len(name) < 5:
+                score -= 20
 
-            # Slight preference for closer airports
-            score -= distance * 0.1
+            # Prefer closer airports, but not too strongly
+            score -= distance * 0.2
 
             if score > best_score:
                 best_score = score
