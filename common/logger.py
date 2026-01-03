@@ -11,9 +11,10 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Create logs directory if it doesn't exist
-_SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOGS_DIR = os.path.join(_SCRIPT_DIR, 'logs')
+from common.paths import get_user_logs_dir
+
+# Create logs directory in user data directory
+LOGS_DIR = str(get_user_logs_dir())
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 

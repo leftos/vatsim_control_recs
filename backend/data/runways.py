@@ -27,10 +27,11 @@ DOWNLOAD_TIMEOUT = 60  # seconds
 # How often to check for updates (days)
 UPDATE_INTERVAL_DAYS = 28  # Approximately one AIRAC cycle
 
-# Cache file location
-_script_dir = os.path.dirname(os.path.abspath(__file__))
-RUNWAYS_CACHE_PATH = Path(os.path.join(_script_dir, '..', '..', 'data', 'runways.csv'))
-RUNWAYS_METADATA_PATH = Path(os.path.join(_script_dir, '..', '..', 'data', 'runways_metadata.txt'))
+# Cache file location (uses user data directory)
+from common.paths import get_runways_cache_path, get_runways_metadata_path
+
+RUNWAYS_CACHE_PATH = get_runways_cache_path()
+RUNWAYS_METADATA_PATH = get_runways_metadata_path()
 
 # Thread-safe in-memory cache
 _RUNWAY_DATA_LOCK = threading.Lock()

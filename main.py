@@ -224,12 +224,16 @@ from backend.config import constants as backend_constants  # noqa: E402
 from backend.core.groupings import load_all_groupings, resolve_grouping_recursively, find_grouping_case_insensitive  # noqa: E402
 from backend.cache.manager import load_aircraft_approach_speeds  # noqa: E402
 from airport_disambiguator import AirportDisambiguator  # noqa: E402
+from common.paths import ensure_user_directories  # noqa: E402
 from ui import VATSIMControlApp, expand_countries_to_airports  # noqa: E402
 from ui import config as ui_config  # noqa: E402
 from ui import debug_logger  # noqa: E402  # Import to trigger log cleanup on bootup
 
 
 def main():
+    # Ensure user data directories exist
+    ensure_user_directories()
+
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Analyze VATSIM flight data and controller staffing")
     parser.add_argument("--max-eta-hours", type=float, default=1.0,

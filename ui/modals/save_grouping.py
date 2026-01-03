@@ -9,6 +9,8 @@ from textual.containers import Container
 from textual.binding import Binding
 from textual.app import ComposeResult
 
+from common.paths import get_custom_groupings_file, load_merged_groupings
+
 
 class SaveGroupingModal(ModalScreen):
     """Modal screen for saving tracked airports as a custom grouping"""
@@ -80,31 +82,35 @@ class SaveGroupingModal(ModalScreen):
         grouping_input.focus()
     
     def action_save_grouping(self) -> None:
-        """Save the grouping to custom_groupings.json"""
+        """Save the grouping to user's custom_groupings.json"""
         grouping_input = self.query_one("#save-grouping-input", Input)
         grouping_name = grouping_input.value.strip()
-        
+
         if not grouping_name:
             result_widget = self.query_one("#save-grouping-result", Static)
             result_widget.update("Please enter a grouping name")
             return
-        
-        # Get the path to custom_groupings.json
-        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        groupings_file = os.path.join(script_dir, 'data', 'custom_groupings.json')
-        
+
+        # Get path to user's custom_groupings.json
+        groupings_file = get_custom_groupings_file()
+
         try:
-            # Load existing groupings
-            with open(groupings_file, 'r', encoding='utf-8') as f:
-                groupings_data = json.load(f)
-            
+            # Load existing user groupings (not merged with project defaults)
+            groupings_data = {}
+            if groupings_file.exists():
+                with open(groupings_file, 'r', encoding='utf-8') as f:
+                    groupings_data = json.load(f)
+
             # Add or update the grouping
             groupings_data[grouping_name] = sorted(self.airport_list)
-            
-            # Save back to file
+
+            # Ensure parent directory exists
+            groupings_file.parent.mkdir(parents=True, exist_ok=True)
+
+            # Save back to user file
             with open(groupings_file, 'w', encoding='utf-8') as f:
                 json.dump(groupings_data, f, indent=2, ensure_ascii=False)
-            
+
             self.dismiss(f"Saved '{grouping_name}' with {len(self.airport_list)} airports")
         except Exception as e:
             result_widget = self.query_one("#save-grouping-result", Static)

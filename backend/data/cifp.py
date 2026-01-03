@@ -30,9 +30,10 @@ CYCLE_DAYS = 28
 CIFP_BASE_URL = "https://aeronav.faa.gov/Upload_313-d/cifp/"
 CIFP_TIMEOUT = 60  # seconds for download
 
-# Cache directory within the project's data folder
-_script_dir = os.path.dirname(os.path.abspath(__file__))
-CIFP_CACHE_DIR = Path(os.path.join(_script_dir, '..', '..', 'data', 'cifp'))
+# Cache directory (uses user data directory)
+from common.paths import get_cifp_cache_dir
+
+CIFP_CACHE_DIR = get_cifp_cache_dir()
 
 
 # --- Data Classes ---

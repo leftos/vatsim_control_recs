@@ -23,9 +23,10 @@ from typing import Dict, List, Optional, Tuple
 NASR_BASE_URL = "https://nfdc.faa.gov/webContent/28DaySub/"
 NASR_TIMEOUT = 120  # seconds for download (larger file)
 
-# Cache directory within the project's data folder
-_script_dir = os.path.dirname(os.path.abspath(__file__))
-NASR_CACHE_DIR = Path(os.path.join(_script_dir, '..', '..', 'data', 'navaids'))
+# Cache directory (uses user data directory)
+from common.paths import get_nasr_cache_dir
+
+NASR_CACHE_DIR = get_nasr_cache_dir()
 
 
 # --- Data Classes ---

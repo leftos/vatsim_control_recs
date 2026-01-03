@@ -215,9 +215,11 @@ def load_aircraft_approach_speeds(filename: str) -> Dict[str, int]:
         return {}
 
 
-# Persistent cache file path
-_PERSISTENT_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'cache')
-_WEATHER_CACHE_FILE = os.path.join(_PERSISTENT_CACHE_DIR, 'weather_cache.json')
+# Persistent cache file path (uses user data directory)
+from common.paths import get_user_cache_dir, get_weather_cache_file
+
+_PERSISTENT_CACHE_DIR = str(get_user_cache_dir())
+_WEATHER_CACHE_FILE = str(get_weather_cache_file())
 
 
 def _ensure_cache_dir() -> None:

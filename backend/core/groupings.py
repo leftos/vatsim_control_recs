@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
 
 from backend.cache.manager import get_artcc_groupings_cache, set_artcc_groupings_cache
+from common.paths import load_merged_groupings
 
 # Path to preset groupings directory
 PRESET_GROUPINGS_DIR = Path(__file__).parent.parent.parent / "data" / "preset_groupings"
@@ -127,52 +128,49 @@ def load_artcc_groupings(unified_data: Dict[str, Dict[str, Any]]) -> Dict[str, L
     return artcc_groupings
 
 
-def load_custom_groupings(filename: str) -> Optional[Dict[str, List[str]]]:
+def load_custom_groupings(filename: str = None) -> Optional[Dict[str, List[str]]]:
     """
-    Load custom airport groupings from JSON file.
+    Load custom airport groupings from JSON file(s).
+
+    Uses merged groupings from both project directory (defaults) and
+    user data directory (user additions).
 
     Args:
-        filename: Path to the custom groupings JSON file
+        filename: Deprecated, ignored. Kept for backwards compatibility.
 
     Returns:
         Dictionary mapping grouping names to lists of airport ICAOs
-        or None if file not found or invalid
+        or None if no groupings found
     """
     from common import logger
 
-    try:
-        with open(filename, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        # Validate structure
-        if not isinstance(data, dict):
-            logger.error(f"Custom groupings file must contain a JSON object, got {type(data).__name__}")
-            return None
-
-        validated: Dict[str, List[str]] = {}
-        for key, value in data.items():
-            if not isinstance(key, str):
-                logger.warning(f"Skipping non-string grouping key: {key}")
-                continue
-            if isinstance(value, str):
-                # Auto-convert single string to list
-                validated[key] = [value]
-                logger.warning(f"Grouping '{key}' has string value, converting to list")
-            elif isinstance(value, list):
-                # Ensure all elements are strings
-                validated[key] = [str(v) for v in value]
-            else:
-                logger.warning(f"Skipping grouping '{key}' with invalid value type: {type(value).__name__}")
-                continue
-
-        return validated
-
-    except FileNotFoundError:
-        logger.error(f"Custom groupings file '{filename}' not found.")
+    # Use the merged groupings from paths module
+    data = load_merged_groupings()
+    if not data:
         return None
-    except json.JSONDecodeError as e:
-        logger.error(f"Could not decode JSON from '{filename}': {e}")
+
+    # Validate structure
+    if not isinstance(data, dict):
+        logger.error(f"Custom groupings must be a JSON object, got {type(data).__name__}")
         return None
+
+    validated: Dict[str, List[str]] = {}
+    for key, value in data.items():
+        if not isinstance(key, str):
+            logger.warning(f"Skipping non-string grouping key: {key}")
+            continue
+        if isinstance(value, str):
+            # Auto-convert single string to list
+            validated[key] = [value]
+            logger.warning(f"Grouping '{key}' has string value, converting to list")
+        elif isinstance(value, list):
+            # Ensure all elements are strings
+            validated[key] = [str(v) for v in value]
+        else:
+            logger.warning(f"Skipping grouping '{key}' with invalid value type: {type(value).__name__}")
+            continue
+
+    return validated
 
 
 def load_preset_groupings() -> Dict[str, List[str]]:
@@ -215,8 +213,8 @@ def load_preset_groupings() -> Dict[str, List[str]]:
 
 
 def load_all_groupings(
-    custom_groupings_filename: str,
-    unified_data: Dict[str, Dict[str, Any]]
+    custom_groupings_filename: str = None,
+    unified_data: Dict[str, Dict[str, Any]] = None
 ) -> Dict[str, List[str]]:
     """
     Load and merge all groupings sources in order of precedence:
@@ -225,20 +223,20 @@ def load_all_groupings(
     3. Custom groupings (highest priority - user-defined)
 
     Args:
-        custom_groupings_filename: Path to the custom groupings JSON file
-        unified_data: Unified airport data dictionary
+        custom_groupings_filename: Deprecated, ignored. Kept for backwards compatibility.
+        unified_data: Unified airport data dictionary (optional, needed for ARTCC groupings)
 
     Returns:
         Merged dictionary of all groupings
     """
     # Load ARTCC groupings first (lowest priority)
-    artcc_groupings = load_artcc_groupings(unified_data)
+    artcc_groupings = load_artcc_groupings(unified_data) if unified_data else {}
 
     # Load preset groupings (medium priority)
     preset_groupings = load_preset_groupings()
 
     # Load custom groupings (highest priority)
-    custom_groupings = load_custom_groupings(custom_groupings_filename)
+    custom_groupings = load_custom_groupings()
 
     # Merge them in order of precedence (later entries override earlier)
     all_groupings = {**artcc_groupings, **preset_groupings}
