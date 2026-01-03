@@ -89,6 +89,9 @@ for file in "${ROOT_FILES[@]}"; do
     fi
 done
 
+echo -e "${YELLOW}Fixing permissions for www-data...${NC}"
+ssh "$USER@$SERVER_IP" "chmod -R o+rX $REMOTE_PATH"
+
 echo -e "${YELLOW}Updating systemd services...${NC}"
 ssh "$USER@$SERVER_IP" "cp $REMOTE_PATH/scripts/weather_daemon/service/weather-daemon.service /etc/systemd/system/ && cp $REMOTE_PATH/scripts/weather_daemon/service/weather-daemon.timer /etc/systemd/system/ && systemctl daemon-reload"
 

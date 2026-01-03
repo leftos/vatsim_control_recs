@@ -22,7 +22,7 @@ $ServerIP = [System.Net.Dns]::GetHostAddresses($Domain) |
 Write-Host "Resolved to: $ServerIP" -ForegroundColor Cyan
 
 Write-Host "Pulling latest code..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "cd $RemotePath && git reset --hard HEAD && git pull"
+ssh "$User@$ServerIP" "cd $RemotePath && git reset --hard HEAD && git clean -fd && git pull"
 
 Write-Host "Regenerating briefings (cached weather)..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --stages briefings,tiles,index --verbose"

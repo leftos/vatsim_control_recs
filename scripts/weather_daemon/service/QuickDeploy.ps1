@@ -24,7 +24,7 @@ ssh "$User@$ServerIP" "systemctl stop weather-daemon.timer 2>/dev/null || true; 
 Write-Host "Services stopped" -ForegroundColor Cyan
 
 Write-Host "Pulling latest code..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "cd $RemotePath && git reset --hard HEAD && git pull"
+ssh "$User@$ServerIP" "cd $RemotePath && git reset --hard HEAD && git clean -fd && git pull"
 
 Write-Host "Running weather generation..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --verbose"

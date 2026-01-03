@@ -50,7 +50,7 @@ foreach ($dir in $Directories) {
     $localDir = Join-Path $ProjectRoot $dir
     if (Test-Path $localDir) {
         Write-Host "  $dir/" -ForegroundColor Cyan
-        # Use scp -r for recursive copy (rsync not available on Windows)
+        # Use scp -r for recursive copy
         scp -r "$localDir/*" "${User}@${ServerIP}:$RemotePath/$dir/"
     } else {
         Write-Host "  Warning: $dir not found" -ForegroundColor Yellow
@@ -67,6 +67,9 @@ foreach ($file in $RootFiles) {
         Write-Host "  Warning: $file not found" -ForegroundColor Yellow
     }
 }
+
+Write-Host "Fixing permissions for www-data..." -ForegroundColor Yellow
+ssh "$User@$ServerIP" "chmod -R o+rX $RemotePath"
 
 Write-Host "Updating systemd services..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cp $RemotePath/scripts/weather_daemon/service/weather-daemon.service /etc/systemd/system/ && cp $RemotePath/scripts/weather_daemon/service/weather-daemon.timer /etc/systemd/system/ && systemctl daemon-reload"
