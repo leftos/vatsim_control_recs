@@ -320,102 +320,9 @@ def generate_html(
     artcc_stats: Dict[str, Dict[str, int]],
     timestamp: str,
     unified_airport_data: Optional[Dict[str, Any]] = None,
+    use_tile_layer: bool = True,
 ) -> str:
     """Generate the complete HTML content."""
-
-    # Collect all airport weather points per ARTCC (de-duplicated by ICAO)
-    artcc_airport_points: Dict[str, Dict[str, Dict]] = {}  # artcc -> icao -> point
-    for artcc, groupings in artcc_groupings.items():
-        if artcc not in CONUS_ARTCCS and artcc != "custom":
-            continue
-        if artcc not in artcc_airport_points:
-            artcc_airport_points[artcc] = {}
-        for g in groupings:
-            for point in g.get('airport_weather_points', []):
-                icao = point.get('icao')
-                if icao:
-                    artcc_airport_points[artcc][icao] = point
-
-    # Augment with ALL airports from unified_airport_data for each ARTCC
-    # This fills in coverage gaps by using all known airports, not just those in groupings
-    if unified_airport_data:
-        for icao, airport_info in unified_airport_data.items():
-            artcc = airport_info.get('artcc', '')
-            if not artcc or artcc not in CONUS_ARTCCS:
-                continue
-            # Skip if we already have this airport with weather data
-            if artcc in artcc_airport_points and icao in artcc_airport_points[artcc]:
-                continue
-            # Get coordinates
-            lat = airport_info.get('latitude')
-            lon = airport_info.get('longitude')
-            if lat is None or lon is None:
-                continue
-            # Add airport without weather data (will be interpolated)
-            if artcc not in artcc_airport_points:
-                artcc_airport_points[artcc] = {}
-            artcc_airport_points[artcc][icao] = {
-                'icao': icao,
-                'lat': lat,
-                'lon': lon,
-                'category': None,  # No weather data - will use interpolation
-            }
-
-        # Now interpolate categories for airports without valid weather data
-        # Only use VFR/MVFR/IFR/LIFR as sources - exclude UNK since it means no weather
-        valid_categories = {'VFR', 'MVFR', 'IFR', 'LIFR'}
-        for artcc, airports in artcc_airport_points.items():
-            # Get airports with known VALID weather (not UNK)
-            known_weather = [(icao, ap) for icao, ap in airports.items()
-                             if ap.get('category') in valid_categories]
-            if not known_weather:
-                continue  # No valid weather data at all for this ARTCC
-
-            # For airports without valid weather, find nearest with valid weather
-            for icao, ap in airports.items():
-                if ap.get('category') in valid_categories:
-                    continue  # Already has valid weather
-                # Find nearest airport with valid weather
-                min_dist = float('inf')
-                nearest_category = 'VFR'  # Default to VFR if no weather found nearby
-                for known_icao, known_ap in known_weather:
-                    dist = (ap['lat'] - known_ap['lat'])**2 + (ap['lon'] - known_ap['lon'])**2
-                    if dist < min_dist:
-                        min_dist = dist
-                        nearest_category = known_ap.get('category', 'VFR')
-                ap['category'] = nearest_category
-
-    # Generate weather region GeoJSON features (Voronoi-style grid cells)
-    # Each ARTCC is divided into a grid, with each cell colored by nearest airport's weather
-    weather_region_features = []
-    for artcc, polys in boundaries.items():
-        if artcc not in CONUS_ARTCCS:
-            continue
-        airport_points = list(artcc_airport_points.get(artcc, {}).values())
-        if not airport_points:
-            continue
-
-        # Process ALL boundary polygons for this ARTCC (some have multiple)
-        for artcc_boundary in polys:
-            regions = generate_weather_regions(artcc_boundary, airport_points, grid_resolution=0.15)
-
-            for region in regions:
-                feature = {
-                    "type": "Feature",
-                    "properties": {
-                        "category": region['category'],
-                    },
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [region['coords']],
-                    }
-                }
-                weather_region_features.append(feature)
-
-    weather_regions_geojson = {
-        "type": "FeatureCollection",
-        "features": weather_region_features,
-    }
 
     # Convert boundaries to GeoJSON for Leaflet (CONUS only)
     # Now using neutral styling - borders only
@@ -990,27 +897,15 @@ def generate_html(
         // ARTCC boundaries GeoJSON
         const artccData = {json.dumps(geojson)};
 
-        // Weather region cells (Voronoi-style grid)
-        const weatherRegions = {json.dumps(weather_regions_geojson)};
-
-        // Category colors
-        const categoryColors = {{
-            'LIFR': '#ff00ff',
-            'IFR': '#ff0000',
-            'MVFR': '#5599ff',
-            'VFR': '#00ff00',
-            'UNK': '#888888'
-        }};
-
-        // Style function for weather region cells
-        function weatherRegionStyle(feature) {{
-            const color = categoryColors[feature.properties.category] || categoryColors['UNK'];
-            return {{
-                fillColor: color,
-                fillOpacity: 0.5,
-                stroke: false,  // No border lines
-            }};
-        }}
+        // Weather overlay tile layer (high-resolution pre-rendered tiles)
+        const weatherTileLayer = L.tileLayer('tiles/{{z}}/{{x}}/{{y}}.png', {{
+            opacity: 1.0,
+            maxZoom: 10,
+            minZoom: 4,
+            errorTileUrl: '',  // Don't show broken tile images
+            // Don't show tiles outside our generated range
+        }});
+        weatherTileLayer.addTo(map);
 
         // Style function for ARTCC polygons - borders only
         function artccStyle(feature) {{
@@ -1087,15 +982,7 @@ def generate_html(
             }});
         }}
 
-        // Render weather region cells first (below ARTCC borders)
-        // Use Canvas renderer to avoid anti-aliasing gaps between cells
-        const weatherRegionLayer = L.geoJSON(weatherRegions, {{
-            style: weatherRegionStyle,
-            interactive: false,  // Don't capture mouse events
-            renderer: L.canvas(),
-        }}).addTo(map);
-
-        // ARTCC borders on top
+        // ARTCC borders on top (weather tiles are below)
         const geojsonLayer = L.geoJSON(artccData, {{
             style: artccStyle,
             onEachFeature: onEachFeature,

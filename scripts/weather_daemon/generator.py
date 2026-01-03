@@ -157,6 +157,7 @@ from backend import (
     load_unified_airport_data,
 )
 from .artcc_boundaries import get_artcc_boundaries
+from .tile_generator import generate_weather_tiles
 from backend.core.groupings import (
     load_preset_groupings,
     load_custom_groupings,
@@ -230,19 +231,13 @@ def get_artcc_bboxes(
     return bboxes
 
 
-# Category priority for trend comparison (lower = worse conditions)
-CATEGORY_PRIORITY = {"LIFR": 0, "IFR": 1, "MVFR": 2, "VFR": 3}
-
-# Tower type priority for sorting (lower = larger/more significant airport)
-TOWER_TYPE_PRIORITY = {
-    'ATCT-TRACON': 0,
-    'ATCT-RAPCON': 0,
-    'ATCT-RATCF': 0,
-    'ATCT-A/C': 1,
-    'ATCT': 2,
-    'NON-ATCT': 3,
-    '': 4,
-}
+# Import shared constants from backend
+from backend.data.weather_parsing import (
+    CATEGORY_PRIORITY,
+    FAR139_PRIORITY,
+    TOWER_TYPE_PRIORITY,
+    get_airport_size_priority as _get_airport_size_priority_impl,
+)
 
 
 def _parse_wind_from_metar(metar: str) -> Optional[str]:
@@ -510,10 +505,9 @@ class WeatherBriefingGenerator:
             }
 
     def _get_airport_size_priority(self, icao: str) -> int:
-        """Get airport size priority for sorting."""
+        """Get airport size priority for sorting (lower = more significant)."""
         airport_info = self.unified_airport_data.get(icao, {})
-        tower_type = airport_info.get('tower_type', '')
-        return TOWER_TYPE_PRIORITY.get(tower_type, 4)
+        return _get_airport_size_priority_impl(airport_info)
 
     def _get_airport_coords(self, icao: str) -> Optional[Tuple[float, float]]:
         """Get airport coordinates."""
@@ -1389,6 +1383,38 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
         generated_files=generated_files,
     )
 
+    # Generate weather overlay tiles
+    print("  Generating weather overlay tiles...")
+    logger.info("Generating weather overlay tiles")
+
+    # Collect all airport weather data for tile generation
+    all_airport_weather: Dict[str, Dict] = {}
+    for artcc, groupings in artcc_groupings_map.items():
+        for g in groupings:
+            for point in g.get('airport_weather_points', []):
+                icao = point.get('icao')
+                if icao and icao not in all_airport_weather:
+                    all_airport_weather[icao] = point
+
+    # Get ARTCC boundaries for tile generation
+    from .index_generator import CONUS_ARTCCS
+    artcc_boundaries = get_artcc_boundaries(config.artcc_cache_dir)
+
+    # Generate tiles
+    tiles_dir = config.output_dir / "tiles"
+    tile_results = generate_weather_tiles(
+        artcc_boundaries=artcc_boundaries,
+        airport_weather=all_airport_weather,
+        output_dir=tiles_dir,
+        conus_artccs=CONUS_ARTCCS,
+        zoom_levels=(4, 5, 6, 7, 8, 9, 10),
+        max_workers=config.max_workers,
+    )
+
+    total_tiles = sum(tile_results.values())
+    print(f"    Generated {total_tiles} weather tiles")
+    logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
+
     # Generate index if enabled
     if config.generate_index:
         from .index_generator import generate_index_page
@@ -1738,6 +1764,38 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
         disambiguator=disambiguator,
         generated_files=generated_files,
     )
+
+    # Generate weather overlay tiles
+    print("  Generating weather overlay tiles...")
+    logger.info("Generating weather overlay tiles")
+
+    # Collect all airport weather data for tile generation
+    all_airport_weather: Dict[str, Dict] = {}
+    for artcc, groupings in artcc_groupings_map.items():
+        for g in groupings:
+            for point in g.get('airport_weather_points', []):
+                icao = point.get('icao')
+                if icao and icao not in all_airport_weather:
+                    all_airport_weather[icao] = point
+
+    # Get ARTCC boundaries for tile generation
+    from .index_generator import CONUS_ARTCCS
+    artcc_boundaries = get_artcc_boundaries(config.artcc_cache_dir)
+
+    # Generate tiles
+    tiles_dir = config.output_dir / "tiles"
+    tile_results = generate_weather_tiles(
+        artcc_boundaries=artcc_boundaries,
+        airport_weather=all_airport_weather,
+        output_dir=tiles_dir,
+        conus_artccs=CONUS_ARTCCS,
+        zoom_levels=(4, 5, 6, 7, 8, 9, 10),
+        max_workers=config.max_workers,
+    )
+
+    total_tiles = sum(tile_results.values())
+    print(f"    Generated {total_tiles} weather tiles")
+    logger.info(f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels")
 
     # Generate index if enabled
     if config.generate_index:

@@ -28,8 +28,13 @@ from ui.modals.metar_info import (
     parse_weather_phenomena,
 )
 
-# Category priority for trend comparison (lower = worse conditions)
-CATEGORY_PRIORITY = {"LIFR": 0, "IFR": 1, "MVFR": 2, "VFR": 3}
+# Import shared constants from backend
+from backend.data.weather_parsing import (
+    CATEGORY_PRIORITY,
+    FAR139_PRIORITY,
+    TOWER_TYPE_PRIORITY,
+    get_airport_size_priority as _get_airport_size_priority_impl,
+)
 
 
 def _parse_metar_observation_time(metar: str) -> Optional[tuple]:
@@ -189,31 +194,6 @@ def _calculate_trend(
             return "improving"
 
     return "stable"
-
-
-# FAR Part 139 priority for sorting (lower = larger/more significant airport)
-# "I E" = Index E (wide-body scheduled service) = Class B airports
-# "I D" = Index D (large jets) = major Class C airports
-# "I C" = Index C (medium jets) = Class C airports
-FAR139_PRIORITY = {
-    'I E': 0,  # Class B (KSFO, KLAX, KJFK, etc.)
-    'I D': 1,  # Major Class C (KOAK, KSJC, KSAN, etc.)
-    'I C': 2,  # Class C
-    'I B': 3,  # Smaller scheduled service
-    'I A': 4,  # Smallest scheduled service
-}
-
-# Tower type priority for sorting (lower = larger/more significant airport)
-# Used as fallback when FAR 139 data is not available
-TOWER_TYPE_PRIORITY = {
-    'ATCT-TRACON': 5,
-    'ATCT-RAPCON': 5,
-    'ATCT-RATCF': 5,
-    'ATCT-A/C': 6,
-    'ATCT': 7,
-    'NON-ATCT': 8,
-    '': 9,
-}
 
 
 def _parse_wind_from_metar(metar: str) -> Optional[str]:
@@ -624,24 +604,11 @@ class WeatherBriefingScreen(ModalScreen):
         self._update_display()
 
     def _get_airport_size_priority(self, icao: str) -> int:
-        """Get airport size priority for sorting (lower = larger airport).
-
-        Priority is determined first by FAR Part 139 certification (if available),
-        then falls back to tower type. This ensures Class B airports (I E) are
-        always prioritized as cluster centers over smaller airports.
-        """
+        """Get airport size priority for sorting (lower = larger airport)."""
         if not config.UNIFIED_AIRPORT_DATA:
             return 9
         airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {})
-
-        # First check FAR 139 certification (most accurate for major airports)
-        far139 = airport_info.get('far139', '')
-        if far139 in FAR139_PRIORITY:
-            return FAR139_PRIORITY[far139]
-
-        # Fall back to tower type
-        tower_type = airport_info.get('tower_type', '')
-        return TOWER_TYPE_PRIORITY.get(tower_type, 9)
+        return _get_airport_size_priority_impl(airport_info)
 
     def _get_airport_coords(self, icao: str) -> Optional[tuple]:
         """Get airport coordinates (lat, lon) if available."""
