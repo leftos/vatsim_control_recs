@@ -9,13 +9,12 @@ from typing import Dict, Any, List, Optional, Tuple
 from backend.cache.manager import load_aircraft_approach_speeds
 from backend.data.loaders import load_unified_airport_data
 from backend.data.vatsim_api import download_vatsim_data, filter_flights_by_airports
-from backend.data.weather import get_wind_info_batch, get_altimeter_setting
+from backend.data.weather import get_wind_from_metar, get_altimeter_setting, get_weather_for_airports_bbox
 from backend.core.controllers import get_staffed_positions
 from backend.core.calculations import format_eta_display, calculate_eta
 from backend.core.groupings import load_all_groupings, resolve_grouping_recursively, find_grouping_case_insensitive
 from backend.core.flights import get_nearest_airport_if_on_ground, is_flight_flying_near_arrival
 from backend.core.models import AirportStats, GroupingStats
-from backend.config.constants import WIND_SOURCE
 from airport_disambiguator import AirportDisambiguator
 
 
@@ -259,28 +258,27 @@ def analyze_flights_data(
                 'staffed_pos_display': staffed_pos_display
             })
     
-    # Batch fetch wind information only for airports that will be displayed (parallelized)
-    # Skip fetching wind if hide_wind is enabled
+    # Fetch weather data using bbox API (more efficient than per-airport fetching)
+    # This populates the METAR cache so wind and altimeter can be retrieved from cache
     airports_to_fetch = [apt['icao'] for apt in airports_to_display]
+    if airports_to_fetch:
+        print(f"Fetching weather data for {len(airports_to_fetch)} active airports using bbox API...")
+        # Use bbox-based fetching which populates the METAR cache
+        get_weather_for_airports_bbox(airports_to_fetch, all_airports_data)
+
+    # Get wind info from cache (populated by bbox fetch above)
+    # Skip if hide_wind is enabled
+    wind_info_batch = {}
     if airports_to_fetch and not hide_wind:
-        print(f"Fetching weather data for {len(airports_to_fetch)} active airports...")
-    wind_info_batch = get_wind_info_batch(airports_to_fetch, source=WIND_SOURCE) if (airports_to_fetch and not hide_wind) else {}
-    
-    # Batch fetch altimeter settings for all airports that will be displayed
+        for icao in airports_to_fetch:
+            wind_info_batch[icao] = get_wind_from_metar(icao)
+
+    # Get altimeter settings from cache (populated by bbox fetch above)
     altimeter_batch = {}
     if airports_to_fetch:
-        print(f"Fetching altimeter settings for {len(airports_to_fetch)} active airports...")
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_icao = {executor.submit(get_altimeter_setting, icao): icao for icao in airports_to_fetch}
-            for future in as_completed(future_to_icao):
-                icao = future_to_icao[future]
-                try:
-                    result = future.result()
-                    # Use raw format (A2992 or Q1013)
-                    altimeter_batch[icao] = result if result else ""
-                except Exception:
-                    altimeter_batch[icao] = ""
+        for icao in airports_to_fetch:
+            result = get_altimeter_setting(icao)
+            altimeter_batch[icao] = result if result else ""
     
     if airports_to_fetch:
         print(f"Processing airport names for {len(airports_to_fetch)} airports...")

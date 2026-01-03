@@ -1401,3 +1401,192 @@ def reset_rate_limit_state() -> None:
         _rate_limit_backoff = 0.0
         _rate_limit_errors = 0
         _rate_limit_last_error_time = None
+
+
+# Maximum bbox size in degrees (approximately 600nm at mid-latitudes)
+MAX_BBOX_SIZE_DEGREES = 10.0
+# Padding to add around airport coordinates to ensure they're included
+BBOX_PADDING_DEGREES = 0.5
+
+
+def calculate_airport_bboxes(
+    airport_icaos: List[str],
+    airports_data: Dict[str, Dict[str, Any]],
+    max_size_degrees: float = MAX_BBOX_SIZE_DEGREES,
+    padding_degrees: float = BBOX_PADDING_DEGREES
+) -> Dict[str, Tuple[float, float, float, float]]:
+    """
+    Calculate bounding boxes for a set of airports, splitting if needed.
+
+    If all airports fit within max_size_degrees, returns a single bbox.
+    Otherwise, uses simple clustering to create multiple smaller bboxes.
+
+    Args:
+        airport_icaos: List of airport ICAO codes
+        airports_data: Dictionary mapping ICAO codes to airport data with lat/lon
+        max_size_degrees: Maximum bbox size in degrees (default: 10.0)
+        padding_degrees: Padding to add around coordinates (default: 0.5)
+
+    Returns:
+        Dictionary mapping bbox ID (e.g., "bbox_0", "bbox_1") to
+        (min_lat, min_lon, max_lat, max_lon) tuples
+    """
+    # Collect valid airport coordinates
+    airport_coords = []
+    for icao in airport_icaos:
+        airport = airports_data.get(icao)
+        if airport and airport.get('latitude') is not None and airport.get('longitude') is not None:
+            airport_coords.append({
+                'icao': icao,
+                'lat': airport['latitude'],
+                'lon': airport['longitude']
+            })
+
+    if not airport_coords:
+        return {}
+
+    # Calculate overall bounding box
+    min_lat = min(a['lat'] for a in airport_coords)
+    max_lat = max(a['lat'] for a in airport_coords)
+    min_lon = min(a['lon'] for a in airport_coords)
+    max_lon = max(a['lon'] for a in airport_coords)
+
+    lat_span = max_lat - min_lat
+    lon_span = max_lon - min_lon
+
+    # If small enough, return single bbox
+    if lat_span <= max_size_degrees and lon_span <= max_size_degrees:
+        bbox = (
+            max(-90.0, min_lat - padding_degrees),
+            max(-180.0, min_lon - padding_degrees),
+            min(90.0, max_lat + padding_degrees),
+            min(180.0, max_lon + padding_degrees)
+        )
+        return {"bbox_0": bbox}
+
+    # Need to split into multiple bboxes using grid-based clustering
+    # Calculate grid dimensions
+    lat_cells = max(1, int((lat_span / max_size_degrees) + 1))
+    lon_cells = max(1, int((lon_span / max_size_degrees) + 1))
+
+    cell_lat_size = lat_span / lat_cells if lat_cells > 0 else lat_span
+    cell_lon_size = lon_span / lon_cells if lon_cells > 0 else lon_span
+
+    # Group airports into grid cells
+    grid_cells: Dict[Tuple[int, int], List[Dict]] = {}
+    for airport in airport_coords:
+        # Calculate which cell this airport belongs to
+        lat_idx = int((airport['lat'] - min_lat) / cell_lat_size) if cell_lat_size > 0 else 0
+        lon_idx = int((airport['lon'] - min_lon) / cell_lon_size) if cell_lon_size > 0 else 0
+
+        # Clamp to valid range
+        lat_idx = min(lat_idx, lat_cells - 1)
+        lon_idx = min(lon_idx, lon_cells - 1)
+
+        cell_key = (lat_idx, lon_idx)
+        if cell_key not in grid_cells:
+            grid_cells[cell_key] = []
+        grid_cells[cell_key].append(airport)
+
+    # Create bboxes for each non-empty cell
+    bboxes = {}
+    for idx, (cell_key, cell_airports) in enumerate(grid_cells.items()):
+        cell_min_lat = min(a['lat'] for a in cell_airports)
+        cell_max_lat = max(a['lat'] for a in cell_airports)
+        cell_min_lon = min(a['lon'] for a in cell_airports)
+        cell_max_lon = max(a['lon'] for a in cell_airports)
+
+        bbox = (
+            max(-90.0, cell_min_lat - padding_degrees),
+            max(-180.0, cell_min_lon - padding_degrees),
+            min(90.0, cell_max_lat + padding_degrees),
+            min(180.0, cell_max_lon + padding_degrees)
+        )
+        bboxes[f"bbox_{idx}"] = bbox
+
+    return bboxes
+
+
+def get_weather_for_airports_bbox(
+    airport_icaos: List[str],
+    airports_data: Dict[str, Dict[str, Any]],
+    max_workers: int = 5,
+    progress_callback: Optional[Callable[[int, int], None]] = None
+) -> Dict[str, str]:
+    """
+    Fetch METAR data for airports using bbox queries.
+
+    This is more efficient than per-airport fetching when dealing with many airports.
+    Calculates bounding boxes from airport coordinates and fetches weather in bulk,
+    then populates the METAR cache for subsequent wind/altimeter lookups.
+
+    Args:
+        airport_icaos: List of airport ICAO codes to fetch weather for
+        airports_data: Dictionary mapping ICAO codes to airport data with lat/lon
+        max_workers: Maximum concurrent bbox fetches (default: 5)
+        progress_callback: Optional callback(completed, total) called as bboxes complete
+
+    Returns:
+        Dictionary mapping ICAO codes to METAR strings (empty string if unavailable)
+    """
+    if not airport_icaos:
+        return {}
+
+    # Calculate bboxes for the airports
+    bboxes = calculate_airport_bboxes(airport_icaos, airports_data)
+
+    if not bboxes:
+        return {}
+
+    # Convert to set for filtering
+    target_set = set(a.upper() for a in airport_icaos)
+
+    all_metars: Dict[str, str] = {}
+    total = len(bboxes)
+    completed = 0
+
+    # Fetch weather for each bbox in parallel
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_bbox = {
+            executor.submit(fetch_weather_bbox, bbox, False): bbox_id
+            for bbox_id, bbox in bboxes.items()
+        }
+
+        for future in as_completed(future_to_bbox):
+            bbox_id = future_to_bbox[future]
+            try:
+                metars, _tafs = future.result()
+                # Filter to target airports
+                for icao, metar in metars.items():
+                    if icao.upper() in target_set:
+                        all_metars[icao] = metar
+            except Exception:
+                pass  # Individual bbox failure doesn't stop others
+
+            completed += 1
+            if progress_callback:
+                progress_callback(completed, total)
+
+    # Populate the METAR cache so subsequent calls to get_wind_from_metar/get_altimeter_setting
+    # can use the cached data without additional API calls
+    metar_data_cache, _metar_blacklist = get_metar_cache()
+    metar_lock = get_metar_cache_lock()
+    current_time = datetime.now(timezone.utc)
+
+    with metar_lock:
+        for icao, metar in all_metars.items():
+            if metar:
+                # Parse wind and altimeter from METAR for caching
+                parsed_wind = _parse_wind_from_metar(metar)
+                parsed_altimeter = parse_altimeter_from_metar(metar)
+
+                metar_data_cache[icao] = {
+                    'metar': metar,
+                    'wind': parsed_wind,
+                    'altimeter': parsed_altimeter,
+                    'timestamp': current_time
+                }
+
+    # Ensure all requested airports have an entry (empty string if not found)
+    result = {icao: all_metars.get(icao, "") for icao in airport_icaos}
+    return result
