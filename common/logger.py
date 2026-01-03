@@ -153,17 +153,21 @@ def LOGS_DIR() -> str:
     return _get_logs_dir()
 
 
-# Expose LOGS_DIR as a module-level variable that's lazily evaluated
-class _LogsDirProxy:
-    """Proxy class to provide lazy LOGS_DIR access."""
+# Expose LOGS_DIR and LOG_FILE as module-level variables that are lazily evaluated
+class _PathProxy:
+    """Proxy class to provide lazy path access."""
+    def __init__(self, getter):
+        self._getter = getter
+
     def __str__(self) -> str:
-        return _get_logs_dir()
+        return self._getter()
 
     def __repr__(self) -> str:
-        return _get_logs_dir()
+        return self._getter()
 
     def __fspath__(self) -> str:
-        return _get_logs_dir()
+        return self._getter()
 
 
-LOGS_DIR = _LogsDirProxy()
+LOGS_DIR = _PathProxy(_get_logs_dir)
+LOG_FILE = _PathProxy(_get_log_file)
