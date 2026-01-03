@@ -43,15 +43,15 @@ $RootFiles = @(
 )
 
 Write-Host "Creating directory structure on remote..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "mkdir -p $RemotePath"
+ssh "$User@$ServerIP" "mkdir -p $RemotePath/scripts/weather_daemon/service $RemotePath/backend/core $RemotePath/backend/data $RemotePath/backend/cache $RemotePath/backend/config $RemotePath/ui/modals $RemotePath/airport_disambiguator $RemotePath/data/preset_groupings"
 
 Write-Host "Syncing directories..." -ForegroundColor Yellow
 foreach ($dir in $Directories) {
     $localDir = Join-Path $ProjectRoot $dir
     if (Test-Path $localDir) {
         Write-Host "  $dir/" -ForegroundColor Cyan
-        # Use rsync for efficient sync with delete, excluding pycache
-        rsync -av --delete --exclude '__pycache__' --exclude '*.pyc' --exclude '.git' "$localDir/" "${User}@${ServerIP}:$RemotePath/$dir/"
+        # Use scp -r for recursive copy (rsync not available on Windows)
+        scp -r "$localDir/*" "${User}@${ServerIP}:$RemotePath/$dir/"
     } else {
         Write-Host "  Warning: $dir not found" -ForegroundColor Yellow
     }
