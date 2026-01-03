@@ -943,7 +943,7 @@ def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
                 output_dir=tiles_dir,
                 conus_artccs=CONUS_ARTCCS,
                 zoom_levels=(4, 5, 6, 7),
-                max_workers=2,  # Keep low for memory-constrained servers
+                max_workers=config.tile_max_workers,
             )
 
             total_tiles = sum(tile_results.values())
@@ -1341,7 +1341,7 @@ def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
                 output_dir=tiles_dir,
                 conus_artccs=CONUS_ARTCCS,
                 zoom_levels=(4, 5, 6, 7),
-                max_workers=2,  # Keep low for memory-constrained servers
+                max_workers=config.tile_max_workers,
             )
 
             total_tiles = sum(tile_results.values())

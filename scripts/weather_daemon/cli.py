@@ -131,6 +131,13 @@ Examples:
     )
 
     parser.add_argument(
+        "--tile-workers",
+        type=int,
+        default=None,
+        help="Maximum concurrent tile generation workers (default: 2 for servers, increase for local machines with more RAM)",
+    )
+
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable verbose output",
@@ -182,6 +189,9 @@ Examples:
 
     if args.workers:
         config.max_workers = args.workers
+
+    if args.tile_workers:
+        config.tile_max_workers = args.tile_workers
 
     if args.data_dir:
         config.data_dir = args.data_dir

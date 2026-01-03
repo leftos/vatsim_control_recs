@@ -33,7 +33,10 @@ try {
 
     Write-Host ""
     Write-Host "Generating weather briefings..." -ForegroundColor Yellow
-    & $VenvPython -m scripts.weather_daemon.cli --output "$OutputDir" --verbose
+    # Use aggressive parallelization for local beefy machines
+    # --workers 20: concurrent API requests
+    # --tile-workers 8: concurrent tile generation (memory-intensive, but fast locally)
+    & $VenvPython -m scripts.weather_daemon.cli --output "$OutputDir" --verbose --workers 20 --tile-workers 8
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""

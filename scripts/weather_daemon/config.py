@@ -51,6 +51,10 @@ class DaemonConfig:
     # Generate weather overlay tiles
     generate_tiles: bool = True
 
+    # Maximum concurrent tile generation workers
+    # Keep low (1-2) for memory-constrained servers, can increase locally
+    tile_max_workers: int = 2
+
     # Server timezone for display (e.g., 'America/Los_Angeles')
     # If None, uses UTC
     display_timezone: Optional[str] = None
