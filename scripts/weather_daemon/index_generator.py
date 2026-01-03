@@ -1504,6 +1504,9 @@ def generate_html(
         // Restore sidebar state on page load
         restoreSidebarState();
 
+        // Restore modal state on page load (after sidebar, so modal appears on top)
+        restoreModalState();
+
         // Function to scroll to ARTCC section from map popup
         function scrollToArtcc(artcc) {{
             const section = document.querySelector(`[data-artcc="${{artcc}}"]`);
@@ -1529,6 +1532,7 @@ def generate_html(
         const modalClose = document.getElementById('modal-close');
         const modalOpenTab = document.getElementById('modal-open-tab');
         let currentBriefingUrl = '';
+        const MODAL_STATE_KEY = 'vatsim-weather-modal';
 
         function openBriefingModal(url, title) {{
             currentBriefingUrl = url;
@@ -1536,6 +1540,11 @@ def generate_html(
             modalIframe.src = url;
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
+
+            // Save modal state
+            try {{
+                localStorage.setItem(MODAL_STATE_KEY, JSON.stringify({{ url, title }}));
+            }} catch (e) {{}}
         }}
 
         function closeBriefingModal() {{
@@ -1543,6 +1552,21 @@ def generate_html(
             modalIframe.src = '';
             currentBriefingUrl = '';
             document.body.style.overflow = '';
+
+            // Clear modal state
+            try {{
+                localStorage.removeItem(MODAL_STATE_KEY);
+            }} catch (e) {{}}
+        }}
+
+        // Restore modal state on page load
+        function restoreModalState() {{
+            try {{
+                const state = JSON.parse(localStorage.getItem(MODAL_STATE_KEY));
+                if (state && state.url) {{
+                    openBriefingModal(state.url, state.title || 'Weather Briefing');
+                }}
+            }} catch (e) {{}}
         }}
 
         // Close modal handlers
