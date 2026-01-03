@@ -95,6 +95,9 @@ ssh "$USER@$SERVER_IP" "cp $REMOTE_PATH/scripts/weather_daemon/service/weather-d
 echo -e "${YELLOW}Installing Python dependencies...${NC}"
 ssh "$USER@$SERVER_IP" "cd $REMOTE_PATH && source .venv/bin/activate && pip install -r requirements.txt"
 
+echo -e "${YELLOW}Clearing caches (except weather)...${NC}"
+ssh "$USER@$SERVER_IP" "rm -f $REMOTE_PATH/cache/artcc_boundaries/*.json 2>/dev/null; rm -rf $REMOTE_PATH/cache/simaware_boundaries/* 2>/dev/null; rm -f $REMOTE_PATH/cache/simaware_facilities*.json 2>/dev/null; echo 'Caches cleared'"
+
 echo -e "${YELLOW}Running weather generation...${NC}"
 ssh "$USER@$SERVER_IP" "cd $REMOTE_PATH && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather"
 

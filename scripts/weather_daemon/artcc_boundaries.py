@@ -2,11 +2,11 @@
 ARTCC Boundary Data Fetcher
 
 Fetches ARTCC boundary data from VATSIM vNAS API.
-Caches data locally for performance.
+Caches data locally per AIRAC cycle (28 days).
 """
 
 import json
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.request import urlopen, Request
@@ -14,6 +14,18 @@ from urllib.error import URLError, HTTPError
 
 # VATSIM vNAS ARTCC boundaries GeoJSON
 VNAS_BOUNDARIES_URL = "https://data-api.vnas.vatsim.net/Files/ArtccBoundaries.geojson"
+
+# AIRAC reference: cycle 2401 started on 2024-01-25
+AIRAC_EPOCH = date(2024, 1, 25)
+AIRAC_CYCLE_DAYS = 28
+
+
+def get_current_airac_date() -> date:
+    """Get the effective date of the current AIRAC cycle."""
+    today = date.today()
+    days_since_epoch = (today - AIRAC_EPOCH).days
+    cycles_since_epoch = days_since_epoch // AIRAC_CYCLE_DAYS
+    return AIRAC_EPOCH + timedelta(days=cycles_since_epoch * AIRAC_CYCLE_DAYS)
 
 
 def download_artcc_boundaries(
@@ -30,14 +42,19 @@ def download_artcc_boundaries(
         where each polygon is a list of (lat, lon) tuples
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    today = date.today().isoformat()
-    cache_file = cache_dir / f"artcc_boundaries_{today}.json"
+    cache_file = cache_dir / "artcc_boundaries.json"
 
-    # Check cache first (valid for today)
+    # Check cache - valid if from current AIRAC cycle
+    current_airac = get_current_airac_date()
     if cache_file.exists():
         try:
             with open(cache_file, 'r') as f:
-                return json.load(f)
+                cached_data = json.load(f)
+            # Check if cache is from current AIRAC cycle
+            cached_airac = cached_data.get('_airac_date', '')
+            if cached_airac == current_airac.isoformat():
+                return cached_data.get('boundaries', {})
+            # Cache is stale (old AIRAC cycle), will re-download
         except Exception:
             pass  # Re-download if cache is corrupt
 
@@ -70,22 +87,24 @@ def download_artcc_boundaries(
         coordinates = geometry.get('coordinates', [])
 
         if geom_type == 'Polygon' and coordinates:
-            # Polygon: coordinates is [ring, ...] where ring is [[lon, lat], ...]
-            polygons = []
-            for ring in coordinates:
-                # Convert from GeoJSON [lon, lat] to our (lat, lon) format
-                polygon = [(coord[1], coord[0]) for coord in ring]
+            # Polygon: coordinates is [exterior_ring, hole1, hole2, ...]
+            # Only use the first ring (exterior boundary), ignore holes
+            # Holes would need special handling (subtract from exterior) but
+            # for ARTCC boundaries we just want the outer extent
+            if coordinates:
+                exterior_ring = coordinates[0]
+                polygon = [(coord[1], coord[0]) for coord in exterior_ring]
                 if len(polygon) >= 3:
-                    polygons.append(polygon)
-            if polygons:
-                boundaries[artcc_id] = polygons
+                    boundaries[artcc_id] = [polygon]
 
         elif geom_type == 'MultiPolygon' and coordinates:
-            # MultiPolygon: coordinates is [polygon, ...] where polygon is [ring, ...]
+            # MultiPolygon: coordinates is [polygon, ...] where polygon is [exterior_ring, hole1, ...]
+            # Only use the exterior ring (first ring) of each polygon
             polygons = []
             for poly_coords in coordinates:
-                for ring in poly_coords:
-                    polygon = [(coord[1], coord[0]) for coord in ring]
+                if poly_coords:
+                    exterior_ring = poly_coords[0]
+                    polygon = [(coord[1], coord[0]) for coord in exterior_ring]
                     if len(polygon) >= 3:
                         polygons.append(polygon)
             if polygons:
@@ -97,15 +116,14 @@ def download_artcc_boundaries(
 
     print(f"    Parsed boundaries for {len(boundaries)} ARTCCs")
 
-    # Cache the parsed data
+    # Cache the parsed data with AIRAC date
     try:
+        cache_data = {
+            '_airac_date': current_airac.isoformat(),
+            'boundaries': boundaries,
+        }
         with open(cache_file, 'w') as f:
-            json.dump(boundaries, f)
-
-        # Clean up old cache files
-        for old_cache in cache_dir.glob("artcc_boundaries_*.json"):
-            if old_cache != cache_file:
-                old_cache.unlink()
+            json.dump(cache_data, f)
     except Exception as e:
         print(f"  Warning: Could not cache boundaries: {e}")
 

@@ -11,12 +11,26 @@ import logging
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Set
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from scripts.weather_daemon.config import DaemonConfig
-from scripts.weather_daemon.generator import generate_all_briefings, generate_index_only, generate_with_cached_weather
+from scripts.weather_daemon.generator import generate
+
+# Valid stages for --stages argument
+VALID_STAGES = {'weather', 'briefings', 'tiles', 'index'}
+ALL_STAGES = VALID_STAGES.copy()
+
+
+def parse_stages(stages_str: str) -> Set[str]:
+    """Parse comma-separated stages string into a set of valid stages."""
+    stages = {s.strip().lower() for s in stages_str.split(',')}
+    invalid = stages - VALID_STAGES
+    if invalid:
+        raise ValueError(f"Invalid stage(s): {', '.join(sorted(invalid))}. Valid stages: {', '.join(sorted(VALID_STAGES))}")
+    return stages
 
 
 def setup_logging(log_dir: Path, verbose: bool = False) -> None:
@@ -54,21 +68,30 @@ def main():
         description="Generate VATSIM weather briefings for all groupings",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  # Generate to default output directory
-  python -m scripts.weather_daemon.cli
+Stages:
+  weather   - Fetch fresh weather data (METARs, TAFs, ATIS)
+  briefings - Generate HTML briefing pages for each grouping
+  tiles     - Generate weather overlay map tiles
+  index     - Generate the index.html page
 
-  # Generate to specific directory
-  python -m scripts.weather_daemon.cli --output /var/www/weather
+Examples:
+  # Full generation (all stages)
+  python -m scripts.weather_daemon.cli --output ./test_output
+
+  # Tiles and index only (use cached weather)
+  python -m scripts.weather_daemon.cli --stages tiles,index
+
+  # Tiles only
+  python -m scripts.weather_daemon.cli --stages tiles
+
+  # Index only
+  python -m scripts.weather_daemon.cli --stages index
+
+  # Briefings and index without tiles
+  python -m scripts.weather_daemon.cli --stages weather,briefings,index
 
   # Generate only for specific ARTCCs
   python -m scripts.weather_daemon.cli --artccs ZOA ZLA ZSE
-
-  # Generate only custom groupings
-  python -m scripts.weather_daemon.cli --custom-only
-
-  # Test run with local output
-  python -m scripts.weather_daemon.cli --output ./test_output --verbose
 """,
     )
 
@@ -77,6 +100,13 @@ Examples:
         type=Path,
         default=None,
         help="Output directory for generated HTML files (default: /var/www/leftos.dev/weather)",
+    )
+
+    parser.add_argument(
+        "--stages", "-s",
+        type=str,
+        default=None,
+        help="Comma-separated list of stages to run: weather,briefings,tiles,index (default: all)",
     )
 
     parser.add_argument(
@@ -97,30 +127,6 @@ Examples:
         "--presets-only",
         action="store_true",
         help="Only generate preset groupings (skip custom)",
-    )
-
-    parser.add_argument(
-        "--no-index",
-        action="store_true",
-        help="Skip generating the index page",
-    )
-
-    parser.add_argument(
-        "--no-tiles",
-        action="store_true",
-        help="Skip generating weather overlay tiles (HTML pages only)",
-    )
-
-    parser.add_argument(
-        "--index-only",
-        action="store_true",
-        help="Only regenerate the index page (no weather fetch, no briefings)",
-    )
-
-    parser.add_argument(
-        "--use-cached",
-        action="store_true",
-        help="Regenerate briefings using cached weather data (no API calls)",
     )
 
     parser.add_argument(
@@ -159,6 +165,15 @@ Examples:
 
     args = parser.parse_args()
 
+    # Parse stages
+    if args.stages:
+        try:
+            stages = parse_stages(args.stages)
+        except ValueError as e:
+            parser.error(str(e))
+    else:
+        stages = ALL_STAGES.copy()
+
     # Build configuration
     config = DaemonConfig()
 
@@ -181,11 +196,11 @@ Examples:
     if args.presets_only:
         config.include_custom = False
 
-    if args.no_index:
-        config.generate_index = False
-
-    if args.no_tiles:
-        config.generate_tiles = False
+    # Configure stages
+    config.fetch_fresh_weather = 'weather' in stages
+    config.generate_briefings = 'briefings' in stages
+    config.generate_tiles = 'tiles' in stages
+    config.generate_index = 'index' in stages
 
     if args.workers:
         config.max_workers = args.workers
@@ -200,20 +215,15 @@ Examples:
     if args.custom_only and args.presets_only:
         parser.error("Cannot use both --custom-only and --presets-only")
 
-    if args.index_only and args.no_index:
-        parser.error("Cannot use both --index-only and --no-index")
-
-    if args.index_only and args.use_cached:
-        parser.error("Cannot use both --index-only and --use-cached")
+    # Print stage info
+    if args.verbose:
+        print(f"Stages: {', '.join(sorted(stages))}")
+        if not config.fetch_fresh_weather:
+            print("Using cached weather data")
 
     # Run generation
     try:
-        if args.index_only:
-            generated_files = generate_index_only(config)
-        elif args.use_cached:
-            generated_files = generate_with_cached_weather(config)
-        else:
-            generated_files = generate_all_briefings(config)
+        generated_files = generate(config)
 
         if args.verbose:
             print("\nGenerated files:")

@@ -1,6 +1,8 @@
 # Regenerate Index Only (no weather fetch)
 # Usage: .\RegenIndex.ps1
 #
+# Stages: index only
+#
 # Quick way to update map/UI without re-fetching weather data.
 
 $ErrorActionPreference = "Stop"
@@ -21,7 +23,7 @@ Write-Host "Pulling latest code..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && git reset --hard HEAD && git pull"
 
 Write-Host "Regenerating index page..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --index-only --verbose"
+ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --stages index --verbose"
 
 Write-Host ""
 Write-Host "=== Index Regeneration Complete! ===" -ForegroundColor Green

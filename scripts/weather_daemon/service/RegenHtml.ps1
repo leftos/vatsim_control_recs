@@ -1,6 +1,8 @@
 # Regenerate HTML Pages Only (No Tiles)
 # Usage: .\RegenHtml.ps1
 #
+# Stages: briefings, index (uses cached weather, skips tiles)
+#
 # Uses cached weather data to regenerate all HTML briefings and index.
 # Skips tile generation for faster updates when only HTML/CSS changes.
 # Useful for testing styling changes without waiting for tile generation.
@@ -28,7 +30,7 @@ Write-Host "Pulling latest code..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && git reset --hard HEAD && git pull"
 
 Write-Host "Regenerating HTML pages (no tiles)..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --use-cached --no-tiles --verbose"
+ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --stages briefings,index --verbose"
 
 # Restart the timer
 Write-Host "Restarting weather daemon timer..." -ForegroundColor Yellow

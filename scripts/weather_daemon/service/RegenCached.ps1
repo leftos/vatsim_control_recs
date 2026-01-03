@@ -1,6 +1,8 @@
 # Regenerate Briefings Using Cached Weather
 # Usage: .\RegenCached.ps1
 #
+# Stages: briefings, tiles, index (uses cached weather)
+#
 # Uses previously fetched weather data to regenerate all briefings.
 # Much faster than full regeneration since it skips API calls.
 # Useful for testing code changes to HTML generation.
@@ -23,7 +25,7 @@ Write-Host "Pulling latest code..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && git reset --hard HEAD && git pull"
 
 Write-Host "Regenerating briefings (cached weather)..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --use-cached --verbose"
+ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --stages briefings,tiles,index --verbose"
 
 Write-Host ""
 Write-Host "=== Cached Regeneration Complete! ===" -ForegroundColor Green

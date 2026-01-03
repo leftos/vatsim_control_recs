@@ -45,6 +45,12 @@ class DaemonConfig:
     # Weather cache directory (for --use-cached mode)
     weather_cache_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent.parent / "cache" / "weather")
 
+    # Fetch fresh weather data (False = use cached)
+    fetch_fresh_weather: bool = True
+
+    # Generate briefing HTML pages
+    generate_briefings: bool = True
+
     # Generate index page
     generate_index: bool = True
 

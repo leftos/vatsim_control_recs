@@ -111,7 +111,7 @@ class WeatherTileGenerator:
         airport_weather: Dict[str, Dict[str, Any]],
         output_dir: Path,
         conus_artccs: Set[str],
-        max_distance_deg: float = 2.5,
+        max_distance_deg: float = 1.0,
         zoom_levels: Tuple[int, ...] = (4, 5, 6, 7, 8, 9, 10),
     ):
         """Initialize the tile generator with KD-tree for efficient lookups."""

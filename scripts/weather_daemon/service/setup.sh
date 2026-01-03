@@ -76,6 +76,12 @@ echo -e "${YELLOW}Setting up systemd service...${NC}"
 cp scripts/weather_daemon/service/weather-daemon.service /etc/systemd/system/
 cp scripts/weather_daemon/service/weather-daemon.timer /etc/systemd/system/
 
+# Clear caches (except weather) to ensure fresh data
+echo -e "${YELLOW}Clearing caches (except weather)...${NC}"
+rm -f "$INSTALL_DIR/cache/artcc_boundaries/"*.json 2>/dev/null || true
+rm -rf "$INSTALL_DIR/cache/simaware_boundaries/"* 2>/dev/null || true
+rm -f "$INSTALL_DIR/cache/simaware_facilities"*.json 2>/dev/null || true
+
 # Fix permissions
 chown -R www-data:www-data "$OUTPUT_DIR"
 chown -R www-data:www-data "$INSTALL_DIR/cache"

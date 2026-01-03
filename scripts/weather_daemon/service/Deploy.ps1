@@ -74,6 +74,9 @@ ssh "$User@$ServerIP" "cp $RemotePath/scripts/weather_daemon/service/weather-dae
 Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && source .venv/bin/activate && pip install -r requirements.txt"
 
+Write-Host "Clearing caches (except weather)..." -ForegroundColor Yellow
+ssh "$User@$ServerIP" "rm -f $RemotePath/cache/artcc_boundaries/*.json 2>/dev/null; rm -rf $RemotePath/cache/simaware_boundaries/* 2>/dev/null; rm -f $RemotePath/cache/simaware_facilities*.json 2>/dev/null; echo 'Caches cleared'"
+
 Write-Host "Running weather generation..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --verbose"
 

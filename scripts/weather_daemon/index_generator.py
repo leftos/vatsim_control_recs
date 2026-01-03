@@ -118,13 +118,26 @@ def build_airport_markers(
         if not lat or not lon:
             continue
 
+        # Get pretty name from unified data
+        name = airport_info.get('name', '')
+        if name:
+            # Title case the name (e.g., "SAN FRANCISCO INTL" -> "San Francisco Intl")
+            name = name.title()
+
         markers.append({
             'icao': icao,
+            'name': name,
             'lat': lat,
             'lon': lon,
             'category': category,
             'color': color,
             'tier': tier,
+            # Weather details for tooltip
+            'visibility': point.get('visibility'),
+            'ceiling': point.get('ceiling'),
+            'wind': point.get('wind'),
+            'phenomena': point.get('phenomena', []),
+            'taf_changes': point.get('taf_changes', []),
         })
 
     return markers
@@ -1022,11 +1035,10 @@ def generate_html(
         }}
 
         .airport-marker-tooltip {{
-            background: #16213e;
-            border: 1px solid #0f3460;
-            border-radius: 6px;
+            background: transparent;
+            border: none;
             padding: 0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            box-shadow: none;
         }}
 
         .airport-marker-tooltip .leaflet-tooltip-content {{
@@ -1034,7 +1046,83 @@ def generate_html(
         }}
 
         .airport-marker-tooltip::before {{
-            border-top-color: #0f3460;
+            display: none;
+        }}
+
+        .marker-weather-card {{
+            background: #16213e;
+            border: 2px solid;
+            border-radius: 6px;
+            padding: 6px 10px;
+            width: max-content;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            font-size: 0.75rem;
+            white-space: nowrap;
+        }}
+
+        .marker-weather-card .card-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 4px;
+        }}
+
+        .marker-weather-card .icao {{
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #e8e8e8;
+        }}
+
+        .marker-weather-card .category {{
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 1px 5px;
+            border-radius: 3px;
+            color: #000;
+        }}
+
+        .marker-weather-card .weather-row {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            color: #b8b8b8;
+        }}
+
+        .marker-weather-card .weather-row span {{
+            white-space: nowrap;
+        }}
+
+        .marker-weather-card .weather-row .phenomena {{
+            color: #ff9900;
+        }}
+
+        .marker-weather-card .taf-row {{
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 3px;
+            color: #999;
+        }}
+
+        .marker-weather-card .taf-row .trend-up {{
+            color: #00cc00;
+        }}
+
+        .marker-weather-card .taf-row .trend-down {{
+            color: #ff4444;
+        }}
+
+        .marker-weather-card .taf-row .taf-cat {{
+            font-weight: 600;
+            padding: 0 3px;
+            border-radius: 2px;
+            color: #000;
+        }}
+
+        .marker-weather-card .taf-row .taf-details {{
+            color: #b8b8b8;
+            margin-left: 4px;
         }}
 
         @media (max-width: 768px) {{
@@ -1120,6 +1208,15 @@ def generate_html(
             minZoom: 3,
             maxZoom: 10,
         }});
+
+        // Create custom panes for airport markers (major airports on top of regional)
+        map.createPane('regionalAirports');
+        map.getPane('regionalAirports').style.zIndex = 645;
+        map.createPane('majorAirports');
+        map.getPane('majorAirports').style.zIndex = 650;
+
+        // Ensure tooltips render above all markers
+        map.getPane('tooltipPane').style.zIndex = 700;
 
         // Update URL with map state (without reloading)
         function updateMapStateInUrl() {{
@@ -1407,35 +1504,104 @@ def generate_html(
         // Airport markers data
         const airportMarkers = {json.dumps(airport_markers or [])};
 
+        // Category colors for card styling
+        const categoryColors = {{
+            'VFR': '#00cc00',
+            'MVFR': '#0066ff',
+            'IFR': '#ff0000',
+            'LIFR': '#ff00ff',
+            'UNK': '#888888',
+        }};
+
         // Layer groups for airport markers (separated by visibility tier)
         const majorMarkerGroup = L.layerGroup();
         const regionalMarkerGroup = L.layerGroup();
 
         // Create airport markers
         airportMarkers.forEach(marker => {{
+            // Use appropriate pane based on tier (major airports on top)
+            const pane = marker.tier === 'major' ? 'majorAirports' : 'regionalAirports';
+
             const circleMarker = L.circleMarker([marker.lat, marker.lon], {{
-                radius: 5,
+                radius: 6,
                 fillColor: marker.color,
                 color: '#000000',
                 weight: 1,
                 fillOpacity: 0.9,
+                pane: pane,
             }});
 
-            // Create tooltip content with weather info (shows on hover)
-            const categoryClass = marker.category.toLowerCase();
+            // Build weather card HTML for tooltip
+            const catColor = categoryColors[marker.category] || categoryColors['UNK'];
+            let weatherHtml = '';
+
+            // Add ceiling/visibility/wind/phenomena row
+            const weatherItems = [];
+            if (marker.ceiling) {{
+                weatherItems.push(`<span>☁ ${{marker.ceiling}}</span>`);
+            }}
+            if (marker.visibility) {{
+                weatherItems.push(`<span>👁 ${{marker.visibility}}</span>`);
+            }}
+            if (marker.wind) {{
+                weatherItems.push(`<span>💨 ${{marker.wind}}</span>`);
+            }}
+            // Add phenomena inline
+            if (marker.phenomena && marker.phenomena.length > 0) {{
+                weatherItems.push(`<span class="phenomena">${{marker.phenomena.join(', ')}}</span>`);
+            }}
+
+            if (weatherItems.length > 0) {{
+                weatherHtml = `<div class="weather-row">${{weatherItems.join('')}}</div>`;
+            }}
+
+            // Add TAF trend changes if present
+            let tafHtml = '';
+            if (marker.taf_changes && marker.taf_changes.length > 0) {{
+                const tafLines = marker.taf_changes.map(change => {{
+                    const trendClass = change.trend === 'worsening' ? 'trend-down' : 'trend-up';
+                    const trendIcon = change.trend === 'worsening' ? '▼' : '▲';
+                    const tafCatColor = categoryColors[change.category] || categoryColors['UNK'];
+
+                    // Build details string with available TAF info
+                    const details = [];
+                    if (change.ceiling) details.push(change.ceiling);
+                    if (change.visibility) details.push(change.visibility);
+                    if (change.wind) details.push(change.wind);
+                    if (change.phenomena && change.phenomena.length > 0) {{
+                        details.push(change.phenomena.join(', '));
+                    }}
+                    const detailsStr = details.length > 0 ? ` ${{details.join(' ')}}` : '';
+
+                    return `<div class="taf-row">
+                        <span class="${{trendClass}}">${{trendIcon}}</span>
+                        <span>${{change.type}} ${{change.time_str}}</span>
+                        <span class="taf-cat" style="background-color: ${{tafCatColor}}">${{change.category}}</span>
+                        <span class="taf-details">${{detailsStr}}</span>
+                    </div>`;
+                }}).join('');
+                tafHtml = tafLines;
+            }}
+
+            // Build header with name (ICAO) or just ICAO if no name
+            const headerText = marker.name ? `${{marker.name}} (${{marker.icao}})` : marker.icao;
+
             const tooltipContent = `
-                <div class="airport-popup">
-                    <div class="airport-popup-header">
-                        <span class="airport-popup-icao">${{marker.icao}}</span>
-                        <span class="airport-popup-cat stat stat-${{categoryClass}}">${{marker.category}}</span>
+                <div class="marker-weather-card" style="border-color: ${{catColor}}">
+                    <div class="card-header">
+                        <span class="icao">${{headerText}}</span>
+                        <span class="category" style="background-color: ${{catColor}}">${{marker.category}}</span>
                     </div>
+                    ${{weatherHtml}}
+                    ${{tafHtml}}
                 </div>
             `;
 
-            // Bind tooltip with weather info (shows on hover)
+            // Bind tooltip with weather card (shows on hover)
             circleMarker.bindTooltip(tooltipContent, {{
                 permanent: false,
                 direction: 'top',
+                offset: [0, -8],
                 className: 'airport-marker-tooltip',
             }});
 
