@@ -1,14 +1,11 @@
 [Unit]
-Description=Run VATSIM Weather Briefing Generator every 5 minutes
+Description=Run VATSIM Weather Briefing Generator every 5 minutes at XX:54/59/04/09...
 Documentation=https://github.com/leftos/vatsim_control_recs
 
 [Timer]
-# Run every 5 minutes, starting 2 minutes after boot
-OnBootSec=2min
-OnUnitActiveSec=5min
-
-# Randomize execution by up to 15 seconds to avoid thundering herd
-RandomizedDelaySec=15
+# Run at fixed times: XX:04, XX:09, XX:14, ... XX:54, XX:59
+# This aligns with METAR updates which typically occur at XX:53
+OnCalendar=*:4/5
 
 # If system was off, don't catch up on missed runs
 Persistent=false

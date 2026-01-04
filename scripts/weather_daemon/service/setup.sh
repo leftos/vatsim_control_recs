@@ -110,7 +110,7 @@ if [ -f "$NGINX_CONF" ]; then
         autoindex_exact_size off;\
         autoindex_localtime on;\
 \
-        # Disable caching for HTML files (briefings update every 15 minutes)\
+        # Disable caching for HTML files (briefings update every 5 minutes)\
         location ~* \\.html$ {\
             expires -1;\
             add_header Cache-Control "no-cache, no-store, must-revalidate";\
@@ -138,7 +138,7 @@ systemctl start weather-daemon.timer
 echo ""
 echo -e "${GREEN}=== Setup Complete! ===${NC}"
 echo ""
-echo -e "${CYAN}Weather briefings will be generated every 15 minutes.${NC}"
+echo -e "${CYAN}Weather briefings will be generated every 5 minutes (XX:04, XX:09, ... XX:54, XX:59).${NC}"
 echo -e "${CYAN}View at: https://leftos.dev/weather/${NC}"
 echo ""
 echo -e "Useful commands:"
