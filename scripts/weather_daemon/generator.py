@@ -582,6 +582,54 @@ class WeatherBriefingGenerator:
 
         return (most_common_hhmm, different_airports)
 
+    def _get_latest_obs_time(self) -> Optional[str]:
+        """
+        Find the latest (most recent) METAR observation time across all airports.
+
+        Returns:
+            The latest observation time as HHMM string, or None if no times found.
+        """
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        current_day = now.day
+        current_hour = now.hour
+        current_minute = now.minute
+
+        latest_time: Optional[str] = None
+        latest_minutes_ago: Optional[int] = None
+
+        for icao, data in self.weather_data.items():
+            obs_time = data.get('obs_time')
+            if obs_time and len(obs_time) == 6:
+                # Parse DDHHMM format
+                obs_day = int(obs_time[0:2])
+                obs_hour = int(obs_time[2:4])
+                obs_minute = int(obs_time[4:6])
+
+                # Calculate minutes ago (handle day rollover)
+                # Assume observations are within the last 24 hours
+                day_diff = current_day - obs_day
+                if day_diff < 0:
+                    # Month rollover (e.g., current day 1, obs day 31)
+                    day_diff = 1 if day_diff == -30 or day_diff == -29 or day_diff == -28 else 1
+
+                minutes_ago = (
+                    day_diff * 24 * 60 +
+                    (current_hour - obs_hour) * 60 +
+                    (current_minute - obs_minute)
+                )
+
+                # Handle negative (future) times - likely means yesterday's obs
+                if minutes_ago < -60:
+                    minutes_ago += 24 * 60
+
+                if latest_minutes_ago is None or minutes_ago < latest_minutes_ago:
+                    latest_minutes_ago = minutes_ago
+                    latest_time = obs_time[2:]  # Just HHMM
+
+        return latest_time
+
     def _build_airport_card(self, icao: str, data: Dict[str, Any], show_obs_time: bool = False) -> str:
         """Build a Rich markup card for one airport.
 
@@ -747,15 +795,16 @@ class WeatherBriefingGenerator:
 
         # Get the most common observation time and airports with different times
         common_obs_hhmm, different_airports = self._get_common_obs_time()
+        latest_obs_hhmm = self._get_latest_obs_time()
 
         console.print(f"[bold]Weather Briefing: {self.grouping_name}[/bold]")
 
-        # Show METAR observation time instead of generation time
-        if common_obs_hhmm:
+        # Show latest METAR observation time
+        display_time = latest_obs_hhmm or common_obs_hhmm
+        if display_time:
             now = datetime.now(timezone.utc)
             date_str = now.strftime("%Y-%m-%d")
-            obs_time_str = f"{common_obs_hhmm}Z"
-            console.print(f"METARs from: [#aaaaff]{date_str} {obs_time_str}[/#aaaaff]\n")
+            console.print(f"METARs current as of: [#aaaaff]{date_str} {display_time}Z[/#aaaaff]\n")
         else:
             # Fallback if no observation times found
             now = datetime.now(timezone.utc)
