@@ -1593,9 +1593,15 @@ def generate_html(
                     const cacheBustUrl = state.url + (state.url.includes('?') ? '&' : '?') + '_t=' + Date.now();
                     currentBriefingUrl = state.url;  // Keep clean URL for "Open in New Tab"
                     modalTitle.textContent = state.title || 'Weather Briefing';
-                    modalIframe.src = cacheBustUrl;
                     modal.classList.add('active');
                     document.body.style.overflow = 'hidden';
+                    // Force iframe to fully reset by replacing the element
+                    const newIframe = document.createElement('iframe');
+                    newIframe.id = 'modal-iframe';
+                    newIframe.className = 'modal-iframe';
+                    newIframe.src = cacheBustUrl;
+                    modalIframe.parentNode.replaceChild(newIframe, modalIframe);
+                    modalIframe = newIframe;
                     // Don't re-save to localStorage - keep the original clean URL
                 }}
             }} catch (e) {{}}
