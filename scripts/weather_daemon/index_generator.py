@@ -1803,8 +1803,8 @@ def generate_html(
         updateZuluClock();
         setInterval(updateZuluClock, 1000);
 
-        // Auto-refresh countdown timer (5 minutes)
-        const REFRESH_INTERVAL = 5 * 60; // seconds
+        // Auto-refresh countdown timer
+        const REFRESH_INTERVAL = 30; // seconds
         let secondsRemaining = REFRESH_INTERVAL;
         const countdownEl = document.getElementById('countdown');
         const modalCountdownEl = document.getElementById('modal-countdown');
