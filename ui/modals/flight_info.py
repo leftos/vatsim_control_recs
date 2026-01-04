@@ -1,8 +1,9 @@
 """Flight Information Modal Screen"""
 
 import asyncio
+import re
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Dict, Any, List
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.containers import Container, Vertical
@@ -18,6 +19,7 @@ from backend import (
     calculate_eta
 )
 from backend.core.flights import get_nearest_airport_if_on_ground
+from backend.data.navaids import get_max_mea_for_route, MeaViolation
 from backend.data.vatsim_api import download_vatsim_data, get_member_stats
 from ui import config
 from ui.debug_logger import debug
@@ -106,6 +108,9 @@ class FlightInfoScreen(ModalScreen):
         self.departure_alternates = None
         self.arrival_alternates = None
         self.alternates_searched = False  # Track if we've completed the search
+        # MEA warning: (max_mea, violations) or None if not yet loaded
+        self.mea_info: tuple[int | None, list[MeaViolation]] | None = None
+        self.mea_loading = False  # Only load for IFR flights with airways
         self._pending_tasks: list = []  # Track pending async tasks
         self._refresh_timer = None  # Timer for periodic refresh
         self._refresh_in_progress = False  # Track if a background refresh is running
@@ -127,6 +132,12 @@ class FlightInfoScreen(ModalScreen):
         if self.cid:
             stats_task = asyncio.create_task(self._load_member_stats())
             self._pending_tasks.append(stats_task)
+
+        # Start loading MEA info for IFR flights with routes
+        if self._should_check_mea():
+            self.mea_loading = True
+            mea_task = asyncio.create_task(self._load_mea_info())
+            self._pending_tasks.append(mea_task)
 
         # Start periodic refresh timer to keep flight data current
         self._refresh_timer = self.set_interval(
@@ -290,6 +301,52 @@ class FlightInfoScreen(ModalScreen):
 
         # VFR if altitude starts with "VFR" or flight_rules is "V"
         return str(altitude).upper().startswith('VFR') or flight_rules.upper() == 'V'
+
+    def _should_check_mea(self) -> bool:
+        """Check if we should verify MEA for this flight.
+
+        Only check MEA for IFR flights with a route that contains airways.
+        """
+        if self._is_vfr_flight():
+            return False
+
+        flight_plan = self.flight_data.get('flight_plan')
+        if not flight_plan:
+            return False
+
+        route = flight_plan.get('route', '')
+        if not route:
+            return False
+
+        # Check if route contains any airways (V##, J##, T##, Q##)
+        return bool(re.search(r'\b[VJTQ]\d+\b', route.upper()))
+
+    async def _load_mea_info(self) -> None:
+        """Asynchronously fetch MEA requirements for the route."""
+        flight_plan = self.flight_data.get('flight_plan')
+        if not flight_plan:
+            self.mea_loading = False
+            return
+
+        route = flight_plan.get('route', '')
+        if not route:
+            self.mea_loading = False
+            return
+
+        loop = asyncio.get_event_loop()
+        try:
+            self.mea_info = await loop.run_in_executor(
+                None,
+                get_max_mea_for_route,
+                route
+            )
+            self.mea_loading = False
+            self._update_display()
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            self.mea_loading = False
+            self.mea_info = None
 
     def _get_airport_weather_sync(self, icao: str) -> tuple | None:
         """
@@ -567,6 +624,29 @@ class FlightInfoScreen(ModalScreen):
                 route_lines = self._wrap_text(route, 82)
                 for route_line in route_lines:
                     lines.append(f"  {route_line}")
+                lines.append("")
+
+            # MEA warning - show if IFR flight's altitude is below required MEA
+            if not self._is_vfr_flight() and self.mea_info is not None:
+                max_mea, violations = self.mea_info
+                if max_mea is not None and violations:
+                    # Get filed altitude as integer
+                    filed_alt_str = flight_plan.get('altitude', '')
+                    try:
+                        filed_alt = int(filed_alt_str)
+                    except (ValueError, TypeError):
+                        filed_alt = 0
+
+                    if filed_alt > 0 and filed_alt < max_mea:
+                        lines.append("[bold yellow]MEA WARNING[/bold yellow]")
+                        lines.append(f"  Filed altitude {filed_alt:,} < required MEA {max_mea:,}")
+                        # Show the highest MEA segments (limit to 3)
+                        high_violations = sorted(violations, key=lambda v: v.mea, reverse=True)[:3]
+                        for v in high_violations:
+                            lines.append(f"  [dim]{v.airway} ({v.segment_start}→{v.segment_end}) requires {v.mea:,}[/dim]")
+                        lines.append("")
+            elif self.mea_loading:
+                lines.append("[dim]Checking MEA requirements...[/dim]")
                 lines.append("")
 
             # VFR weather warning - show if VFR flight has non-VFR conditions

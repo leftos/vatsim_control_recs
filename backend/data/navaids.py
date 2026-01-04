@@ -74,6 +74,21 @@ class AirwayFix:
     longitude: float
 
 
+@dataclass
+class AirwaySegmentRestriction:
+    """MEA/MOCA altitude restrictions for an airway segment.
+
+    Each segment is identified by its sequence number, which corresponds
+    to the point-to-point segment ending at that sequence in the airway.
+    """
+
+    airway: str  # e.g., "V23", "J80"
+    sequence: int  # Links to AirwayFix sequence (segment ends at this point)
+    mea: int | None  # Minimum Enroute Altitude in feet (e.g., 5000)
+    mea_opposite: int | None  # MEA for opposite direction (may differ)
+    moca: int | None  # Minimum Obstruction Clearance Altitude in feet
+
+
 # --- NASR Cycle Calculation ---
 
 # NASR uses the same AIRAC cycle dates
@@ -441,6 +456,71 @@ def load_fixes() -> Dict[str, Fix]:
     return fixes
 
 
+def _parse_awy1_record(line: str) -> Optional[Tuple[str, AirwaySegmentRestriction]]:
+    """Parse an AWY.txt AWY1 record line for MEA/MOCA data.
+
+    AWY.txt format is fixed-width. AWY1 records contain altitude restrictions:
+    - Positions 0-4: Record type "AWY1"
+    - Positions 4-9: Airway designator (e.g., "V27  ", "J1   ")
+    - Positions 10-15: Sequence number (identifies segment)
+    - Positions 74-79: MEA (5 digits, right-justified, e.g., "05000")
+    - Positions 85-90: MEA opposite direction (may be blank)
+    - Positions 101-106: MOCA (5 digits or blank)
+
+    Args:
+        line: Raw AWY.txt record line
+
+    Returns:
+        Tuple of (airway_designator, AirwaySegmentRestriction) if valid, None otherwise
+    """
+    if len(line) < 110:
+        return None
+
+    # Only process AWY1 records
+    record_type = line[0:4].strip()
+    if record_type != "AWY1":
+        return None
+
+    try:
+        # Extract airway designator (positions 4-9)
+        airway = line[4:9].strip()
+        if not airway:
+            return None
+
+        # Extract sequence number (positions 10-15)
+        seq_str = line[10:15].strip()
+        if not seq_str:
+            return None
+        sequence = int(seq_str)
+
+        # Extract MEA (positions 74-79)
+        mea_str = line[74:79].strip()
+        mea = int(mea_str) if mea_str and mea_str.isdigit() else None
+
+        # Extract MEA opposite direction (positions 85-90)
+        mea_opp_str = line[85:90].strip()
+        mea_opposite = int(mea_opp_str) if mea_opp_str and mea_opp_str.isdigit() else None
+
+        # Extract MOCA (positions 101-106)
+        moca_str = line[101:106].strip()
+        moca = int(moca_str) if moca_str and moca_str.isdigit() else None
+
+        # Skip if no altitude data at all
+        if mea is None and mea_opposite is None and moca is None:
+            return None
+
+        return (airway, AirwaySegmentRestriction(
+            airway=airway,
+            sequence=sequence,
+            mea=mea,
+            mea_opposite=mea_opposite,
+            moca=moca,
+        ))
+
+    except (IndexError, ValueError):
+        return None
+
+
 def _parse_awy_record(line: str) -> Optional[Tuple[str, AirwayFix]]:
     """Parse an AWY.txt record line (AWY2 records only).
 
@@ -569,6 +649,40 @@ def load_airways() -> Dict[str, List[AirwayFix]]:
         return {}
 
     return airways
+
+
+@lru_cache(maxsize=1)
+def load_airway_restrictions() -> Dict[str, Dict[int, AirwaySegmentRestriction]]:
+    """Load MEA/MOCA restrictions for all airways from NASR data.
+
+    Returns:
+        Dict mapping airway designator to dict of sequence -> restriction.
+        Example: {"V23": {20: AirwaySegmentRestriction(...), 30: ...}}
+    """
+    cache_path = ensure_nasr_data(quiet=True)
+    if not cache_path:
+        return {}
+
+    awy_file = cache_path / "AWY.txt"
+    if not awy_file.exists():
+        return {}
+
+    restrictions: Dict[str, Dict[int, AirwaySegmentRestriction]] = {}
+
+    try:
+        with open(awy_file, "r", encoding="latin-1") as f:
+            for line in f:
+                result = _parse_awy1_record(line)
+                if result:
+                    airway, restriction = result
+                    if airway not in restrictions:
+                        restrictions[airway] = {}
+                    restrictions[airway][restriction.sequence] = restriction
+
+    except (OSError, IOError):
+        return {}
+
+    return restrictions
 
 
 def get_airway_fixes(
@@ -849,3 +963,133 @@ def clear_navaid_cache() -> None:
     load_navaids.cache_clear()
     load_fixes.cache_clear()
     load_airways.cache_clear()
+    load_airway_restrictions.cache_clear()
+
+
+@dataclass
+class MeaViolation:
+    """Information about an MEA violation on a route segment."""
+
+    airway: str  # e.g., "V23"
+    segment_start: str  # Fix identifier where segment starts
+    segment_end: str  # Fix identifier where segment ends
+    mea: int  # Required MEA in feet
+
+
+def get_max_mea_for_route(
+    route: str,
+    airports: Optional[Dict[str, Tuple[float, float]]] = None
+) -> Tuple[int | None, List[MeaViolation]]:
+    """Get the maximum MEA required for airways in a route.
+
+    Parses the route string, identifies airways used, and looks up
+    MEA requirements for each airway segment.
+
+    Args:
+        route: Filed route string (e.g., "KSFO V25 SAC J80 RNO KRNO")
+        airports: Optional dict mapping ICAO codes to (lat, lon) tuples
+
+    Returns:
+        Tuple of (max_mea, violations) where:
+        - max_mea: Maximum MEA required across all airways (None if no airways)
+        - violations: List of MeaViolation objects for segments with MEA data
+    """
+    if not route:
+        return (None, [])
+
+    airports = airports or {}
+    restrictions = load_airway_restrictions()
+    airways_data = load_airways()
+
+    if not restrictions:
+        return (None, [])
+
+    # Parse route to find airways and their entry/exit points
+    parts = route.upper().split()
+    violations: List[MeaViolation] = []
+    max_mea: int | None = None
+
+    i = 0
+    while i < len(parts):
+        part = parts[i]
+
+        # Check if this is an airway (V##, J##, T##, Q##)
+        if re.match(r'^[VJTQ]\d+$', part):
+            airway = part
+
+            # Find entry fix (previous non-airway, non-DCT part)
+            entry_fix = None
+            for j in range(i - 1, -1, -1):
+                prev = parts[j]
+                if prev != 'DCT' and not re.match(r'^[VJTQ]\d+$', prev):
+                    # Skip SID/STAR names
+                    if not (re.match(r'^[A-Z]+\d+[A-Z]*$', prev) and len(prev) > 5):
+                        entry_fix = prev
+                        break
+
+            # Find exit fix (next non-airway, non-DCT part)
+            exit_fix = None
+            for j in range(i + 1, len(parts)):
+                next_part = parts[j]
+                if next_part != 'DCT' and not re.match(r'^[VJTQ]\d+$', next_part):
+                    # Skip SID/STAR names
+                    if not (re.match(r'^[A-Z]+\d+[A-Z]*$', next_part) and len(next_part) > 5):
+                        exit_fix = next_part
+                        break
+
+            # Look up MEA for this airway
+            if airway in restrictions and airway in airways_data:
+                airway_restrictions = restrictions[airway]
+                airway_fixes = airways_data[airway]
+
+                # Find the sequence range for entry/exit fixes
+                entry_seq = None
+                exit_seq = None
+
+                for fix in airway_fixes:
+                    if entry_fix and fix.identifier == entry_fix:
+                        entry_seq = fix.sequence
+                    if exit_fix and fix.identifier == exit_fix:
+                        exit_seq = fix.sequence
+
+                # Get MEA for segments in the used portion
+                # If we found both entry and exit, only check those segments
+                # Otherwise, check all segments on the airway
+                for seq, restr in airway_restrictions.items():
+                    # Determine if this segment is in our used portion
+                    in_range = True
+                    if entry_seq is not None and exit_seq is not None:
+                        min_seq = min(entry_seq, exit_seq)
+                        max_seq = max(entry_seq, exit_seq)
+                        # Segment at sequence N is between fix N-1 and fix N
+                        in_range = min_seq < seq <= max_seq
+
+                    if in_range and restr.mea is not None:
+                        # Find the fix identifiers for this segment
+                        segment_end = None
+                        segment_start = None
+                        for fix in airway_fixes:
+                            if fix.sequence == seq:
+                                segment_end = fix.identifier
+                            elif fix.sequence == seq - 10:  # Typical spacing is 10
+                                segment_start = fix.identifier
+
+                        # If we can't find exact fixes, use generic labels
+                        if not segment_start:
+                            segment_start = f"seq{seq - 10}"
+                        if not segment_end:
+                            segment_end = f"seq{seq}"
+
+                        violations.append(MeaViolation(
+                            airway=airway,
+                            segment_start=segment_start,
+                            segment_end=segment_end,
+                            mea=restr.mea,
+                        ))
+
+                        if max_mea is None or restr.mea > max_mea:
+                            max_mea = restr.mea
+
+        i += 1
+
+    return (max_mea, violations)
