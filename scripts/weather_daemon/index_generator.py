@@ -1589,7 +1589,14 @@ def generate_html(
             try {{
                 const state = JSON.parse(localStorage.getItem(MODAL_STATE_KEY));
                 if (state && state.url) {{
-                    openBriefingModal(state.url, state.title || 'Weather Briefing');
+                    // Add cache-bust to force fresh content after auto-refresh
+                    const cacheBustUrl = state.url + (state.url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+                    currentBriefingUrl = state.url;  // Keep clean URL for "Open in New Tab"
+                    modalTitle.textContent = state.title || 'Weather Briefing';
+                    modalIframe.src = cacheBustUrl;
+                    modal.classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                    // Don't re-save to localStorage - keep the original clean URL
                 }}
             }} catch (e) {{}}
         }}
