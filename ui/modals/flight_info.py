@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List
 from textual.screen import ModalScreen
 from textual.widgets import Static
-from textual.containers import Container, Vertical
+from textual.containers import Container, VerticalScroll
 from textual.binding import Binding
 from textual.app import ComposeResult
 from backend import (
@@ -41,7 +41,7 @@ class FlightInfoScreen(ModalScreen):
     FlightInfoScreen {
         align: center middle;
     }
-    
+
     #flight-info-container {
         width: 90;
         height: auto;
@@ -50,28 +50,33 @@ class FlightInfoScreen(ModalScreen):
         border: thick $primary;
         padding: 1 2;
     }
-    
+
     #flight-info-title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
         color: $accent;
     }
-    
+
+    #flight-info-scroll {
+        height: auto;
+        max-height: 100%;
+    }
+
     .info-section {
         margin-bottom: 1;
     }
-    
+
     .info-label {
         text-style: bold;
         color: $text;
     }
-    
+
     .info-value {
         color: $text-muted;
         margin-left: 2;
     }
-    
+
     #flight-info-hint {
         text-align: center;
         color: $text-muted;
@@ -118,7 +123,7 @@ class FlightInfoScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         with Container(id="flight-info-container"):
             yield Static(self._format_title(), id="flight-info-title")
-            with Vertical():
+            with VerticalScroll(id="flight-info-scroll"):
                 yield Static(self._format_flight_info(), classes="info-section", id="flight-info-content")
             yield Static("D: Diversions | W: Route Wx | Escape/Q: Close", id="flight-info-hint")
     
@@ -640,9 +645,10 @@ class FlightInfoScreen(ModalScreen):
                     if filed_alt > 0 and filed_alt < max_mea:
                         lines.append("[bold yellow]MEA WARNING[/bold yellow]")
                         lines.append(f"  Filed altitude {filed_alt:,} < required MEA {max_mea:,}")
-                        # Show the highest MEA segments (limit to 3)
-                        high_violations = sorted(violations, key=lambda v: v.mea, reverse=True)[:3]
-                        for v in high_violations:
+                        # Show segments that exceed filed altitude (limit to 3, highest first)
+                        exceeding = [v for v in violations if v.mea > filed_alt]
+                        exceeding.sort(key=lambda v: v.mea, reverse=True)
+                        for v in exceeding[:3]:
                             lines.append(f"  [dim]{v.airway} ({v.segment_start}→{v.segment_end}) requires {v.mea:,}[/dim]")
                         lines.append("")
             elif self.mea_loading:
