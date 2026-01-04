@@ -1589,19 +1589,27 @@ def generate_html(
             try {{
                 const state = JSON.parse(localStorage.getItem(MODAL_STATE_KEY));
                 if (state && state.url) {{
-                    // Add cache-bust to force fresh content after auto-refresh
-                    const cacheBustUrl = state.url + (state.url.includes('?') ? '&' : '?') + '_t=' + Date.now();
-                    currentBriefingUrl = state.url;  // Keep clean URL for "Open in New Tab"
+                    currentBriefingUrl = state.url;
                     modalTitle.textContent = state.title || 'Weather Briefing';
                     modal.classList.add('active');
                     document.body.style.overflow = 'hidden';
-                    // Force iframe to fully reset by replacing the element
-                    const newIframe = document.createElement('iframe');
-                    newIframe.id = 'modal-iframe';
-                    newIframe.className = 'modal-iframe';
-                    newIframe.src = cacheBustUrl;
-                    modalIframe.parentNode.replaceChild(newIframe, modalIframe);
-                    modalIframe = newIframe;
+
+                    // Use fetch with no-store to bypass all caching
+                    fetch(state.url, {{ cache: 'no-store' }})
+                        .then(response => response.text())
+                        .then(html => {{
+                            // Create new iframe and load content via srcdoc
+                            const newIframe = document.createElement('iframe');
+                            newIframe.id = 'modal-iframe';
+                            newIframe.className = 'modal-iframe';
+                            newIframe.srcdoc = html;
+                            modalIframe.parentNode.replaceChild(newIframe, modalIframe);
+                            modalIframe = newIframe;
+                        }})
+                        .catch(() => {{
+                            // Fallback to src if fetch fails
+                            modalIframe.src = state.url + '?_t=' + Date.now();
+                        }});
                     // Don't re-save to localStorage - keep the original clean URL
                 }}
             }} catch (e) {{}}
