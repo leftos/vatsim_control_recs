@@ -6,16 +6,16 @@ ATIS text filtering and parsing.
 """
 
 import re
-from typing import Dict, Set, Tuple
+from typing import Any, Dict, Set, Tuple
 
 # =============================================================================
 # Shared pattern components for runway/approach parsing and colorization
 # =============================================================================
 
 # Runway number pattern with spoken direction forms
-# Matches: "17R", "17L", "17 R", "17R AND LEFT", "17R AND 17L", "17R, 17L AND CENTER"
+# Matches: "17R", "17L", "17 R", "17R AND LEFT", "17R AND 17L", "17R, 17L AND CENTER", "10L OR 10R"
 RWY_NUM_PATTERN = (
-    r"\d{1,2}\s*[LRC]?(?:\s*(?:AND|&|,|/)\s*(?:\d{1,2}\s*[LRC]?|LEFT|RIGHT|CENTER))*"
+    r"\d{1,2}\s*[LRC]?(?:\s*(?:AND|OR|&|,|/)\s*(?:\d{1,2}\s*[LRC]?|LEFT|RIGHT|CENTER))*"
 )
 
 # Approach type keywords
@@ -157,23 +157,34 @@ def _extract_runway_numbers(text: str) -> Set[str]:
     return runways
 
 
-def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
+def parse_approach_info(atis_text: str) -> Dict[str, Any]:
     """
-    Parse ATIS text to extract active runway assignments.
+    Parse ATIS text to extract active runway assignments AND approach types.
 
     Args:
         atis_text: Full ATIS text
 
     Returns:
-        Dict with keys 'landing' and 'departing', each containing a set of runway designators.
-        Runways are normalized (e.g., "16L", "27", "35R").
+        Dict with keys:
+            - 'landing': Set of runway designators for landing
+            - 'departing': Set of runway designators for departing
+            - 'approaches': Dict mapping runway -> set of approach types
+                           (e.g., {"16L": {"ILS", "RNAV"}, "16R": {"VISUAL"}})
     """
     if not atis_text:
-        return {"landing": set(), "departing": set()}
+        return {"landing": set(), "departing": set(), "approaches": {}}
 
     landing: Set[str] = set()
     departing: Set[str] = set()
+    approaches: Dict[str, Set[str]] = {}  # runway -> set of approach types
     text = atis_text.upper()
+
+    # Helper to add approach type for runways
+    def add_approaches(runways: Set[str], approach_type: str):
+        for rwy in runways:
+            if rwy not in approaches:
+                approaches[rwy] = set()
+            approaches[rwy].add(approach_type)
 
     # Pattern 1: Compound LDG/DEPTG or LDG AND DEPTG format (both ops on same runways)
     # e.g., "LDG/DEPTG 4/8", "LDG AND DEPTG RWY 27", "ARR/DEP RWY 36"
@@ -206,9 +217,10 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
 
     # Pattern 3: Departing runways
     # e.g., "DEP RWY 16R", "DEPARTING RWYS 26L, 27R", "DEPTG RWY 18"
+    # Handles malformed double prefix: "DEPG RWYS RWY 10L"
     departing_pattern = (
         rf"\b(?:{DEPARTING_KW})\s+"
-        rf"(?:{RWY_PREFIX})?\s*"
+        rf"(?:{RWY_PREFIX})?\s*(?:{RWY_PREFIX})?\s*"
         rf"({RWY_CHARS})"
     )
     for match in re.finditer(departing_pattern, text):
@@ -220,34 +232,39 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
         rwys = _extract_runway_numbers(match.group(1))
         departing.update(rwys)
 
-    # Pattern 4: Approach types imply landing runway
+    # Pattern 4: Approach types imply landing runway (CAPTURE APPROACH TYPE)
     # e.g., "ILS RWY 22R", "RNAV-Y RWY 35", "VISUAL APPROACH RWY 26"
     # Also handles spoken forms: "ILS RWYS 17R AND LEFT" means 17R and 17L
     approach_pattern = (
-        rf"\b(?:{APPROACH_TYPES})[-\s]?[XYZWUK]?\s*"
+        rf"\b({APPROACH_TYPES})[-\s]?[XYZWUK]?\s*"
         rf"(?:{APPROACH_SUFFIX})?\s*"
         r"(?:TO\s+)?"
         rf"(?:{RWY_PREFIX})?\s*"
         rf"({RWY_NUM_PATTERN})"
     )
     for match in re.finditer(approach_pattern, text):
-        rwys = _extract_runway_numbers(match.group(1))
+        approach_type = match.group(1)
+        rwys = _extract_runway_numbers(match.group(2))
         landing.update(rwys)
+        add_approaches(rwys, approach_type)
 
-    # Pattern 5: EXPECT approach type
-    # e.g., "EXPECT ILS RWY 35L", "EXP VIS APCH RWY 27"
+    # Pattern 5: EXPECT approach type (CAPTURE APPROACH TYPE)
+    # e.g., "EXPECT ILS RWY 35L", "EXP VIS APCH RWY 27", "ARRIVALS EXPECT ILS APCH RWY 10L"
     # Also handles spoken forms: "EXPECT ILS RWYS 17R AND LEFT"
+    # Handles malformed double prefix: "ARRIVALS EXPECT ILS RWYS RWY 10L"
     expect_pattern = (
-        r"\b(?:EXPECT|EXPT?|EXPECTED)\s+"
+        r"\b(?:ARRIVALS?\s+)?(?:EXPECT|EXPT?|EXPECTED)\s+"
         r"(?:PROC\s+)?"
-        rf"(?:{APPROACH_TYPES})[-\s]?[XYZWUK]?\s*"
+        rf"({APPROACH_TYPES})[-\s]?[XYZWUK]?\s*"
         rf"(?:{APPROACH_SUFFIX})?\s*"
-        rf"(?:{RWY_PREFIX})?\s*"
+        rf"(?:{RWY_PREFIX})?\s*(?:{RWY_PREFIX})?\s*"
         rf"({RWY_NUM_PATTERN})"
     )
     for match in re.finditer(expect_pattern, text):
-        rwys = _extract_runway_numbers(match.group(1))
+        approach_type = match.group(1)
+        rwys = _extract_runway_numbers(match.group(2))
         landing.update(rwys)
+        add_approaches(rwys, approach_type)
 
     # Pattern 6: RWY XX FOR ARR/DEP (Australian/international style)
     # e.g., "RWY 03 FOR ARR", "RWY 06 FOR DEP"
@@ -282,7 +299,23 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
         else:
             departing.update(rwys)
 
-    return {"landing": landing, "departing": departing}
+    return {"landing": landing, "departing": departing, "approaches": approaches}
+
+
+def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
+    """
+    Parse ATIS text to extract active runway assignments.
+
+    Args:
+        atis_text: Full ATIS text
+
+    Returns:
+        Dict with keys 'landing' and 'departing', each containing a set of runway designators.
+        Runways are normalized (e.g., "16L", "27", "35R").
+    """
+    # Reuse the new parse_approach_info function and discard approach data
+    result = parse_approach_info(atis_text)
+    return {"landing": result["landing"], "departing": result["departing"]}
 
 
 def format_runway_summary(assignments: Dict[str, Set[str]]) -> str:
@@ -430,11 +463,13 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
         flags=re.IGNORECASE,
     )
 
-    # Pattern 5: EXPECT/EXP + approach type
-    # e.g., "EXPECT ILS APPROACH", "EXP VIS APCH", "EXPT PROC ILS"
+    # Pattern 5: EXPECT/EXP + approach type (also handles "ARRIVALS EXPECT...")
+    # e.g., "EXPECT ILS APPROACH", "EXP VIS APCH", "EXPT PROC ILS", "ARRIVALS EXPECT ILS APCH RWY 10L"
     result = re.sub(
-        r"\b(EXPECT|EXPT?|EXPECTED)\s+(?:PROC\s+)?"
-        rf"({APPROACH_TYPES}|INSTR?)[-\s]?([XYZWUK])?\b",
+        r"\b((?:ARRIVALS?\s+)?(?:EXPECT|EXPT?|EXPECTED))\s+(?:PROC\s+)?"
+        rf"({APPROACH_TYPES}|INSTR?)[-\s]?([XYZWUK])?\s*"
+        rf"(?:{APPROACH_SUFFIX})?\s*"
+        rf"(?:(?:{RWY_PREFIX})\s*(?:{RWY_PREFIX})?\s*{RWY_NUM_PATTERN})?",
         r"[yellow]\g<0>[/yellow]",
         result,
         flags=re.IGNORECASE,
@@ -468,10 +503,11 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
     # e.g., "LDG RWY 16L", "DEPTG RWYS 26L, 27R", "LANDING RUNWAY 27", "DEPARTING RWY 18"
     # Also handles DEPG (common variant), DEPARTURE
     # Handles spoken forms: "17R AND LEFT", "28L AND RIGHT"
+    # Handles malformed double prefix: "DEPG RWYS RWY 10L" (some controllers do this)
     # Uses negative lookbehind to avoid matching after "/" or "AND " (already handled by Pattern 6)
     result = re.sub(
         rf"(?<!/)(?<!AND )\b({LANDING_KW}|{DEPARTING_KW})\s+"
-        rf"((?:{RWY_PREFIX})?\s*)?"
+        rf"((?:{RWY_PREFIX})\s*(?:{RWY_PREFIX})?\s*)?"
         rf"({RWY_NUM_PATTERN})\b",
         r"[yellow]\g<0>[/yellow]",
         result,
@@ -499,6 +535,17 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
         r"(\d{1,2}[LRC]?)\s+"
         r"FOR\s+(?:ALL\s+(?:OTHER\s+)?)?"
         r"(ARR(?:IVALS?)?|DEP(?:ARTURES?)?)\b",
+        r"[yellow]\g<0>[/yellow]",
+        result,
+        flags=re.IGNORECASE,
+    )
+
+    # Pattern 10: Parallel operations
+    # e.g., "PARL OPS ARE BEING CNTD", "PARALLEL OPS IN USE", "PARL OPERATIONS"
+    result = re.sub(
+        r"\b(PAR(?:A)?L(?:LEL)?)\s+"
+        r"(OPS?|OPERATIONS?)"
+        r"(?:\s+(?:ARE\s+)?(?:BEING\s+)?(?:CNTD|CONDUCTED|IN\s+(?:USE|EFFECT|PROG(?:RESS)?)))?\b",
         r"[yellow]\g<0>[/yellow]",
         result,
         flags=re.IGNORECASE,

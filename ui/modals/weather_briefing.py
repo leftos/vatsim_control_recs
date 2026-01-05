@@ -623,16 +623,24 @@ class WeatherBriefingScreen(ModalScreen):
                     )
 
         # ATIS info (filtered to show only non-METAR info)
-        atis = data.get("atis")
-        if atis:
+        # Supports dual ATIS (departure/arrival) - atis_data is a list
+        atis_list = data.get("atis") or []
+        for atis in atis_list:
             atis_code = atis.get("atis_code", "")
+            atis_type = atis.get("type", "combined")
             raw_text = atis.get("text_atis", "")
             # Filter out METAR-duplicated info
             filtered_text = filter_atis_text(raw_text)
             if filtered_text:
+                # Add type label for departure/arrival ATIS
+                type_label = ""
+                if atis_type == "departure":
+                    type_label = "[cyan]DEP:[/cyan] "
+                elif atis_type == "arrival":
+                    type_label = "[cyan]ARR:[/cyan] "
                 # Colorize ATIS letter if present
                 display_text = colorize_atis_text(filtered_text, atis_code)
-                lines.append(f"  [dim]{display_text}[/dim]")
+                lines.append(f"  [dim]{type_label}{display_text}[/dim]")
 
         return "\n".join(lines)
 

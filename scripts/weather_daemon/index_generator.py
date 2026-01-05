@@ -574,7 +574,9 @@ def generate_html(
 
     for artcc in sorted_artccs:
         groupings = artcc_groupings[artcc]
-        for g in sorted(groupings, key=lambda x: x["name"]):
+        # Filter out groupings with no METARs, sort with International last
+        filtered_groupings = [g for g in groupings if grouping_has_metars(g)]
+        for g in sorted(filtered_groupings, key=grouping_sort_key):
             grouping_name = g["name"]
 
             # Check if we have a SimAware boundary for this grouping
@@ -617,7 +619,9 @@ def generate_html(
 
     # Add custom groupings at the end
     if "custom" in artcc_groupings:
-        for g in sorted(artcc_groupings["custom"], key=lambda x: x["name"]):
+        # Filter out groupings with no METARs, sort with International last
+        filtered_custom = [g for g in artcc_groupings["custom"] if grouping_has_metars(g)]
+        for g in sorted(filtered_custom, key=grouping_sort_key):
             grouping_name = g["name"]
 
             # Check if we have a SimAware boundary for this grouping
@@ -1863,6 +1867,30 @@ def generate_html(
 </html>"""
 
 
+def grouping_has_metars(grouping: Dict[str, Any]) -> bool:
+    """Check if a grouping has any airports with METAR data."""
+    categories = grouping.get("categories", {})
+    # Sum category counts EXCLUDING "UNK" (unknown = no METAR data)
+    # Only count LIFR, IFR, MVFR, VFR which indicate actual weather reports
+    metar_count = sum(
+        count for cat, count in categories.items() if cat != "UNK"
+    )
+    return metar_count > 0
+
+
+def grouping_sort_key(grouping: Dict[str, Any]) -> Tuple[int, str]:
+    """
+    Sort key for groupings: International groupings sort last, then alphabetically.
+
+    Returns tuple of (sort_priority, name) where:
+    - sort_priority 0 = regular groupings (sorted first)
+    - sort_priority 1 = International groupings (sorted last)
+    """
+    name = grouping.get("name", "")
+    is_international = name.startswith("International")
+    return (1 if is_international else 0, name)
+
+
 def build_sidebar_html(
     artcc_groupings: Dict[str, List[Dict[str, Any]]],
     artcc_stats: Dict[str, Dict[str, int]],
@@ -1910,8 +1938,10 @@ def build_sidebar_html(
                 </a>'''
 
         # Build grouping links
+        # Filter out groupings with no METARs, sort with International last
         groupings_html = ""
-        for g in sorted(groupings, key=lambda x: x["name"]):
+        filtered_groupings = [g for g in groupings if grouping_has_metars(g)]
+        for g in sorted(filtered_groupings, key=grouping_sort_key):
             airport_count = g.get("airport_count", 0)
             # Use path_prefix for custom groupings that were assigned to an ARTCC
             path_prefix = g.get("path_prefix", artcc)
@@ -1955,8 +1985,10 @@ def build_sidebar_html(
         if stats.get("VFR", 0) > 0:
             stats_html += f'<span class="stat stat-vfr">{stats["VFR"]}</span>'
 
+        # Filter out groupings with no METARs, sort with International last
         groupings_html = ""
-        for g in sorted(custom_groupings, key=lambda x: x["name"]):
+        filtered_custom = [g for g in custom_groupings if grouping_has_metars(g)]
+        for g in sorted(filtered_custom, key=grouping_sort_key):
             airport_count = g.get("airport_count", 0)
             groupings_html += f'''
                 <a href="custom/{g["filename"]}" class="grouping-link" data-grouping-id="{grouping_id}">
@@ -1965,7 +1997,9 @@ def build_sidebar_html(
                 </a>'''
             grouping_id += 1
 
-        html_parts.append(f"""
+        # Only show custom section if there are groupings with METARs
+        if filtered_custom:
+            html_parts.append(f"""
             <div class="artcc-section custom-section" data-artcc="custom">
                 <div class="artcc-header">
                     <div>

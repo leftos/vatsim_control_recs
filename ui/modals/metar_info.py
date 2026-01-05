@@ -462,18 +462,27 @@ class MetarInfoScreen(ModalScreen):
             result_lines.append("")
 
         # ATIS (filtered to remove METAR-duplicated info, with colorized runway/approach info)
+        # Supports dual ATIS (departure/arrival) - atis_list is a list of ATIS entries
         if vatsim_data:
-            atis_info = self._get_atis_for_airport(vatsim_data, icao)
-            if atis_info:
+            atis_list = self._get_atis_for_airport(vatsim_data, icao)
+            for atis_info in atis_list:
                 atis_code = atis_info.get("atis_code", "")
+                atis_type = atis_info.get("type", "combined")
                 raw_text = atis_info.get("text_atis", "")
                 # Filter out METAR-duplicated info
                 filtered_text = filter_atis_text(raw_text)
                 if filtered_text:
+                    # Add type label for departure/arrival ATIS
+                    type_label = ""
+                    if atis_type == "departure":
+                        type_label = "[cyan]DEP:[/cyan] "
+                    elif atis_type == "arrival":
+                        type_label = "[cyan]ARR:[/cyan] "
                     # Colorize ATIS: letter in cyan, approaches/runways in yellow
                     colorized_text = colorize_atis_text(filtered_text, atis_code)
-                    result_lines.append(f"[dim]{colorized_text}[/dim]")
-                    result_lines.append("")
+                    result_lines.append(f"[dim]{type_label}{colorized_text}[/dim]")
+            if atis_list:
+                result_lines.append("")
 
         # METAR with highlighted flight category components
         if metar:
@@ -500,10 +509,10 @@ class MetarInfoScreen(ModalScreen):
 
         result_widget.update("\n".join(result_lines))
 
-    def _get_atis_for_airport(self, vatsim_data: dict, icao: str) -> dict | None:
-        """Extract ATIS for a specific airport from VATSIM data."""
+    def _get_atis_for_airport(self, vatsim_data: dict, icao: str) -> list:
+        """Extract ATIS entries for a specific airport from VATSIM data."""
         atis_dict = get_atis_for_airports(vatsim_data, [icao])
-        return atis_dict.get(icao)
+        return atis_dict.get(icao, [])
 
     def _update_hint(self, category: str | None) -> None:
         """Update the hint text based on current flight category"""

@@ -6,7 +6,7 @@ from typing import Dict, Optional, Tuple
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.widgets.data_table import RowDoesNotExist
-from textual.containers import Container, Vertical, Horizontal
+from textual.containers import Container, Vertical, Horizontal, VerticalScroll
 from textual.binding import Binding
 from textual.app import ComposeResult
 
@@ -18,7 +18,11 @@ from backend import (
 )
 from backend.core.flights import get_airport_flight_details
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
-from backend.data.atis_filter import parse_runway_assignments, format_runway_summary
+from backend.data.atis_filter import (
+    parse_approach_info,
+    parse_runway_assignments,
+    format_runway_summary,
+)
 from backend.config import constants as backend_constants
 from ui.modals.metar_info import get_flight_category
 from ui.modals.notification_manager import NotificationManager
@@ -110,24 +114,40 @@ class FlightBoardScreen(ModalScreen):
         display: none;
     }
 
-    #notification-toast {
+    #notification-container {
         dock: bottom;
+        width: 100%;
+        height: auto;
+        max-height: 15;
+        layer: notification;
+    }
+
+    #notification-spacer {
+        width: 1fr;
+        height: 1;
+    }
+
+    #notification-scroll {
+        width: 1fr;
+        height: auto;
+        overflow-y: auto;
+        scrollbar-size: 0 0;
+        border: none;
+    }
+
+    .notification-item {
         width: 100%;
         height: 1;
         padding: 0 1;
         background: $boost;
         text-align: right;
-        layer: notification;
-    }
-
-    #notification-toast.hidden {
-        display: none;
     }
     """
 
     BINDINGS = [
         Binding("escape", "close_board", "Close", priority=True),
         Binding("q", "close_board", "Close"),
+        Binding("ctrl+n", "test_notifications", "Test Notifications", show=False),
     ]
 
     # Weather check interval in seconds (check for condition changes)
@@ -164,6 +184,9 @@ class FlightBoardScreen(ModalScreen):
         self._previous_runways: Dict[
             str, Tuple[frozenset, frozenset]
         ] = {}  # ICAO -> (landing, departing)
+        self._previous_approaches: Dict[
+            str, Dict[str, frozenset]
+        ] = {}  # ICAO -> {runway: frozenset of approach types}
         self._weather_check_timer = None  # Timer for weather/runway change checks
         # Notification manager (initialized in on_mount)
         self._notification_manager: Optional[NotificationManager] = None
@@ -200,13 +223,15 @@ class FlightBoardScreen(ModalScreen):
                     )
                     arrivals_table.cursor_type = "row"
                     yield arrivals_table
-            # Change notification toast (hidden by default)
-            yield Static("", id="notification-toast", classes="hidden", markup=True)
+            # Notification container with spacer for right-alignment
+            with Horizontal(id="notification-container"):
+                yield Static("", id="notification-spacer")  # Left spacer
+                yield VerticalScroll(id="notification-scroll")
 
     async def on_mount(self) -> None:
         """Load and display flight data when the screen is mounted"""
         # Initialize notification manager
-        self._notification_manager = NotificationManager(self)
+        self._notification_manager = NotificationManager(self, container_id="notification-scroll")
 
         await self.load_flight_data()
         # Note: Full data refresh is triggered by parent app, not independent timer
@@ -571,6 +596,36 @@ class FlightBoardScreen(ModalScreen):
 
         self.dismiss()
 
+    def action_test_notifications(self) -> None:
+        """Test notification stacking by showing multiple notifications at once."""
+        if not self._notification_manager:
+            return
+
+        # Show 4 test notifications with different types
+        self._notification_manager.show(
+            "[bold]WX:[/bold] KSFO (San Francisco Intl) now [red bold]IFR[/red bold] [dim](was MVFR)[/dim]",
+            "[dim]WX: KSFO (San Francisco Intl) now IFR (was MVFR)[/dim]",
+            flash=True,
+        )
+
+        self._notification_manager.show(
+            "[bold]RWY:[/bold] KOAK (Oakland Intl) now [yellow bold]L:27R,28R D:27R,28R[/yellow bold] [dim](was L:28R D:28R)[/dim]",
+            "[dim]RWY: KOAK (Oakland Intl) now L:27R,28R D:27R,28R (was L:28R D:28R)[/dim]",
+            flash=True,
+        )
+
+        self._notification_manager.show(
+            "[bold]APP:[/bold] KSJC (San Jose Intl) RWY 30L now [cyan bold]ILS/RNAV[/cyan bold] [dim](was VISUAL)[/dim]",
+            "[dim]APP: KSJC (San Jose Intl) RWY 30L now ILS/RNAV (was VISUAL)[/dim]",
+            flash=True,
+        )
+
+        self._notification_manager.show(
+            "[bold]WX:[/bold] KSAC (Sacramento Intl) now [yellow bold]MVFR[/yellow bold] [dim](was VFR)[/dim]",
+            "[dim]WX: KSAC (Sacramento Intl) now MVFR (was VFR)[/dim]",
+            flash=True,
+        )
+
     def action_show_flight_info(self) -> None:
         """Show detailed flight information for the selected flight"""
         if not self.vatsim_data:
@@ -650,17 +705,35 @@ class FlightBoardScreen(ModalScreen):
                 category = get_flight_category(metar)
                 self._previous_weather[icao] = category
 
-        # Build baseline runway state from ATIS
+        # Build baseline runway state and approach types from ATIS
+        # Supports dual ATIS - combine info from all ATIS entries (dep/arr)
         for icao in airports:
-            atis = atis_data.get(icao)
-            if atis:
-                atis_text = atis.get("text_atis", "")
-                if atis_text:
-                    assignments = parse_runway_assignments(atis_text)
+            atis_list = atis_data.get(icao, [])
+            if atis_list:
+                # Combine runway/approach info from all ATIS entries
+                combined_landing: set = set()
+                combined_departing: set = set()
+                combined_approaches: dict = {}
+                for atis in atis_list:
+                    atis_text = atis.get("text_atis", "")
+                    if atis_text:
+                        info = parse_approach_info(atis_text)
+                        combined_landing.update(info["landing"])
+                        combined_departing.update(info["departing"])
+                        for rwy, approaches in info["approaches"].items():
+                            if rwy not in combined_approaches:
+                                combined_approaches[rwy] = set()
+                            combined_approaches[rwy].update(approaches)
+                if combined_landing or combined_departing:
                     self._previous_runways[icao] = (
-                        frozenset(assignments["landing"]),
-                        frozenset(assignments["departing"]),
+                        frozenset(combined_landing),
+                        frozenset(combined_departing),
                     )
+                    # Store approach types: {runway: frozenset of approach types}
+                    self._previous_approaches[icao] = {
+                        rwy: frozenset(approaches)
+                        for rwy, approaches in combined_approaches.items()
+                    }
 
     async def _check_for_changes(self) -> None:
         """Check for weather/runway condition changes and show notifications."""
@@ -700,23 +773,38 @@ class FlightBoardScreen(ModalScreen):
             # Update baseline
             self._previous_weather[icao] = new_category
 
-        # Check for runway changes
+        # Check for runway and approach type changes
+        # Supports dual ATIS - combine info from all ATIS entries (dep/arr)
         for icao in airports:
-            atis = atis_data.get(icao)
-            if not atis:
+            atis_list = atis_data.get(icao, [])
+            if not atis_list:
                 continue
 
-            atis_text = atis.get("text_atis", "")
-            if not atis_text:
-                continue
+            # Combine runway/approach info from all ATIS entries
+            combined_landing: set = set()
+            combined_departing: set = set()
+            combined_approaches: dict = {}
+            for atis in atis_list:
+                atis_text = atis.get("text_atis", "")
+                if atis_text:
+                    info = parse_approach_info(atis_text)
+                    combined_landing.update(info["landing"])
+                    combined_departing.update(info["departing"])
+                    for rwy, approaches in info["approaches"].items():
+                        if rwy not in combined_approaches:
+                            combined_approaches[rwy] = set()
+                        combined_approaches[rwy].update(approaches)
 
-            assignments = parse_runway_assignments(atis_text)
-            new_landing = frozenset(assignments["landing"])
-            new_departing = frozenset(assignments["departing"])
+            new_landing = frozenset(combined_landing)
+            new_departing = frozenset(combined_departing)
+            new_approaches = {
+                rwy: frozenset(approaches) for rwy, approaches in combined_approaches.items()
+            }
 
             old_runways = self._previous_runways.get(icao)
+            old_approaches = self._previous_approaches.get(icao, {})
 
-            # If we have previous runways and they changed, show notification
+            # Check runway changes
             # Only notify when BOTH old and new have actual runway data to avoid
             # flip-flop notifications caused by intermittent parsing failures or
             # transient ATIS data gaps
@@ -731,10 +819,23 @@ class FlightBoardScreen(ModalScreen):
                             icao, new_landing, new_departing, old_landing, old_departing
                         )
 
+            # Check approach type changes (only for runways that still exist)
+            if old_approaches and new_approaches:
+                for rwy in new_approaches:
+                    if rwy in old_approaches:
+                        old_app = old_approaches[rwy]
+                        new_app = new_approaches[rwy]
+                        if old_app != new_app:
+                            self._show_approach_notification(
+                                icao, rwy, new_app, old_app
+                            )
+
             # Update baseline only if we have runway data (avoid overwriting
             # good data with empty sets from transient parsing failures)
             if new_landing or new_departing:
                 self._previous_runways[icao] = (new_landing, new_departing)
+            if new_approaches:
+                self._previous_approaches[icao] = new_approaches
 
     def _show_weather_notification(
         self, icao: str, new_category: str, old_category: str, has_atis: bool = False
@@ -806,4 +907,40 @@ class FlightBoardScreen(ModalScreen):
         )
 
         # Always flash for runway changes (they're always from staffed airports with ATIS)
+        self._notification_manager.show(text_bright, text_dim, flash=True)
+
+    def _show_approach_notification(
+        self,
+        icao: str,
+        runway: str,
+        new_approaches: frozenset,
+        old_approaches: frozenset,
+    ) -> None:
+        """Show an approach type change notification toast."""
+        if not self._notification_manager:
+            return
+
+        # Get airport name
+        airport_name = icao
+        if config.DISAMBIGUATOR:
+            airport_name = config.DISAMBIGUATOR.get_full_name(icao)
+
+        # Format approach types
+        new_app_str = "/".join(sorted(new_approaches))
+        old_app_str = "/".join(sorted(old_approaches))
+
+        # Build notification text
+        text_bright = (
+            f"[bold]APP:[/bold] {icao} ({airport_name}) RWY {runway} now "
+            f"[cyan bold]{new_app_str}[/cyan bold] "
+            f"[dim](was {old_app_str})[/dim]"
+        )
+
+        text_dim = (
+            f"[dim]APP: {icao} ({airport_name}) RWY {runway} now "
+            f"{new_app_str} "
+            f"(was {old_app_str})[/dim]"
+        )
+
+        # Flash for approach changes
         self._notification_manager.show(text_bright, text_dim, flash=True)

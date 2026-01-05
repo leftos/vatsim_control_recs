@@ -244,27 +244,47 @@ def filter_flights_by_airports(
 
 def get_atis_for_airports(
     vatsim_data: Dict[str, Any], airports: List[str]
-) -> Dict[str, Dict[str, Any]]:
+) -> Dict[str, List[Dict[str, Any]]]:
     """
     Extract ATIS information for specified airports from VATSIM data.
+
+    Supports dual ATIS (separate departure/arrival) at airports like KMIA.
+    ATIS types are determined by callsign patterns:
+    - ICAO_ATIS: Combined ATIS (type="combined")
+    - ICAO_D_ATIS or ICAO_DEP_ATIS: Departure ATIS (type="departure")
+    - ICAO_A_ATIS or ICAO_ARR_ATIS: Arrival ATIS (type="arrival")
 
     Args:
         vatsim_data: Full VATSIM API response
         airports: List of airport ICAO codes to find ATIS for
 
     Returns:
-        Dict mapping ICAO to ATIS data:
+        Dict mapping ICAO to list of ATIS data (supports multiple ATIS per airport):
         {
-            'KSFO': {
+            'KSFO': [{
+                'type': 'combined',
                 'callsign': 'KSFO_ATIS',
                 'atis_code': 'K',
                 'text_atis': 'Full ATIS text as single string',
                 'frequency': '127.650'
-            },
+            }],
+            'KMIA': [{
+                'type': 'departure',
+                'callsign': 'KMIA_D_ATIS',
+                'atis_code': 'D',
+                'text_atis': 'Departure ATIS text',
+                'frequency': '132.450'
+            }, {
+                'type': 'arrival',
+                'callsign': 'KMIA_A_ATIS',
+                'atis_code': 'A',
+                'text_atis': 'Arrival ATIS text',
+                'frequency': '123.900'
+            }],
             ...
         }
     """
-    result: Dict[str, Dict[str, Any]] = {}
+    result: Dict[str, List[Dict[str, Any]]] = {}
 
     if not vatsim_data or not airports:
         return result
@@ -273,18 +293,42 @@ def get_atis_for_airports(
 
     for atis in vatsim_data.get("atis", []):
         callsign = atis.get("callsign", "")
-        # Extract ICAO from callsign (e.g., "KSFO_ATIS" -> "KSFO")
+        # Extract ICAO and ATIS type from callsign
+        # Patterns: ICAO_ATIS, ICAO_D_ATIS, ICAO_A_ATIS, ICAO_DEP_ATIS, ICAO_ARR_ATIS
         if "_ATIS" in callsign:
-            icao = callsign.split("_ATIS")[0]
+            parts = callsign.split("_ATIS")[0]  # e.g., "KMIA_D" or "KMIA"
+
+            # Check for departure/arrival suffix
+            if parts.endswith("_D") or parts.endswith("_DEP"):
+                icao = parts.rsplit("_", 1)[0]
+                atis_type = "departure"
+            elif parts.endswith("_A") or parts.endswith("_ARR"):
+                icao = parts.rsplit("_", 1)[0]
+                atis_type = "arrival"
+            else:
+                icao = parts
+                atis_type = "combined"
+
             if icao in airport_set:
                 # Join text_atis lines into single string (VATSIM splits on line breaks)
                 raw_lines = atis.get("text_atis") or []
                 text_atis = " ".join(line.strip() for line in raw_lines)
-                result[icao] = {
+
+                atis_entry = {
+                    "type": atis_type,
                     "callsign": callsign,
                     "atis_code": atis.get("atis_code", ""),
                     "text_atis": text_atis,
                     "frequency": atis.get("frequency", ""),
                 }
+
+                if icao not in result:
+                    result[icao] = []
+                result[icao].append(atis_entry)
+
+    # Sort ATIS entries: departure first, then arrival, then combined
+    type_order = {"departure": 0, "arrival": 1, "combined": 2}
+    for icao in result:
+        result[icao].sort(key=lambda x: type_order.get(x.get("type", "combined"), 2))
 
     return result

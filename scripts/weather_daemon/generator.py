@@ -825,14 +825,22 @@ class WeatherBriefingGenerator:
                         f"  {entry['indicator']} {prefix_with_markup}: [{pred_color} bold]{cat_padded}[/{pred_color} bold]"
                     )
 
-        atis = data.get("atis")
-        if atis:
+        # ATIS info - supports dual ATIS (departure/arrival)
+        atis_list = data.get("atis") or []
+        for atis in atis_list:
             atis_code = atis.get("atis_code", "")
+            atis_type = atis.get("type", "combined")
             raw_text = atis.get("text_atis", "")
             filtered_text = filter_atis_text(raw_text)
             if filtered_text:
+                # Add type label for departure/arrival ATIS
+                type_label = ""
+                if atis_type == "departure":
+                    type_label = "[cyan]DEP:[/cyan] "
+                elif atis_type == "arrival":
+                    type_label = "[cyan]ARR:[/cyan] "
                 display_text = colorize_atis_text(filtered_text, atis_code)
-                lines.append(f"  [#aaaaaa]{display_text}[/#aaaaaa]")
+                lines.append(f"  [#aaaaaa]{type_label}{display_text}[/#aaaaaa]")
 
         return "\n".join(lines)
 

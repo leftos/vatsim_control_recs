@@ -3,28 +3,93 @@ Notification Manager - Reusable notification system for modal screens.
 
 Provides toast-style notifications with optional flash animation
 for important alerts (e.g., weather changes, runway changes at staffed airports).
+
+Notifications are stacked vertically from the bottom-right and each has
+an independent auto-dismiss timer.
 """
 
-from typing import Optional
+from typing import Optional, Dict, Tuple
 from textual.screen import ModalScreen
 from textual.widgets import Static
+from textual.containers import VerticalScroll
 from textual.timer import Timer
+
+
+class Notification(Static):
+    """A single notification widget with independent timer and flash animation."""
+
+    def __init__(
+        self,
+        notification_id: str,
+        text_bright: str,
+        text_dim: str,
+        flash: bool,
+        flash_interval: float,
+        flash_cycles: int,
+    ):
+        super().__init__(text_bright, id=notification_id, classes="notification-item", markup=True)
+        self.text_bright = text_bright
+        self.text_dim = text_dim
+        self.flash = flash
+        self.flash_interval = flash_interval
+        self.flash_cycles = flash_cycles
+
+        # Flash animation state
+        self._flash_timer: Optional[Timer] = None
+        self._flash_count = 0
+        self._flash_bright = True
+
+    def on_mount(self) -> None:
+        """Start flash animation when notification is mounted."""
+        if self.flash:
+            self._flash_count = self.flash_cycles * 2
+            self._flash_bright = True
+            self._flash_timer = self.set_interval(
+                self.flash_interval,
+                self._do_flash,
+            )
+
+    def _do_flash(self) -> None:
+        """Toggle notification between bright and dim states."""
+        if self._flash_count <= 0:
+            # Stop flashing, leave on bright
+            if self._flash_timer:
+                self._flash_timer.stop()
+                self._flash_timer = None
+            self.update(self.text_bright)
+            return
+
+        # Toggle state
+        self._flash_bright = not self._flash_bright
+        self._flash_count -= 1
+
+        if self._flash_bright:
+            self.update(self.text_bright)
+        else:
+            self.update(self.text_dim)
+
+    def cleanup(self) -> None:
+        """Stop flash timer."""
+        if self._flash_timer:
+            self._flash_timer.stop()
+            self._flash_timer = None
 
 
 class NotificationManager:
     """
-    Manages toast-style notifications for a modal screen.
+    Manages stacked toast-style notifications for a modal screen.
 
     Features:
-    - Auto-dismiss after configurable duration
+    - Multiple notifications stacked vertically from bottom-right
+    - Each notification has independent auto-dismiss timer
     - Optional flash animation for high-priority notifications
-    - First escape dismisses notification, second closes modal
+    - First escape dismisses top notification, second closes modal
     """
 
     def __init__(
         self,
         screen: ModalScreen,
-        notification_id: str = "notification-toast",
+        container_id: str = "notification-container",
         dismiss_seconds: float = 15.0,
         flash_interval: float = 0.3,
         flash_cycles: int = 3,
@@ -34,35 +99,27 @@ class NotificationManager:
 
         Args:
             screen: The ModalScreen that owns this notification manager
-            notification_id: Widget ID for the notification Static widget
-            dismiss_seconds: Seconds before auto-dismissing notification
+            container_id: Widget ID for the notification container
+            dismiss_seconds: Seconds before auto-dismissing each notification
             flash_interval: Seconds between flash state changes
             flash_cycles: Number of bright-dim cycles for flash animation
         """
         self.screen = screen
-        self.notification_id = notification_id
+        self.container_id = container_id
         self.dismiss_seconds = dismiss_seconds
         self.flash_interval = flash_interval
         self.flash_cycles = flash_cycles
 
-        # Timer references
-        self._dismiss_timer: Optional[Timer] = None
-        self._flash_timer: Optional[Timer] = None
-
-        # Flash animation state
-        self._flash_count = 0
-        self._flash_bright = True
-        self._text_bright = ""
-        self._text_dim = ""
+        # Track active notifications with their dismiss timers
+        self._notifications: Dict[str, Tuple[Notification, Timer]] = {}
+        self._next_id = 0
 
     def cleanup(self) -> None:
-        """Stop all timers. Call this in on_unmount()."""
-        if self._dismiss_timer:
-            self._dismiss_timer.stop()
-            self._dismiss_timer = None
-        if self._flash_timer:
-            self._flash_timer.stop()
-            self._flash_timer = None
+        """Stop all timers and remove all notifications. Call this in on_unmount()."""
+        for notification, timer in self._notifications.values():
+            timer.stop()
+            notification.cleanup()
+        self._notifications.clear()
 
     def show(
         self,
@@ -71,92 +128,74 @@ class NotificationManager:
         flash: bool = False,
     ) -> None:
         """
-        Show a notification.
+        Show a new notification, stacked with existing ones.
 
         Args:
             text_bright: Rich markup text for normal/bright state
             text_dim: Rich markup text for dim state (optional, for flash animation)
             flash: Whether to enable flash animation
         """
-        self._text_bright = text_bright
-        self._text_dim = text_dim or f"[dim]{text_bright}[/dim]"
+        text_dim = text_dim or f"[dim]{text_bright}[/dim]"
 
         try:
-            notification = self.screen.query_one(f"#{self.notification_id}", Static)
-            notification.update(text_bright)
-            notification.remove_class("hidden")
+            container = self.screen.query_one(f"#{self.container_id}", VerticalScroll)
 
-            # Cancel existing timers
-            if self._dismiss_timer:
-                self._dismiss_timer.stop()
-            if self._flash_timer:
-                self._flash_timer.stop()
-                self._flash_timer = None
+            # Generate unique ID for this notification
+            notification_id = f"notification-{self._next_id}"
+            self._next_id += 1
 
-            # Start flash animation if requested
-            if flash:
-                # flash_cycles * 2 for bright-dim-bright-dim pattern
-                self._flash_count = self.flash_cycles * 2
-                self._flash_bright = True
-                self._flash_timer = self.screen.set_interval(
-                    self.flash_interval,
-                    self._do_flash,
-                )
-
-            # Auto-dismiss timer
-            self._dismiss_timer = self.screen.set_timer(
-                self.dismiss_seconds,
-                self.dismiss,
+            # Create notification widget
+            notification = Notification(
+                notification_id,
+                text_bright,
+                text_dim,
+                flash,
+                self.flash_interval,
+                self.flash_cycles,
             )
-        except Exception:
-            pass
 
-    def _do_flash(self) -> None:
-        """Toggle notification between bright and dim states."""
-        if self._flash_count <= 0:
-            # Stop flashing, leave on bright
-            if self._flash_timer:
-                self._flash_timer.stop()
-                self._flash_timer = None
+            # Mount notification to container
+            container.mount(notification)
+
+            # Set auto-dismiss timer for this notification
+            dismiss_timer = self.screen.set_timer(
+                self.dismiss_seconds,
+                lambda nid=notification_id: self._dismiss_notification(nid),
+            )
+
+            # Track notification and timer
+            self._notifications[notification_id] = (notification, dismiss_timer)
+
+        except Exception as e:
+            # Log error for debugging
             try:
-                notification = self.screen.query_one(f"#{self.notification_id}", Static)
-                notification.update(self._text_bright)
-            except Exception:
+                self.screen.notify(f"Notification error: {e}", severity="error")
+            except:
                 pass
+
+    def _dismiss_notification(self, notification_id: str) -> None:
+        """Dismiss a specific notification by ID."""
+        if notification_id not in self._notifications:
             return
 
-        # Toggle state
-        self._flash_bright = not self._flash_bright
-        self._flash_count -= 1
+        notification, timer = self._notifications.pop(notification_id)
+        timer.stop()
+        notification.cleanup()
 
         try:
-            notification = self.screen.query_one(f"#{self.notification_id}", Static)
-            if self._flash_bright:
-                notification.update(self._text_bright)
-            else:
-                notification.update(self._text_dim)
+            notification.remove()
         except Exception:
             pass
 
     def dismiss(self) -> None:
-        """Hide the notification and stop all timers."""
-        if self._flash_timer:
-            self._flash_timer.stop()
-            self._flash_timer = None
-        if self._dismiss_timer:
-            self._dismiss_timer.stop()
-            self._dismiss_timer = None
+        """Dismiss the topmost (most recent) notification."""
+        if not self._notifications:
+            return
 
-        try:
-            notification = self.screen.query_one(f"#{self.notification_id}", Static)
-            notification.add_class("hidden")
-        except Exception:
-            pass
+        # Get the most recent notification (highest ID)
+        latest_id = max(self._notifications.keys(), key=lambda x: int(x.split("-")[1]))
+        self._dismiss_notification(latest_id)
 
     def is_visible(self) -> bool:
-        """Check if notification is currently visible."""
-        try:
-            notification = self.screen.query_one(f"#{self.notification_id}", Static)
-            return "hidden" not in notification.classes
-        except Exception:
-            return False
+        """Check if any notifications are currently visible."""
+        return len(self._notifications) > 0
