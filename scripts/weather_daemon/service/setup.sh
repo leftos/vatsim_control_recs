@@ -94,12 +94,13 @@ systemctl enable weather-daemon.timer
 echo -e "${YELLOW}Configuring nginx...${NC}"
 # Add weather location to existing nginx config if not present
 NGINX_CONF="/etc/nginx/sites-available/leftos.dev"
+NGINX_SNIPPET="$INSTALL_DIR/scripts/weather_daemon/service/nginx-weather.conf"
 
 if [ -f "$NGINX_CONF" ]; then
     if ! grep -q "location /weather" "$NGINX_CONF"; then
-        # Insert weather location before the closing brace of the server block
+        # Insert weather location before the closing brace of the first server block
         sed -i '/^}$/i \
-    # Weather briefings\
+    # Weather briefings - NO CACHING\
     location /weather/ {\
         alias /var/www/leftos.dev/weather/;\
         index index.html;\
@@ -110,20 +111,23 @@ if [ -f "$NGINX_CONF" ]; then
         autoindex_exact_size off;\
         autoindex_localtime on;\
 \
-        # Disable caching for HTML files (briefings update every 5 minutes)\
-        location ~* \\.html$ {\
-            expires -1;\
-            add_header Cache-Control "no-cache, no-store, must-revalidate";\
-            add_header Pragma "no-cache";\
-        }\
+        # Completely disable caching\
+        add_header Cache-Control "no-cache, no-store, must-revalidate, max-age=0" always;\
+        add_header Pragma "no-cache" always;\
+        add_header Expires "0" always;\
+        etag off;\
+        if_modified_since off;\
     }' "$NGINX_CONF"
         echo -e "${CYAN}Added weather location to nginx config${NC}"
     else
         echo -e "${CYAN}Weather location already configured in nginx${NC}"
+        echo -e "${YELLOW}Note: If caching issues occur, update your config from:${NC}"
+        echo -e "${YELLOW}  $NGINX_SNIPPET${NC}"
     fi
 else
     echo -e "${YELLOW}Warning: nginx config not found at $NGINX_CONF${NC}"
-    echo -e "${YELLOW}You may need to manually configure nginx${NC}"
+    echo -e "${YELLOW}You may need to manually configure nginx using:${NC}"
+    echo -e "${YELLOW}  $NGINX_SNIPPET${NC}"
 fi
 
 # Test nginx config and reload
