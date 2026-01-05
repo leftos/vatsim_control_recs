@@ -18,7 +18,9 @@ from common import logger as debug_logger
 STATSIM_API_BASE_URL = "https://api.statsim.net"
 STATSIM_API_TIMEOUT = 15  # seconds per request
 STATSIM_MAX_DAYS_PER_QUERY = 30  # API has ~30 day limit per query
-STATSIM_DEFAULT_DAYS_BACK = 90  # Total days to query (in chunks of STATSIM_MAX_DAYS_PER_QUERY)
+STATSIM_DEFAULT_DAYS_BACK = (
+    90  # Total days to query (in chunks of STATSIM_MAX_DAYS_PER_QUERY)
+)
 
 
 def _format_datetime_for_api(dt: datetime) -> str:
@@ -38,7 +40,7 @@ def fetch_flights_from_origin(
     icao: str,
     days_back: int = STATSIM_MAX_DAYS_PER_QUERY,
     days_offset: int = 0,
-    timeout: int = STATSIM_API_TIMEOUT
+    timeout: int = STATSIM_API_TIMEOUT,
 ) -> List[Dict[str, Any]]:
     """
     Fetch all flights departing from a given airport in a date range.
@@ -64,7 +66,7 @@ def fetch_flights_from_origin(
     params = {
         "icao": icao.upper(),
         "from": _format_datetime_for_api(from_date),
-        "to": _format_datetime_for_api(to_date)
+        "to": _format_datetime_for_api(to_date),
     }
 
     try:
@@ -75,10 +77,14 @@ def fetch_flights_from_origin(
         debug_logger.warning(f"Statsim API timeout fetching flights from origin {icao}")
         return []
     except requests.RequestException as e:
-        debug_logger.warning(f"Statsim API error fetching flights from origin {icao}: {e}")
+        debug_logger.warning(
+            f"Statsim API error fetching flights from origin {icao}: {e}"
+        )
         return []
     except Exception as e:
-        debug_logger.warning(f"Unexpected error fetching flights from origin {icao}: {e}")
+        debug_logger.warning(
+            f"Unexpected error fetching flights from origin {icao}: {e}"
+        )
         return []
 
 
@@ -86,7 +92,7 @@ def fetch_flights_to_destination(
     icao: str,
     days_back: int = STATSIM_MAX_DAYS_PER_QUERY,
     days_offset: int = 0,
-    timeout: int = STATSIM_API_TIMEOUT
+    timeout: int = STATSIM_API_TIMEOUT,
 ) -> List[Dict[str, Any]]:
     """
     Fetch all flights arriving at a given airport in a date range.
@@ -112,7 +118,7 @@ def fetch_flights_to_destination(
     params = {
         "icao": icao.upper(),
         "from": _format_datetime_for_api(from_date),
-        "to": _format_datetime_for_api(to_date)
+        "to": _format_datetime_for_api(to_date),
     }
 
     try:
@@ -120,13 +126,19 @@ def fetch_flights_to_destination(
         response.raise_for_status()
         return response.json()
     except requests.Timeout:
-        debug_logger.warning(f"Statsim API timeout fetching flights to destination {icao}")
+        debug_logger.warning(
+            f"Statsim API timeout fetching flights to destination {icao}"
+        )
         return []
     except requests.RequestException as e:
-        debug_logger.warning(f"Statsim API error fetching flights to destination {icao}: {e}")
+        debug_logger.warning(
+            f"Statsim API error fetching flights to destination {icao}: {e}"
+        )
         return []
     except Exception as e:
-        debug_logger.warning(f"Unexpected error fetching flights to destination {icao}: {e}")
+        debug_logger.warning(
+            f"Unexpected error fetching flights to destination {icao}: {e}"
+        )
         return []
 
 
@@ -134,7 +146,9 @@ def get_historical_stats_for_airports(
     query_airports: List[str],
     tracked_airports: Set[str],
     days_back: int = STATSIM_DEFAULT_DAYS_BACK,
-    progress_callback: Optional[Callable[[int, int, Dict[str, Dict[str, int]]], None]] = None
+    progress_callback: Optional[
+        Callable[[int, int, Dict[str, Dict[str, int]]], None]
+    ] = None,
 ) -> Dict[str, Dict[str, int]]:
     """
     Get historical flight statistics between query airports and tracked airports.
@@ -176,7 +190,11 @@ def get_historical_stats_for_airports(
 
         for flight in origin_flights:
             # Get destination - statsim API uses 'arrival' field
-            destination = flight.get('destination', '').upper() if flight.get('destination') else ''
+            destination = (
+                flight.get("destination", "").upper()
+                if flight.get("destination")
+                else ""
+            )
             if destination and destination in tracked_upper:
                 if destination not in results:
                     results[destination] = {"departures": 0, "arrivals": 0, "total": 0}
@@ -194,7 +212,9 @@ def get_historical_stats_for_airports(
 
         for flight in destination_flights:
             # Get origin - statsim API uses 'departure' field
-            origin = flight.get('departure', '').upper() if flight.get('departure') else ''
+            origin = (
+                flight.get("departure", "").upper() if flight.get("departure") else ""
+            )
             if origin and origin in tracked_upper:
                 if origin not in results:
                     results[origin] = {"departures": 0, "arrivals": 0, "total": 0}
@@ -214,7 +234,9 @@ def get_historical_stats_concurrent(
     tracked_airports: Set[str],
     days_back: int = STATSIM_DEFAULT_DAYS_BACK,
     max_workers: int = 4,
-    progress_callback: Optional[Callable[[int, int, Dict[str, Dict[str, int]]], None]] = None
+    progress_callback: Optional[
+        Callable[[int, int, Dict[str, Dict[str, int]]], None]
+    ] = None,
 ) -> Dict[str, Dict[str, int]]:
     """
     Get historical flight statistics using concurrent API calls for better performance.
@@ -259,8 +281,7 @@ def get_historical_stats_concurrent(
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_query = {
-            executor.submit(execute_query, query): query
-            for query in queries
+            executor.submit(execute_query, query): query for query in queries
         }
 
         for future in as_completed(future_to_query):
@@ -270,18 +291,34 @@ def get_historical_stats_concurrent(
                 for flight in flights:
                     if query_type == "origin":
                         # Flights departing FROM query airport - check destination
-                        destination = flight.get('destination', '').upper() if flight.get('destination') else ''
+                        destination = (
+                            flight.get("destination", "").upper()
+                            if flight.get("destination")
+                            else ""
+                        )
                         if destination and destination in tracked_upper:
                             if destination not in results:
-                                results[destination] = {"departures": 0, "arrivals": 0, "total": 0}
+                                results[destination] = {
+                                    "departures": 0,
+                                    "arrivals": 0,
+                                    "total": 0,
+                                }
                             results[destination]["arrivals"] += 1
                             results[destination]["total"] += 1
                     else:
                         # Flights arriving AT query airport - check origin
-                        origin = flight.get('departure', '').upper() if flight.get('departure') else ''
+                        origin = (
+                            flight.get("departure", "").upper()
+                            if flight.get("departure")
+                            else ""
+                        )
                         if origin and origin in tracked_upper:
                             if origin not in results:
-                                results[origin] = {"departures": 0, "arrivals": 0, "total": 0}
+                                results[origin] = {
+                                    "departures": 0,
+                                    "arrivals": 0,
+                                    "total": 0,
+                                }
                             results[origin]["departures"] += 1
                             results[origin]["total"] += 1
 

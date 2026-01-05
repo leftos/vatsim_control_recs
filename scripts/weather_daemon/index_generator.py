@@ -11,30 +11,47 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .config import DaemonConfig, ARTCC_NAMES, CATEGORY_COLORS
-from .artcc_boundaries import get_artcc_boundaries, get_artcc_center
+from .config import DaemonConfig, ARTCC_NAMES
+from .artcc_boundaries import get_artcc_boundaries
 from .simaware_boundaries import get_all_grouping_boundaries
 
 # Continental US ARTCCs to display on the map (excludes oceanic/remote)
 CONUS_ARTCCS = {
-    'ZAB', 'ZAU', 'ZBW', 'ZDC', 'ZDV', 'ZFW', 'ZHU', 'ZID', 'ZJX',
-    'ZKC', 'ZLA', 'ZLC', 'ZMA', 'ZME', 'ZMP', 'ZNY', 'ZOA', 'ZOB',
-    'ZSE', 'ZTL',
+    "ZAB",
+    "ZAU",
+    "ZBW",
+    "ZDC",
+    "ZDV",
+    "ZFW",
+    "ZHU",
+    "ZID",
+    "ZJX",
+    "ZKC",
+    "ZLA",
+    "ZLC",
+    "ZMA",
+    "ZME",
+    "ZMP",
+    "ZNY",
+    "ZOA",
+    "ZOB",
+    "ZSE",
+    "ZTL",
 }
 
 # FAR 139 ARFF Index categories for airport markers
 # I E, I D = Major airports (show at all zoom levels)
 # I C = Regional airports (show at zoom 6+)
-FAR139_MAJOR = {'I E', 'I D'}  # ~49 airports
-FAR139_REGIONAL = {'I C'}      # ~92 airports
+FAR139_MAJOR = {"I E", "I D"}  # ~49 airports
+FAR139_REGIONAL = {"I C"}  # ~92 airports
 
 # Weather category to marker color mapping
 MARKER_COLORS = {
-    'VFR': '#00cc00',    # Green
-    'MVFR': '#0066ff',   # Blue
-    'IFR': '#ff0000',    # Red
-    'LIFR': '#ff00ff',   # Magenta
-    'UNK': '#888888',    # Gray
+    "VFR": "#00cc00",  # Green
+    "MVFR": "#0066ff",  # Blue
+    "IFR": "#ff0000",  # Red
+    "LIFR": "#ff00ff",  # Magenta
+    "UNK": "#888888",  # Gray
 }
 
 
@@ -65,80 +82,78 @@ def build_airport_markers(
     for artcc, groupings in artcc_groupings.items():
         for g in groupings:
             # Try airport_weather_points first (has weather category)
-            weather_points = g.get('airport_weather_points', [])
+            weather_points = g.get("airport_weather_points", [])
             for point in weather_points:
-                icao = point.get('icao')
+                icao = point.get("icao")
                 if icao and icao not in all_airports:
                     all_airports[icao] = point
-
-            # Fallback: use airport_coords if no weather points available
-            if not weather_points:
-                airport_coords = g.get('airport_coords', [])
-                # airport_coords is a list of (lat, lon) tuples, need to match with airports
-                # We don't have ICAO here, so we need to get airports from categories or name
 
     # If we have no weather points, build markers directly from unified_airport_data
     # for airports that match FAR139 criteria
     if not all_airports:
         for icao, info in unified_airport_data.items():
-            far139 = info.get('far139', '') or info.get('FAR_139_TYPE_CODE', '')
+            far139 = info.get("far139", "") or info.get("FAR_139_TYPE_CODE", "")
             if far139 in FAR139_MAJOR or far139 in FAR139_REGIONAL:
-                lat = info.get('latitude') or info.get('lat')
-                lon = info.get('longitude') or info.get('lon')
+                lat = info.get("latitude") or info.get("lat")
+                lon = info.get("longitude") or info.get("lon")
                 if lat and lon:
                     all_airports[icao] = {
-                        'icao': icao,
-                        'lat': lat,
-                        'lon': lon,
-                        'category': 'UNK',  # No weather data available
+                        "icao": icao,
+                        "lat": lat,
+                        "lon": lon,
+                        "category": "UNK",  # No weather data available
                     }
 
     # Filter and classify airports by FAR139
     markers = []
     for icao, point in all_airports.items():
         airport_info = unified_airport_data.get(icao, {})
-        far139 = airport_info.get('far139', '') or airport_info.get('FAR_139_TYPE_CODE', '')
+        far139 = airport_info.get("far139", "") or airport_info.get(
+            "FAR_139_TYPE_CODE", ""
+        )
 
         # Determine tier based on FAR139 classification
         if far139 in FAR139_MAJOR:
-            tier = 'major'
+            tier = "major"
         elif far139 in FAR139_REGIONAL:
-            tier = 'regional'
+            tier = "regional"
         else:
             # Skip airports without FAR139 major/regional classification
             continue
 
-        category = point.get('category', 'UNK')
-        color = MARKER_COLORS.get(category, MARKER_COLORS['UNK'])
+        category = point.get("category", "UNK")
+        color = MARKER_COLORS.get(category, MARKER_COLORS["UNK"])
 
-        lat = point.get('lat')
-        lon = point.get('lon')
+        lat = point.get("lat")
+        lon = point.get("lon")
 
         # Skip if no coordinates
         if not lat or not lon:
             continue
 
         # Get pretty name from unified data
-        name = airport_info.get('name', '')
+        name = airport_info.get("name", "")
         if name:
             # Title case the name (e.g., "SAN FRANCISCO INTL" -> "San Francisco Intl")
             name = name.title()
 
-        markers.append({
-            'icao': icao,
-            'name': name,
-            'lat': lat,
-            'lon': lon,
-            'category': category,
-            'color': color,
-            'tier': tier,
-            # Weather details for tooltip
-            'visibility': point.get('visibility'),
-            'ceiling': point.get('ceiling'),
-            'wind': point.get('wind'),
-            'phenomena': point.get('phenomena', []),
-            'taf_changes': point.get('taf_changes', []),
-        })
+        markers.append(
+            {
+                "icao": icao,
+                "name": name,
+                "lat": lat,
+                "lon": lon,
+                "category": category,
+                "color": color,
+                "tier": tier,
+                # Weather details for tooltip
+                "visibility": point.get("visibility"),
+                "ceiling": point.get("ceiling"),
+                "wind": point.get("wind"),
+                "phenomena": point.get("phenomena", []),
+                "taf_changes": point.get("taf_changes", []),
+            }
+        )
 
     return markers
 
@@ -185,7 +200,9 @@ def compute_convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, 
     return lower[:-1] + upper[:-1]
 
 
-def point_in_polygon(point: Tuple[float, float], polygon: List[Tuple[float, float]]) -> bool:
+def point_in_polygon(
+    point: Tuple[float, float], polygon: List[Tuple[float, float]]
+) -> bool:
     """
     Check if a point is inside a polygon using ray casting algorithm.
 
@@ -254,10 +271,10 @@ def generate_weather_regions(
             # Check if cell center is inside ARTCC
             if point_in_polygon((lat, lon), artcc_boundary):
                 # Find nearest airport
-                min_dist = float('inf')
+                min_dist = float("inf")
                 nearest_idx = 0
                 for idx, ap in enumerate(airport_points):
-                    dist = (lat - ap['lat'])**2 + (lon - ap['lon'])**2
+                    dist = (lat - ap["lat"]) ** 2 + (lon - ap["lon"]) ** 2
                     if dist < min_dist:
                         min_dist = dist
                         nearest_idx = idx
@@ -276,7 +293,7 @@ def generate_weather_regions(
     regions = []
 
     for lat, lon, airport_idx in grid_cells:
-        category = airport_points[airport_idx].get('category', 'UNK')
+        category = airport_points[airport_idx].get("category", "UNK")
         # Create cell polygon (GeoJSON format: [lon, lat])
         cell_coords = [
             [lon - half_res, lat - half_res],
@@ -285,15 +302,19 @@ def generate_weather_regions(
             [lon - half_res, lat + half_res],
             [lon - half_res, lat - half_res],  # Close polygon
         ]
-        regions.append({
-            'coords': cell_coords,
-            'category': category,
-        })
+        regions.append(
+            {
+                "coords": cell_coords,
+                "category": category,
+            }
+        )
 
     return regions
 
 
-def add_buffer_to_polygon(points: List[Tuple[float, float]], buffer_nm: float = 20) -> List[Tuple[float, float]]:
+def add_buffer_to_polygon(
+    points: List[Tuple[float, float]], buffer_nm: float = 20
+) -> List[Tuple[float, float]]:
     """
     Add a buffer around a polygon by expanding it outward.
 
@@ -389,12 +410,19 @@ def generate_index_page(
     # Calculate overall category stats per ARTCC
     artcc_stats: Dict[str, Dict[str, int]] = {}
     for artcc, groupings in artcc_groupings.items():
-        artcc_stats[artcc] = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0, "UNK": 0, "total": 0}
+        artcc_stats[artcc] = {
+            "LIFR": 0,
+            "IFR": 0,
+            "MVFR": 0,
+            "VFR": 0,
+            "UNK": 0,
+            "total": 0,
+        }
         for g in groupings:
-            cats = g.get('categories', {})
+            cats = g.get("categories", {})
             for cat, count in cats.items():
                 artcc_stats[artcc][cat] = artcc_stats[artcc].get(cat, 0) + count
-                artcc_stats[artcc]['total'] += count
+                artcc_stats[artcc]["total"] += count
 
     # Generate timestamp and version for cache busting
     now = datetime.now(timezone.utc)
@@ -419,7 +447,7 @@ def generate_index_page(
 
     # Write index file
     index_path = config.output_dir / "index.html"
-    with open(index_path, 'w', encoding='utf-8') as f:
+    with open(index_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
     print(f"    Created {index_path}")
@@ -488,7 +516,7 @@ def generate_html(
                 "geometry": {
                     "type": "Polygon",
                     "coordinates": [coords],
-                }
+                },
             }
             geojson_features.append(feature)
 
@@ -509,10 +537,10 @@ def generate_html(
             lats = [c[0] for c in all_coords]
             lons = [c[1] for c in all_coords]
             artcc_bounds[artcc] = {
-                'south': min(lats),
-                'north': max(lats),
-                'west': min(lons),
-                'east': max(lons),
+                "south": min(lats),
+                "north": max(lats),
+                "west": min(lons),
+                "east": max(lons),
             }
 
     # Build grouping polygons data for hover effect
@@ -522,17 +550,17 @@ def generate_html(
 
     sorted_artccs = sorted(
         [a for a in artcc_groupings.keys() if a != "custom"],
-        key=lambda x: ARTCC_NAMES.get(x, x)
+        key=lambda x: ARTCC_NAMES.get(x, x),
     )
 
     # Collect all grouping names to fetch SimAware boundaries in batch
     all_grouping_names = []
     for artcc in sorted_artccs:
         for g in artcc_groupings[artcc]:
-            all_grouping_names.append(g['name'])
+            all_grouping_names.append(g["name"])
     if "custom" in artcc_groupings:
         for g in artcc_groupings["custom"]:
-            all_grouping_names.append(g['name'])
+            all_grouping_names.append(g["name"])
 
     # Fetch SimAware TRACON boundaries for all groupings (when cache dir is available)
     simaware_boundaries = {}
@@ -546,8 +574,8 @@ def generate_html(
 
     for artcc in sorted_artccs:
         groupings = artcc_groupings[artcc]
-        for g in sorted(groupings, key=lambda x: x['name']):
-            grouping_name = g['name']
+        for g in sorted(groupings, key=lambda x: x["name"]):
+            grouping_name = g["name"]
 
             # Check if we have a SimAware boundary for this grouping
             if grouping_name in simaware_boundaries:
@@ -564,7 +592,7 @@ def generate_html(
                     all_polygon_coords.append(polygon_coords)
             else:
                 # Fall back to convex hull of airport coordinates
-                coords = g.get('airport_coords', [])
+                coords = g.get("airport_coords", [])
                 all_polygon_coords = []
                 if coords:
                     # Convert to tuples for convex hull
@@ -581,16 +609,16 @@ def generate_html(
 
             if all_polygon_coords:
                 grouping_polygons[str(grouping_id)] = {
-                    'name': grouping_name,
-                    'artcc': artcc,
-                    'coords': all_polygon_coords,  # Now a list of polygons
+                    "name": grouping_name,
+                    "artcc": artcc,
+                    "coords": all_polygon_coords,  # Now a list of polygons
                 }
             grouping_id += 1
 
     # Add custom groupings at the end
     if "custom" in artcc_groupings:
-        for g in sorted(artcc_groupings["custom"], key=lambda x: x['name']):
-            grouping_name = g['name']
+        for g in sorted(artcc_groupings["custom"], key=lambda x: x["name"]):
+            grouping_name = g["name"]
 
             # Check if we have a SimAware boundary for this grouping
             if grouping_name in simaware_boundaries:
@@ -602,7 +630,7 @@ def generate_html(
                         polygon_coords.append(polygon_coords[0])
                     all_polygon_coords.append(polygon_coords)
             else:
-                coords = g.get('airport_coords', [])
+                coords = g.get("airport_coords", [])
                 all_polygon_coords = []
                 if coords:
                     coord_tuples = [(c[0], c[1]) for c in coords]
@@ -615,16 +643,16 @@ def generate_html(
 
             if all_polygon_coords:
                 grouping_polygons[str(grouping_id)] = {
-                    'name': grouping_name,
-                    'artcc': None,  # No ARTCC for unmapped custom groupings
-                    'coords': all_polygon_coords,  # Now a list of polygons
+                    "name": grouping_name,
+                    "artcc": None,  # No ARTCC for unmapped custom groupings
+                    "coords": all_polygon_coords,  # Now a list of polygons
                 }
             grouping_id += 1
 
     # Build groupings sidebar data
     sidebar_html = build_sidebar_html(artcc_groupings, artcc_stats)
 
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1836,7 +1864,7 @@ def generate_html(
         updateCountdown(); // Initial call
     </script>
 </body>
-</html>'''
+</html>"""
 
 
 def build_sidebar_html(
@@ -1849,7 +1877,7 @@ def build_sidebar_html(
     # Sort ARTCCs alphabetically, but put "custom" at the end
     sorted_artccs = sorted(
         [a for a in artcc_groupings.keys() if a != "custom"],
-        key=lambda x: ARTCC_NAMES.get(x, x)
+        key=lambda x: ARTCC_NAMES.get(x, x),
     )
 
     # Track grouping ID for hover polygon mapping
@@ -1871,15 +1899,12 @@ def build_sidebar_html(
         if stats.get("VFR", 0) > 0:
             stats_html += f'<span class="stat stat-vfr">{stats["VFR"]}</span>'
 
-        # Count total airports in this ARTCC
-        total_airports = stats.get('total', 0)
-
         # Link to FAA/NWS real-world aviation weather briefing
-        awc_briefing_html = f'''
+        awc_briefing_html = f"""
                 <a href="https://aviationweather.gov/pdwb/?cwsu={artcc.lower()}" target="_blank" class="awc-briefing-link">
                     <span class="awc-briefing-name">FAA Weather Briefing</span>
                     <span class="icon">🌐</span>
-                </a>'''
+                </a>"""
 
         # ARTCC-wide briefing link at the top
         artcc_briefing_html = f'''
@@ -1890,15 +1915,15 @@ def build_sidebar_html(
 
         # Build grouping links
         groupings_html = ""
-        for g in sorted(groupings, key=lambda x: x['name']):
-            airport_count = g.get('airport_count', 0)
+        for g in sorted(groupings, key=lambda x: x["name"]):
+            airport_count = g.get("airport_count", 0)
             # Use path_prefix for custom groupings that were assigned to an ARTCC
-            path_prefix = g.get('path_prefix', artcc)
-            is_custom = g.get('is_custom', False)
-            custom_marker = ' <span class="custom-marker">★</span>' if is_custom else ''
+            path_prefix = g.get("path_prefix", artcc)
+            is_custom = g.get("is_custom", False)
+            custom_marker = ' <span class="custom-marker">★</span>' if is_custom else ""
             groupings_html += f'''
-                <a href="{path_prefix}/{g['filename']}" class="grouping-link" data-grouping-id="{grouping_id}">
-                    <span class="grouping-name">{g['name']}{custom_marker}</span>
+                <a href="{path_prefix}/{g["filename"]}" class="grouping-link" data-grouping-id="{grouping_id}">
+                    <span class="grouping-name">{g["name"]}{custom_marker}</span>
                     <span class="grouping-airports">{airport_count} airports</span>
                 </a>'''
             grouping_id += 1
@@ -1935,16 +1960,16 @@ def build_sidebar_html(
             stats_html += f'<span class="stat stat-vfr">{stats["VFR"]}</span>'
 
         groupings_html = ""
-        for g in sorted(custom_groupings, key=lambda x: x['name']):
-            airport_count = g.get('airport_count', 0)
+        for g in sorted(custom_groupings, key=lambda x: x["name"]):
+            airport_count = g.get("airport_count", 0)
             groupings_html += f'''
-                <a href="custom/{g['filename']}" class="grouping-link" data-grouping-id="{grouping_id}">
-                    <span class="grouping-name">{g['name']}</span>
+                <a href="custom/{g["filename"]}" class="grouping-link" data-grouping-id="{grouping_id}">
+                    <span class="grouping-name">{g["name"]}</span>
                     <span class="grouping-airports">{airport_count} airports</span>
                 </a>'''
             grouping_id += 1
 
-        html_parts.append(f'''
+        html_parts.append(f"""
             <div class="artcc-section custom-section" data-artcc="custom">
                 <div class="artcc-header">
                     <div>
@@ -1955,6 +1980,6 @@ def build_sidebar_html(
                 <div class="groupings-list">
                     {groupings_html}
                 </div>
-            </div>''')
+            </div>""")
 
     return "\n".join(html_parts)

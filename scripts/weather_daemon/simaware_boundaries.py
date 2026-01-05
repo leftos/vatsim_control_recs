@@ -16,20 +16,24 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # Default directories
-SIMAWARE_BOUNDARIES_DIR = Path(__file__).parent.parent.parent / "data" / "simaware_boundaries"
+SIMAWARE_BOUNDARIES_DIR = (
+    Path(__file__).parent.parent.parent / "data" / "simaware_boundaries"
+)
 PRESET_GROUPINGS_DIR = Path(__file__).parent.parent.parent / "data" / "preset_groupings"
 
 # Sub-facility to parent SimAware folder mappings
 # Some groupings reference sub-facilities that don't have their own SimAware folder
 SUB_FACILITY_MAP = {
-    "O90": "NCT",   # Bay TRACON is part of NCT
-    "MC1": "NCT",   # Sacramento sector
-    "SC1": "NCT",   # Stockton sector
-    "MR1": "NCT",   # Monterey sector
+    "O90": "NCT",  # Bay TRACON is part of NCT
+    "MC1": "NCT",  # Sacramento sector
+    "SC1": "NCT",  # Stockton sector
+    "MR1": "NCT",  # Monterey sector
 }
 
 
-def load_preset_grouping_data(preset_dir: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
+def load_preset_grouping_data(
+    preset_dir: Optional[Path] = None,
+) -> Dict[str, Dict[str, Any]]:
     """
     Load all preset groupings with full metadata (including position_prefixes).
 
@@ -52,7 +56,7 @@ def load_preset_grouping_data(preset_dir: Optional[Path] = None) -> Dict[str, Di
 
     for json_file in preset_dir.glob("*.json"):
         try:
-            with open(json_file, 'r', encoding='utf-8') as f:
+            with open(json_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             if not isinstance(data, dict):
@@ -69,15 +73,15 @@ def load_preset_grouping_data(preset_dir: Optional[Path] = None) -> Dict[str, Di
                 elif isinstance(value, list):
                     # Old format - just airport list, no metadata
                     grouping_data = {
-                        'airports': value,
-                        'position_prefixes': None,
-                        'position_suffixes': None,
-                        'facility_id': None,
+                        "airports": value,
+                        "position_prefixes": None,
+                        "position_suffixes": None,
+                        "facility_id": None,
                     }
 
                 # Filter out single-airport groupings
                 if grouping_data:
-                    airports = grouping_data.get('airports', [])
+                    airports = grouping_data.get("airports", [])
                     if len(airports) > 1:
                         all_data[key] = grouping_data
 
@@ -88,7 +92,7 @@ def load_preset_grouping_data(preset_dir: Optional[Path] = None) -> Dict[str, Di
 
 
 def load_simaware_boundaries(
-    boundaries_dir: Optional[Path] = None
+    boundaries_dir: Optional[Path] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Load all SimAware boundary data from local files.
@@ -106,7 +110,7 @@ def load_simaware_boundaries(
 
     for json_file in boundaries_dir.glob("*.json"):
         try:
-            with open(json_file, 'r', encoding='utf-8') as f:
+            with open(json_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             facility = json_file.stem
@@ -118,8 +122,7 @@ def load_simaware_boundaries(
 
 
 def resolve_simaware_folder(
-    facility_id: str,
-    available_facilities: set
+    facility_id: str, available_facilities: set
 ) -> Optional[str]:
     """
     Resolve a facility ID to a SimAware folder name.
@@ -168,18 +171,18 @@ def find_boundary_for_prefix(
         return None
 
     # For DEP suffix, try PREFIX_DEP first
-    if suffix == 'DEP':
+    if suffix == "DEP":
         dep_key = f"{prefix}_DEP"
         if dep_key in facility_boundaries:
-            return facility_boundaries[dep_key].get('coordinates')
+            return facility_boundaries[dep_key].get("coordinates")
 
     # Try exact prefix match
     if prefix in facility_boundaries:
-        return facility_boundaries[prefix].get('coordinates')
+        return facility_boundaries[prefix].get("coordinates")
 
     # Fall back to facility's main boundary (e.g., L30 only has L30.json)
     if simaware_folder in facility_boundaries:
-        return facility_boundaries[simaware_folder].get('coordinates')
+        return facility_boundaries[simaware_folder].get("coordinates")
 
     return None
 
@@ -204,9 +207,9 @@ def map_grouping_to_boundaries(
     if not grouping_data:
         return []
 
-    position_prefixes = grouping_data.get('position_prefixes')
-    position_suffixes = grouping_data.get('position_suffixes')
-    facility_id = grouping_data.get('facility_id')
+    position_prefixes = grouping_data.get("position_prefixes")
+    position_suffixes = grouping_data.get("position_suffixes")
+    facility_id = grouping_data.get("facility_id")
 
     available_facilities = set(boundaries_data.keys())
 
@@ -219,7 +222,7 @@ def map_grouping_to_boundaries(
                 facility_boundaries = boundaries_data.get(simaware_folder, {})
                 # Try facility-level boundary
                 if facility_id in facility_boundaries:
-                    coords = facility_boundaries[facility_id].get('coordinates')
+                    coords = facility_boundaries[facility_id].get("coordinates")
                     if coords:
                         return [coords]
 
@@ -236,10 +239,10 @@ def map_grouping_to_boundaries(
     # Determine the primary suffix (DEP gets special handling)
     primary_suffix = None
     if position_suffixes:
-        if 'DEP' in position_suffixes:
-            primary_suffix = 'DEP'
-        elif 'APP' in position_suffixes:
-            primary_suffix = 'APP'
+        if "DEP" in position_suffixes:
+            primary_suffix = "DEP"
+        elif "APP" in position_suffixes:
+            primary_suffix = "APP"
 
     # Find boundaries for each position prefix
     # Collect ALL matching boundaries (e.g., NCT C with OAK and MOD prefixes)
@@ -252,7 +255,9 @@ def map_grouping_to_boundaries(
         )
         if coords:
             # Use first few points as a key to detect duplicates
-            coords_key = tuple(tuple(p) for p in coords[:3]) if len(coords) >= 3 else None
+            coords_key = (
+                tuple(tuple(p) for p in coords[:3]) if len(coords) >= 3 else None
+            )
             if coords_key and coords_key not in seen_coords:
                 polygons.append(coords)
                 seen_coords.add(coords_key)
@@ -279,7 +284,7 @@ def expand_plus_pattern(
     Returns:
         List of expanded grouping names
     """
-    if '+' not in grouping_name:
+    if "+" not in grouping_name:
         return [grouping_name]
 
     # Check if it's a "Facility Letter+Letter" pattern (e.g., "NCT E+R")
@@ -291,8 +296,8 @@ def expand_plus_pattern(
         facility = parts[0]
         sector_part = parts[1]
 
-        if '+' in sector_part:
-            sectors = sector_part.split('+')
+        if "+" in sector_part:
+            sectors = sector_part.split("+")
             expanded = []
             for sector in sectors:
                 candidate = f"{facility} {sector}"
@@ -300,8 +305,8 @@ def expand_plus_pattern(
             return expanded if expanded else [grouping_name]
 
     # Pattern: "N90+B90" or similar
-    if '+' in grouping_name and ' ' not in grouping_name:
-        parts = grouping_name.split('+')
+    if "+" in grouping_name and " " not in grouping_name:
+        parts = grouping_name.split("+")
         expanded = []
         for part in parts:
             # Try exact match first
@@ -309,7 +314,7 @@ def expand_plus_pattern(
                 expanded.append(part)
             else:
                 # Try adding common suffix patterns
-                for suffix in ['', ' Combined', f' {part}']:
+                for suffix in ["", " Combined", f" {part}"]:
                     candidate = f"{part}{suffix}"
                     if candidate in all_grouping_data:
                         expanded.append(candidate)
@@ -332,11 +337,12 @@ def polygon_min_distance(poly1: List[List[float]], poly2: List[List[float]]) -> 
         Minimum distance in degrees (approximate, for comparison only)
     """
     import math
-    min_dist = float('inf')
+
+    min_dist = float("inf")
     for p1 in poly1:
         for p2 in poly2:
             # Simple Euclidean distance in degrees
-            dist = math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+            dist = math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
             if dist < min_dist:
                 min_dist = dist
     return min_dist
@@ -382,10 +388,7 @@ def convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
 
 
 def generate_circle_polygon(
-    lat: float,
-    lon: float,
-    radius_nm: float = 5,
-    num_points: int = 32
+    lat: float, lon: float, radius_nm: float = 5, num_points: int = 32
 ) -> List[Tuple[float, float]]:
     """
     Generate a circle polygon around a point.
@@ -422,7 +425,7 @@ def generate_circle_polygon(
 
 def combine_polygons(
     polygons: List[List[List[float]]],
-    neighbor_threshold: float = 0.05  # ~3nm at mid-latitudes
+    neighbor_threshold: float = 0.05,  # ~3nm at mid-latitudes
 ) -> List[List[Tuple[float, float]]]:
     """
     Combine multiple polygons into groups based on proximity.
@@ -469,6 +472,7 @@ def combine_polygons(
 
     # Group polygons by their root
     from collections import defaultdict
+
     groups = defaultdict(list)
     for i in range(n):
         groups[find(i)].append(i)
@@ -496,7 +500,9 @@ def get_all_grouping_boundaries(
     preset_dir: Optional[Path] = None,
     boundaries_dir: Optional[Path] = None,
     max_workers: int = 8,  # Kept for API compatibility, not used
-    unified_airport_data: Optional[Dict[str, Any]] = None,  # For Tower circle generation
+    unified_airport_data: Optional[
+        Dict[str, Any]
+    ] = None,  # For Tower circle generation
 ) -> Dict[str, List[List[Tuple[float, float]]]]:
     """
     Get boundaries for multiple groupings from pre-downloaded SimAware data.
@@ -524,7 +530,7 @@ def get_all_grouping_boundaries(
 
     if not boundaries_data:
         print("  Warning: No SimAware boundary data found")
-        print(f"  Run 'python scripts/generate_simaware_boundaries.py' to download")
+        print("  Run 'python scripts/generate_simaware_boundaries.py' to download")
         return {}
 
     # Map each grouping to its boundary polygons
@@ -532,16 +538,16 @@ def get_all_grouping_boundaries(
 
     for name in grouping_names:
         # Check if this is a Tower grouping - use circle polygon
-        if name.endswith(' Tower') and unified_airport_data:
+        if name.endswith(" Tower") and unified_airport_data:
             grouping_data = all_grouping_data.get(name)
             if grouping_data:
-                airports = grouping_data.get('airports', [])
+                airports = grouping_data.get("airports", [])
                 if airports:
                     # Get coordinates of the first (usually only) airport
                     airport_code = airports[0]
                     airport_info = unified_airport_data.get(airport_code, {})
-                    lat = airport_info.get('latitude')
-                    lon = airport_info.get('longitude')
+                    lat = airport_info.get("latitude")
+                    lon = airport_info.get("longitude")
                     if lat and lon:
                         circle = generate_circle_polygon(lat, lon, radius_nm=5)
                         boundaries[name] = [circle]
@@ -566,9 +572,7 @@ def get_all_grouping_boundaries(
         else:
             # Single grouping
             grouping_data = all_grouping_data.get(name)
-            polygons = map_grouping_to_boundaries(
-                name, grouping_data, boundaries_data
-            )
+            polygons = map_grouping_to_boundaries(name, grouping_data, boundaries_data)
 
             if polygons:
                 # combine_polygons handles all cases (1 or more input polygons)
@@ -576,7 +580,9 @@ def get_all_grouping_boundaries(
 
     matched = len(boundaries)
     if matched > 0:
-        print(f"  Matched {matched}/{len(grouping_names)} groupings to SimAware boundaries")
+        print(
+            f"  Matched {matched}/{len(grouping_names)} groupings to SimAware boundaries"
+        )
 
     return boundaries
 
@@ -588,39 +594,34 @@ if __name__ == "__main__":
     # Test groupings from preset_groupings with various ARTCCs
     test_groupings = [
         # ZOA (Oakland Center) - tests position prefix mapping
-        "NCT A",        # Should map to SJC via prefix SJC/MRY
-        "NCT B",        # Should map to SFO via prefix SFO
-        "NCT C",        # Should map to OAK + MOD (combined) via prefixes
-        "NCT D",        # Should map to SFO_DEP via DEP suffix
-        "NCT E",        # Should map to SMF
-        "NCT R",        # Should map to RNO
+        "NCT A",  # Should map to SJC via prefix SJC/MRY
+        "NCT B",  # Should map to SFO via prefix SFO
+        "NCT C",  # Should map to OAK + MOD (combined) via prefixes
+        "NCT D",  # Should map to SFO_DEP via DEP suffix
+        "NCT E",  # Should map to SMF
+        "NCT R",  # Should map to RNO
         "NCT Combined",
-        "NCT E+R",      # Combined sectors
-        "FAT",          # Was "FAT FAT", now simplified
-        "O90",          # Was "O90 O90", now simplified
+        "NCT E+R",  # Combined sectors
+        "FAT",  # Was "FAT FAT", now simplified
+        "O90",  # Was "O90 O90", now simplified
         "O90 SFO",
-
         # ZLA (Los Angeles Center)
         "SCT Burbank",
         "SCT Empire",
         "SCT Coast",
         "SCT Consolidated",
-        "L30",          # Was "L30 L30", now simplified
+        "L30",  # Was "L30 L30", now simplified
         "L30 Las Vegas Tower",
-
         # ZNY (New York Center)
         "N90 Kennedy",
         "N90 LaGuardia",
         "N90 New York Combined",
-
         # ZDC (Washington Center)
         "PCT Consolidated",
         "PCT Mount Vernon",
         "PCT Shenandoah",
-
         # ZSE (Seattle Center)
         "S46 Seattle Area",
-
         # International (should fall back to convex hull)
         "International - Mexico",
     ]
@@ -637,7 +638,7 @@ if __name__ == "__main__":
     print(f"Loaded {len(boundaries_data)} SimAware facility files")
 
     # Show which facilities have NCT prefixes
-    nct_boundaries = boundaries_data.get('NCT', {})
+    nct_boundaries = boundaries_data.get("NCT", {})
     print(f"\nNCT facility has {len(nct_boundaries)} boundary files:")
     for key in sorted(nct_boundaries.keys()):
         print(f"  - {key}")
@@ -663,15 +664,19 @@ if __name__ == "__main__":
             polygons = boundaries[name]
             # Check how many prefixes this grouping has
             gdata = grouping_data.get(name, {})
-            prefixes = gdata.get('position_prefixes', [])
+            prefixes = gdata.get("position_prefixes", [])
             if len(polygons) == 1:
                 if prefixes and len(prefixes) > 1:
-                    print(f"  {name}: {len(polygons[0])} points (merged from prefixes: {prefixes})")
+                    print(
+                        f"  {name}: {len(polygons[0])} points (merged from prefixes: {prefixes})"
+                    )
                 else:
                     print(f"  {name}: {len(polygons[0])} points")
             else:
                 # Multiple separate polygons (not neighbors)
                 point_counts = [len(p) for p in polygons]
-                print(f"  {name}: {len(polygons)} separate polygons ({point_counts} points)")
+                print(
+                    f"  {name}: {len(polygons)} separate polygons ({point_counts} points)"
+                )
         else:
             print(f"  {name}: NO MATCH (will use convex hull)")

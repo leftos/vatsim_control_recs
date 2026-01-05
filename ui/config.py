@@ -8,15 +8,15 @@ from typing import Any, Dict, Optional, Callable, Literal
 
 # Flight category colors for Rich markup (VFR/MVFR/IFR/LIFR)
 CATEGORY_COLORS: Dict[str, str] = {
-    'LIFR': 'magenta',
-    'IFR': 'red',
-    'MVFR': '#5599ff',
-    'VFR': '#00ff00',
-    'UNK': 'white',
+    "LIFR": "magenta",
+    "IFR": "red",
+    "MVFR": "#5599ff",
+    "VFR": "#00ff00",
+    "UNK": "white",
 }
 
 # Category display order (worst to best conditions)
-CATEGORY_ORDER = ['LIFR', 'IFR', 'MVFR', 'VFR', 'UNK']
+CATEGORY_ORDER = ["LIFR", "IFR", "MVFR", "VFR", "UNK"]
 
 # Custom flap character sets for specific column types
 ETA_FLAP_CHARS = "9876543210hm:ADELN <-"  # For NEXT ETA columns: numbers in descending order for countdown effect
@@ -35,6 +35,7 @@ AIRCRAFT_APPROACH_SPEEDS: Optional[Dict[str, Any]] = None
 @dataclass
 class ColumnConfig:
     """Configuration for a single table column"""
+
     name: str
     flap_chars: Optional[str] = None
     content_align: Literal["left", "center", "right"] = "left"
@@ -44,5 +45,6 @@ class ColumnConfig:
 @dataclass
 class TableConfig:
     """Configuration for a complete table"""
+
     columns: list[ColumnConfig]
     sort_function: Optional[Callable] = None

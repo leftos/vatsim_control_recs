@@ -15,24 +15,24 @@ CATEGORY_PRIORITY = {"LIFR": 0, "IFR": 1, "MVFR": 2, "VFR": 3}
 # "I D" = Index D (large jets) = major Class C airports
 # "I C" = Index C (medium jets) = Class C airports
 FAR139_PRIORITY = {
-    'I E': 0,  # Class B (KSFO, KLAX, KJFK, etc.)
-    'I D': 1,  # Major Class C (KOAK, KSJC, KSAN, etc.)
-    'I C': 2,  # Class C
-    'I B': 3,  # Smaller scheduled service
-    'I A': 4,  # Smallest scheduled service
+    "I E": 0,  # Class B (KSFO, KLAX, KJFK, etc.)
+    "I D": 1,  # Major Class C (KOAK, KSJC, KSAN, etc.)
+    "I C": 2,  # Class C
+    "I B": 3,  # Smaller scheduled service
+    "I A": 4,  # Smallest scheduled service
 }
 
 # Tower type priority for sorting (lower = larger/more significant airport)
 # Used as fallback when FAR 139 data is not available
 # Values start at 5 to sort after FAR 139 airports
 TOWER_TYPE_PRIORITY = {
-    'ATCT-TRACON': 5,
-    'ATCT-RAPCON': 5,
-    'ATCT-RATCF': 5,
-    'ATCT-A/C': 6,
-    'ATCT': 7,
-    'NON-ATCT': 8,
-    '': 9,
+    "ATCT-TRACON": 5,
+    "ATCT-RAPCON": 5,
+    "ATCT-RATCF": 5,
+    "ATCT-A/C": 6,
+    "ATCT": 7,
+    "NON-ATCT": 8,
+    "": 9,
 }
 
 # Weather phenomena codes mapping
@@ -95,12 +95,12 @@ def get_airport_size_priority(airport_info: Dict[str, Any]) -> int:
     Returns:
         Priority value (lower = more significant airport)
     """
-    far139 = airport_info.get('far139', '')
+    far139 = airport_info.get("far139", "")
     # Check FAR 139 first (most accurate for major airports)
     if far139 in FAR139_PRIORITY:
         return FAR139_PRIORITY[far139]
     # Fall back to tower type
-    tower_type = airport_info.get('tower_type', '')
+    tower_type = airport_info.get("tower_type", "")
     return TOWER_TYPE_PRIORITY.get(tower_type, 9)
 
 
@@ -123,7 +123,7 @@ def parse_visibility_sm(metar: str) -> Optional[float]:
     # 3. Meters visibility (convert to SM): "9999" means 10+ km, "0800" = 800m
 
     # Pattern for mixed fraction like "1 1/2SM" or "2 1/4SM"
-    mixed_frac_match = re.search(r'\b(\d+)\s+(\d+)/(\d+)SM\b', metar)
+    mixed_frac_match = re.search(r"\b(\d+)\s+(\d+)/(\d+)SM\b", metar)
     if mixed_frac_match:
         whole = int(mixed_frac_match.group(1))
         num = int(mixed_frac_match.group(2))
@@ -131,7 +131,7 @@ def parse_visibility_sm(metar: str) -> Optional[float]:
         return whole + (num / den)
 
     # Pattern for "M1/4SM" (less than 1/4 mile)
-    less_than_frac_match = re.search(r'\bM(\d+)/(\d+)SM\b', metar)
+    less_than_frac_match = re.search(r"\bM(\d+)/(\d+)SM\b", metar)
     if less_than_frac_match:
         num = int(less_than_frac_match.group(1))
         den = int(less_than_frac_match.group(2))
@@ -139,24 +139,24 @@ def parse_visibility_sm(metar: str) -> Optional[float]:
         return (num / den) - 0.01
 
     # Pattern for simple fraction like "1/2SM", "3/4SM"
-    frac_match = re.search(r'\b(\d+)/(\d+)SM\b', metar)
+    frac_match = re.search(r"\b(\d+)/(\d+)SM\b", metar)
     if frac_match:
         num = int(frac_match.group(1))
         den = int(frac_match.group(2))
         return num / den
 
     # Pattern for whole number like "10SM", "3SM", "P6SM" (P = plus/more than 6)
-    whole_match = re.search(r'\b[PM]?(\d+)SM\b', metar)
+    whole_match = re.search(r"\b[PM]?(\d+)SM\b", metar)
     if whole_match:
         vis = int(whole_match.group(1))
         # P6SM means greater than 6 miles - treat as good visibility
-        if 'P' in metar and f'P{vis}SM' in metar:
+        if "P" in metar and f"P{vis}SM" in metar:
             return vis + 1  # Slightly more than indicated
         return float(vis)
 
     # Pattern for meters (4-digit): "9999" = 10km+, "0800" = 800m
     # This appears after the wind in METAR, before clouds
-    meters_match = re.search(r'\b(\d{4})\b(?!\d)', metar)
+    meters_match = re.search(r"\b(\d{4})\b(?!\d)", metar)
     if meters_match:
         # Make sure it's not a time or other number
         meters_str = meters_match.group(1)
@@ -188,7 +188,7 @@ def parse_ceiling_feet(metar: str) -> Optional[int]:
     # Heights are in hundreds of feet AGL
     # Ceiling is the lowest BKN (broken), OVC (overcast), or VV (vertical visibility/obscured)
 
-    cloud_pattern = r'\b(BKN|OVC|VV)(\d{3})\b'
+    cloud_pattern = r"\b(BKN|OVC|VV)(\d{3})\b"
     matches = re.findall(cloud_pattern, metar)
 
     if not matches:
@@ -218,7 +218,7 @@ def parse_ceiling_layer(metar: str) -> Optional[str]:
         return None
 
     # Cloud layer patterns: BKN035, OVC050, VV003 (vertical visibility)
-    cloud_pattern = r'\b(BKN|OVC|VV)(\d{3})\b'
+    cloud_pattern = r"\b(BKN|OVC|VV)(\d{3})\b"
     matches = re.findall(cloud_pattern, metar)
 
     if not matches:
@@ -252,22 +252,22 @@ def extract_visibility_str(metar: str) -> Optional[str]:
 
     # Match visibility patterns in order of specificity:
     # Mixed fraction: "1 1/2SM", "2 1/4SM"
-    mixed_match = re.search(r'\b(\d+\s+\d+/\d+SM)\b', metar)
+    mixed_match = re.search(r"\b(\d+\s+\d+/\d+SM)\b", metar)
     if mixed_match:
         return mixed_match.group(1)
 
     # Less than fraction: "M1/4SM"
-    less_than_match = re.search(r'\b(M\d+/\d+SM)\b', metar)
+    less_than_match = re.search(r"\b(M\d+/\d+SM)\b", metar)
     if less_than_match:
         return less_than_match.group(1)
 
     # Simple fraction: "1/2SM", "3/4SM"
-    frac_match = re.search(r'\b(\d+/\d+SM)\b', metar)
+    frac_match = re.search(r"\b(\d+/\d+SM)\b", metar)
     if frac_match:
         return frac_match.group(1)
 
     # Whole number with optional P prefix: "10SM", "P6SM"
-    whole_match = re.search(r'\b(P?\d+SM)\b', metar)
+    whole_match = re.search(r"\b(P?\d+SM)\b", metar)
     if whole_match:
         return whole_match.group(1)
 
@@ -301,7 +301,7 @@ def parse_wind_from_metar(metar: str) -> Optional[str]:
     if not metar:
         return None
 
-    wind_pattern = r'\b(\d{3}|VRB)(\d{2,3})(G\d{2,3})?(KT|MPS|KMH)\b'
+    wind_pattern = r"\b(\d{3}|VRB)(\d{2,3})(G\d{2,3})?(KT|MPS|KMH)\b"
     match = re.search(wind_pattern, metar)
     if match:
         return match.group(0)
@@ -325,7 +325,7 @@ def parse_metar_obs_time(metar: str) -> Optional[str]:
         return None
 
     # Match 6-digit Zulu time after the ICAO code
-    time_pattern = r'\b(\d{6})Z\b'
+    time_pattern = r"\b(\d{6})Z\b"
     match = re.search(time_pattern, metar)
     if match:
         return match.group(1)
@@ -357,7 +357,7 @@ def is_speci_metar(metar: str) -> bool:
     # - "SPECI KSFO 031756Z..."
     # - "KSFO 031756Z... SPECI" (less common but possible)
     metar_upper = metar.strip().upper()
-    return metar_upper.startswith('SPECI') or ' SPECI ' in metar_upper
+    return metar_upper.startswith("SPECI") or " SPECI " in metar_upper
 
 
 def format_obs_time_display(obs_time: str) -> str:
@@ -410,7 +410,7 @@ def _parse_single_weather(code: str) -> List[str]:
     for desc_code, desc_name in WEATHER_DESCRIPTORS.items():
         if code.startswith(desc_code):
             descriptor = desc_name + " "
-            code = code[len(desc_code):]
+            code = code[len(desc_code) :]
             break
 
     # Handle thunderstorm specially - it's both descriptor and phenomenon
@@ -462,25 +462,25 @@ def parse_weather_phenomena(metar: str) -> List[str]:
 
     for part in parts:
         # Skip parts that are clearly not weather (timestamps, wind, visibility, clouds, temps)
-        if re.match(r'^\d{6}Z$', part):  # Timestamp
+        if re.match(r"^\d{6}Z$", part):  # Timestamp
             continue
-        if re.match(r'^\d{5}(G\d+)?KT$', part):  # Wind
+        if re.match(r"^\d{5}(G\d+)?KT$", part):  # Wind
             continue
-        if re.match(r'^(VRB)?\d{3}V\d{3}$', part):  # Variable wind
+        if re.match(r"^(VRB)?\d{3}V\d{3}$", part):  # Variable wind
             continue
-        if re.match(r'^[PM]?\d+SM$', part):  # Visibility
+        if re.match(r"^[PM]?\d+SM$", part):  # Visibility
             continue
-        if re.match(r'^\d+/\d+SM$', part):  # Fractional visibility
+        if re.match(r"^\d+/\d+SM$", part):  # Fractional visibility
             continue
-        if re.match(r'^(SKC|CLR|FEW|SCT|BKN|OVC|VV)\d{3}', part):  # Clouds
+        if re.match(r"^(SKC|CLR|FEW|SCT|BKN|OVC|VV)\d{3}", part):  # Clouds
             continue
-        if re.match(r'^[AM]?\d{2}/[AM]?\d{2}$', part):  # Temp/dewpoint
+        if re.match(r"^[AM]?\d{2}/[AM]?\d{2}$", part):  # Temp/dewpoint
             continue
-        if re.match(r'^A\d{4}$', part):  # Altimeter
+        if re.match(r"^A\d{4}$", part):  # Altimeter
             continue
-        if re.match(r'^Q\d{4}$', part):  # QNH
+        if re.match(r"^Q\d{4}$", part):  # QNH
             continue
-        if re.match(r'^RMK', part):  # Start of remarks - stop processing
+        if re.match(r"^RMK", part):  # Start of remarks - stop processing
             break
 
         # Try to parse as weather phenomenon

@@ -26,20 +26,21 @@ TILE_SIZE = 256
 
 # Weather category colors as RGBA tuples
 CATEGORY_RGBA = {
-    'VFR': (0, 255, 0, 140),
-    'MVFR': (85, 153, 255, 140),
-    'IFR': (255, 0, 0, 140),
-    'LIFR': (255, 0, 255, 140),
+    "VFR": (0, 255, 0, 140),
+    "MVFR": (85, 153, 255, 140),
+    "IFR": (255, 0, 0, 140),
+    "LIFR": (255, 0, 255, 140),
 }
 
 # Category to index mapping
-CATEGORY_INDEX = {'VFR': 0, 'MVFR': 1, 'IFR': 2, 'LIFR': 3}
-INDEX_TO_CATEGORY = {0: 'VFR', 1: 'MVFR', 2: 'IFR', 3: 'LIFR'}
+CATEGORY_INDEX = {"VFR": 0, "MVFR": 1, "IFR": 2, "LIFR": 3}
+INDEX_TO_CATEGORY = {0: "VFR", 1: "MVFR", 2: "IFR", 3: "LIFR"}
 
 
 @dataclass
 class TileBounds:
     """Geographic bounds for a tile."""
+
     north: float
     south: float
     east: float
@@ -48,20 +49,20 @@ class TileBounds:
 
 def lat_to_tile_y(lat: float, zoom: int) -> int:
     """Convert latitude to tile Y coordinate (Web Mercator)."""
-    n = 2 ** zoom
+    n = 2**zoom
     lat_rad = math.radians(lat)
     return int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
 
 
 def lon_to_tile_x(lon: float, zoom: int) -> int:
     """Convert longitude to tile X coordinate."""
-    n = 2 ** zoom
+    n = 2**zoom
     return int((lon + 180.0) / 360.0 * n)
 
 
 def get_tile_bounds(x: int, y: int, zoom: int) -> TileBounds:
     """Get geographic bounds for a tile."""
-    n = 2 ** zoom
+    n = 2**zoom
 
     def tile_to_lat(ty):
         lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ty / n)))
@@ -78,7 +79,9 @@ def get_tile_bounds(x: int, y: int, zoom: int) -> TileBounds:
     )
 
 
-def points_in_polygon(lats: np.ndarray, lons: np.ndarray, polygon: List[Tuple[float, float]]) -> np.ndarray:
+def points_in_polygon(
+    lats: np.ndarray, lons: np.ndarray, polygon: List[Tuple[float, float]]
+) -> np.ndarray:
     """Vectorized point-in-polygon test using ray casting."""
     n = len(polygon)
     inside = np.zeros(lats.shape, dtype=bool)
@@ -89,7 +92,7 @@ def points_in_polygon(lats: np.ndarray, lons: np.ndarray, polygon: List[Tuple[fl
         xj, yj = polygon[j]
         cond1 = (yi > lons) != (yj > lons)
         cond2 = lats < (xj - xi) * (lons - yi) / (yj - yi + 1e-10) + xi
-        inside ^= (cond1 & cond2)
+        inside ^= cond1 & cond2
         j = i
 
     return inside
@@ -117,7 +120,7 @@ class WeatherTileGenerator:
         """Initialize the tile generator with KD-tree for efficient lookups."""
         self.output_dir = output_dir
         self.zoom_levels = zoom_levels
-        self.max_distance_sq = max_distance_deg ** 2
+        self.max_distance_sq = max_distance_deg**2
 
         # Build combined list of all CONUS boundary polygons
         self.all_boundaries: List[List[Tuple[float, float]]] = []
@@ -135,15 +138,15 @@ class WeatherTileGenerator:
         self.cos_ref_lat = math.cos(math.radians(self.ref_lat))
 
         # Build airport arrays and KD-tree for spatial queries
-        valid_categories = {'VFR', 'MVFR', 'IFR', 'LIFR'}
+        valid_categories = {"VFR", "MVFR", "IFR", "LIFR"}
         coords = []
         raw_coords = []
         categories = []
 
         for icao, data in airport_weather.items():
-            cat = data.get('category')
+            cat = data.get("category")
             if cat in valid_categories:
-                lat, lon = data['lat'], data['lon']
+                lat, lon = data["lat"], data["lon"]
                 raw_coords.append((lat, lon))
                 # Apply cosine correction to longitude for equal-distance KD-tree
                 coords.append((lat, lon * self.cos_ref_lat))
@@ -161,7 +164,9 @@ class WeatherTileGenerator:
             self.airport_categories = np.array([], dtype=np.int8)
             self.kdtree = None
 
-        logger.info(f"WeatherTileGenerator initialized with {len(coords)} airports (KD-tree indexed, ref_lat={self.ref_lat:.1f}°)")
+        logger.info(
+            f"WeatherTileGenerator initialized with {len(coords)} airports (KD-tree indexed, ref_lat={self.ref_lat:.1f}°)"
+        )
 
     def _calculate_bounds(
         self,
@@ -210,14 +215,16 @@ class WeatherTileGenerator:
         tile_bounds = get_tile_bounds(tile_x, tile_y, zoom)
 
         # Quick bounds check
-        if (tile_bounds.south > self.bounds.north or
-            tile_bounds.north < self.bounds.south or
-            tile_bounds.west > self.bounds.east or
-            tile_bounds.east < self.bounds.west):
+        if (
+            tile_bounds.south > self.bounds.north
+            or tile_bounds.north < self.bounds.south
+            or tile_bounds.west > self.bounds.east
+            or tile_bounds.east < self.bounds.west
+        ):
             return None
 
         # Create coordinate grids for the tile
-        n = 2 ** zoom
+        n = 2**zoom
         px = np.arange(TILE_SIZE, dtype=np.float32)
         py = np.arange(TILE_SIZE, dtype=np.float32)
         px_grid, py_grid = np.meshgrid(px, py)
@@ -253,7 +260,7 @@ class WeatherTileGenerator:
 
         # Get categories and apply distance mask
         pixel_categories = self.airport_categories[indices]
-        valid_mask = inside_any & (distances ** 2 <= self.max_distance_sq)
+        valid_mask = inside_any & (distances**2 <= self.max_distance_sq)
 
         if not np.any(valid_mask):
             return None
@@ -267,9 +274,9 @@ class WeatherTileGenerator:
                 rgba[cat_mask] = CATEGORY_RGBA[cat_name]
 
         # Convert to PNG bytes
-        img = Image.fromarray(rgba, 'RGBA')
+        img = Image.fromarray(rgba, "RGBA")
         buffer = BytesIO()
-        img.save(buffer, 'PNG', optimize=True)
+        img.save(buffer, "PNG", optimize=True)
         return buffer.getvalue()
 
     def generate_all(self, max_workers: int = 2) -> Dict[int, int]:
@@ -293,8 +300,12 @@ class WeatherTileGenerator:
                     all_tiles.append((x, y, zoom))
 
         total_potential = len(all_tiles)
-        print(f"    Processing {total_potential} potential tiles with {max_workers} workers...")
-        logger.info(f"Processing {total_potential} potential tiles with {max_workers} workers")
+        print(
+            f"    Processing {total_potential} potential tiles with {max_workers} workers..."
+        )
+        logger.info(
+            f"Processing {total_potential} potential tiles with {max_workers} workers"
+        )
 
         results: Dict[int, int] = {z: 0 for z in self.zoom_levels}
         generated = 0
@@ -306,7 +317,7 @@ class WeatherTileGenerator:
                 tile_dir = self.output_dir / str(zoom) / str(x)
                 tile_dir.mkdir(parents=True, exist_ok=True)
                 tile_path = tile_dir / f"{y}.png"
-                with open(tile_path, 'wb') as f:
+                with open(tile_path, "wb") as f:
                     f.write(png_bytes)
                 return zoom
             return None
@@ -327,7 +338,9 @@ class WeatherTileGenerator:
 
         total = sum(results.values())
         print(f"    Generated {total} tiles total")
-        logger.info(f"Generated {total} tiles across {len(self.zoom_levels)} zoom levels")
+        logger.info(
+            f"Generated {total} tiles across {len(self.zoom_levels)} zoom levels"
+        )
 
         return results
 

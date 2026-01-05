@@ -1,7 +1,7 @@
 """Route Weather Modal Screen - Weather along a flight's filed route"""
 
 import asyncio
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Set
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.containers import Container, VerticalScroll
@@ -87,18 +87,20 @@ class RouteWeatherScreen(ModalScreen):
         """
         super().__init__()
         self.flight_data = flight_data
-        self.callsign = flight_data.get('callsign', 'Unknown')
+        self.callsign = flight_data.get("callsign", "Unknown")
 
         # Extract route info
-        flight_plan = flight_data.get('flight_plan') or {}
-        self.departure = flight_plan.get('departure', '')
-        self.arrival = flight_plan.get('arrival', '')
-        self.route_string = flight_plan.get('route', '')
+        flight_plan = flight_data.get("flight_plan") or {}
+        self.departure = flight_plan.get("departure", "")
+        self.arrival = flight_plan.get("arrival", "")
+        self.route_string = flight_plan.get("route", "")
 
         # Will be populated asynchronously
         self.waypoints: List[Waypoint] = []
         self.route_airports: List[str] = []  # Airports along the route
-        self.waypoint_airports: Dict[str, List[str]] = {}  # waypoint_id -> nearby airports
+        self.waypoint_airports: Dict[
+            str, List[str]
+        ] = {}  # waypoint_id -> nearby airports
         self.weather_data: Dict[str, Dict[str, Any]] = {}
         self._pending_tasks: list = []
 
@@ -134,17 +136,14 @@ class RouteWeatherScreen(ModalScreen):
         airport_coords = {}
         if config.UNIFIED_AIRPORT_DATA:
             for icao, data in config.UNIFIED_AIRPORT_DATA.items():
-                lat = data.get('latitude')
-                lon = data.get('longitude')
+                lat = data.get("latitude")
+                lon = data.get("longitude")
                 if lat is not None and lon is not None:
                     airport_coords[icao] = (lat, lon)
 
         # Parse route string in executor (may involve file I/O for navaids)
         self.waypoints = await loop.run_in_executor(
-            None,
-            parse_route_string,
-            self.route_string,
-            airport_coords
+            None, parse_route_string, self.route_string, airport_coords
         )
 
         # Collect airports to fetch weather for
@@ -164,12 +163,15 @@ class RouteWeatherScreen(ModalScreen):
                     waypoint.longitude,
                     config.UNIFIED_AIRPORT_DATA,
                     radius_nm=WAYPOINT_SEARCH_RADIUS_NM,
-                    max_results=5
+                    max_results=5,
                 )
                 # Filter to 4-letter ICAO codes only
                 nearby_icao = [
-                    icao for icao in nearby
-                    if len(icao) == 4 and icao.isalpha() and icao not in (self.departure, self.arrival)
+                    icao
+                    for icao in nearby
+                    if len(icao) == 4
+                    and icao.isalpha()
+                    and icao not in (self.departure, self.arrival)
                 ]
                 if nearby_icao:
                     self.waypoint_airports[waypoint.identifier] = nearby_icao
@@ -195,32 +197,28 @@ class RouteWeatherScreen(ModalScreen):
 
         # Fetch METARs for all airports
         all_airports = list(airports_to_fetch)
-        metars = await loop.run_in_executor(
-            None,
-            get_metar_batch,
-            all_airports
-        )
+        metars = await loop.run_in_executor(None, get_metar_batch, all_airports)
 
         # Build weather data structure
         for icao in all_airports:
-            metar = metars.get(icao, '')
+            metar = metars.get(icao, "")
             if metar:
                 category = get_flight_category(metar)
                 color = CATEGORY_COLORS.get(category, "white")
                 self.weather_data[icao] = {
-                    'metar': metar,
-                    'category': category,
-                    'color': color,
-                    'visibility': extract_visibility_str(metar),
-                    'ceiling': parse_ceiling_layer(metar),
-                    'wind': parse_wind_from_metar(metar),
-                    'obs_time': _parse_metar_observation_time(metar),
-                    'phenomena': parse_weather_phenomena(metar),
+                    "metar": metar,
+                    "category": category,
+                    "color": color,
+                    "visibility": extract_visibility_str(metar),
+                    "ceiling": parse_ceiling_layer(metar),
+                    "wind": parse_wind_from_metar(metar),
+                    "obs_time": _parse_metar_observation_time(metar),
+                    "phenomena": parse_weather_phenomena(metar),
                 }
             else:
                 self.weather_data[icao] = {
-                    'category': 'UNK',
-                    'color': 'white',
+                    "category": "UNK",
+                    "color": "white",
                 }
 
         # Update display
@@ -231,8 +229,8 @@ class RouteWeatherScreen(ModalScreen):
         # Count categories (excluding UNK)
         category_counts = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0}
         for data in self.weather_data.values():
-            cat = data.get('category', 'UNK')
-            if cat != 'UNK':
+            cat = data.get("category", "UNK")
+            if cat != "UNK":
                 category_counts[cat] = category_counts.get(cat, 0) + 1
 
         # Build summary
@@ -270,13 +268,16 @@ class RouteWeatherScreen(ModalScreen):
             wp_airports = self.waypoint_airports.get(waypoint.identifier, [])
             # Filter to airports with valid weather that haven't been shown yet
             valid_airports = [
-                icao for icao in wp_airports
+                icao
+                for icao in wp_airports
                 if self._has_valid_weather(icao) and icao not in shown_airports
             ]
 
             if valid_airports:
                 # Show waypoint header
-                enroute_lines.append(f"[dim]── {waypoint.identifier} ({waypoint.waypoint_type}) ──[/dim]")
+                enroute_lines.append(
+                    f"[dim]── {waypoint.identifier} ({waypoint.waypoint_type}) ──[/dim]"
+                )
                 # Show each airport's weather
                 for icao in valid_airports:
                     data = self.weather_data.get(icao, {})
@@ -289,7 +290,9 @@ class RouteWeatherScreen(ModalScreen):
             # Remove trailing blank line
             if enroute_lines and enroute_lines[-1] == "":
                 enroute_lines.pop()
-            sections.append("[bold cyan]═══ ENROUTE ═══[/bold cyan]\n" + "\n".join(enroute_lines))
+            sections.append(
+                "[bold cyan]═══ ENROUTE ═══[/bold cyan]\n" + "\n".join(enroute_lines)
+            )
 
         # Arrival section
         if self.arrival and self._has_valid_weather(self.arrival):
@@ -306,7 +309,7 @@ class RouteWeatherScreen(ModalScreen):
     def _has_valid_weather(self, icao: str) -> bool:
         """Check if an airport has valid (non-UNK) weather data."""
         data = self.weather_data.get(icao, {})
-        return data.get('category', 'UNK') != 'UNK'
+        return data.get("category", "UNK") != "UNK"
 
     def _build_section(self, header: str, airports: List[str]) -> str:
         """Build a section with header and airport cards (filters out UNK)"""
@@ -326,9 +329,11 @@ class RouteWeatherScreen(ModalScreen):
         lines = []
 
         # Header with airport name and colored category suffix
-        category = data.get('category', 'VFR')
-        color = CATEGORY_COLORS.get(category, 'white')
-        pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
+        category = data.get("category", "VFR")
+        color = CATEGORY_COLORS.get(category, "white")
+        pretty_name = (
+            config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
+        )
 
         # Calculate distance from previous waypoint if applicable
         distance_info = self._get_distance_info(icao)
@@ -338,7 +343,7 @@ class RouteWeatherScreen(ModalScreen):
         lines.append(header)
 
         # Observation time line (Zulu + Local)
-        obs_time = data.get('obs_time')
+        obs_time = data.get("obs_time")
         if obs_time:
             zulu_str, local_str = obs_time
             if local_str:
@@ -348,17 +353,17 @@ class RouteWeatherScreen(ModalScreen):
 
         # Conditions line
         conditions_parts = []
-        ceiling = data.get('ceiling')
+        ceiling = data.get("ceiling")
         if ceiling:
             conditions_parts.append(f"Ceiling: {ceiling}")
         else:
             conditions_parts.append("Ceiling: CLR")
 
-        visibility = data.get('visibility')
+        visibility = data.get("visibility")
         if visibility:
             conditions_parts.append(f"Vis: {visibility}")
 
-        wind = data.get('wind')
+        wind = data.get("wind")
         if wind:
             conditions_parts.append(f"Wind: {wind}")
 
@@ -366,7 +371,7 @@ class RouteWeatherScreen(ModalScreen):
             lines.append("  " + " | ".join(conditions_parts))
 
         # Weather phenomena line
-        phenomena = data.get('phenomena', [])
+        phenomena = data.get("phenomena", [])
         if phenomena:
             lines.append(f"  Weather: {', '.join(phenomena)}")
 
@@ -378,20 +383,19 @@ class RouteWeatherScreen(ModalScreen):
             return ""
 
         airport_data = config.UNIFIED_AIRPORT_DATA.get(icao, {})
-        apt_lat = airport_data.get('latitude')
-        apt_lon = airport_data.get('longitude')
+        apt_lat = airport_data.get("latitude")
+        apt_lon = airport_data.get("longitude")
         if apt_lat is None or apt_lon is None:
             return ""
 
         # For enroute airports, find the nearest waypoint and show distance
         if icao not in (self.departure, self.arrival):
-            min_distance = float('inf')
+            min_distance = float("inf")
             nearest_waypoint = None
 
             for waypoint in self.waypoints:
                 distance = haversine_distance_nm(
-                    waypoint.latitude, waypoint.longitude,
-                    apt_lat, apt_lon
+                    waypoint.latitude, waypoint.longitude, apt_lat, apt_lon
                 )
                 if distance < min_distance:
                     min_distance = distance

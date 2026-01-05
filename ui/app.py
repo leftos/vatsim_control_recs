@@ -19,8 +19,27 @@ from backend import analyze_flights_data
 from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
-from .tables import TableManager, create_airports_table_config, create_groupings_table_config
-from .modals import WindInfoScreen, MetarInfoScreen, FlightBoardScreen, TrackedAirportsModal, FlightLookupScreen, GoToScreen, VfrAlternativesScreen, HistoricalStatsScreen, HelpScreen, CommandPaletteScreen, FlightInfoScreen, DiversionModal, WeatherBriefingScreen, FlightWeatherBriefingScreen
+from .tables import (
+    TableManager,
+    create_airports_table_config,
+    create_groupings_table_config,
+)
+from .modals import (
+    WindInfoScreen,
+    MetarInfoScreen,
+    FlightBoardScreen,
+    TrackedAirportsModal,
+    FlightLookupScreen,
+    GoToScreen,
+    VfrAlternativesScreen,
+    HistoricalStatsScreen,
+    HelpScreen,
+    CommandPaletteScreen,
+    FlightInfoScreen,
+    DiversionModal,
+    WeatherBriefingScreen,
+    FlightWeatherBriefingScreen,
+)
 
 
 def set_terminal_title(title: str) -> None:
@@ -40,7 +59,7 @@ def set_terminal_title(title: str) -> None:
     # Method 2: Write directly to the terminal file descriptor
     try:
         # Get the actual terminal file descriptor
-        if hasattr(sys.stdout, 'buffer'):
+        if hasattr(sys.stdout, "buffer"):
             # Use the underlying buffer
             os.write(sys.stdout.fileno(), f"\033]0;{title}\007".encode())
         else:
@@ -58,7 +77,7 @@ def set_terminal_title(title: str) -> None:
 
 class VATSIMControlApp(App):
     """Textual app for VATSIM Control Recommendations"""
-    
+
     CSS = """
     #header-bar {
         height: 1;
@@ -122,7 +141,7 @@ class VATSIMControlApp(App):
         padding: 0 1;
     }
     """
-    
+
     BINDINGS = [
         # Visible in footer (compact labels)
         Binding("ctrl+c", "quit", "Quit", priority=True),
@@ -137,22 +156,41 @@ class VATSIMControlApp(App):
         Binding("ctrl+l", "show_goto", "Go To", show=False, priority=True),
         Binding("ctrl+w", "show_wind_lookup", "Wind Lkp", show=False, priority=True),
         Binding("ctrl+e", "show_metar_lookup", "METAR Lkp", show=False, priority=True),
-        Binding("ctrl+a", "show_vfr_alternatives", "VFR Alts", show=False, priority=True),
-        Binding("ctrl+t", "show_airport_tracking", "Tracked", show=False, priority=True),
-        Binding("ctrl+s", "show_historical_stats", "Hist Stats", show=False, priority=True),
-        Binding("ctrl+b", "show_weather_briefing", "Wx Brief", show=False, priority=True),
+        Binding(
+            "ctrl+a", "show_vfr_alternatives", "VFR Alts", show=False, priority=True
+        ),
+        Binding(
+            "ctrl+t", "show_airport_tracking", "Tracked", show=False, priority=True
+        ),
+        Binding(
+            "ctrl+s", "show_historical_stats", "Hist Stats", show=False, priority=True
+        ),
+        Binding(
+            "ctrl+b", "show_weather_briefing", "Wx Brief", show=False, priority=True
+        ),
         Binding("escape", "cancel_search", "Cancel", show=False),
     ]
-    
-    def __init__(self, airport_data=None, groupings_data=None, total_flights=0, args=None, airport_allowlist=None):
+
+    def __init__(
+        self,
+        airport_data=None,
+        groupings_data=None,
+        total_flights=0,
+        args=None,
+        airport_allowlist=None,
+    ):
         super().__init__()
         self.title = "VATSIM Control Recommendations"
-        self.original_airport_data: List[Any] = list(airport_data) if airport_data else []
+        self.original_airport_data: List[Any] = (
+            list(airport_data) if airport_data else []
+        )
         self.airport_data: List[Any] = list(airport_data) if airport_data else []
         self.groupings_data: List[Any] = list(groupings_data) if groupings_data else []
         self.total_flights = total_flights
         self.args = args
-        self.airport_allowlist = list(airport_allowlist) if airport_allowlist else []  # Store the expanded airport allowlist
+        self.airport_allowlist = (
+            list(airport_allowlist) if airport_allowlist else []
+        )  # Store the expanded airport allowlist
         self.include_all_staffed = args.include_all_staffed if args else False
         self.hide_wind = args.hide_wind if args else False
         self.include_all_arriving = args.include_all_arriving if args else False
@@ -168,10 +206,12 @@ class VATSIMControlApp(App):
         self.airports_row_keys = []
         self.groupings_row_keys = []
         self.watch_for_user_activity = True  # Control whether to track user activity
-        self._activity_lock = threading.Lock()  # Lock for synchronizing watch_for_user_activity
+        self._activity_lock = (
+            threading.Lock()
+        )  # Lock for synchronizing watch_for_user_activity
         self.last_activity_source = ""  # Track what triggered the last activity
         self.initial_setup_complete = False  # Prevent timer resets during initial setup
-        self.flight_board_open = False # Is a flight board currently open?
+        self.flight_board_open = False  # Is a flight board currently open?
         self.active_flight_board = None  # Reference to the active flight board screen
         # TableManagers will be initialized after tables are created
         self.airports_manager = None
@@ -182,40 +222,48 @@ class VATSIMControlApp(App):
         # Pre-built results list for Go To modal (list of (type, identifier, data) tuples)
         self.cached_goto_results: List[Tuple[str, str, Any]] = []
         self.goto_cache_ready = False
-        
+
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
         # Create custom header with clocks
         with Container(id="header-bar"):
             yield Static("VATSIM Control Recommendations", classes="header-title")
             yield Static("", classes="header-clocks")
-        
+
         with Container(id="search-container"):
             yield Input(placeholder="Type to filter airports...", id="search-input")
-        
+
         with TabbedContent(initial="airports", id="tabs"):
             with TabPane("Individual Airports", id="airports"):
                 enable_anims = not self.args.disable_animations if self.args else True
-                airports_table = SplitFlapDataTable(id="airports-table", enable_animations=enable_anims, on_select=self.action_open_flight_board)
+                airports_table = SplitFlapDataTable(
+                    id="airports-table",
+                    enable_animations=enable_anims,
+                    on_select=self.action_open_flight_board,
+                )
                 airports_table.cursor_type = "row"
                 yield airports_table
 
             with TabPane("Custom Groupings", id="groupings"):
                 enable_anims = not self.args.disable_animations if self.args else True
-                groupings_table = SplitFlapDataTable(id="groupings-table", enable_animations=enable_anims, on_select=self.action_open_flight_board)
+                groupings_table = SplitFlapDataTable(
+                    id="groupings-table",
+                    enable_animations=enable_anims,
+                    on_select=self.action_open_flight_board,
+                )
                 groupings_table.cursor_type = "row"
                 yield groupings_table
-        
+
         yield Static("", id="status-bar")
         yield Footer()
-    
+
     def on_mount(self) -> None:
         """Set up the datatables when the app starts."""
         # Set the terminal title using Textual's driver (bypasses stdout/stderr capture)
         try:
             # Use Textual's driver to write directly to the terminal
-            driver = getattr(self, '_driver', None)
-            if driver is not None and hasattr(driver, 'write'):
+            driver = getattr(self, "_driver", None)
+            if driver is not None and hasattr(driver, "write"):
                 driver.write("\033]0;VATSIM Control Recommendations\007")
             else:
                 set_terminal_title("VATSIM Control Recommendations")
@@ -234,7 +282,7 @@ class VATSIMControlApp(App):
 
         # Mark initial setup as complete after all initialization events have settled
         # This prevents automatic events (tab activation, row highlights) from resetting the timer
-        self.call_after_refresh(lambda: setattr(self, 'initial_setup_complete', True))
+        self.call_after_refresh(lambda: setattr(self, "initial_setup_complete", True))
 
         # Warm up caches for Go To modal in background
         self.run_worker(self._warm_up_goto_cache(), exclusive=False)
@@ -251,14 +299,14 @@ class VATSIMControlApp(App):
         self.cached_groupings = await loop.run_in_executor(
             None,
             load_all_groupings,
-            os.path.join(script_dir, 'data', 'custom_groupings.json'),
-            config.UNIFIED_AIRPORT_DATA or {}
+            os.path.join(script_dir, "data", "custom_groupings.json"),
+            config.UNIFIED_AIRPORT_DATA or {},
         )
 
         # Load pilots data (network call)
         vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
         if vatsim_data:
-            self.cached_pilots = vatsim_data.get('pilots', [])
+            self.cached_pilots = vatsim_data.get("pilots", [])
 
         # Pre-build the Go To results list in executor (includes disambiguator warmup)
         await loop.run_in_executor(None, self._build_goto_results)
@@ -279,17 +327,17 @@ class VATSIMControlApp(App):
         # Add airports with their pre-fetched names
         for icao in sorted(tracked_airports):
             pretty_name = airport_names.get(icao, icao)
-            results.append(('airport', icao, pretty_name))
+            results.append(("airport", icao, pretty_name))
 
         # Add all available groupings
         for name in sorted(self.cached_groupings.keys()):
-            results.append(('grouping', name, None))
+            results.append(("grouping", name, None))
 
         # Add flights (sorted by callsign)
-        for pilot in sorted(self.cached_pilots, key=lambda p: p.get('callsign', '')):
-            callsign = pilot.get('callsign', '')
+        for pilot in sorted(self.cached_pilots, key=lambda p: p.get("callsign", "")):
+            callsign = pilot.get("callsign", "")
             if callsign:
-                results.append(('flight', callsign, pilot))
+                results.append(("flight", callsign, pilot))
 
         self.cached_goto_results = results
         self.goto_cache_ready = True
@@ -309,62 +357,70 @@ class VATSIMControlApp(App):
         self._disable_activity_watching()  # Temporarily disable user activity tracking
 
         max_eta = self.args.max_eta_hours if self.args else 1.0
-        
+
         # Initialize or recreate TableManagers with current configuration
         airports_table = self.query_one("#airports-table", SplitFlapDataTable)
         groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
-        
+
         # Clear tables and recreate managers (needed when columns change, e.g., on first load)
         airports_table.clear(columns=True)
         self.airports_row_keys.clear()
-        
+
         groupings_table.clear(columns=True)
         self.groupings_row_keys.clear()
-        
+
         # Create fresh TableManagers with current config
         airports_config = create_airports_table_config(max_eta, self.hide_wind)
-        self.airports_manager = TableManager(airports_table, airports_config, self.airports_row_keys)
-        
+        self.airports_manager = TableManager(
+            airports_table, airports_config, self.airports_row_keys
+        )
+
         groupings_config = create_groupings_table_config(max_eta)
-        self.groupings_manager = TableManager(groupings_table, groupings_config, self.groupings_row_keys)
-        
+        self.groupings_manager = TableManager(
+            groupings_table, groupings_config, self.groupings_row_keys
+        )
+
         # Populate tables using TableManagers
         self.airports_manager.populate(self.airport_data)
-        
+
         if self.groupings_data:
             self.groupings_manager.populate(self.groupings_data)
 
         self._enable_activity_watching()  # Re-enable user activity tracking
-    
+
     async def action_quit(self) -> None:
         """Quit the application."""
         self.exit()
-    
+
     def auto_refresh_callback(self) -> None:
         """Callback for auto-refresh timer (called every second)."""
         # Check if at least refresh_interval seconds have passed since last refresh
-        time_since_refresh = (datetime.now(timezone.utc) - self.last_refresh_time).total_seconds()
+        time_since_refresh = (
+            datetime.now(timezone.utc) - self.last_refresh_time
+        ).total_seconds()
         if time_since_refresh < self.refresh_interval:
             return
-        
+
         # Don't refresh if manually paused
         if self.refresh_paused:
             return
-        
+
         # Check if user has been idle long enough (not auto-paused)
-        idle_time = (datetime.now(timezone.utc) - self.last_activity_time).total_seconds()
+        idle_time = (
+            datetime.now(timezone.utc) - self.last_activity_time
+        ).total_seconds()
         if idle_time < self.idle_timeout:
             return
-        
+
         # All conditions met - perform refresh
         self.user_is_active = False
         self.action_refresh()
-    
+
     def action_toggle_pause(self) -> None:
         """Toggle pause/resume auto-refresh."""
         self.refresh_paused = not self.refresh_paused
         self.update_status_bar()
-    
+
     def format_time_since(self, seconds: int) -> str:
         """Format seconds into a human-readable time string."""
         if seconds < 60:
@@ -377,7 +433,7 @@ class VATSIMControlApp(App):
             hours = seconds // 3600
             minutes = (seconds % 3600) // 60
             return f"{hours}h {minutes}m"
-    
+
     def update_time_displays(self) -> None:
         """Update clocks and status bar with time since last refresh."""
         # Update clocks (UTC and local)
@@ -385,55 +441,65 @@ class VATSIMControlApp(App):
             clocks = self.query_one(".header-clocks", Static)
             current_utc = datetime.now(timezone.utc)
             current_local = datetime.now()
-            clocks.update(f"Local {current_local.strftime('%H:%M:%S')} | UTC {current_utc.strftime('%H:%M:%S')}")
+            clocks.update(
+                f"Local {current_local.strftime('%H:%M:%S')} | UTC {current_utc.strftime('%H:%M:%S')}"
+            )
         except Exception:
             pass
-        
+
         # Update status bar with time since last refresh
         self.update_status_bar()
-    
+
     def record_user_activity(self, source: str = "unknown") -> None:
         """Record user activity to pause auto-refresh temporarily."""
         # Ignore activity during initial setup to prevent automatic events from resetting timer
         if not self.watch_for_user_activity or not self.initial_setup_complete:
             return
-        
+
         self.last_activity_time = datetime.now(timezone.utc)
         self.last_activity_source = source
         self.user_is_active = True
-    
+
     def update_status_bar(self) -> None:
         """Update the status bar with current state."""
         status_bar = self.query_one("#status-bar", Static)
-        
+
         # Check if user has been idle long enough
-        idle_time = (datetime.now(timezone.utc) - self.last_activity_time).total_seconds()
+        idle_time = (
+            datetime.now(timezone.utc) - self.last_activity_time
+        ).total_seconds()
         if idle_time >= self.idle_timeout:
             self.user_is_active = False
-        
+
         # Determine pause status
         if self.refresh_paused:
             pause_status = "Paused"
         elif self.user_is_active:
-            pause_status = f"Auto-paused (not idle) - triggered by: {self.last_activity_source}"
+            pause_status = (
+                f"Auto-paused (not idle) - triggered by: {self.last_activity_source}"
+            )
         else:
             pause_status = f"Active ({self.refresh_interval}s)"
-        
+
         groupings_count = len(self.groupings_data) if self.groupings_data else 0
-        
+
         # Calculate time since last refresh
-        time_since_refresh = int((datetime.now(timezone.utc) - self.last_refresh_time).total_seconds())
+        time_since_refresh = int(
+            (datetime.now(timezone.utc) - self.last_refresh_time).total_seconds()
+        )
         time_str = self.format_time_since(time_since_refresh)
-        
-        status_bar.update(f"Auto-refresh: {pause_status} | Last refresh: {time_str} ago | {len(self.airport_data)} airports, {groupings_count} groupings")
-    
+
+        status_bar.update(
+            f"Auto-refresh: {pause_status} | Last refresh: {time_str} ago | {len(self.airport_data)} airports, {groupings_count} groupings"
+        )
+
     async def fetch_data_async(self):
         """Asynchronously fetch data from VATSIM."""
         global UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
-        
+
         # Import at module level to update globals
         from . import config
-        
+
         # Run the blocking call in a thread pool to avoid blocking the UI
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -446,66 +512,84 @@ class VATSIMControlApp(App):
             self.hide_wind,
             self.include_all_arriving,
             config.UNIFIED_AIRPORT_DATA,  # Pass existing instance or None
-            config.DISAMBIGUATOR  # Pass existing instance or None
+            config.DISAMBIGUATOR,  # Pass existing instance or None
         )
-        
+
         # Update module-level instances from the result
         if len(result) == 5:
-            airport_data, groupings_data, total_flights, config.UNIFIED_AIRPORT_DATA, config.DISAMBIGUATOR = result
+            (
+                airport_data,
+                groupings_data,
+                total_flights,
+                config.UNIFIED_AIRPORT_DATA,
+                config.DISAMBIGUATOR,
+            ) = result
             return airport_data, groupings_data, total_flights
-        
+
         return result
-    
+
     def action_refresh(self) -> None:
         """Refresh the data from VATSIM asynchronously."""
         # Update last refresh time
         self.last_refresh_time = datetime.now(timezone.utc)
-        
+
         # Also trigger refresh on the flight board if it's open
         if self.flight_board_open and self.active_flight_board:
             self.active_flight_board.refresh_flight_data()
-                
+
         # Store old data and search state for efficient updates
         old_airport_data = self.airport_data.copy()
         old_groupings_data = self.groupings_data.copy()
         old_search_active = self.search_active
-        
+
         # Get current tab and cursor position
         tabs = self.query_one("#tabs", TabbedContent)
         current_tab = tabs.active
-        
+
         # Save cursor position and scroll offset before refresh
         saved_airport_icao = None
         saved_grouping_name = None
         saved_row_index = 0
         saved_scroll_offset = 0
-        
+
         if current_tab == "airports":
             airports_table = self.query_one("#airports-table", SplitFlapDataTable)
-            if airports_table.cursor_row is not None and airports_table.cursor_row < len(self.airport_data):
+            if (
+                airports_table.cursor_row is not None
+                and airports_table.cursor_row < len(self.airport_data)
+            ):
                 saved_row_index = airports_table.cursor_row
                 saved_airport_icao = self.airport_data[airports_table.cursor_row].icao
                 # Save current scroll offset
                 saved_scroll_offset = airports_table.scroll_offset.y
         elif current_tab == "groupings":
             groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
-            if self.groupings_data and groupings_table.cursor_row is not None and groupings_table.cursor_row < len(self.groupings_data):
+            if (
+                self.groupings_data
+                and groupings_table.cursor_row is not None
+                and groupings_table.cursor_row < len(self.groupings_data)
+            ):
                 saved_row_index = groupings_table.cursor_row
-                saved_grouping_name = self.groupings_data[groupings_table.cursor_row].name
+                saved_grouping_name = self.groupings_data[
+                    groupings_table.cursor_row
+                ].name
                 saved_scroll_offset = groupings_table.scroll_offset.y
-        
+
         # Start async data fetch
-        self.run_worker(self.refresh_worker(
-            old_airport_data,
-            old_groupings_data,
-            old_search_active,
-            saved_airport_icao,
-            saved_grouping_name,
-            saved_row_index,
-            saved_scroll_offset,
-            current_tab
-        ), exclusive=True)
-    
+        self.run_worker(
+            self.refresh_worker(
+                old_airport_data,
+                old_groupings_data,
+                old_search_active,
+                saved_airport_icao,
+                saved_grouping_name,
+                saved_row_index,
+                saved_scroll_offset,
+                current_tab,
+            ),
+            exclusive=True,
+        )
+
     async def refresh_worker(
         self,
         _old_airport_data,
@@ -515,7 +599,7 @@ class VATSIMControlApp(App):
         saved_grouping_name,
         saved_row_index,
         saved_scroll_offset,
-        current_tab
+        current_tab,
     ):
         """Worker to fetch data asynchronously and update tables efficiently."""
         # Fetch fresh data
@@ -523,10 +607,11 @@ class VATSIMControlApp(App):
 
         # Update pilots cache (uses VATSIM API's internal 15s cache, so no extra network call)
         from backend.data.vatsim_api import download_vatsim_data
+
         loop = asyncio.get_event_loop()
         vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
         if vatsim_data:
-            self.cached_pilots = vatsim_data.get('pilots', [])
+            self.cached_pilots = vatsim_data.get("pilots", [])
             # Rebuild Go To results in background to keep cache warm
             await loop.run_in_executor(None, self._build_goto_results)
 
@@ -537,7 +622,7 @@ class VATSIMControlApp(App):
             self.airport_data = list(airport_data)
             self.groupings_data = list(groupings_data) if groupings_data else []
             self.total_flights = total_flights or 0
-            
+
             # If search is active, reapply the filter to the new data before updating table
             if self.search_active:
                 search_input = self.query_one("#search-input", Input)
@@ -545,21 +630,22 @@ class VATSIMControlApp(App):
                 if search_text:
                     search_text = search_text.upper()
                     self.airport_data = [
-                        row for row in self.original_airport_data
-                        if search_text in row.icao.upper() or
-                           search_text in row.name.upper() or
-                           search_text in row.staffed.upper()
+                        row
+                        for row in self.original_airport_data
+                        if search_text in row.icao.upper()
+                        or search_text in row.name.upper()
+                        or search_text in row.staffed.upper()
                     ]
                 else:
                     self.airport_data = self.original_airport_data
-            
+
             # Update tables using TableManagers
             if self.airports_manager:
                 self.airports_manager.populate(self.airport_data)
-            
+
             if self.groupings_manager and self.groupings_data:
                 self.groupings_manager.populate(self.groupings_data)
-            
+
             # Restore cursor position and scroll offset
             if current_tab == "airports":
                 airports_table = self.query_one("#airports-table", SplitFlapDataTable)
@@ -574,14 +660,16 @@ class VATSIMControlApp(App):
                 # Ensure row index is within bounds
                 if new_row_index >= len(self.airport_data):
                     new_row_index = max(0, len(self.airport_data) - 1)
-                
+
                 if len(self.airport_data) > 0:
                     # Calculate the scroll adjustment to maintain visual position
                     row_diff = new_row_index - old_row_index
                     # Move cursor to the new row
                     airports_table.move_cursor(row=new_row_index)
                     # Restore scroll position with adjustment for row index change
-                    airports_table.scroll_to(y=saved_scroll_offset + row_diff, animate=False)
+                    airports_table.scroll_to(
+                        y=saved_scroll_offset + row_diff, animate=False
+                    )
                     self._enable_activity_watching()  # Re-enable user activity tracking
 
             elif current_tab == "groupings" and self.groupings_data:
@@ -597,7 +685,7 @@ class VATSIMControlApp(App):
                 # Ensure row index is within bounds
                 if new_row_index >= len(self.groupings_data):
                     new_row_index = max(0, len(self.groupings_data) - 1)
-                
+
                 if len(self.groupings_data) > 0:
                     # Calculate the scroll adjustment
                     row_diff = new_row_index - old_row_index
@@ -605,7 +693,9 @@ class VATSIMControlApp(App):
                     # Move cursor to the new row
                     groupings_table.move_cursor(row=new_row_index)
                     # Restore scroll position with adjustment
-                    groupings_table.scroll_to(y=saved_scroll_offset + row_diff, animate=False)
+                    groupings_table.scroll_to(
+                        y=saved_scroll_offset + row_diff, animate=False
+                    )
                     self._enable_activity_watching()  # Re-enable user activity tracking
 
             self.update_status_bar()
@@ -618,17 +708,17 @@ class VATSIMControlApp(App):
                 status_bar.update(f"{refresh_status}Failed to refresh data from VATSIM")
             except Exception:
                 pass
-    
+
     def action_toggle_search(self) -> None:
         """Toggle the search box visibility."""
         # Only allow search on the airports tab
         tabs = self.query_one("#tabs", TabbedContent)
         if tabs.active != "airports":
             return
-        
+
         search_container = self.query_one("#search-container")
         search_input = self.query_one("#search-input", Input)
-        
+
         if self.search_active:
             # Hide search and reset filter
             search_container.remove_class("visible")
@@ -636,7 +726,7 @@ class VATSIMControlApp(App):
             self.search_active = False
             self.airport_data = self.original_airport_data
             self.populate_tables()
-            
+
             # Return focus to table
             airports_table = self.query_one("#airports-table", SplitFlapDataTable)
             airports_table.focus()
@@ -645,34 +735,45 @@ class VATSIMControlApp(App):
             search_container.add_class("visible")
             self.search_active = True
             search_input.focus()
-    
+
     def action_cancel_search(self) -> None:
         """Cancel search and hide search box."""
         if self.search_active:
             self.action_toggle_search()
-    
+
     def on_key(self, event: Key) -> None:
         """Handle key events to detect user activity."""
         # Record activity for navigation keys
-        if event.key in ["up", "down", "left", "right", "pageup", "pagedown", "home", "end"]:
+        if event.key in [
+            "up",
+            "down",
+            "left",
+            "right",
+            "pageup",
+            "pagedown",
+            "home",
+            "end",
+        ]:
             self.record_user_activity(f"key:{event.key}")
-    
-    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:  # noqa: ARG002
+
+    def on_tabbed_content_tab_activated(
+        self, event: TabbedContent.TabActivated
+    ) -> None:  # noqa: ARG002
         """Handle tab changes."""
         self.record_user_activity(f"tab_change:{event.tab.id}")
-    
+
     def on_data_table_row_highlighted(self, _event: DataTable.RowHighlighted) -> None:
         """Handle row navigation in tables."""
         # Don't record activity for automatic row highlights (e.g., on app init)
         # Only key presses (handled by on_key) will record user activity
         pass
-    
+
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes."""
         if event.input.id == "search-input" and self.search_active:
             self.filter_airports(event.value)
             self.record_user_activity("search_input")
-    
+
     def filter_airports(self, search_text: str) -> None:
         """Filter airports table based on search text."""
         if not search_text:
@@ -680,26 +781,27 @@ class VATSIMControlApp(App):
         else:
             search_text = search_text.upper()
             self.airport_data = [
-                row for row in self.original_airport_data
-                if search_text in row.icao.upper() or
-                   search_text in row.name.upper() or
-                   search_text in row.staffed.upper()
+                row
+                for row in self.original_airport_data
+                if search_text in row.icao.upper()
+                or search_text in row.name.upper()
+                or search_text in row.staffed.upper()
             ]
-        
+
         self.populate_tables()
-    
+
     def action_open_flight_board(self) -> None:
         """Open the flight board for the selected airport or grouping"""
         # Don't allow opening flight board during search or if a flight board is already open
         if self.search_active or self.flight_board_open:
             return
-        
+
         tabs = self.query_one("#tabs", TabbedContent)
         current_tab = tabs.active
-        
+
         # Import DISAMBIGUATOR from config module
         from . import config
-        
+
         if current_tab == "airports":
             airports_table = self.query_one("#airports-table", SplitFlapDataTable)
             if airports_table.cursor_row is not None and airports_table.row_count > 0:
@@ -707,25 +809,40 @@ class VATSIMControlApp(App):
                     # Get the ICAO code from the backend data, but account for table sorting
                     # The table sorts by airport_grouping_sort_key, so we need to sort our data the same way
                     from .utils import airport_grouping_sort_key
-                    
+
                     # Sort airport_data the same way the table does
-                    sorted_airports = sorted(self.airport_data, key=airport_grouping_sort_key)
-                    
+                    sorted_airports = sorted(
+                        self.airport_data, key=airport_grouping_sort_key
+                    )
+
                     # Now we can safely index with cursor_row
                     icao: str = sorted_airports[airports_table.cursor_row].icao
                     # Use the full name as the title instead of just the ICAO
-                    title: str = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
-                     
+                    title: str = (
+                        config.DISAMBIGUATOR.get_full_name(icao)
+                        if config.DISAMBIGUATOR
+                        else icao
+                    )
+
                     # Open the flight board and store reference
                     self.flight_board_open = True
-                    enable_anims = not self.args.disable_animations if self.args else True
-                    flight_board = FlightBoardScreen(title, icao, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, config.DISAMBIGUATOR, enable_anims)
+                    enable_anims = (
+                        not self.args.disable_animations if self.args else True
+                    )
+                    flight_board = FlightBoardScreen(
+                        title,
+                        icao,
+                        self.args.max_eta_hours if self.args else 1.0,
+                        self.refresh_interval,
+                        config.DISAMBIGUATOR,
+                        enable_anims,
+                    )
                     self.active_flight_board = flight_board
                     self.push_screen(flight_board)
                 except (IndexError, KeyError):
                     # Silently fail if there's an issue
                     pass
-        
+
         elif current_tab == "groupings":
             groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
             if groupings_table.cursor_row is not None and groupings_table.row_count > 0:
@@ -734,64 +851,79 @@ class VATSIMControlApp(App):
                     # The table sorts by airport_grouping_sort_key, so we need to sort our data the same way
                     from .utils import airport_grouping_sort_key
                     from . import config
-                    
+
                     # Sort groupings_data the same way the table does
-                    sorted_groupings = sorted(self.groupings_data, key=airport_grouping_sort_key)
-                    
+                    sorted_groupings = sorted(
+                        self.groupings_data, key=airport_grouping_sort_key
+                    )
+
                     # Now we can safely index with cursor_row
                     grouping_name = sorted_groupings[groupings_table.cursor_row].name
-                    
+
                     # Get the list of airports in this grouping
                     # Load all groupings (custom + ARTCC) to get the airport list
-                    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                    all_groupings = load_all_groupings(
-                        os.path.join(script_dir, 'data', 'custom_groupings.json'),
-                        config.UNIFIED_AIRPORT_DATA or {}
+                    script_dir = os.path.dirname(
+                        os.path.dirname(os.path.abspath(__file__))
                     )
-                    
+                    all_groupings = load_all_groupings(
+                        os.path.join(script_dir, "data", "custom_groupings.json"),
+                        config.UNIFIED_AIRPORT_DATA or {},
+                    )
+
                     if grouping_name in all_groupings:
                         # Recursively resolve the grouping to actual airports (handles nested groupings)
                         def resolve_grouping_recursively(gname, visited=None):
                             """Recursively resolve a grouping name to its individual airports."""
                             if visited is None:
                                 visited = set()
-                            
+
                             if gname in visited:
                                 return set()
                             visited.add(gname)
-                            
+
                             if gname not in all_groupings:
                                 return set()
-                            
+
                             airports = set()
                             items = all_groupings[gname]
-                            
+
                             for item in items:
                                 if item in all_groupings:
-                                    airports.update(resolve_grouping_recursively(item, visited))
+                                    airports.update(
+                                        resolve_grouping_recursively(item, visited)
+                                    )
                                 else:
                                     airports.add(item)
-                            
+
                             return airports
-                        
+
                         airport_list = list(resolve_grouping_recursively(grouping_name))
                         title = grouping_name
-                         
+
                         # Open the flight board and store reference
                         self.flight_board_open = True
-                        enable_anims = not self.args.disable_animations if self.args else True
-                        flight_board = FlightBoardScreen(title, airport_list, self.args.max_eta_hours if self.args else 1.0, self.refresh_interval, config.DISAMBIGUATOR, enable_anims)
+                        enable_anims = (
+                            not self.args.disable_animations if self.args else True
+                        )
+                        flight_board = FlightBoardScreen(
+                            title,
+                            airport_list,
+                            self.args.max_eta_hours if self.args else 1.0,
+                            self.refresh_interval,
+                            config.DISAMBIGUATOR,
+                            enable_anims,
+                        )
                         self.active_flight_board = flight_board
                         self.push_screen(flight_board)
                 except Exception:
                     # Silently fail if there's an issue
                     pass
-    
+
     def action_show_wind_lookup(self) -> None:
         """Show the wind information lookup modal"""
         wind_screen = WindInfoScreen()
         self.push_screen(wind_screen)
-    
+
     def action_show_metar_lookup(self) -> None:
         """Show the METAR lookup modal.
 
@@ -822,32 +954,39 @@ class VATSIMControlApp(App):
             # FlightInfoScreen: Use departure (on ground at departure) or arrival (in flight/landed)
             if isinstance(screen, FlightInfoScreen):
                 flight_data = screen.flight_data
-                flight_plan = flight_data.get('flight_plan')
+                flight_plan = flight_data.get("flight_plan")
                 if flight_plan:
                     # Use the screen's _get_eta_info to determine flight state:
                     # - Returns "LANDED" if on ground at arrival airport
                     # - Returns None if on ground at departure (or no valid ETA)
                     # - Returns "ETA ..." if in flight
                     eta_info = screen._get_eta_info()
-                    groundspeed = flight_data.get('groundspeed', 0)
+                    groundspeed = flight_data.get("groundspeed", 0)
 
-                    if eta_info == "LANDED" or (eta_info and eta_info.startswith("ETA")):
+                    if eta_info == "LANDED" or (
+                        eta_info and eta_info.startswith("ETA")
+                    ):
                         # Landed at arrival or in flight - use arrival airport
-                        initial_icao = flight_plan.get('arrival')
+                        initial_icao = flight_plan.get("arrival")
                     elif groundspeed <= 40:
                         # On ground but not at arrival - use departure airport
-                        initial_icao = flight_plan.get('departure')
+                        initial_icao = flight_plan.get("departure")
                     else:
                         # Fallback: in flight, use arrival
-                        initial_icao = flight_plan.get('arrival')
+                        initial_icao = flight_plan.get("arrival")
                 break
 
             # FlightBoardScreen: Use departure/arrival from selected row
             if isinstance(screen, FlightBoardScreen):
-                departures_table = screen.query_one("#departures-table", SplitFlapDataTable)
+                departures_table = screen.query_one(
+                    "#departures-table", SplitFlapDataTable
+                )
                 arrivals_table = screen.query_one("#arrivals-table", SplitFlapDataTable)
 
-                is_grouping = isinstance(screen.airport_icao_or_list, list) and len(screen.airport_icao_or_list) > 1
+                is_grouping = (
+                    isinstance(screen.airport_icao_or_list, list)
+                    and len(screen.airport_icao_or_list) > 1
+                )
 
                 # Determine which table has focus/selection
                 focused_table = None
@@ -866,7 +1005,9 @@ class VATSIMControlApp(App):
                     if is_grouping:
                         # For groupings, column 1 has the departure/arrival airport ICAO
                         try:
-                            row_data = focused_table.get_row_at(focused_table.cursor_row)
+                            row_data = focused_table.get_row_at(
+                                focused_table.cursor_row
+                            )
                             initial_icao = str(row_data[1]).strip()
                         except Exception:
                             pass
@@ -880,10 +1021,16 @@ class VATSIMControlApp(App):
             tabs = self.query_one("#tabs", TabbedContent)
             if tabs.active == "airports":
                 airports_table = self.query_one("#airports-table", SplitFlapDataTable)
-                if airports_table.cursor_row is not None and airports_table.row_count > 0:
+                if (
+                    airports_table.cursor_row is not None
+                    and airports_table.row_count > 0
+                ):
                     try:
                         from .utils import airport_grouping_sort_key
-                        sorted_airports = sorted(self.airport_data, key=airport_grouping_sort_key)
+
+                        sorted_airports = sorted(
+                            self.airport_data, key=airport_grouping_sort_key
+                        )
                         initial_icao = sorted_airports[airports_table.cursor_row].icao
                     except (IndexError, KeyError):
                         pass
@@ -900,8 +1047,8 @@ class VATSIMControlApp(App):
 
         # Check if MetarInfoScreen is open and has a current airport
         for screen in self.screen_stack:
-            if screen.__class__.__name__ == 'MetarInfoScreen':
-                initial_icao = getattr(screen, 'current_icao', None)
+            if screen.__class__.__name__ == "MetarInfoScreen":
+                initial_icao = getattr(screen, "current_icao", None)
                 break
 
         vfr_screen = VfrAlternativesScreen(initial_icao=initial_icao)
@@ -910,9 +1057,9 @@ class VATSIMControlApp(App):
     def action_show_historical_stats(self) -> None:
         """Show the historical flight statistics modal"""
         from . import config
+
         stats_screen = HistoricalStatsScreen(
-            tracked_airports=self.airport_allowlist,
-            disambiguator=config.DISAMBIGUATOR
+            tracked_airports=self.airport_allowlist, disambiguator=config.DISAMBIGUATOR
         )
         self.push_screen(stats_screen)
 
@@ -922,18 +1069,19 @@ class VATSIMControlApp(App):
         Auto-fills with current grouping/airport if viewing a FlightBoardScreen.
         Otherwise opens a picker for groupings or airports.
         """
-        from . import config
-        from backend import find_airports_near_position
 
         # Check if FlightBoardScreen is open
         for screen in self.screen_stack:
             if isinstance(screen, FlightBoardScreen):
-                if isinstance(screen.airport_icao_or_list, list) and len(screen.airport_icao_or_list) > 1:
+                if (
+                    isinstance(screen.airport_icao_or_list, list)
+                    and len(screen.airport_icao_or_list) > 1
+                ):
                     # It's a grouping - open weather briefing directly
                     grouping_title = screen.title if screen.title else "Grouping"
                     briefing_screen = WeatherBriefingScreen(
                         grouping_name=grouping_title,
-                        airports=screen.airport_icao_or_list
+                        airports=screen.airport_icao_or_list,
                     )
                     self.push_screen(briefing_screen)
                     return
@@ -946,7 +1094,7 @@ class VATSIMControlApp(App):
         # No context - show picker (allows both airports and groupings)
         goto_screen = GoToScreen(
             title="Weather Briefing: Enter airports or select grouping",
-            callback=self._open_weather_briefing_callback
+            callback=self._open_weather_briefing_callback,
         )
         self.push_screen(goto_screen)
 
@@ -962,19 +1110,21 @@ class VATSIMControlApp(App):
             self._open_airport_weather_briefing(data)
         elif name == "flight":
             # Flight selected - open full flight weather briefing
-            flight_plan = data.get('flight_plan') or {}
-            callsign = data.get('callsign', 'Flight')
-            departure = flight_plan.get('departure', '')
-            arrival = flight_plan.get('arrival', '')
+            flight_plan = data.get("flight_plan") or {}
+            callsign = data.get("callsign", "Flight")
+            departure = flight_plan.get("departure", "")
+            arrival = flight_plan.get("arrival", "")
             if departure and arrival:
                 self._open_flight_weather_briefing(
                     callsign=callsign,
                     departure=departure,
                     arrival=arrival,
-                    alternate=flight_plan.get('alternate', ''),
-                    route=flight_plan.get('route', ''),
-                    cruise_altitude=self._parse_altitude(flight_plan.get('altitude', '')),
-                    groundspeed=data.get('groundspeed', 0)
+                    alternate=flight_plan.get("alternate", ""),
+                    route=flight_plan.get("route", ""),
+                    cruise_altitude=self._parse_altitude(
+                        flight_plan.get("altitude", "")
+                    ),
+                    groundspeed=data.get("groundspeed", 0),
                 )
             else:
                 self.notify("No departure/arrival in flight plan", severity="warning")
@@ -983,10 +1133,7 @@ class VATSIMControlApp(App):
             self._open_airport_weather_briefing(data)
         else:
             # Grouping selected
-            briefing_screen = WeatherBriefingScreen(
-                grouping_name=name,
-                airports=data
-            )
+            briefing_screen = WeatherBriefingScreen(grouping_name=name, airports=data)
             self.push_screen(briefing_screen)
 
     def _open_airport_weather_briefing(self, airports: list) -> None:
@@ -997,23 +1144,32 @@ class VATSIMControlApp(App):
         if len(airports) == 1:
             # Single airport - find nearby airports within 30nm
             icao = airports[0]
-            airport_info = config.UNIFIED_AIRPORT_DATA.get(icao, {}) if config.UNIFIED_AIRPORT_DATA else {}
-            lat = airport_info.get('latitude')
-            lon = airport_info.get('longitude')
+            airport_info = (
+                config.UNIFIED_AIRPORT_DATA.get(icao, {})
+                if config.UNIFIED_AIRPORT_DATA
+                else {}
+            )
+            lat = airport_info.get("latitude")
+            lon = airport_info.get("longitude")
 
             if lat and lon:
                 nearby = find_airports_near_position(
-                    lat, lon,
+                    lat,
+                    lon,
                     config.UNIFIED_AIRPORT_DATA or {},
                     radius_nm=30.0,
-                    max_results=15
+                    max_results=15,
                 )
                 # Ensure primary airport is in the list
                 all_airports = [icao] + [a for a in nearby if a != icao]
             else:
                 all_airports = airports
 
-            pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
+            pretty_name = (
+                config.DISAMBIGUATOR.get_full_name(icao)
+                if config.DISAMBIGUATOR
+                else icao
+            )
             title = f"{pretty_name} Area"
             primary = airports
         else:
@@ -1023,9 +1179,7 @@ class VATSIMControlApp(App):
             primary = airports
 
         briefing_screen = WeatherBriefingScreen(
-            grouping_name=title,
-            airports=all_airports,
-            primary_airports=primary
+            grouping_name=title, airports=all_airports, primary_airports=primary
         )
         self.push_screen(briefing_screen)
 
@@ -1035,7 +1189,7 @@ class VATSIMControlApp(App):
             return None
         try:
             # Handle FL350 format
-            if altitude_str.upper().startswith('FL'):
+            if altitude_str.upper().startswith("FL"):
                 return int(altitude_str[2:]) * 100
             # Handle raw number (assumed to be flight level or feet)
             val = int(altitude_str)
@@ -1053,7 +1207,7 @@ class VATSIMControlApp(App):
         alternate: Optional[str] = None,
         route: Optional[str] = None,
         cruise_altitude: Optional[int] = None,
-        groundspeed: Optional[int] = None
+        groundspeed: Optional[int] = None,
     ) -> None:
         """Open full flight weather briefing with enroute weather."""
         briefing_screen = FlightWeatherBriefingScreen(
@@ -1063,16 +1217,19 @@ class VATSIMControlApp(App):
             alternate=alternate if alternate else None,
             route=route,
             cruise_altitude=cruise_altitude,
-            groundspeed=groundspeed if groundspeed and groundspeed > 50 else None
+            groundspeed=groundspeed if groundspeed and groundspeed > 50 else None,
         )
         self.push_screen(briefing_screen)
 
     def action_show_airport_tracking(self) -> None:
         """Show the tracked airports manager modal"""
         from . import config
-        tracking_modal = TrackedAirportsModal(self.airport_allowlist, config.DISAMBIGUATOR)
+
+        tracking_modal = TrackedAirportsModal(
+            self.airport_allowlist, config.DISAMBIGUATOR
+        )
         self.push_screen(tracking_modal, callback=self.handle_tracking_result)
-    
+
     def handle_tracking_result(self, result) -> None:
         """Handle the result from tracked airports modal"""
         if result is None:
@@ -1084,11 +1241,12 @@ class VATSIMControlApp(App):
 
         # Clear weather caches to ensure fresh data for changed airports
         from backend.data import clear_weather_caches
+
         clear_weather_caches()
 
         # Refresh data with new configuration
         self.action_refresh()
-    
+
     def action_show_flight_lookup(self) -> None:
         """Show the flight lookup modal"""
         flight_lookup_screen = FlightLookupScreen()

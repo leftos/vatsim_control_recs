@@ -30,12 +30,9 @@ def parse_route_waypoints(route_string: str) -> List[str]:
 
     waypoints = []
     # Airways pattern: letter(s) followed by numbers (J1, V23, Q100, UL9, etc.)
-    airway_pattern = re.compile(r'^[A-Z]{1,2}\d+$')
+    airway_pattern = re.compile(r"^[A-Z]{1,2}\d+$")
     # DCT (direct) pattern
-    dct_pattern = re.compile(r'^DCT$')
-    # SID/STAR pattern (ends in digit, like SFOXX, HADLY2, MODENA1)
-    # We want to keep these but note they're procedures
-    procedure_pattern = re.compile(r'^[A-Z]{3,5}\d$')
+    dct_pattern = re.compile(r"^DCT$")
 
     for part in parts:
         # Skip airways
@@ -45,7 +42,7 @@ def parse_route_waypoints(route_string: str) -> List[str]:
         if dct_pattern.match(part):
             continue
         # Skip speed/altitude restrictions like N0450F350
-        if re.match(r'^[NK]\d{4}[FA]\d{3}$', part):
+        if re.match(r"^[NK]\d{4}[FA]\d{3}$", part):
             continue
         # Skip pure numbers
         if part.isdigit():
@@ -60,9 +57,7 @@ def parse_route_waypoints(route_string: str) -> List[str]:
 
 
 def interpolate_great_circle(
-    lat1: float, lon1: float,
-    lat2: float, lon2: float,
-    fraction: float
+    lat1: float, lon1: float, lat2: float, lon2: float, fraction: float
 ) -> Tuple[float, float]:
     """
     Interpolate a point along the great circle path between two points.
@@ -84,7 +79,10 @@ def interpolate_great_circle(
     # Calculate angular distance
     d_lat = lat2_rad - lat1_rad
     d_lon = lon2_rad - lon1_rad
-    a = math.sin(d_lat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(d_lon / 2) ** 2
+    a = (
+        math.sin(d_lat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(d_lon / 2) ** 2
+    )
     delta = 2 * math.asin(math.sqrt(a))
 
     if delta < 1e-10:
@@ -94,22 +92,28 @@ def interpolate_great_circle(
     A = math.sin((1 - fraction) * delta) / math.sin(delta)
     B = math.sin(fraction * delta) / math.sin(delta)
 
-    x = A * math.cos(lat1_rad) * math.cos(lon1_rad) + B * math.cos(lat2_rad) * math.cos(lon2_rad)
-    y = A * math.cos(lat1_rad) * math.sin(lon1_rad) + B * math.cos(lat2_rad) * math.sin(lon2_rad)
+    x = A * math.cos(lat1_rad) * math.cos(lon1_rad) + B * math.cos(lat2_rad) * math.cos(
+        lon2_rad
+    )
+    y = A * math.cos(lat1_rad) * math.sin(lon1_rad) + B * math.cos(lat2_rad) * math.sin(
+        lon2_rad
+    )
     z = A * math.sin(lat1_rad) + B * math.sin(lat2_rad)
 
-    lat = math.atan2(z, math.sqrt(x ** 2 + y ** 2))
+    lat = math.atan2(z, math.sqrt(x**2 + y**2))
     lon = math.atan2(y, x)
 
     return math.degrees(lat), math.degrees(lon)
 
 
 def sample_route_points(
-    dep_lat: float, dep_lon: float,
-    arr_lat: float, arr_lon: float,
+    dep_lat: float,
+    dep_lon: float,
+    arr_lat: float,
+    arr_lon: float,
     interval_nm: float = 150.0,
     min_points: int = 0,
-    max_points: int = 10
+    max_points: int = 10,
 ) -> List[Tuple[float, float, float]]:
     """
     Sample points along the great circle route at regular intervals.
@@ -140,7 +144,9 @@ def sample_route_points(
     points = []
     for i in range(1, num_points + 1):
         fraction = i / (num_points + 1)
-        lat, lon = interpolate_great_circle(dep_lat, dep_lon, arr_lat, arr_lon, fraction)
+        lat, lon = interpolate_great_circle(
+            dep_lat, dep_lon, arr_lat, arr_lon, fraction
+        )
         distance = total_distance * fraction
         points.append((lat, lon, distance))
 
@@ -151,7 +157,7 @@ def find_enroute_airports(
     sample_points: List[Tuple[float, float, float]],
     airports_data: Dict[str, Dict[str, Any]],
     search_radius_nm: float = 100.0,
-    prefer_metar: bool = True
+    prefer_metar: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Find airports near each sample point along the route.
@@ -191,28 +197,28 @@ def find_enroute_airports(
             score = 0
 
             # FAR 139 certification indicates commercial service airports
-            far139 = data.get('far139', '')
+            far139 = data.get("far139", "")
             if far139:
                 score += 80
 
             # Towered airports are generally larger
-            tower_type = data.get('tower_type', '')
-            if tower_type == 'ATCT':
+            tower_type = data.get("tower_type", "")
+            if tower_type == "ATCT":
                 score += 50
-            elif tower_type == 'NON-ATCT':
+            elif tower_type == "NON-ATCT":
                 score += 5
 
             # Check name for indicators of major airports
-            name = data.get('name', '').upper()
-            if 'INTL' in name or 'INTERNATIONAL' in name:
+            name = data.get("name", "").upper()
+            if "INTL" in name or "INTERNATIONAL" in name:
                 score += 100
-            elif 'REGIONAL' in name or 'RGNL' in name:
+            elif "REGIONAL" in name or "RGNL" in name:
                 score += 40
-            elif 'MUNICIPAL' in name or 'MUNI' in name:
+            elif "MUNICIPAL" in name or "MUNI" in name:
                 score += 20
 
             # ICAO codes starting with K (US) that are 4 chars are more likely major
-            if icao.startswith('K') and len(icao) == 4:
+            if icao.startswith("K") and len(icao) == 4:
                 score += 10
 
             # Penalize airports with very short names (often private)
@@ -225,23 +231,22 @@ def find_enroute_airports(
             if score > best_score:
                 best_score = score
                 best = {
-                    'icao': icao,
-                    'distance_nm': route_distance,
-                    'lat': data.get('latitude', lat),
-                    'lon': data.get('longitude', lon),
-                    'name': data.get('name', icao),
+                    "icao": icao,
+                    "distance_nm": route_distance,
+                    "lat": data.get("latitude", lat),
+                    "lon": data.get("longitude", lon),
+                    "name": data.get("name", icao),
                 }
 
         if best:
             enroute.append(best)
-            used_icaos.add(best['icao'])
+            used_icaos.add(best["icao"])
 
     return enroute
 
 
 def determine_runway_from_wind(
-    wind_str: str,
-    runways: List[Dict[str, Any]]
+    wind_str: str, runways: List[Dict[str, Any]]
 ) -> Optional[str]:
     """
     Determine the most likely runway based on wind direction.
@@ -259,10 +264,10 @@ def determine_runway_from_wind(
         return None
 
     # Parse wind direction
-    match = re.match(r'(\d{3})(\d{2,3})(G\d{2,3})?(KT|MPS)', wind_str)
+    match = re.match(r"(\d{3})(\d{2,3})(G\d{2,3})?(KT|MPS)", wind_str)
     if not match:
         # Variable wind - can't determine runway
-        if 'VRB' in wind_str:
+        if "VRB" in wind_str:
             return None
         return None
 
@@ -274,8 +279,8 @@ def determine_runway_from_wind(
 
     for rwy in runways:
         # Check low-end runway
-        le_hdg = rwy.get('le_heading_degT')
-        le_ident = rwy.get('le_ident', '')
+        le_hdg = rwy.get("le_heading_degT")
+        le_ident = rwy.get("le_ident", "")
         if le_hdg is not None and le_ident:
             try:
                 le_hdg = float(le_hdg)
@@ -289,8 +294,8 @@ def determine_runway_from_wind(
                 pass
 
         # Check high-end runway
-        he_hdg = rwy.get('he_heading_degT')
-        he_ident = rwy.get('he_ident', '')
+        he_hdg = rwy.get("he_heading_degT")
+        he_ident = rwy.get("he_ident", "")
         if he_hdg is not None and he_ident:
             try:
                 he_hdg = float(he_hdg)

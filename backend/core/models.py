@@ -9,6 +9,7 @@ from dataclasses import dataclass
 @dataclass
 class AirportStats:
     """Statistics for a single airport."""
+
     icao: str
     name: str
     wind: str
@@ -53,7 +54,7 @@ class AirportStats:
             str(self.departures).rjust(3),
             self._format_arrivals_display(include_arrivals_all),
             self.next_eta,
-            self.staffed
+            self.staffed,
         )
 
     def to_tuple_without_wind(self, include_arrivals_all: bool = True) -> tuple:
@@ -75,17 +76,19 @@ class AirportStats:
             str(self.departures).rjust(3),
             self._format_arrivals_display(include_arrivals_all),
             self.next_eta,
-            self.staffed
+            self.staffed,
         )
 
-    def to_tuple(self, hide_wind: bool = False, include_arrivals_all: bool = True) -> tuple:
+    def to_tuple(
+        self, hide_wind: bool = False, include_arrivals_all: bool = True
+    ) -> tuple:
         """
         Convert to tuple format for display.
-        
+
         Args:
             hide_wind: Whether to hide the wind column
             include_arrivals_all: Whether to include the arrivals_all column
-        
+
         Returns:
             Tuple for display in the appropriate format
         """
@@ -98,6 +101,7 @@ class AirportStats:
 @dataclass
 class GroupingStats:
     """Statistics for an airport grouping."""
+
     name: str
     total: int
     departures: int
@@ -136,5 +140,5 @@ class GroupingStats:
             str(self.departures),
             self._format_arrivals_display(include_arrivals_all),
             self.next_eta,
-            self.staffed
+            self.staffed,
         )

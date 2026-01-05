@@ -1,7 +1,7 @@
 """Flight Board Modal Screen"""
 
 import asyncio
-from typing import Dict, Optional, Set, Tuple
+from typing import Dict, Optional, Tuple
 
 from textual.screen import ModalScreen
 from textual.widgets import Static
@@ -10,7 +10,12 @@ from textual.containers import Container, Vertical, Horizontal
 from textual.binding import Binding
 from textual.app import ComposeResult
 
-from backend import get_wind_info, get_altimeter_setting, get_metar_batch, find_airports_near_position
+from backend import (
+    get_wind_info,
+    get_altimeter_setting,
+    get_metar_batch,
+    find_airports_near_position,
+)
 from backend.core.flights import get_airport_flight_details
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
 from backend.data.atis_filter import parse_runway_assignments, format_runway_summary
@@ -21,7 +26,13 @@ from ui.modals.notification_manager import NotificationManager
 from widgets.split_flap_datatable import SplitFlapDataTable
 from ui import config
 from ui.config import CATEGORY_COLORS
-from ui.tables import TableManager, DEPARTURES_TABLE_CONFIG, ARRIVALS_TABLE_CONFIG, GROUPING_DEPARTURES_TABLE_CONFIG, GROUPING_ARRIVALS_TABLE_CONFIG
+from ui.tables import (
+    TableManager,
+    DEPARTURES_TABLE_CONFIG,
+    ARRIVALS_TABLE_CONFIG,
+    GROUPING_DEPARTURES_TABLE_CONFIG,
+    GROUPING_ARRIVALS_TABLE_CONFIG,
+)
 from ui.modals.flight_info import FlightInfoScreen
 
 
@@ -122,7 +133,15 @@ class FlightBoardScreen(ModalScreen):
     # Weather check interval in seconds (check for condition changes)
     WEATHER_CHECK_INTERVAL = 60
 
-    def __init__(self, title: str, airport_icao_or_list, max_eta_hours: float, refresh_interval: int = 15, disambiguator=None, enable_animations: bool = True):
+    def __init__(
+        self,
+        title: str,
+        airport_icao_or_list,
+        max_eta_hours: float,
+        refresh_interval: int = 15,
+        disambiguator=None,
+        enable_animations: bool = True,
+    ):
         super().__init__()
         self.title = title
         self.airport_icao_or_list = airport_icao_or_list
@@ -142,7 +161,9 @@ class FlightBoardScreen(ModalScreen):
         self._cache_refresh_timer = None  # Timer for periodic cache refresh
         # Weather and runway change tracking
         self._previous_weather: Dict[str, str] = {}  # ICAO -> flight category
-        self._previous_runways: Dict[str, Tuple[frozenset, frozenset]] = {}  # ICAO -> (landing, departing)
+        self._previous_runways: Dict[
+            str, Tuple[frozenset, frozenset]
+        ] = {}  # ICAO -> (landing, departing)
         self._weather_check_timer = None  # Timer for weather/runway change checks
         # Notification manager (initialized in on_mount)
         self._notification_manager: Optional[NotificationManager] = None
@@ -161,12 +182,22 @@ class FlightBoardScreen(ModalScreen):
                 yield Static("Loading flight data...", id="loading-indicator")
                 with Vertical(classes="board-section", id="departures-section"):
                     yield Static("DEPARTURES", classes="section-title")
-                    departures_table = SplitFlapDataTable(classes="board-table", id="departures-table", enable_animations=self.enable_animations, on_select=self.action_show_flight_info)
+                    departures_table = SplitFlapDataTable(
+                        classes="board-table",
+                        id="departures-table",
+                        enable_animations=self.enable_animations,
+                        on_select=self.action_show_flight_info,
+                    )
                     departures_table.cursor_type = "row"
                     yield departures_table
                 with Vertical(classes="board-section", id="arrivals-section"):
                     yield Static("ARRIVALS", classes="section-title")
-                    arrivals_table = SplitFlapDataTable(classes="board-table", id="arrivals-table", enable_animations=self.enable_animations, on_select=self.action_show_flight_info)
+                    arrivals_table = SplitFlapDataTable(
+                        classes="board-table",
+                        id="arrivals-table",
+                        enable_animations=self.enable_animations,
+                        on_select=self.action_show_flight_info,
+                    )
                     arrivals_table.cursor_type = "row"
                     yield arrivals_table
             # Change notification toast (hidden by default)
@@ -182,18 +213,19 @@ class FlightBoardScreen(ModalScreen):
 
         # Start periodic cache refresh for altimeter lookups
         self._cache_refresh_timer = self.set_interval(
-            self.CACHE_REFRESH_INTERVAL,
-            self._refresh_altimeter_cache
+            self.CACHE_REFRESH_INTERVAL, self._refresh_altimeter_cache
         )
 
         # Start weather/runway change monitoring for groupings
-        if isinstance(self.airport_icao_or_list, list) and len(self.airport_icao_or_list) > 1:
+        if (
+            isinstance(self.airport_icao_or_list, list)
+            and len(self.airport_icao_or_list) > 1
+        ):
             # Initialize baseline weather and runways (fire-and-forget)
             self.run_worker(self._initialize_change_baseline(), exclusive=False)
             # Start periodic weather/runway checks
             self._weather_check_timer = self.set_interval(
-                self.WEATHER_CHECK_INTERVAL,
-                self._check_for_changes
+                self.WEATHER_CHECK_INTERVAL, self._check_for_changes
             )
 
     def on_unmount(self) -> None:
@@ -212,7 +244,7 @@ class FlightBoardScreen(ModalScreen):
 
         # Disable parent app activity tracking for the entire operation
         app = self.app
-        if hasattr(app, '_disable_activity_watching'):
+        if hasattr(app, "_disable_activity_watching"):
             app._disable_activity_watching()  # type: ignore[attr-defined]
 
         try:
@@ -236,14 +268,17 @@ class FlightBoardScreen(ModalScreen):
                     disambiguator_to_use,
                     unified_data_to_use,
                     aircraft_speeds_to_use,
-                    vatsim_data
+                    vatsim_data,
                 )
-                return vatsim_data, result[0] if result else [], result[1] if result else []
+                return (
+                    vatsim_data,
+                    result[0] if result else [],
+                    result[1] if result else [],
+                )
 
             # Run all blocking operations in a single executor call
             vatsim_data, departures, arrivals = await loop.run_in_executor(
-                None,
-                fetch_and_process_flights
+                None, fetch_and_process_flights
             )
 
             if vatsim_data:
@@ -255,10 +290,12 @@ class FlightBoardScreen(ModalScreen):
                 self.call_after_refresh(self.populate_tables)
 
                 # Start METAR precaching in background (fire-and-forget, don't block UI)
-                self.run_worker(self._precache_flight_altimeters_async(), exclusive=False)
+                self.run_worker(
+                    self._precache_flight_altimeters_async(), exclusive=False
+                )
         finally:
             # Re-enable activity tracking
-            if hasattr(app, '_enable_activity_watching'):
+            if hasattr(app, "_enable_activity_watching"):
                 app._enable_activity_watching()  # type: ignore[attr-defined]
 
     async def _precache_flight_altimeters_async(self) -> None:
@@ -276,7 +313,9 @@ class FlightBoardScreen(ModalScreen):
             return
 
         airports_to_cache = set()
-        pilots_by_callsign = {p.get('callsign'): p for p in self.vatsim_data.get('pilots', [])}
+        pilots_by_callsign = {
+            p.get("callsign"): p for p in self.vatsim_data.get("pilots", [])
+        }
 
         # For departures on the ground, use their departure airport
         for dep in self.departures_data:
@@ -289,15 +328,16 @@ class FlightBoardScreen(ModalScreen):
         for arr in self.arrivals_data:
             pilot = pilots_by_callsign.get(arr.callsign)
             if pilot:
-                lat = pilot.get('latitude')
-                lon = pilot.get('longitude')
+                lat = pilot.get("latitude")
+                lon = pilot.get("longitude")
                 if lat is not None and lon is not None:
                     # Find airports near this flight's position
                     nearby = find_airports_near_position(
-                        lat, lon,
+                        lat,
+                        lon,
                         config.UNIFIED_AIRPORT_DATA,
                         radius_nm=75,  # Search within 75nm
-                        max_results=3   # Get closest 3 airports
+                        max_results=3,  # Get closest 3 airports
                     )
                     airports_to_cache.update(nearby)
 
@@ -334,7 +374,9 @@ class FlightBoardScreen(ModalScreen):
             full_name = self.disambiguator.get_full_name(self.airport_icao_or_list)
 
             # Fetch wind information using the current global wind source
-            wind_info = get_wind_info(self.airport_icao_or_list, source=backend_constants.WIND_SOURCE)
+            wind_info = get_wind_info(
+                self.airport_icao_or_list, source=backend_constants.WIND_SOURCE
+            )
 
             # Fetch altimeter information (use raw format: A2992 or Q1013)
             altimeter_info = get_altimeter_setting(self.airport_icao_or_list)
@@ -425,42 +467,59 @@ class FlightBoardScreen(ModalScreen):
         self.run_worker(self._update_window_title_async(), exclusive=False)
 
         # Detect if this is a grouping (list of airports) or single airport
-        is_grouping = isinstance(self.airport_icao_or_list, list) and len(self.airport_icao_or_list) > 1
+        is_grouping = (
+            isinstance(self.airport_icao_or_list, list)
+            and len(self.airport_icao_or_list) > 1
+        )
 
         # Initialize TableManagers if not already done, using appropriate config
         if self.departures_manager is None:
             departures_table = self.query_one("#departures-table", SplitFlapDataTable)
-            departures_config = GROUPING_DEPARTURES_TABLE_CONFIG if is_grouping else DEPARTURES_TABLE_CONFIG
-            self.departures_manager = TableManager(departures_table, departures_config, self.departures_row_keys)
+            departures_config = (
+                GROUPING_DEPARTURES_TABLE_CONFIG
+                if is_grouping
+                else DEPARTURES_TABLE_CONFIG
+            )
+            self.departures_manager = TableManager(
+                departures_table, departures_config, self.departures_row_keys
+            )
 
         if self.arrivals_manager is None:
             arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
-            arrivals_config = GROUPING_ARRIVALS_TABLE_CONFIG if is_grouping else ARRIVALS_TABLE_CONFIG
-            self.arrivals_manager = TableManager(arrivals_table, arrivals_config, self.arrivals_row_keys)
+            arrivals_config = (
+                GROUPING_ARRIVALS_TABLE_CONFIG if is_grouping else ARRIVALS_TABLE_CONFIG
+            )
+            self.arrivals_manager = TableManager(
+                arrivals_table, arrivals_config, self.arrivals_row_keys
+            )
 
         # Transform structured data to tuple format for table display
         if is_grouping:
             # For groupings: show departure airport, destination airport, both with ICAO and name
             # Format: (callsign, from_icao, from_name, dest_icao, dest_name)
             departures_formatted = [
-                (dep.callsign,
-                 dep.departure.icao_code if dep.departure else "----",
-                 dep.departure.pretty_name if dep.departure else "----",
-                 dep.destination.icao_code,
-                 dep.destination.pretty_name)
+                (
+                    dep.callsign,
+                    dep.departure.icao_code if dep.departure else "----",
+                    dep.departure.pretty_name if dep.departure else "----",
+                    dep.destination.icao_code,
+                    dep.destination.pretty_name,
+                )
                 for dep in self.departures_data
             ]
 
             # For arrivals: show arrival airport first, then origin airport, both with ICAO and name, plus ETA
             # Format: (callsign, to_icao, to_name, orig_icao, orig_name, eta, eta_local)
             arrivals_formatted = [
-                (arr.callsign,
-                 arr.arrival.icao_code if arr.arrival else "----",
-                 arr.arrival.pretty_name if arr.arrival else "----",
-                 arr.origin.icao_code,
-                 arr.origin.pretty_name,
-                 arr.eta_display,
-                 arr.eta_local_time)
+                (
+                    arr.callsign,
+                    arr.arrival.icao_code if arr.arrival else "----",
+                    arr.arrival.pretty_name if arr.arrival else "----",
+                    arr.origin.icao_code,
+                    arr.origin.pretty_name,
+                    arr.eta_display,
+                    arr.eta_local_time,
+                )
                 for arr in self.arrivals_data
             ]
         else:
@@ -473,7 +532,13 @@ class FlightBoardScreen(ModalScreen):
 
             # Format: (callsign, icao, name, eta, eta_local)
             arrivals_formatted = [
-                (arr.callsign, arr.origin.icao_code, arr.origin.pretty_name, arr.eta_display, arr.eta_local_time)
+                (
+                    arr.callsign,
+                    arr.origin.icao_code,
+                    arr.origin.pretty_name,
+                    arr.eta_display,
+                    arr.eta_local_time,
+                )
                 for arr in self.arrivals_data
             ]
 
@@ -499,10 +564,10 @@ class FlightBoardScreen(ModalScreen):
 
         # Reset the flight board open flag and reference in the parent app
         app = self.app
-        if hasattr(app, 'flight_board_open'):
-            setattr(app, 'flight_board_open', False)
-        if hasattr(app, 'active_flight_board'):
-            setattr(app, 'active_flight_board', None)
+        if hasattr(app, "flight_board_open"):
+            setattr(app, "flight_board_open", False)
+        if hasattr(app, "active_flight_board"):
+            setattr(app, "active_flight_board", None)
 
         self.dismiss()
 
@@ -544,9 +609,9 @@ class FlightBoardScreen(ModalScreen):
 
         # Find the flight in vatsim_data
         flight_data = None
-        pilots_list = self.vatsim_data.get('pilots', [])
+        pilots_list = self.vatsim_data.get("pilots", [])
         for pilot in pilots_list:
-            if pilot.get('callsign', '').strip() == callsign:
+            if pilot.get("callsign", "").strip() == callsign:
                 flight_data = pilot
                 break
 
@@ -580,7 +645,7 @@ class FlightBoardScreen(ModalScreen):
 
         # Build baseline weather state
         for icao in airports:
-            metar = metars.get(icao, '')
+            metar = metars.get(icao, "")
             if metar:
                 category = get_flight_category(metar)
                 self._previous_weather[icao] = category
@@ -589,12 +654,12 @@ class FlightBoardScreen(ModalScreen):
         for icao in airports:
             atis = atis_data.get(icao)
             if atis:
-                atis_text = atis.get('text_atis', '')
+                atis_text = atis.get("text_atis", "")
                 if atis_text:
                     assignments = parse_runway_assignments(atis_text)
                     self._previous_runways[icao] = (
-                        frozenset(assignments['landing']),
-                        frozenset(assignments['departing'])
+                        frozenset(assignments["landing"]),
+                        frozenset(assignments["departing"]),
                     )
 
     async def _check_for_changes(self) -> None:
@@ -618,7 +683,7 @@ class FlightBoardScreen(ModalScreen):
 
         # Check for weather changes
         for icao in airports:
-            metar = metars.get(icao, '')
+            metar = metars.get(icao, "")
             if not metar:
                 continue
 
@@ -628,7 +693,9 @@ class FlightBoardScreen(ModalScreen):
             # If we have a previous category and it changed, show notification
             if old_category and new_category != old_category:
                 has_atis = icao in atis_data
-                self._show_weather_notification(icao, new_category, old_category, has_atis)
+                self._show_weather_notification(
+                    icao, new_category, old_category, has_atis
+                )
 
             # Update baseline
             self._previous_weather[icao] = new_category
@@ -639,13 +706,13 @@ class FlightBoardScreen(ModalScreen):
             if not atis:
                 continue
 
-            atis_text = atis.get('text_atis', '')
+            atis_text = atis.get("text_atis", "")
             if not atis_text:
                 continue
 
             assignments = parse_runway_assignments(atis_text)
-            new_landing = frozenset(assignments['landing'])
-            new_departing = frozenset(assignments['departing'])
+            new_landing = frozenset(assignments["landing"])
+            new_departing = frozenset(assignments["departing"])
 
             old_runways = self._previous_runways.get(icao)
 
@@ -661,9 +728,7 @@ class FlightBoardScreen(ModalScreen):
                 if old_has_runways and new_has_runways:
                     if new_landing != old_landing or new_departing != old_departing:
                         self._show_runway_notification(
-                            icao,
-                            new_landing, new_departing,
-                            old_landing, old_departing
+                            icao, new_landing, new_departing, old_landing, old_departing
                         )
 
             # Update baseline only if we have runway data (avoid overwriting
@@ -671,13 +736,15 @@ class FlightBoardScreen(ModalScreen):
             if new_landing or new_departing:
                 self._previous_runways[icao] = (new_landing, new_departing)
 
-    def _show_weather_notification(self, icao: str, new_category: str, old_category: str, has_atis: bool = False) -> None:
+    def _show_weather_notification(
+        self, icao: str, new_category: str, old_category: str, has_atis: bool = False
+    ) -> None:
         """Show a weather change notification toast, with flashing if airport has ATIS."""
         if not self._notification_manager:
             return
 
-        new_color = CATEGORY_COLORS.get(new_category, 'white')
-        old_color = CATEGORY_COLORS.get(old_category, 'white')
+        new_color = CATEGORY_COLORS.get(new_category, "white")
+        old_color = CATEGORY_COLORS.get(old_category, "white")
 
         # Get airport name
         airport_name = icao
@@ -706,7 +773,7 @@ class FlightBoardScreen(ModalScreen):
         new_landing: frozenset,
         new_departing: frozenset,
         old_landing: frozenset,
-        old_departing: frozenset
+        old_departing: frozenset,
     ) -> None:
         """Show a runway change notification toast."""
         if not self._notification_manager:
@@ -718,8 +785,12 @@ class FlightBoardScreen(ModalScreen):
             airport_name = config.DISAMBIGUATOR.get_full_name(icao)
 
         # Format runway changes
-        new_summary = format_runway_summary({'landing': set(new_landing), 'departing': set(new_departing)})
-        old_summary = format_runway_summary({'landing': set(old_landing), 'departing': set(old_departing)})
+        new_summary = format_runway_summary(
+            {"landing": set(new_landing), "departing": set(new_departing)}
+        )
+        old_summary = format_runway_summary(
+            {"landing": set(old_landing), "departing": set(old_departing)}
+        )
 
         # Build notification text
         text_bright = (

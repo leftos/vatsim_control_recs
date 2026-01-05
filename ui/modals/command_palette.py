@@ -11,15 +11,35 @@ from textual.app import ComposeResult
 # List of all available commands
 COMMANDS = [
     {"name": "Refresh Data", "shortcut": "Ctrl+R", "action": "refresh"},
-    {"name": "Pause/Resume Auto-refresh", "shortcut": "Ctrl+P", "action": "toggle_pause"},
+    {
+        "name": "Pause/Resume Auto-refresh",
+        "shortcut": "Ctrl+P",
+        "action": "toggle_pause",
+    },
     {"name": "Find Airport", "shortcut": "Ctrl+F", "action": "toggle_search"},
     {"name": "Go To", "shortcut": "Ctrl+G", "action": "show_goto"},
     {"name": "Wind Lookup", "shortcut": "Ctrl+W", "action": "show_wind_lookup"},
     {"name": "METAR Lookup", "shortcut": "Ctrl+E", "action": "show_metar_lookup"},
-    {"name": "VFR Alternatives", "shortcut": "Ctrl+A", "action": "show_vfr_alternatives"},
-    {"name": "Historical Stats", "shortcut": "Ctrl+S", "action": "show_historical_stats"},
-    {"name": "Weather Briefing", "shortcut": "Ctrl+B", "action": "show_weather_briefing"},
-    {"name": "Tracked Airports", "shortcut": "Ctrl+T", "action": "show_airport_tracking"},
+    {
+        "name": "VFR Alternatives",
+        "shortcut": "Ctrl+A",
+        "action": "show_vfr_alternatives",
+    },
+    {
+        "name": "Historical Stats",
+        "shortcut": "Ctrl+S",
+        "action": "show_historical_stats",
+    },
+    {
+        "name": "Weather Briefing",
+        "shortcut": "Ctrl+B",
+        "action": "show_weather_briefing",
+    },
+    {
+        "name": "Tracked Airports",
+        "shortcut": "Ctrl+T",
+        "action": "show_airport_tracking",
+    },
     {"name": "Open Flight Board", "shortcut": "Enter", "action": "open_flight_board"},
     {"name": "Show Help", "shortcut": "?/F1", "action": "show_help"},
     {"name": "Command Palette", "shortcut": "F2", "action": "show_command_palette"},
@@ -87,7 +107,7 @@ class CommandPaletteScreen(ModalScreen):
         for cmd in commands:
             # Format: "Command Name                 Shortcut"
             label = f"{cmd['name']:<30} [{cmd['shortcut']}]"
-            options.append(Option(label, id=cmd['action']))
+            options.append(Option(label, id=cmd["action"]))
         return options
 
     def on_mount(self) -> None:
@@ -107,8 +127,9 @@ class CommandPaletteScreen(ModalScreen):
         # Filter commands
         if query:
             self.filtered_commands = [
-                cmd for cmd in COMMANDS
-                if query in cmd['name'].lower() or query in cmd['shortcut'].lower()
+                cmd
+                for cmd in COMMANDS
+                if query in cmd["name"].lower() or query in cmd["shortcut"].lower()
             ]
         else:
             self.filtered_commands = list(COMMANDS)
@@ -126,7 +147,9 @@ class CommandPaletteScreen(ModalScreen):
         """Execute command when Enter is pressed in input"""
         await self._execute_selected()
 
-    async def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+    async def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected
+    ) -> None:
         """Execute command when option is clicked/selected"""
         await self._execute_selected()
 
@@ -139,7 +162,7 @@ class CommandPaletteScreen(ModalScreen):
 
         # Get the action from filtered commands
         if option_list.highlighted < len(self.filtered_commands):
-            action = self.filtered_commands[option_list.highlighted]['action']
+            action = self.filtered_commands[option_list.highlighted]["action"]
             self.dismiss()
             # Run the action on the app
             await self.app.run_action(action)

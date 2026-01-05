@@ -9,7 +9,7 @@ Can be run manually or via systemd timer.
 import argparse
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Set
 
@@ -20,16 +20,18 @@ from scripts.weather_daemon.config import DaemonConfig
 from scripts.weather_daemon.generator import generate, acquire_lock
 
 # Valid stages for --stages argument
-VALID_STAGES = {'weather', 'briefings', 'tiles', 'index'}
+VALID_STAGES = {"weather", "briefings", "tiles", "index"}
 ALL_STAGES = VALID_STAGES.copy()
 
 
 def parse_stages(stages_str: str) -> Set[str]:
     """Parse comma-separated stages string into a set of valid stages."""
-    stages = {s.strip().lower() for s in stages_str.split(',')}
+    stages = {s.strip().lower() for s in stages_str.split(",")}
     invalid = stages - VALID_STAGES
     if invalid:
-        raise ValueError(f"Invalid stage(s): {', '.join(sorted(invalid))}. Valid stages: {', '.join(sorted(VALID_STAGES))}")
+        raise ValueError(
+            f"Invalid stage(s): {', '.join(sorted(invalid))}. Valid stages: {', '.join(sorted(VALID_STAGES))}"
+        )
     return stages
 
 
@@ -45,11 +47,10 @@ def setup_logging(log_dir: Path, verbose: bool = False) -> None:
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
 
     # File handler - always logs INFO and above
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(logging.INFO)
     file_formatter = logging.Formatter(
-        '%(asctime)s [%(levelname)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
     file_handler.setFormatter(file_formatter)
     logger.addHandler(file_handler)
@@ -58,7 +59,7 @@ def setup_logging(log_dir: Path, verbose: bool = False) -> None:
     if verbose:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG)
-        console_formatter = logging.Formatter('[%(levelname)s] %(message)s')
+        console_formatter = logging.Formatter("[%(levelname)s] %(message)s")
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
 
@@ -93,14 +94,16 @@ Examples:
     )
 
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=None,
         help="Output directory for generated HTML files (default: /var/www/leftos.dev/weather)",
     )
 
     parser.add_argument(
-        "--stages", "-s",
+        "--stages",
+        "-s",
         type=str,
         default=None,
         help="Comma-separated list of stages to run: weather,briefings,tiles,index (default: all)",
@@ -141,7 +144,8 @@ Examples:
     )
 
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose output",
     )
@@ -206,10 +210,10 @@ Examples:
         config.include_custom = False
 
     # Configure stages
-    config.fetch_fresh_weather = 'weather' in stages
-    config.generate_briefings = 'briefings' in stages
-    config.generate_tiles = 'tiles' in stages
-    config.generate_index = 'index' in stages
+    config.fetch_fresh_weather = "weather" in stages
+    config.generate_briefings = "briefings" in stages
+    config.generate_tiles = "tiles" in stages
+    config.generate_index = "index" in stages
 
     if args.workers:
         config.max_workers = args.workers
@@ -244,9 +248,11 @@ Examples:
                 print(f"  {path}")
 
         if generated_files:
-            print(f"\nSuccess: Generated {len(generated_files)} files to {config.output_dir}")
+            print(
+                f"\nSuccess: Generated {len(generated_files)} files to {config.output_dir}"
+            )
         else:
-            print(f"\nNo files generated (weather unchanged or no groupings)")
+            print("\nNo files generated (weather unchanged or no groupings)")
         return 0
 
     try:
@@ -271,6 +277,7 @@ Examples:
         print(f"\nError: {e}", file=sys.stderr)
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         return 1
 

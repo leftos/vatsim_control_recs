@@ -26,7 +26,9 @@ MEMBER_STATS_CACHE_DURATION = 300  # 5 minutes - stats don't change frequently
 VATSIM_API_BASE_URL = "https://api.vatsim.net/v2"
 
 
-def download_vatsim_data(timeout: int = 10, max_retries: int = 3) -> Optional[Dict[str, Any]]:
+def download_vatsim_data(
+    timeout: int = 10, max_retries: int = 3
+) -> Optional[Dict[str, Any]]:
     """
     Download VATSIM data from the API with retry logic and caching.
 
@@ -69,20 +71,28 @@ def download_vatsim_data(timeout: int = 10, max_retries: int = 3) -> Optional[Di
             return data
         except requests.Timeout as e:
             last_exception = e
-            debug_logger.warning(f"VATSIM API timeout (attempt {attempt + 1}/{max_retries})")
+            debug_logger.warning(
+                f"VATSIM API timeout (attempt {attempt + 1}/{max_retries})"
+            )
         except requests.RequestException as e:
             last_exception = e
-            debug_logger.warning(f"VATSIM API error (attempt {attempt + 1}/{max_retries}): {e}")
+            debug_logger.warning(
+                f"VATSIM API error (attempt {attempt + 1}/{max_retries}): {e}"
+            )
         except json.JSONDecodeError as e:
             last_exception = e
-            debug_logger.warning(f"VATSIM API JSON decode error (attempt {attempt + 1}/{max_retries}): {e}")
+            debug_logger.warning(
+                f"VATSIM API JSON decode error (attempt {attempt + 1}/{max_retries}): {e}"
+            )
 
         # Exponential backoff before next retry (0.5s, 1s, 2s)
         if attempt < max_retries - 1:
-            sleep_time = (2 ** attempt) * 0.5
+            sleep_time = (2**attempt) * 0.5
             time.sleep(sleep_time)
 
-    debug_logger.error(f"VATSIM API failed after {max_retries} attempts: {last_exception}")
+    debug_logger.error(
+        f"VATSIM API failed after {max_retries} attempts: {last_exception}"
+    )
 
     # On failure, return stale cache if available
     with _VATSIM_DATA_CACHE_LOCK:
@@ -143,86 +153,98 @@ def get_member_stats(cid: int, timeout: int = 5) -> Optional[Dict[str, Any]]:
 def filter_flights_by_airports(
     data: Dict[str, Any],
     airports: Dict[str, Dict[str, Any]],
-    airport_allowlist: Optional[List[str]] = None
+    airport_allowlist: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Filter flights by departure and arrival airports.
-    
+
     Args:
         data: VATSIM data dictionary containing 'pilots' list
         airports: Dictionary of airport data
         airport_allowlist: Optional list of airport ICAOs to filter by
-    
+
     Returns:
         List of filtered flight dictionaries
     """
-    flights = data.get('pilots', [])
+    flights = data.get("pilots", [])
     filtered_flights = []
-    
+
     for flight in flights:
         # For flights with flight plans
         # Check if flight has a valid flight plan with non-empty departure or arrival
         departure = None
         arrival = None
         has_valid_flight_plan = False
-        
-        if flight.get('flight_plan'):
-            departure = flight['flight_plan'].get('departure')
-            arrival = flight['flight_plan'].get('arrival')
-            
+
+        if flight.get("flight_plan"):
+            departure = flight["flight_plan"].get("departure")
+            arrival = flight["flight_plan"].get("arrival")
+
             # Treat empty strings as None/null for departure and arrival
             if not departure:
                 departure = None
             if not arrival:
                 arrival = None
-            
+
             # Only consider it a valid flight plan if at least one field is non-empty
             has_valid_flight_plan = departure is not None or arrival is not None
-        
+
         if has_valid_flight_plan:
             # If allowlist is provided, check if either departure or arrival is in the allowlist
             # Otherwise, check if both departure and arrival airports are in our airport data
             if airport_allowlist:
-                if (departure and departure in airports) or (arrival and arrival in airports):
-                    filtered_flights.append({
-                        'callsign': flight.get('callsign'),
-                        'departure': departure,
-                        'arrival': arrival,
-                        'latitude': flight.get('latitude'),
-                        'longitude': flight.get('longitude'),
-                        'groundspeed': flight.get('groundspeed'),
-                        'altitude': flight.get('altitude'),
-                        'flight_plan': flight.get('flight_plan')
-                    })
-            elif departure and arrival and departure in airports and arrival in airports:
-                filtered_flights.append({
-                    'callsign': flight.get('callsign'),
-                    'departure': departure,
-                    'arrival': arrival,
-                    'latitude': flight.get('latitude'),
-                    'longitude': flight.get('longitude'),
-                    'groundspeed': flight.get('groundspeed'),
-                    'altitude': flight.get('altitude'),
-                    'flight_plan': flight.get('flight_plan')
-                })
+                if (departure and departure in airports) or (
+                    arrival and arrival in airports
+                ):
+                    filtered_flights.append(
+                        {
+                            "callsign": flight.get("callsign"),
+                            "departure": departure,
+                            "arrival": arrival,
+                            "latitude": flight.get("latitude"),
+                            "longitude": flight.get("longitude"),
+                            "groundspeed": flight.get("groundspeed"),
+                            "altitude": flight.get("altitude"),
+                            "flight_plan": flight.get("flight_plan"),
+                        }
+                    )
+            elif (
+                departure and arrival and departure in airports and arrival in airports
+            ):
+                filtered_flights.append(
+                    {
+                        "callsign": flight.get("callsign"),
+                        "departure": departure,
+                        "arrival": arrival,
+                        "latitude": flight.get("latitude"),
+                        "longitude": flight.get("longitude"),
+                        "groundspeed": flight.get("groundspeed"),
+                        "altitude": flight.get("altitude"),
+                        "flight_plan": flight.get("flight_plan"),
+                    }
+                )
         # For flights without valid flight plans, we'll still include them for ground analysis
         # but with None for departure/arrival
-        elif flight.get('latitude') is not None and flight.get('longitude') is not None:
-            filtered_flights.append({
-                'callsign': flight.get('callsign'),
-                'departure': None,
-                'arrival': None,
-                'latitude': flight.get('latitude'),
-                'longitude': flight.get('longitude'),
-                'groundspeed': flight.get('groundspeed'),
-                'altitude': flight.get('altitude'),
-                'flight_plan': flight.get('flight_plan')
-            })
-    
+        elif flight.get("latitude") is not None and flight.get("longitude") is not None:
+            filtered_flights.append(
+                {
+                    "callsign": flight.get("callsign"),
+                    "departure": None,
+                    "arrival": None,
+                    "latitude": flight.get("latitude"),
+                    "longitude": flight.get("longitude"),
+                    "groundspeed": flight.get("groundspeed"),
+                    "altitude": flight.get("altitude"),
+                    "flight_plan": flight.get("flight_plan"),
+                }
+            )
+
     return filtered_flights
 
 
-def get_atis_for_airports(vatsim_data: Dict[str, Any], airports: List[str]) -> Dict[str, Dict[str, Any]]:
+def get_atis_for_airports(
+    vatsim_data: Dict[str, Any], airports: List[str]
+) -> Dict[str, Dict[str, Any]]:
     """
     Extract ATIS information for specified airports from VATSIM data.
 
@@ -249,20 +271,20 @@ def get_atis_for_airports(vatsim_data: Dict[str, Any], airports: List[str]) -> D
 
     airport_set = set(airports)
 
-    for atis in vatsim_data.get('atis', []):
-        callsign = atis.get('callsign', '')
+    for atis in vatsim_data.get("atis", []):
+        callsign = atis.get("callsign", "")
         # Extract ICAO from callsign (e.g., "KSFO_ATIS" -> "KSFO")
-        if '_ATIS' in callsign:
-            icao = callsign.split('_ATIS')[0]
+        if "_ATIS" in callsign:
+            icao = callsign.split("_ATIS")[0]
             if icao in airport_set:
                 # Join text_atis lines into single string (VATSIM splits on line breaks)
-                raw_lines = atis.get('text_atis') or []
-                text_atis = ' '.join(line.strip() for line in raw_lines)
+                raw_lines = atis.get("text_atis") or []
+                text_atis = " ".join(line.strip() for line in raw_lines)
                 result[icao] = {
-                    'callsign': callsign,
-                    'atis_code': atis.get('atis_code', ''),
-                    'text_atis': text_atis,
-                    'frequency': atis.get('frequency', '')
+                    "callsign": callsign,
+                    "atis_code": atis.get("atis_code", ""),
+                    "text_atis": text_atis,
+                    "frequency": atis.get("frequency", ""),
                 }
 
     return result

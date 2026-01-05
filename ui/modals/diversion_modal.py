@@ -39,9 +39,10 @@ MAX_RESULTS = 50
 
 class SortMode(Enum):
     """Sort modes for diversion results"""
-    POSITION = "pos"      # Distance from aircraft position (default)
+
+    POSITION = "pos"  # Distance from aircraft position (default)
     DESTINATION = "dest"  # Distance from destination airport
-    RUNWAY = "runway"     # Longest runway length
+    RUNWAY = "runway"  # Longest runway length
 
 
 class DiversionModal(ModalScreen):
@@ -125,17 +126,17 @@ class DiversionModal(ModalScreen):
         self._search_cancelled = False
 
         # Extract flight info
-        self.callsign = flight_data.get('callsign', 'Unknown')
+        self.callsign = flight_data.get("callsign", "Unknown")
         # Handle None values explicitly (get() default only applies when key is missing)
-        self.latitude = flight_data.get('latitude') or 0.0
-        self.longitude = flight_data.get('longitude') or 0.0
-        self.aircraft_type = ''
-        self.destination_icao = ''
+        self.latitude = flight_data.get("latitude") or 0.0
+        self.longitude = flight_data.get("longitude") or 0.0
+        self.aircraft_type = ""
+        self.destination_icao = ""
         self.destination_lat: Optional[float] = None
         self.destination_lon: Optional[float] = None
-        if flight_data.get('flight_plan'):
-            self.aircraft_type = flight_data['flight_plan'].get('aircraft_short', '')
-            self.destination_icao = flight_data['flight_plan'].get('arrival', '')
+        if flight_data.get("flight_plan"):
+            self.aircraft_type = flight_data["flight_plan"].get("aircraft_short", "")
+            self.destination_icao = flight_data["flight_plan"].get("arrival", "")
 
         # Current filter state
         self.filters = DiversionFilters(
@@ -158,7 +159,11 @@ class DiversionModal(ModalScreen):
     def compose(self) -> ComposeResult:
         # Build subtitle with aircraft info
         aircraft_info = self.aircraft_type or "Unknown aircraft"
-        required_runway = get_required_runway_length(self.aircraft_type) if self.aircraft_type else 6000
+        required_runway = (
+            get_required_runway_length(self.aircraft_type)
+            if self.aircraft_type
+            else 6000
+        )
         dest_info = f" → {self.destination_icao}" if self.destination_icao else ""
         subtitle = f"{self.callsign}{dest_info} | {aircraft_info} | Min runway: {required_runway:,}ft"
 
@@ -175,7 +180,10 @@ class DiversionModal(ModalScreen):
             table = SplitFlapDataTable(id="diversion-table", enable_animations=False)
             table.cursor_type = "row"
             yield table
-            yield Static("1: Sort Pos | 2: Sort Dest | 3: Sort Runway | R: Refresh | Esc: Close", id="diversion-hint")
+            yield Static(
+                "1: Sort Pos | 2: Sort Dest | 3: Sort Runway | R: Refresh | Esc: Close",
+                id="diversion-hint",
+            )
 
     def on_mount(self) -> None:
         """Start searching when mounted"""
@@ -190,8 +198,8 @@ class DiversionModal(ModalScreen):
             return
 
         dest_data = config.UNIFIED_AIRPORT_DATA.get(self.destination_icao, {})
-        self.destination_lat = dest_data.get('latitude')
-        self.destination_lon = dest_data.get('longitude')
+        self.destination_lat = dest_data.get("latitude")
+        self.destination_lon = dest_data.get("longitude")
 
     def _setup_table(self) -> None:
         """Set up the DataTable columns"""
@@ -217,26 +225,26 @@ class DiversionModal(ModalScreen):
         if not self.vatsim_data:
             return
 
-        controllers = self.vatsim_data.get('controllers', [])
+        controllers = self.vatsim_data.get("controllers", [])
         for controller in controllers:
-            callsign = controller.get('callsign', '')
+            callsign = controller.get("callsign", "")
             if not callsign:
                 continue
 
             # Extract facility from callsign (e.g., "KSFO_TWR" -> "KSFO")
-            parts = callsign.split('_')
+            parts = callsign.split("_")
             if len(parts) >= 2:
                 facility = parts[0].upper()
                 position = parts[-1].upper()
 
                 # Map position suffixes
                 pos_map = {
-                    'TWR': 'TWR',
-                    'GND': 'GND',
-                    'DEL': 'DEL',
-                    'APP': 'APP',
-                    'DEP': 'DEP',
-                    'CTR': 'CTR',
+                    "TWR": "TWR",
+                    "GND": "GND",
+                    "DEL": "DEL",
+                    "APP": "APP",
+                    "DEP": "DEP",
+                    "CTR": "CTR",
                 }
                 pos_display = pos_map.get(position) or position
 
@@ -311,7 +319,9 @@ class DiversionModal(ModalScreen):
 
         # Basic sanity check for coordinates
         if not (-90 <= self.latitude <= 90) or not (-180 <= self.longitude <= 180):
-            hint_widget.update(f"[red]Invalid coordinates: {self.latitude}, {self.longitude}[/red]")
+            hint_widget.update(
+                f"[red]Invalid coordinates: {self.latitude}, {self.longitude}[/red]"
+            )
             return
 
         table.clear()
@@ -340,7 +350,10 @@ class DiversionModal(ModalScreen):
             hint_widget.update(f"[dim]Searching within {radius}nm...[/dim]")
 
             try:
-                def search_at_radius(r: float = radius, f: DiversionFilters = current_filters):
+
+                def search_at_radius(
+                    r: float = radius, f: DiversionFilters = current_filters
+                ):
                     return find_suitable_diversions(
                         self.latitude,
                         self.longitude,
@@ -380,7 +393,9 @@ class DiversionModal(ModalScreen):
         # Fetch weather for displayed diversions in background
         await self._fetch_weather_for_diversions(all_diversions[:50])
 
-    async def _fetch_weather_for_diversions(self, diversions: List[DiversionOption]) -> None:
+    async def _fetch_weather_for_diversions(
+        self, diversions: List[DiversionOption]
+    ) -> None:
         """Fetch weather data for diversion airports in batch"""
         if self._search_cancelled:
             return
@@ -388,15 +403,16 @@ class DiversionModal(ModalScreen):
         loop = asyncio.get_running_loop()
 
         # Collect ICAOs that need weather (skip already cached)
-        icaos_to_fetch = [d.icao for d in diversions if d.icao not in self._weather_data]
+        icaos_to_fetch = [
+            d.icao for d in diversions if d.icao not in self._weather_data
+        ]
 
         if not icaos_to_fetch:
             return
 
         # Batch fetch all METARs in parallel
         metars = await loop.run_in_executor(
-            None,
-            lambda: get_metar_batch(icaos_to_fetch, max_workers=10)
+            None, lambda: get_metar_batch(icaos_to_fetch, max_workers=10)
         )
 
         if self._search_cancelled:
@@ -429,12 +445,18 @@ class DiversionModal(ModalScreen):
             if not self._search_completed:
                 # Search still in progress, don't show "no results" message
                 return
-            hint_widget.update(f"[yellow]No airports within 100nm of {self.latitude:.2f}, {self.longitude:.2f}[/yellow]")
+            hint_widget.update(
+                f"[yellow]No airports within 100nm of {self.latitude:.2f}, {self.longitude:.2f}[/yellow]"
+            )
             table.clear()
             return
 
         # Get required runway for filter
-        required_runway = get_required_runway_length(self.aircraft_type) if self.aircraft_type else None
+        required_runway = (
+            get_required_runway_length(self.aircraft_type)
+            if self.aircraft_type
+            else None
+        )
 
         # Filter diversions
         filtered = []
@@ -454,7 +476,7 @@ class DiversionModal(ModalScreen):
 
             # Weather filter
             if self.filters.require_good_weather:
-                if d.weather_category and d.weather_category not in ('VFR', 'MVFR'):
+                if d.weather_category and d.weather_category not in ("VFR", "MVFR"):
                     continue
 
             # Staffing filter
@@ -471,16 +493,20 @@ class DiversionModal(ModalScreen):
             # Sort by distance from destination
             def get_dest_distance(d: DiversionOption) -> float:
                 if self.destination_lat is None or self.destination_lon is None:
-                    return float('inf')
-                div_data = config.UNIFIED_AIRPORT_DATA.get(d.icao, {}) if config.UNIFIED_AIRPORT_DATA else {}
-                div_lat = div_data.get('latitude')
-                div_lon = div_data.get('longitude')
-                if div_lat is None or div_lon is None:
-                    return float('inf')
-                return haversine_distance_nm(
-                    self.destination_lat, self.destination_lon,
-                    div_lat, div_lon
+                    return float("inf")
+                div_data = (
+                    config.UNIFIED_AIRPORT_DATA.get(d.icao, {})
+                    if config.UNIFIED_AIRPORT_DATA
+                    else {}
                 )
+                div_lat = div_data.get("latitude")
+                div_lon = div_data.get("longitude")
+                if div_lat is None or div_lon is None:
+                    return float("inf")
+                return haversine_distance_nm(
+                    self.destination_lat, self.destination_lon, div_lat, div_lon
+                )
+
             filtered.sort(key=get_dest_distance)
         elif self._sort_mode == SortMode.RUNWAY:
             # Sort by runway length (longest first)
@@ -507,7 +533,11 @@ class DiversionModal(ModalScreen):
 
         for d in filtered:
             # Look up airport data once for multiple uses
-            div_data = config.UNIFIED_AIRPORT_DATA.get(d.icao, {}) if config.UNIFIED_AIRPORT_DATA else {}
+            div_data = (
+                config.UNIFIED_AIRPORT_DATA.get(d.icao, {})
+                if config.UNIFIED_AIRPORT_DATA
+                else {}
+            )
 
             # Format runway
             if d.longest_runway_ft:
@@ -526,14 +556,14 @@ class DiversionModal(ModalScreen):
 
             # Format weather with color (using shared color config)
             if d.weather_category:
-                wx_color = CATEGORY_COLORS.get(d.weather_category, 'white')
+                wx_color = CATEGORY_COLORS.get(d.weather_category, "white")
                 wx_text = Text(d.weather_category, style=f"bold {wx_color}")
             else:
                 wx_text = Text("...", style="dim")
 
             # Format ATC - check if airport is towered
-            tower_type = div_data.get('tower_type', '')
-            if tower_type == 'NON-ATCT':
+            tower_type = div_data.get("tower_type", "")
+            if tower_type == "NON-ATCT":
                 # Untowered airport
                 atc_str = "N/A"
             elif d.is_staffed:
@@ -544,7 +574,11 @@ class DiversionModal(ModalScreen):
 
             # Get pretty name if available (with fallback)
             try:
-                name = config.DISAMBIGUATOR.get_short_name(d.icao, max_length=16) if config.DISAMBIGUATOR else d.name[:16]
+                name = (
+                    config.DISAMBIGUATOR.get_short_name(d.icao, max_length=16)
+                    if config.DISAMBIGUATOR
+                    else d.name[:16]
+                )
             except Exception:
                 name = d.name[:16] if d.name else d.icao
 
@@ -558,12 +592,11 @@ class DiversionModal(ModalScreen):
 
             # Distance from destination
             if self.destination_lat is not None and self.destination_lon is not None:
-                div_lat = div_data.get('latitude')
-                div_lon = div_data.get('longitude')
+                div_lat = div_data.get("latitude")
+                div_lon = div_data.get("longitude")
                 if div_lat is not None and div_lon is not None:
                     dest_dist = haversine_distance_nm(
-                        self.destination_lat, self.destination_lon,
-                        div_lat, div_lon
+                        self.destination_lat, self.destination_lon, div_lat, div_lon
                     )
                     dest_dist_str = f"{dest_dist:>3.0f}nm"
                 else:
@@ -571,7 +604,15 @@ class DiversionModal(ModalScreen):
             else:
                 dest_dist_str = "-"
 
-            table.add_row(airport_text, pos_dist_str, dest_dist_str, runway_str, app_str, wx_text, atc_str)
+            table.add_row(
+                airport_text,
+                pos_dist_str,
+                dest_dist_str,
+                runway_str,
+                app_str,
+                wx_text,
+                atc_str,
+            )
 
     def action_close(self) -> None:
         """Close the modal"""

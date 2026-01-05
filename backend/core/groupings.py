@@ -3,7 +3,6 @@ Airport groupings management (custom groupings, preset groupings, and ARTCC-base
 """
 
 import json
-import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
@@ -16,8 +15,7 @@ PRESET_GROUPINGS_DIR = Path(__file__).parent.parent.parent / "data" / "preset_gr
 
 
 def find_grouping_case_insensitive(
-    name: str,
-    all_groupings: Dict[str, List[str]]
+    name: str, all_groupings: Dict[str, List[str]]
 ) -> Optional[str]:
     """
     Find a grouping name case-insensitively.
@@ -45,7 +43,7 @@ def find_grouping_case_insensitive(
 def resolve_grouping_recursively(
     grouping_name: str,
     all_groupings: Dict[str, List[str]],
-    visited: Optional[Set[str]] = None
+    visited: Optional[Set[str]] = None,
 ) -> Set[str]:
     """
     Recursively resolve a grouping name to its individual airports.
@@ -88,15 +86,17 @@ def resolve_grouping_recursively(
     return airports
 
 
-def load_artcc_groupings(unified_data: Dict[str, Dict[str, Any]]) -> Dict[str, List[str]]:
+def load_artcc_groupings(
+    unified_data: Dict[str, Dict[str, Any]],
+) -> Dict[str, List[str]]:
     """
     Load ARTCC groupings from unified airport data.
     Creates groupings like "ZOA All", "ZMP All", etc. containing all airports under each ARTCC.
     Uses caching to avoid reloading on every call.
-    
+
     Args:
         unified_data: Unified airport data dictionary
-    
+
     Returns:
         Dictionary mapping ARTCC grouping names to lists of airport ICAOs
         (e.g., {'ZOA All': ['KSFO', 'KOAK', ...], ...})
@@ -104,31 +104,33 @@ def load_artcc_groupings(unified_data: Dict[str, Dict[str, Any]]) -> Dict[str, L
     cached = get_artcc_groupings_cache()
     if cached is not None:
         return cached
-    
+
     if not unified_data:
         set_artcc_groupings_cache({})
         return {}
-    
+
     # Group airports by ARTCC
     artcc_airports = defaultdict(list)
-    
+
     for airport_code, airport_info in unified_data.items():
-        artcc = airport_info.get('artcc', '').strip()
+        artcc = airport_info.get("artcc", "").strip()
         if artcc:
             artcc_airports[artcc].append(airport_code)
-    
+
     # Create groupings in the format "ARTCC All"
     artcc_groupings = {}
     for artcc, airports in artcc_airports.items():
         grouping_name = f"{artcc} All"
         artcc_groupings[grouping_name] = sorted(airports)  # Sort for consistency
-    
+
     set_artcc_groupings_cache(artcc_groupings)
-    #print(f"Created {len(artcc_groupings)} ARTCC groupings")
+    # print(f"Created {len(artcc_groupings)} ARTCC groupings")
     return artcc_groupings
 
 
-def load_custom_groupings(filename: Optional[str] = None) -> Optional[Dict[str, List[str]]]:
+def load_custom_groupings(
+    filename: Optional[str] = None,
+) -> Optional[Dict[str, List[str]]]:
     """
     Load custom airport groupings from JSON file(s).
 
@@ -151,7 +153,9 @@ def load_custom_groupings(filename: Optional[str] = None) -> Optional[Dict[str, 
 
     # Validate structure
     if not isinstance(data, dict):
-        logger.error(f"Custom groupings must be a JSON object, got {type(data).__name__}")
+        logger.error(
+            f"Custom groupings must be a JSON object, got {type(data).__name__}"
+        )
         return None
 
     validated: Dict[str, List[str]] = {}
@@ -167,7 +171,9 @@ def load_custom_groupings(filename: Optional[str] = None) -> Optional[Dict[str, 
             # Ensure all elements are strings
             validated[key] = [str(v) for v in value]
         else:
-            logger.warning(f"Skipping grouping '{key}' with invalid value type: {type(value).__name__}")
+            logger.warning(
+                f"Skipping grouping '{key}' with invalid value type: {type(value).__name__}"
+            )
             continue
 
     return validated
@@ -195,11 +201,13 @@ def load_preset_groupings() -> Dict[str, List[str]]:
 
     for json_file in PRESET_GROUPINGS_DIR.glob("*.json"):
         try:
-            with open(json_file, 'r', encoding='utf-8') as f:
+            with open(json_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             if not isinstance(data, dict):
-                logger.warning(f"Preset groupings file '{json_file.name}' must contain a JSON object")
+                logger.warning(
+                    f"Preset groupings file '{json_file.name}' must contain a JSON object"
+                )
                 continue
 
             for key, value in data.items():
@@ -209,26 +217,30 @@ def load_preset_groupings() -> Dict[str, List[str]]:
                 if isinstance(value, list):
                     # Old format: value is list of airports
                     airports = [str(v) for v in value]
-                elif isinstance(value, dict) and 'airports' in value:
+                elif isinstance(value, dict) and "airports" in value:
                     # New format: value is dict with 'airports' key
-                    if isinstance(value['airports'], list):
-                        airports = [str(v) for v in value['airports']]
+                    if isinstance(value["airports"], list):
+                        airports = [str(v) for v in value["airports"]]
 
                 # Filter out single-airport groupings
                 if airports and len(airports) > 1:
                     all_preset_groupings[key] = airports
 
         except json.JSONDecodeError as e:
-            logger.warning(f"Could not decode JSON from preset groupings file '{json_file.name}': {e}")
+            logger.warning(
+                f"Could not decode JSON from preset groupings file '{json_file.name}': {e}"
+            )
         except Exception as e:
-            logger.warning(f"Error loading preset groupings file '{json_file.name}': {e}")
+            logger.warning(
+                f"Error loading preset groupings file '{json_file.name}': {e}"
+            )
 
     return all_preset_groupings
 
 
 def load_all_groupings(
     custom_groupings_filename: Optional[str] = None,
-    unified_data: Optional[Dict[str, Dict[str, Any]]] = None
+    unified_data: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, List[str]]:
     """
     Load and merge all groupings sources in order of precedence:

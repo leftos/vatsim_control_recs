@@ -29,38 +29,38 @@ OUTPUT_DIR = PROJECT_ROOT / "data" / "preset_groupings"
 
 # FIR/ARTCC codes to exclude (not airports)
 EXCLUDED_FACILITY_IDS = {
-    'ZAK',  # Oakland Oceanic
-    'ZWY',  # Caribbean virtual ARTCC
+    "ZAK",  # Oakland Oceanic
+    "ZWY",  # Caribbean virtual ARTCC
 }
 
 # Patterns to clean from area names (applied before combining with facility ID)
 # These patterns handle redundant or noisy suffixes in vNAS area names
 AREA_NAME_CLEANUP_PATTERNS = [
     # Remove " MAPS" suffix (e.g., "GTU TOWER MAPS" -> "GTU TOWER")
-    (r'\s+MAPS$', ''),
+    (r"\s+MAPS$", ""),
     # Remove trailing " - XXX" suffixes (e.g., "FSM TRACON - FSM" -> "FSM TRACON")
-    (r'\s+-\s+[A-Z0-9]{2,4}$', ''),
+    (r"\s+-\s+[A-Z0-9]{2,4}$", ""),
 ]
 
 # Country names for international airport groupings
 COUNTRY_NAMES = {
-    'MY': 'Bahamas',
-    'MB': 'Turks & Caicos',
-    'MD': 'Dominican Republic',
-    'MU': 'Cuba',
-    'MT': 'Cuba',
-    'MM': 'Mexico',
-    'CY': 'Canada',
-    'CZ': 'Canada',
-    'TN': 'Netherlands Antilles',
-    'TT': 'Trinidad & Tobago',
-    'TF': 'French Antilles',
-    'TA': 'Antigua',
-    'TK': 'St. Kitts',
-    'TU': 'British Virgin Islands',
-    'SV': 'Venezuela',
-    'TX': 'Bermuda',
-    'UH': 'Russia',
+    "MY": "Bahamas",
+    "MB": "Turks & Caicos",
+    "MD": "Dominican Republic",
+    "MU": "Cuba",
+    "MT": "Cuba",
+    "MM": "Mexico",
+    "CY": "Canada",
+    "CZ": "Canada",
+    "TN": "Netherlands Antilles",
+    "TT": "Trinidad & Tobago",
+    "TF": "French Antilles",
+    "TA": "Antigua",
+    "TK": "St. Kitts",
+    "TU": "British Virgin Islands",
+    "SV": "Venezuela",
+    "TX": "Bermuda",
+    "UH": "Russia",
 }
 
 
@@ -69,9 +69,9 @@ def fetch_artcc_data(artcc: str) -> Optional[Dict[str, Any]]:
     try:
         url = f"{VNAS_API_BASE}/{artcc}"
         req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+        req.add_header("User-Agent", "VATSIM-Control-Recs/1.0")
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode('utf-8'))
+            return json.loads(resp.read().decode("utf-8"))
     except Exception as e:
         print(f"  ERROR fetching {artcc}: {e}")
         return None
@@ -81,10 +81,10 @@ def get_all_artccs() -> List[str]:
     """Get list of all ARTCCs from vNAS API."""
     try:
         req = urllib.request.Request(VNAS_API_BASE)
-        req.add_header('User-Agent', 'VATSIM-Control-Recs/1.0')
+        req.add_header("User-Agent", "VATSIM-Control-Recs/1.0")
         with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-        return [item.get('id') for item in data if item.get('id')]
+            data = json.loads(resp.read().decode("utf-8"))
+        return [item.get("id") for item in data if item.get("id")]
     except Exception as e:
         print(f"ERROR fetching ARTCC list: {e}")
         return []
@@ -107,7 +107,7 @@ def is_airport_code(code: str) -> bool:
     if code in EXCLUDED_FACILITY_IDS:
         return False
     # 3-letter codes starting with Z are usually ARTCCs/FIRs
-    if len(code) == 3 and code.startswith('Z'):
+    if len(code) == 3 and code.startswith("Z"):
         return False
     return True
 
@@ -138,13 +138,13 @@ def clean_area_name(area_name: str, facility_id: str) -> str:
     # Remove leading facility ID if area name starts with it
     # e.g., "M03 TRACON" under M03 → "TRACON"
     facility_upper = facility_id.upper()
-    if name.upper().startswith(facility_upper + ' '):
-        name = name[len(facility_id):].strip()
+    if name.upper().startswith(facility_upper + " "):
+        name = name[len(facility_id) :].strip()
 
     # Normalize case for common suffixes (TRACON, TOWER, etc.)
     # Keep them uppercase for consistency
-    name = re.sub(r'\btracon\b', 'TRACON', name, flags=re.IGNORECASE)
-    name = re.sub(r'\btower\b', 'Tower', name, flags=re.IGNORECASE)
+    name = re.sub(r"\btracon\b", "TRACON", name, flags=re.IGNORECASE)
+    name = re.sub(r"\btower\b", "Tower", name, flags=re.IGNORECASE)
 
     return name.strip()
 
@@ -162,7 +162,7 @@ def extract_position_prefix(callsign: str) -> Optional[str]:
     if not callsign:
         return None
     # Split by underscore and take first part
-    parts = callsign.upper().split('_')
+    parts = callsign.upper().split("_")
     if parts:
         return parts[0]
     return None
@@ -179,15 +179,14 @@ def extract_position_suffix(callsign: str) -> Optional[str]:
     """
     if not callsign:
         return None
-    parts = callsign.upper().split('_')
+    parts = callsign.upper().split("_")
     if len(parts) >= 2:
         return parts[-1]  # Last part is the suffix
     return None
 
 
 def get_area_position_info(
-    facility: Dict[str, Any],
-    area_id: str
+    facility: Dict[str, Any], area_id: str
 ) -> Tuple[Set[str], Set[str]]:
     """
     Get position prefixes and suffixes for an area.
@@ -200,13 +199,13 @@ def get_area_position_info(
     prefixes: Set[str] = set()
     suffixes: Set[str] = set()
 
-    positions = facility.get('positions', [])
+    positions = facility.get("positions", [])
     for pos in positions:
-        pos_stars = pos.get('starsConfiguration', {})
-        pos_area_id = pos_stars.get('areaId', '')
+        pos_stars = pos.get("starsConfiguration", {})
+        pos_area_id = pos_stars.get("areaId", "")
 
         if pos_area_id == area_id:
-            callsign = pos.get('callsign', '')
+            callsign = pos.get("callsign", "")
             prefix = extract_position_prefix(callsign)
             suffix = extract_position_suffix(callsign)
             if prefix:
@@ -218,9 +217,7 @@ def get_area_position_info(
 
 
 def extract_areas_from_facility(
-    facility: Dict[str, Any],
-    facility_id: str,
-    groupings: Dict[str, Dict[str, Any]]
+    facility: Dict[str, Any], facility_id: str, groupings: Dict[str, Dict[str, Any]]
 ) -> None:
     """
     Extract sector areas from starsConfiguration.areas.
@@ -228,23 +225,25 @@ def extract_areas_from_facility(
     Each area has underlyingAirports which maps to a sector grouping.
     Also extracts position prefixes for SimAware boundary matching.
     """
-    stars = facility.get('starsConfiguration', {})
-    areas = stars.get('areas', [])
+    stars = facility.get("starsConfiguration", {})
+    areas = stars.get("areas", [])
 
     for area in areas:
-        area_id = area.get('id', '')
-        area_name = area.get('name', '')
-        underlying = area.get('underlyingAirports', [])
+        area_id = area.get("id", "")
+        area_name = area.get("name", "")
+        underlying = area.get("underlyingAirports", [])
 
         if not area_name or not underlying:
             continue
 
         # Skip generic/system areas
-        if area_name.lower() in ('default', 'all', 'none'):
+        if area_name.lower() in ("default", "all", "none"):
             continue
 
         # Normalize airport codes
-        airports = [normalize_icao(code) for code in underlying if is_airport_code(code)]
+        airports = [
+            normalize_icao(code) for code in underlying if is_airport_code(code)
+        ]
 
         if airports:
             # Clean the area name to remove redundant patterns
@@ -271,22 +270,22 @@ def extract_areas_from_facility(
             }
 
 
-def extract_airports_from_facility(facility: Dict[str, Any], collected: Set[str]) -> None:
+def extract_airports_from_facility(
+    facility: Dict[str, Any], collected: Set[str]
+) -> None:
     """Recursively extract airport IDs from a facility and its children."""
-    facility_id = facility.get('id', '')
+    facility_id = facility.get("id", "")
 
     if is_airport_code(facility_id):
         collected.add(normalize_icao(facility_id))
 
     # Recurse into child facilities
-    for child in facility.get('childFacilities', []):
+    for child in facility.get("childFacilities", []):
         extract_airports_from_facility(child, collected)
 
 
 def process_facility_hierarchy(
-    facility: Dict[str, Any],
-    groupings: Dict[str, Dict[str, Any]],
-    depth: int = 0
+    facility: Dict[str, Any], groupings: Dict[str, Dict[str, Any]], depth: int = 0
 ) -> None:
     """
     Process facility hierarchy to extract groupings.
@@ -294,10 +293,10 @@ def process_facility_hierarchy(
     - Extracts sector areas from starsConfiguration
     - Creates groupings for TRACONs with their underlying airports
     """
-    facility_id = facility.get('id', '')
-    facility_type = facility.get('type', '')
-    facility_name = facility.get('name', facility_id)
-    children = facility.get('childFacilities', [])
+    facility_id = facility.get("id", "")
+    facility_type = facility.get("type", "")
+    facility_name = facility.get("name", facility_id)
+    children = facility.get("childFacilities", [])
 
     # Extract sector areas from STARS configuration
     extract_areas_from_facility(facility, facility_id, groupings)
@@ -312,19 +311,25 @@ def process_facility_hierarchy(
         if is_airport_code(facility_id):
             airports.add(normalize_icao(facility_id))
 
-        if airports and facility_type in ('AtctTracon', 'Tracon', 'AtctRapcon', 'Rapcon'):
+        if airports and facility_type in (
+            "AtctTracon",
+            "Tracon",
+            "AtctRapcon",
+            "Rapcon",
+        ):
             # Create combined grouping for the facility
             # Avoid duplicate names like "FAT FAT" -> just use "FAT"
             if facility_name.upper() == facility_id.upper():
                 group_name = facility_id
             else:
                 group_name = f"{facility_id} {facility_name}"
-                group_name = group_name.replace('  ', ' ').strip()
+                group_name = group_name.replace("  ", " ").strip()
 
             # Only add if we don't already have sector-level groupings
             sector_prefix = f"{facility_id} "
-            has_sectors = any(k.startswith(sector_prefix) and k != group_name
-                            for k in groupings)
+            has_sectors = any(
+                k.startswith(sector_prefix) and k != group_name for k in groupings
+            )
 
             if not has_sectors:
                 groupings[group_name] = {
@@ -340,13 +345,13 @@ def process_facility_hierarchy(
 
 
 def add_international_airports(
-    facility: Dict[str, Any],
-    groupings: Dict[str, Dict[str, Any]]
+    facility: Dict[str, Any], groupings: Dict[str, Dict[str, Any]]
 ) -> int:
     """Add international airports from nonNasFacilityIds."""
-    non_nas = facility.get('nonNasFacilityIds', [])
-    intl_airports = [code.upper() for code in non_nas
-                     if is_airport_code(code) and len(code) == 4]
+    non_nas = facility.get("nonNasFacilityIds", [])
+    intl_airports = [
+        code.upper() for code in non_nas if is_airport_code(code) and len(code) == 4
+    ]
 
     if not intl_airports:
         return 0
@@ -356,7 +361,7 @@ def add_international_airports(
 
     for code in intl_airports:
         prefix = code[:2]
-        country = COUNTRY_NAMES.get(prefix, f'{prefix} Region')
+        country = COUNTRY_NAMES.get(prefix, f"{prefix} Region")
         if country not in by_country:
             by_country[country] = []
         by_country[country].append(code)
@@ -376,14 +381,16 @@ def add_international_airports(
     return count
 
 
-def generate_artcc_groupings(artcc: str, data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+def generate_artcc_groupings(
+    artcc: str, data: Dict[str, Any]
+) -> Dict[str, Dict[str, Any]]:
     """Generate groupings for an ARTCC from vNAS data."""
     groupings: Dict[str, Dict[str, Any]] = {}
 
-    facility = data.get('facility', {})
+    facility = data.get("facility", {})
 
     # Process each child facility (TRACONs, RAPCONs, etc.)
-    for child in facility.get('childFacilities', []):
+    for child in facility.get("childFacilities", []):
         process_facility_hierarchy(child, groupings)
 
     # Add international airports
@@ -431,11 +438,13 @@ def main():
 
         if groupings:
             output_file = OUTPUT_DIR / f"{artcc}.json"
-            with open(output_file, 'w', encoding='utf-8') as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(groupings, f, indent=2, ensure_ascii=False)
-                f.write('\n')  # Trailing newline
+                f.write("\n")  # Trailing newline
 
-            intl_count = sum(1 for name in groupings if name.startswith('International'))
+            intl_count = sum(
+                1 for name in groupings if name.startswith("International")
+            )
             total_groupings += len(groupings)
             total_intl += intl_count
             print(f"  {artcc}: {len(groupings)} groupings ({intl_count} international)")

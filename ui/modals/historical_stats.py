@@ -11,7 +11,7 @@ from backend.data.statsim_api import (
     fetch_flights_from_origin,
     fetch_flights_to_destination,
     STATSIM_DEFAULT_DAYS_BACK,
-    STATSIM_MAX_DAYS_PER_QUERY
+    STATSIM_MAX_DAYS_PER_QUERY,
 )
 from ui import config
 
@@ -98,18 +98,27 @@ class HistoricalStatsScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Container(id="stats-container"):
-            yield Static(f"Historical Flight Statistics ({STATSIM_DEFAULT_DAYS_BACK} days)", id="stats-title")
+            yield Static(
+                f"Historical Flight Statistics ({STATSIM_DEFAULT_DAYS_BACK} days)",
+                id="stats-title",
+            )
             with Container(id="stats-input-container"):
                 yield Input(
                     placeholder="Enter airports (space-separated, e.g., KLAX KJFK KORD)",
-                    id="stats-input"
+                    id="stats-input",
                 )
-            yield Static("Enter airports to see which tracked airports have the most traffic to/from them", id="stats-status", markup=True)
+            yield Static(
+                "Enter airports to see which tracked airports have the most traffic to/from them",
+                id="stats-status",
+                markup=True,
+            )
             with Container(id="stats-table-container"):
                 table = DataTable(id="stats-table")
                 table.cursor_type = "row"
                 yield table
-            yield Static("Enter: Search | C: Copy results | Escape: Close", id="stats-hint")
+            yield Static(
+                "Enter: Search | C: Copy results | Escape: Close", id="stats-hint"
+            )
 
     def on_mount(self) -> None:
         """Focus the input when mounted and set up the table"""
@@ -150,14 +159,18 @@ class HistoricalStatsScreen(ModalScreen):
         # Parse input
         input_text = stats_input.value.strip().upper()
         if not input_text:
-            status_widget.update("[yellow]Please enter at least one airport ICAO code[/yellow]")
+            status_widget.update(
+                "[yellow]Please enter at least one airport ICAO code[/yellow]"
+            )
             return
 
         # Split by whitespace and filter valid ICAOs
         query_airports = [icao.strip() for icao in input_text.split() if icao.strip()]
 
         if not query_airports:
-            status_widget.update("[yellow]Please enter at least one airport ICAO code[/yellow]")
+            status_widget.update(
+                "[yellow]Please enter at least one airport ICAO code[/yellow]"
+            )
             return
 
         # Validate airports exist
@@ -170,22 +183,32 @@ class HistoricalStatsScreen(ModalScreen):
                 invalid_airports.append(icao)
 
         if invalid_airports and not valid_airports:
-            status_widget.update(f"[red]Unknown airports: {', '.join(invalid_airports)}[/red]")
+            status_widget.update(
+                f"[red]Unknown airports: {', '.join(invalid_airports)}[/red]"
+            )
             return
 
         if not self.tracked_airports:
-            status_widget.update("[yellow]No airports are currently being tracked[/yellow]")
+            status_widget.update(
+                "[yellow]No airports are currently being tracked[/yellow]"
+            )
             return
 
         # Calculate number of chunks needed to cover STATSIM_DEFAULT_DAYS_BACK
-        num_chunks = (STATSIM_DEFAULT_DAYS_BACK + STATSIM_MAX_DAYS_PER_QUERY - 1) // STATSIM_MAX_DAYS_PER_QUERY
+        num_chunks = (
+            STATSIM_DEFAULT_DAYS_BACK + STATSIM_MAX_DAYS_PER_QUERY - 1
+        ) // STATSIM_MAX_DAYS_PER_QUERY
 
         # Show initial status (2 queries per airport per chunk: origin + destination)
         total_queries = len(valid_airports) * 2 * num_chunks
         warning = ""
         if invalid_airports:
-            warning = f" [yellow](skipping unknown: {', '.join(invalid_airports)})[/yellow]"
-        status_widget.update(f"Fetching historical data... 0/{total_queries} queries{warning}")
+            warning = (
+                f" [yellow](skipping unknown: {', '.join(invalid_airports)})[/yellow]"
+            )
+        status_widget.update(
+            f"Fetching historical data... 0/{total_queries} queries{warning}"
+        )
 
         # Clear existing results and store query airports
         table.clear()
@@ -219,7 +242,11 @@ class HistoricalStatsScreen(ModalScreen):
             for flight in flights:
                 if query_type == "origin":
                     # Flights FROM query airport - check destination
-                    dest = flight.get('destination', '').upper() if flight.get('destination') else ''
+                    dest = (
+                        flight.get("destination", "").upper()
+                        if flight.get("destination")
+                        else ""
+                    )
                     if dest and dest in self.tracked_airports:
                         if dest not in results:
                             results[dest] = {"departures": 0, "arrivals": 0, "total": 0}
@@ -227,10 +254,18 @@ class HistoricalStatsScreen(ModalScreen):
                         results[dest]["total"] += 1
                 else:
                     # Flights TO query airport - check origin
-                    origin = flight.get('departure', '').upper() if flight.get('departure') else ''
+                    origin = (
+                        flight.get("departure", "").upper()
+                        if flight.get("departure")
+                        else ""
+                    )
                     if origin and origin in self.tracked_airports:
                         if origin not in results:
-                            results[origin] = {"departures": 0, "arrivals": 0, "total": 0}
+                            results[origin] = {
+                                "departures": 0,
+                                "arrivals": 0,
+                                "total": 0,
+                            }
                         results[origin]["departures"] += 1
                         results[origin]["total"] += 1
 
@@ -238,11 +273,19 @@ class HistoricalStatsScreen(ModalScreen):
             """Execute a single API query for a specific time chunk."""
             if query_type == "origin":
                 flights = await loop.run_in_executor(
-                    None, fetch_flights_from_origin, icao, STATSIM_MAX_DAYS_PER_QUERY, days_offset
+                    None,
+                    fetch_flights_from_origin,
+                    icao,
+                    STATSIM_MAX_DAYS_PER_QUERY,
+                    days_offset,
                 )
             else:
                 flights = await loop.run_in_executor(
-                    None, fetch_flights_to_destination, icao, STATSIM_MAX_DAYS_PER_QUERY, days_offset
+                    None,
+                    fetch_flights_to_destination,
+                    icao,
+                    STATSIM_MAX_DAYS_PER_QUERY,
+                    days_offset,
                 )
             return (query_type, icao, flights)
 
@@ -255,9 +298,13 @@ class HistoricalStatsScreen(ModalScreen):
                     return
 
                 # Start new tasks up to current concurrency limit
-                while len(pending_tasks) < current_concurrent and query_index < len(queries):
+                while len(pending_tasks) < current_concurrent and query_index < len(
+                    queries
+                ):
                     query_type, icao, days_offset = queries[query_index]
-                    task = asyncio.create_task(execute_query(query_type, icao, days_offset))
+                    task = asyncio.create_task(
+                        execute_query(query_type, icao, days_offset)
+                    )
                     pending_tasks.add(task)
                     query_index += 1
 
@@ -286,7 +333,9 @@ class HistoricalStatsScreen(ModalScreen):
                         if current_concurrent < max_concurrent and error_count > 0:
                             error_count = max(0, error_count - 1)
                             if error_count == 0:
-                                current_concurrent = min(current_concurrent + 1, max_concurrent)
+                                current_concurrent = min(
+                                    current_concurrent + 1, max_concurrent
+                                )
 
                     except Exception:
                         completed += 1
@@ -324,14 +373,18 @@ class HistoricalStatsScreen(ModalScreen):
         except Exception as e:
             status_widget.update(f"[red]Error: {e}[/red]")
 
-    def _update_table(self, results: dict, completed: int, total: int, warning: str = "") -> None:
+    def _update_table(
+        self, results: dict, completed: int, total: int, warning: str = ""
+    ) -> None:
         """Update the results table with current data"""
         table = self.query_one("#stats-table", DataTable)
         status_widget = self.query_one("#stats-status", Static)
 
         # Update status
         if completed < total:
-            status_widget.update(f"Fetching historical data... {completed}/{total} queries{warning}")
+            status_widget.update(
+                f"Fetching historical data... {completed}/{total} queries{warning}"
+            )
 
         # Clear and repopulate table
         table.clear()
@@ -341,9 +394,7 @@ class HistoricalStatsScreen(ModalScreen):
 
         # Sort by total descending
         sorted_results = sorted(
-            results.items(),
-            key=lambda x: x[1]["total"],
-            reverse=True
+            results.items(), key=lambda x: x[1]["total"], reverse=True
         )
 
         # Add rows
@@ -363,7 +414,7 @@ class HistoricalStatsScreen(ModalScreen):
                 name,
                 str(stats["departures"]),
                 str(stats["arrivals"]),
-                str(stats["total"])
+                str(stats["total"]),
             )
 
     def action_close(self) -> None:
@@ -379,9 +430,7 @@ class HistoricalStatsScreen(ModalScreen):
 
         # Sort results by total descending
         sorted_results = sorted(
-            self._results.items(),
-            key=lambda x: x[1]["total"],
-            reverse=True
+            self._results.items(), key=lambda x: x[1]["total"], reverse=True
         )
 
         # Build formatted table
@@ -416,9 +465,13 @@ class HistoricalStatsScreen(ModalScreen):
         total_arrs = sum(s["arrivals"] for s in self._results.values())
         total_all = sum(s["total"] for s in self._results.values())
         lines.append("-" * 69)
-        lines.append(f"{'TOTAL':<6} {'':<35} {total_deps:>8} {total_arrs:>8} {total_all:>8}")
+        lines.append(
+            f"{'TOTAL':<6} {'':<35} {total_deps:>8} {total_arrs:>8} {total_all:>8}"
+        )
 
         # Copy to clipboard
         text = "\n".join(lines)
         self.app.copy_to_clipboard(text)
-        self.notify(f"Copied {len(sorted_results)} rows to clipboard", severity="information")
+        self.notify(
+            f"Copied {len(sorted_results)} rows to clipboard", severity="information"
+        )

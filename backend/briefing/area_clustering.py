@@ -5,15 +5,19 @@ This module provides shared clustering functionality used by both the
 UI weather briefing modal and the weather daemon HTML generator.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from backend.core.calculations import haversine_distance_nm
 from backend.data.weather_parsing import get_airport_size_priority as _get_size_priority
 
 
 # Type aliases for clarity
-AirportEntry = Tuple[str, Dict[str, Any], int, Optional[Tuple[float, float]]]  # (icao, data, size_priority, coords)
-ValidAirportEntry = Tuple[str, Dict[str, Any], int, Tuple[float, float]]  # Same but with non-None coords
+AirportEntry = Tuple[
+    str, Dict[str, Any], int, Optional[Tuple[float, float]]
+]  # (icao, data, size_priority, coords)
+ValidAirportEntry = Tuple[
+    str, Dict[str, Any], int, Tuple[float, float]
+]  # Same but with non-None coords
 AirportMember = Tuple[str, Dict[str, Any], int]  # (icao, data, size_priority)
 
 
@@ -51,8 +55,8 @@ class AreaClusterer:
     def get_airport_coords(self, icao: str) -> Optional[Tuple[float, float]]:
         """Get airport coordinates (lat, lon) if available."""
         airport_info = self.unified_airport_data.get(icao, {})
-        lat = airport_info.get('latitude')
-        lon = airport_info.get('longitude')
+        lat = airport_info.get("latitude")
+        lon = airport_info.get("longitude")
         if lat is not None and lon is not None:
             return (lat, lon)
         return None
@@ -60,12 +64,12 @@ class AreaClusterer:
     def get_airport_city(self, icao: str) -> str:
         """Get airport city name if available."""
         airport_info = self.unified_airport_data.get(icao, {})
-        return airport_info.get('city', '') or ''
+        return airport_info.get("city", "") or ""
 
     def get_airport_state(self, icao: str) -> str:
         """Get airport state/region if available."""
         airport_info = self.unified_airport_data.get(icao, {})
-        return airport_info.get('state', '') or ''
+        return airport_info.get("state", "") or ""
 
     def calculate_grouping_extent(self) -> float:
         """
@@ -139,10 +143,7 @@ class AreaClusterer:
                 return min(num_towered, 18)
 
     def kmeans_clustering(
-        self,
-        airports: List[AirportEntry],
-        k: int,
-        max_iterations: int = 50
+        self, airports: List[AirportEntry], k: int, max_iterations: int = 50
     ) -> List[List[AirportEntry]]:
         """
         Simple k-means clustering for airports using haversine distance.
@@ -168,7 +169,9 @@ class AreaClusterer:
 
         # Initialize centroids using k-means++ style selection
         sorted_by_size = sorted(valid_airports, key=lambda x: (x[2], x[0]))
-        centroids: List[Tuple[float, float]] = [sorted_by_size[0][3]]  # First centroid is largest airport
+        centroids: List[Tuple[float, float]] = [
+            sorted_by_size[0][3]
+        ]  # First centroid is largest airport
 
         remaining = sorted_by_size[1:]
         while len(centroids) < k and remaining:
@@ -193,13 +196,12 @@ class AreaClusterer:
 
             for airport in valid_airports:
                 coords = airport[3]
-                min_dist = float('inf')
+                min_dist = float("inf")
                 best_cluster = 0
 
                 for i, centroid in enumerate(centroids):
                     dist = haversine_distance_nm(
-                        coords[0], coords[1],
-                        centroid[0], centroid[1]
+                        coords[0], coords[1], centroid[0], centroid[1]
                     )
                     if dist < min_dist:
                         min_dist = dist
@@ -247,9 +249,9 @@ class AreaClusterer:
 
             # Normalize for comparison
             normalized = city.lower().strip()
-            for suffix in [' area', ' metro', ' metropolitan', ' region']:
+            for suffix in [" area", " metro", " metropolitan", " region"]:
                 if normalized.endswith(suffix):
-                    normalized = normalized[:-len(suffix)].strip()
+                    normalized = normalized[: -len(suffix)].strip()
 
             if normalized not in seen_cities:
                 seen_cities.add(normalized)
@@ -271,7 +273,7 @@ class AreaClusterer:
         all_airports = [
             (icao, data, self.get_airport_size_priority(icao))
             for icao, data in self.weather_data.items()
-            if data.get('category') != 'UNK'
+            if data.get("category") != "UNK"
         ]
 
         if not all_airports:
@@ -300,27 +302,33 @@ class AreaClusterer:
 
         for city, members in sorted(city_groups.items()):
             members.sort(key=lambda x: (x[2], x[0]))
-            result.append({
-                'name': f"{city} Area",
-                'airports': members,
-                'center_icao': None,
-            })
+            result.append(
+                {
+                    "name": f"{city} Area",
+                    "airports": members,
+                    "center_icao": None,
+                }
+            )
 
         for state, members in sorted(state_groups.items()):
             members.sort(key=lambda x: (x[2], x[0]))
-            result.append({
-                'name': f"{state} Region",
-                'airports': members,
-                'center_icao': None,
-            })
+            result.append(
+                {
+                    "name": f"{state} Region",
+                    "airports": members,
+                    "center_icao": None,
+                }
+            )
 
         if no_location:
             no_location.sort(key=lambda x: (x[2], x[0]))
-            result.append({
-                'name': "Other Airports",
-                'airports': no_location,
-                'center_icao': None,
-            })
+            result.append(
+                {
+                    "name": "Other Airports",
+                    "airports": no_location,
+                    "center_icao": None,
+                }
+            )
 
         return result
 
@@ -337,14 +345,14 @@ class AreaClusterer:
         non_towered_airports: List[AirportEntry] = []
 
         for icao, data in self.weather_data.items():
-            if data.get('category') == 'UNK':
+            if data.get("category") == "UNK":
                 continue
             coords = self.get_airport_coords(icao)
             size_priority = self.get_airport_size_priority(icao)
             entry: AirportEntry = (icao, data, size_priority, coords)
 
             # Towered airports have priority 0-2 or have active ATIS
-            if size_priority <= 2 or data.get('atis'):
+            if size_priority <= 2 or data.get("atis"):
                 towered_airports.append(entry)
             else:
                 non_towered_airports.append(entry)
@@ -364,8 +372,12 @@ class AreaClusterer:
         cluster_centroids: List[Optional[Tuple[float, float]]] = []
         for cluster in clusters:
             if cluster:
-                avg_lat = sum(a[3][0] for a in cluster if a[3]) / len([a for a in cluster if a[3]])
-                avg_lon = sum(a[3][1] for a in cluster if a[3]) / len([a for a in cluster if a[3]])
+                avg_lat = sum(a[3][0] for a in cluster if a[3]) / len(
+                    [a for a in cluster if a[3]]
+                )
+                avg_lon = sum(a[3][1] for a in cluster if a[3]) / len(
+                    [a for a in cluster if a[3]]
+                )
                 cluster_centroids.append((avg_lat, avg_lon))
             else:
                 cluster_centroids.append(None)
@@ -377,13 +389,12 @@ class AreaClusterer:
                 continue
 
             best_cluster_idx = 0
-            best_distance = float('inf')
+            best_distance = float("inf")
 
             for i, centroid in enumerate(cluster_centroids):
                 if centroid:
                     dist = haversine_distance_nm(
-                        coords[0], coords[1],
-                        centroid[0], centroid[1]
+                        coords[0], coords[1], centroid[0], centroid[1]
                     )
                     if dist < best_distance:
                         best_distance = dist
@@ -399,12 +410,7 @@ class AreaClusterer:
 
             # Find center airports for naming (ATIS first, then by size)
             centers = sorted(
-                cluster,
-                key=lambda x: (
-                    0 if x[1].get('atis') else 1,
-                    x[2],
-                    x[0]
-                )
+                cluster, key=lambda x: (0 if x[1].get("atis") else 1, x[2], x[0])
             )
 
             area_name = self.generate_area_name(centers[:3])
@@ -414,23 +420,25 @@ class AreaClusterer:
                 (icao, data, size_priority)
                 for icao, data, size_priority, coords in cluster
             ]
-            members.sort(key=lambda x: (
-                0 if x[1].get('atis') else 1,
-                x[2],
-                x[0]
-            ))
+            members.sort(key=lambda x: (0 if x[1].get("atis") else 1, x[2], x[0]))
 
-            area_groups.append({
-                'name': area_name,
-                'airports': members,
-                'center_icao': centers[0][0] if centers else None,
-            })
+            area_groups.append(
+                {
+                    "name": area_name,
+                    "airports": members,
+                    "center_icao": centers[0][0] if centers else None,
+                }
+            )
 
         # Sort by primary airport size
-        area_groups.sort(key=lambda g: (
-            self.get_airport_size_priority(g['center_icao']) if g['center_icao'] else 99,
-            g['name']
-        ))
+        area_groups.sort(
+            key=lambda g: (
+                self.get_airport_size_priority(g["center_icao"])
+                if g["center_icao"]
+                else 99,
+                g["name"],
+            )
+        )
 
         return area_groups
 
@@ -447,7 +455,7 @@ def count_area_categories(airports: List[AirportMember]) -> Dict[str, int]:
     """
     counts = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0}
     for _, data, _ in airports:
-        cat = data.get('category', 'UNK')
+        cat = data.get("category", "UNK")
         if cat in counts:
             counts[cat] += 1
     return counts

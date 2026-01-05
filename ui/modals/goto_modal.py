@@ -75,7 +75,7 @@ class GoToScreen(ModalScreen):
         self,
         filter_type: Optional[str] = None,
         callback: Optional[Callable[[Optional[Tuple[str, List[str]]]], None]] = None,
-        title: str = "Go To"
+        title: str = "Go To",
     ):
         """
         Initialize the GoTo modal.
@@ -149,7 +149,10 @@ class GoToScreen(ModalScreen):
                 input_widget.focus()
                 event.prevent_default()
                 event.stop()
-            elif event.key == "down" and option_list.highlighted == option_list.option_count - 1:
+            elif (
+                event.key == "down"
+                and option_list.highlighted == option_list.option_count - 1
+            ):
                 # At last item, cycle to input
                 input_widget.focus()
                 event.prevent_default()
@@ -177,7 +180,8 @@ class GoToScreen(ModalScreen):
                 self.all_results = [
                     (item_type, identifier, data)
                     for item_type, identifier, data in self.vatsim_app.cached_goto_results
-                    if item_type == self.filter_type or (self.filter_type == "$" and item_type == "grouping")
+                    if item_type == self.filter_type
+                    or (self.filter_type == "$" and item_type == "grouping")
                 ]
 
             self.data_loaded = True
@@ -196,12 +200,14 @@ class GoToScreen(ModalScreen):
             self.all_groupings = self.vatsim_app.cached_groupings
         else:
             # Fallback: load groupings in executor (file I/O)
-            script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            script_dir = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
             self.all_groupings = await loop.run_in_executor(
                 None,
                 load_all_groupings,
-                os.path.join(script_dir, 'data', 'custom_groupings.json'),
-                config.UNIFIED_AIRPORT_DATA or {}
+                os.path.join(script_dir, "data", "custom_groupings.json"),
+                config.UNIFIED_AIRPORT_DATA or {},
             )
 
         # Use cached pilots from app if available (kept fresh by refresh cycle)
@@ -213,7 +219,7 @@ class GoToScreen(ModalScreen):
                 vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
 
                 if vatsim_data:
-                    self.pilots = vatsim_data.get('pilots', [])
+                    self.pilots = vatsim_data.get("pilots", [])
             except Exception:
                 # If VATSIM data fails, continue with just airports and groupings
                 pass
@@ -232,19 +238,23 @@ class GoToScreen(ModalScreen):
         # Add airports (unless filtered to groupings only)
         if self.filter_type != "$":
             for icao in sorted(self.tracked_airports):
-                pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
-                self.all_results.append(('airport', icao, pretty_name))
+                pretty_name = (
+                    config.DISAMBIGUATOR.get_full_name(icao)
+                    if config.DISAMBIGUATOR
+                    else icao
+                )
+                self.all_results.append(("airport", icao, pretty_name))
 
         # Add all available groupings
         for name in sorted(self.all_groupings.keys()):
-            self.all_results.append(('grouping', name, None))
+            self.all_results.append(("grouping", name, None))
 
         # Add flights (sorted by callsign) (unless filtered to groupings only)
         if self.filter_type != "$":
-            for pilot in sorted(self.pilots, key=lambda p: p.get('callsign', '')):
-                callsign = pilot.get('callsign', '')
+            for pilot in sorted(self.pilots, key=lambda p: p.get("callsign", "")):
+                callsign = pilot.get("callsign", "")
                 if callsign:
-                    self.all_results.append(('flight', callsign, pilot))
+                    self.all_results.append(("flight", callsign, pilot))
 
     def _format_label(self, item_type: str, identifier: str, data: Any) -> str:
         """Format the display label for an item
@@ -252,17 +262,19 @@ class GoToScreen(ModalScreen):
         Uses filter symbols as prefixes for consistency:
         @ for airports, # for flights, $ for groupings
         """
-        if item_type == 'airport':
+        if item_type == "airport":
             return f"@ {identifier} - {data}"
-        elif item_type == 'grouping':
+        elif item_type == "grouping":
             # Show recursively expanded airport count to distinguish from flights
-            resolved_airports = resolve_grouping_recursively(identifier, self.all_groupings)
+            resolved_airports = resolve_grouping_recursively(
+                identifier, self.all_groupings
+            )
             airport_count = len(resolved_airports)
             return f"$ {identifier} ({airport_count} airports)"
-        elif item_type == 'flight':
-            fp = data.get('flight_plan') or {}
-            dep = fp.get('departure') or '----'
-            arr = fp.get('arrival') or '----'
+        elif item_type == "flight":
+            fp = data.get("flight_plan") or {}
+            dep = fp.get("departure") or "----"
+            arr = fp.get("arrival") or "----"
             return f"# {identifier} - {dep} -> {arr}"
         return identifier
 
@@ -302,14 +314,14 @@ class GoToScreen(ModalScreen):
         """Filter all_results based on query string."""
         # Check for type filter prefix
         type_filter = None
-        if query.startswith('@'):
-            type_filter = 'airport'
+        if query.startswith("@"):
+            type_filter = "airport"
             query = query[1:].strip()
-        elif query.startswith('#'):
-            type_filter = 'flight'
+        elif query.startswith("#"):
+            type_filter = "flight"
             query = query[1:].strip()
-        elif query.startswith('$'):
-            type_filter = 'grouping'
+        elif query.startswith("$"):
+            type_filter = "grouping"
             query = query[1:].strip()
 
         query_lower = query.lower()
@@ -330,12 +342,12 @@ class GoToScreen(ModalScreen):
 
                 # Search within the item
                 searchable = identifier.lower()
-                if item_type == 'airport' and data:
-                    searchable += ' ' + data.lower()
-                elif item_type == 'flight' and data:
-                    fp = data.get('flight_plan') or {}
-                    searchable += ' ' + (fp.get('departure') or '').lower()
-                    searchable += ' ' + (fp.get('arrival') or '').lower()
+                if item_type == "airport" and data:
+                    searchable += " " + data.lower()
+                elif item_type == "flight" and data:
+                    fp = data.get("flight_plan") or {}
+                    searchable += " " + (fp.get("departure") or "").lower()
+                    searchable += " " + (fp.get("arrival") or "").lower()
 
                 if query_lower in searchable:
                     self.filtered_results.append((item_type, identifier, data))
@@ -359,7 +371,9 @@ class GoToScreen(ModalScreen):
         """Handle Enter key in input - select top result if available"""
         await self._execute_selected()
 
-    async def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+    async def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected
+    ) -> None:
         """Handle option selection"""
         await self._execute_selected()
 
@@ -381,38 +395,48 @@ class GoToScreen(ModalScreen):
 
         # If callback is provided, use it instead of navigating
         if self.callback:
-            if item_type == 'grouping':
-                airport_list = list(resolve_grouping_recursively(identifier, self.all_groupings))
+            if item_type == "grouping":
+                airport_list = list(
+                    resolve_grouping_recursively(identifier, self.all_groupings)
+                )
                 self.callback((identifier, airport_list))
-            elif item_type == 'airport':
+            elif item_type == "airport":
                 # For airports, return as a single-item list
                 self.callback((identifier, [identifier]))
-            elif item_type == 'flight':
+            elif item_type == "flight":
                 # For flights, pass as ("flight", flight_data) tuple
                 self.callback(("flight", data))
             else:
                 self.callback(None)
             return
 
-        if item_type == 'airport':
+        if item_type == "airport":
             self._open_airport(identifier)
-        elif item_type == 'grouping':
+        elif item_type == "grouping":
             self._open_grouping(identifier)
-        elif item_type == 'flight':
+        elif item_type == "flight":
             self.vatsim_app.push_screen(FlightInfoScreen(data))
 
     def _open_airport(self, icao: str) -> None:
         """Open flight board for an airport"""
-        title = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
-        enable_anims = not self.vatsim_app.args.disable_animations if self.vatsim_app.args else True
+        title = (
+            config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
+        )
+        enable_anims = (
+            not self.vatsim_app.args.disable_animations
+            if self.vatsim_app.args
+            else True
+        )
         max_eta = self.vatsim_app.args.max_eta_hours if self.vatsim_app.args else 1.0
 
         self.vatsim_app.flight_board_open = True
         flight_board = FlightBoardScreen(
-            title, icao, max_eta,
+            title,
+            icao,
+            max_eta,
             self.vatsim_app.refresh_interval,
             config.DISAMBIGUATOR,
-            enable_anims
+            enable_anims,
         )
         self.vatsim_app.active_flight_board = flight_board
         self.vatsim_app.push_screen(flight_board)
@@ -421,15 +445,21 @@ class GoToScreen(ModalScreen):
         """Open flight board for a grouping"""
         # Use the already-loaded groupings
         airport_list = list(resolve_grouping_recursively(name, self.all_groupings))
-        enable_anims = not self.vatsim_app.args.disable_animations if self.vatsim_app.args else True
+        enable_anims = (
+            not self.vatsim_app.args.disable_animations
+            if self.vatsim_app.args
+            else True
+        )
         max_eta = self.vatsim_app.args.max_eta_hours if self.vatsim_app.args else 1.0
 
         self.vatsim_app.flight_board_open = True
         flight_board = FlightBoardScreen(
-            name, airport_list, max_eta,
+            name,
+            airport_list,
+            max_eta,
             self.vatsim_app.refresh_interval,
             config.DISAMBIGUATOR,
-            enable_anims
+            enable_anims,
         )
         self.vatsim_app.active_flight_board = flight_board
         self.vatsim_app.push_screen(flight_board)

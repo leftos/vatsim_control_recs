@@ -40,18 +40,18 @@ from backend.core.calculations import (
     haversine_distance_nm,
     calculate_bearing,
     bearing_to_compass,
-    calculate_eta
+    calculate_eta,
 )
 
 # Import diversion-related functions
 from backend.core.diversions import (
     find_suitable_diversions,
     DiversionOption,
-    DiversionFilters
+    DiversionFilters,
 )
 from backend.core.aircraft_performance import (
     get_required_runway_length,
-    can_land_at_runway
+    can_land_at_runway,
 )
 from backend.data.cifp import (
     ensure_cifp_data,
@@ -59,14 +59,14 @@ from backend.data.cifp import (
     get_approach_list_for_airport,
     has_instrument_approaches,
     get_current_airac_cycle,
-    cleanup_old_airac_caches as cleanup_old_cifp_caches
+    cleanup_old_airac_caches as cleanup_old_cifp_caches,
 )
 from backend.data.runways import (
     ensure_runway_data,
     download_runway_data,
     get_longest_runway,
     get_runways,
-    get_runway_summary
+    get_runway_summary,
 )
 
 # Import route utilities
@@ -79,57 +79,60 @@ from backend.core.route import (
 )
 
 # Import cache functions
-from backend.cache.manager import (
-    save_weather_cache,
-    load_weather_cache
-)
+from backend.cache.manager import save_weather_cache, load_weather_cache
 
 __version__ = "1.0.0"
 
 # Export public API
 __all__ = [
-    'analyze_flights_data',
-    'get_airport_flight_details',
-    'get_wind_info',
-    'get_wind_info_batch',
-    'get_metar',
-    'get_metar_batch',
-    'get_taf',
-    'get_taf_batch',
-    'get_altimeter_setting',
-    'find_nearest_airport_with_metar',
-    'find_airports_near_position',
-    'get_rate_limit_status',
-    'reset_rate_limit_state',
-    'fetch_weather_bbox',
-    'get_weather_batch_bbox',
-    'load_all_groupings',
-    'load_unified_airport_data',
-    'WIND_SOURCE',
-    'haversine_distance_nm',
-    'calculate_bearing',
-    'bearing_to_compass',
-    'calculate_eta',
+    "analyze_flights_data",
+    "get_airport_flight_details",
+    "get_wind_info",
+    "get_wind_info_batch",
+    "get_metar",
+    "get_metar_batch",
+    "get_taf",
+    "get_taf_batch",
+    "get_altimeter_setting",
+    "find_nearest_airport_with_metar",
+    "find_airports_near_position",
+    "get_rate_limit_status",
+    "reset_rate_limit_state",
+    "fetch_weather_bbox",
+    "get_weather_batch_bbox",
+    "load_all_groupings",
+    "load_unified_airport_data",
+    "WIND_SOURCE",
+    "haversine_distance_nm",
+    "calculate_bearing",
+    "bearing_to_compass",
+    "calculate_eta",
     # Diversion-related
-    'find_suitable_diversions',
-    'DiversionOption',
-    'DiversionFilters',
-    'get_required_runway_length',
-    'can_land_at_runway',
+    "find_suitable_diversions",
+    "DiversionOption",
+    "DiversionFilters",
+    "get_required_runway_length",
+    "can_land_at_runway",
     # CIFP data
-    'ensure_cifp_data',
-    'get_approaches_for_airport',
-    'get_approach_list_for_airport',
-    'has_instrument_approaches',
-    'get_current_airac_cycle',
-    'cleanup_old_cifp_caches',
+    "ensure_cifp_data",
+    "get_approaches_for_airport",
+    "get_approach_list_for_airport",
+    "has_instrument_approaches",
+    "get_current_airac_cycle",
+    "cleanup_old_cifp_caches",
     # Runway data
-    'ensure_runway_data',
-    'download_runway_data',
-    'get_longest_runway',
-    'get_runways',
-    'get_runway_summary',
+    "ensure_runway_data",
+    "download_runway_data",
+    "get_longest_runway",
+    "get_runways",
+    "get_runway_summary",
+    # Route utilities
+    "sample_route_points",
+    "find_enroute_airports",
+    "parse_route_waypoints",
+    "format_ete",
+    "interpolate_great_circle",
     # Cache functions
-    'save_weather_cache',
-    'load_weather_cache',
+    "save_weather_cache",
+    "load_weather_cache",
 ]

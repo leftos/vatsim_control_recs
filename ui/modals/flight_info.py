@@ -3,7 +3,7 @@
 import asyncio
 import re
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Dict, Any
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.containers import Container, VerticalScroll
@@ -16,7 +16,7 @@ from backend import (
     haversine_distance_nm,
     calculate_bearing,
     bearing_to_compass,
-    calculate_eta
+    calculate_eta,
 )
 from backend.core.flights import get_nearest_airport_if_on_ground
 from backend.data.navaids import get_max_mea_for_route, MeaViolation
@@ -83,14 +83,14 @@ class FlightInfoScreen(ModalScreen):
         margin-top: 1;
     }
     """
-    
+
     BINDINGS = [
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
         Binding("d", "show_diversions", "Find Diversions", priority=True),
         Binding("w", "show_route_weather", "Route Weather", priority=True),
     ]
-    
+
     def __init__(self, flight_data: dict):
         """
         Initialize the flight info modal.
@@ -100,8 +100,10 @@ class FlightInfoScreen(ModalScreen):
         """
         super().__init__()
         self.flight_data = flight_data
-        self.callsign = flight_data.get('callsign', '')  # Store callsign for refresh lookups
-        self.cid = flight_data.get('cid')  # VATSIM Client ID for member stats
+        self.callsign = flight_data.get(
+            "callsign", ""
+        )  # Store callsign for refresh lookups
+        self.cid = flight_data.get("cid")  # VATSIM Client ID for member stats
         self.altimeter_info = None  # Will be populated asynchronously
         self.altimeter_loading = True
         self.member_stats = None  # Will be populated asynchronously (pilot/ATC hours)
@@ -119,14 +121,20 @@ class FlightInfoScreen(ModalScreen):
         self._pending_tasks: list = []  # Track pending async tasks
         self._refresh_timer = None  # Timer for periodic refresh
         self._refresh_in_progress = False  # Track if a background refresh is running
-    
+
     def compose(self) -> ComposeResult:
         with Container(id="flight-info-container"):
             yield Static(self._format_title(), id="flight-info-title")
             with VerticalScroll(id="flight-info-scroll"):
-                yield Static(self._format_flight_info(), classes="info-section", id="flight-info-content")
-            yield Static("D: Diversions | W: Route Wx | Escape/Q: Close", id="flight-info-hint")
-    
+                yield Static(
+                    self._format_flight_info(),
+                    classes="info-section",
+                    id="flight-info-content",
+                )
+            yield Static(
+                "D: Diversions | W: Route Wx | Escape/Q: Close", id="flight-info-hint"
+            )
+
     async def on_mount(self) -> None:
         """Load altimeter info and member stats asynchronously after modal is shown"""
         # Start loading altimeter info in the background (tracked for cleanup)
@@ -146,8 +154,7 @@ class FlightInfoScreen(ModalScreen):
 
         # Start periodic refresh timer to keep flight data current
         self._refresh_timer = self.set_interval(
-            self.FLIGHT_DATA_REFRESH_INTERVAL,
-            self._refresh_flight_data
+            self.FLIGHT_DATA_REFRESH_INTERVAL, self._refresh_flight_data
         )
 
     def on_unmount(self) -> None:
@@ -195,41 +202,46 @@ class FlightInfoScreen(ModalScreen):
 
             # Now fetch altimeter for the (potentially new) position
             self.altimeter_info = await loop.run_in_executor(
-                None,
-                self._get_altimeter_info_sync
+                None, self._get_altimeter_info_sync
             )
 
             # Refresh airport weather for VFR flights
             if self._is_vfr_flight():
-                flight_plan = self.flight_data.get('flight_plan')
+                flight_plan = self.flight_data.get("flight_plan")
                 if flight_plan:
-                    departure = flight_plan.get('departure')
-                    arrival = flight_plan.get('arrival')
+                    departure = flight_plan.get("departure")
+                    arrival = flight_plan.get("arrival")
 
                     if departure:
                         self.departure_weather = await loop.run_in_executor(
-                            None,
-                            self._get_airport_weather_sync,
-                            departure
+                            None, self._get_airport_weather_sync, departure
                         )
                     if arrival:
                         self.arrival_weather = await loop.run_in_executor(
-                            None,
-                            self._get_airport_weather_sync,
-                            arrival
+                            None, self._get_airport_weather_sync, arrival
                         )
 
                     # Refresh alternate airports if departure/arrival has IFR/LIFR
                     # Use async method for progressive updates
-                    if self.departure_weather and self.departure_weather[0] in ('IFR', 'LIFR'):
+                    if self.departure_weather and self.departure_weather[0] in (
+                        "IFR",
+                        "LIFR",
+                    ):
                         self.departure_alternates = []  # Clear before searching
-                        await self._find_vfr_alternates_async(departure, 'departure_alternates')
+                        await self._find_vfr_alternates_async(
+                            departure, "departure_alternates"
+                        )
                     else:
                         self.departure_alternates = None
 
-                    if self.arrival_weather and self.arrival_weather[0] in ('IFR', 'LIFR'):
+                    if self.arrival_weather and self.arrival_weather[0] in (
+                        "IFR",
+                        "LIFR",
+                    ):
                         self.arrival_alternates = []  # Clear before searching
-                        await self._find_vfr_alternates_async(arrival, 'arrival_alternates')
+                        await self._find_vfr_alternates_async(
+                            arrival, "arrival_alternates"
+                        )
                     else:
                         self.arrival_alternates = None
                     self.alternates_searched = True
@@ -251,9 +263,9 @@ class FlightInfoScreen(ModalScreen):
             if not vatsim_data:
                 return None
 
-            pilots = vatsim_data.get('pilots', [])
+            pilots = vatsim_data.get("pilots", [])
             for pilot in pilots:
-                if pilot.get('callsign') == self.callsign:
+                if pilot.get("callsign") == self.callsign:
                     return pilot
         except Exception:
             pass
@@ -268,9 +280,7 @@ class FlightInfoScreen(ModalScreen):
         loop = asyncio.get_event_loop()
         try:
             self.member_stats = await loop.run_in_executor(
-                None,
-                get_member_stats,
-                self.cid
+                None, get_member_stats, self.cid
             )
             # Update title with member stats
             self._update_title()
@@ -297,15 +307,15 @@ class FlightInfoScreen(ModalScreen):
 
     def _is_vfr_flight(self) -> bool:
         """Check if this is a VFR flight."""
-        flight_plan = self.flight_data.get('flight_plan')
+        flight_plan = self.flight_data.get("flight_plan")
         if not flight_plan:
             return False
 
-        altitude = flight_plan.get('altitude', '')
-        flight_rules = flight_plan.get('flight_rules', '')
+        altitude = flight_plan.get("altitude", "")
+        flight_rules = flight_plan.get("flight_rules", "")
 
         # VFR if altitude starts with "VFR" or flight_rules is "V"
-        return str(altitude).upper().startswith('VFR') or flight_rules.upper() == 'V'
+        return str(altitude).upper().startswith("VFR") or flight_rules.upper() == "V"
 
     def _should_check_mea(self) -> bool:
         """Check if we should verify MEA for this flight.
@@ -315,25 +325,25 @@ class FlightInfoScreen(ModalScreen):
         if self._is_vfr_flight():
             return False
 
-        flight_plan = self.flight_data.get('flight_plan')
+        flight_plan = self.flight_data.get("flight_plan")
         if not flight_plan:
             return False
 
-        route = flight_plan.get('route', '')
+        route = flight_plan.get("route", "")
         if not route:
             return False
 
         # Check if route contains any airways (V##, J##, T##, Q##)
-        return bool(re.search(r'\b[VJTQ]\d+\b', route.upper()))
+        return bool(re.search(r"\b[VJTQ]\d+\b", route.upper()))
 
     async def _load_mea_info(self) -> None:
         """Asynchronously fetch MEA requirements for the route."""
-        flight_plan = self.flight_data.get('flight_plan')
+        flight_plan = self.flight_data.get("flight_plan")
         if not flight_plan:
             self.mea_loading = False
             return
 
-        route = flight_plan.get('route', '')
+        route = flight_plan.get("route", "")
         if not route:
             self.mea_loading = False
             return
@@ -341,9 +351,7 @@ class FlightInfoScreen(ModalScreen):
         loop = asyncio.get_event_loop()
         try:
             self.mea_info = await loop.run_in_executor(
-                None,
-                get_max_mea_for_route,
-                route
+                None, get_max_mea_for_route, route
             )
             self.mea_loading = False
             self._update_display()
@@ -362,7 +370,7 @@ class FlightInfoScreen(ModalScreen):
             where visibility_str and ceiling_str are verbatim from METAR
             (e.g., "2SM", "BKN004")
         """
-        if not icao or icao == '----':
+        if not icao or icao == "----":
             return None
         try:
             metar = get_metar(icao)
@@ -378,10 +386,7 @@ class FlightInfoScreen(ModalScreen):
     MAX_ALTERNATE_SEARCH_RADIUS_NM = 100.0
 
     async def _find_vfr_alternates_async(
-        self,
-        origin_icao: str,
-        target_attr: str,
-        max_results: int = 3
+        self, origin_icao: str, target_attr: str, max_results: int = 3
     ) -> None:
         """
         Find VFR alternates asynchronously, updating display as results are found.
@@ -398,10 +403,10 @@ class FlightInfoScreen(ModalScreen):
         current_time = datetime.now(timezone.utc)
         if origin_icao in _VFR_ALTERNATES_CACHE:
             cache_entry = _VFR_ALTERNATES_CACHE[origin_icao]
-            time_since_cache = (current_time - cache_entry['timestamp']).total_seconds()
+            time_since_cache = (current_time - cache_entry["timestamp"]).total_seconds()
             if time_since_cache < _VFR_ALTERNATES_CACHE_DURATION:
                 debug(f"[VFR_ALT] Cache hit for {origin_icao}")
-                setattr(self, target_attr, cache_entry['result'])
+                setattr(self, target_attr, cache_entry["result"])
                 self._update_display()
                 return
 
@@ -412,29 +417,31 @@ class FlightInfoScreen(ModalScreen):
         if not origin_data:
             return
 
-        origin_lat = origin_data.get('latitude')
-        origin_lon = origin_data.get('longitude')
+        origin_lat = origin_data.get("latitude")
+        origin_lon = origin_data.get("longitude")
         if origin_lat is None or origin_lon is None:
             return
 
         # Find nearby airports
         nearby_all = find_airports_near_position(
-            origin_lat, origin_lon,
+            origin_lat,
+            origin_lon,
             config.UNIFIED_AIRPORT_DATA,
             radius_nm=self.MAX_ALTERNATE_SEARCH_RADIUS_NM,
-            max_results=500
+            max_results=500,
         )
 
         nearby = [
-            icao for icao in nearby_all
+            icao
+            for icao in nearby_all
             if len(icao) == 4 and icao.isalpha() and icao != origin_icao
         ]
 
         if not nearby:
             setattr(self, target_attr, [])
             _VFR_ALTERNATES_CACHE[origin_icao] = {
-                'result': [],
-                'timestamp': current_time
+                "result": [],
+                "timestamp": current_time,
             }
             return
 
@@ -455,13 +462,13 @@ class FlightInfoScreen(ModalScreen):
                 continue
 
             category, color = get_flight_category(metar)
-            if category not in ('VFR', 'MVFR'):
+            if category not in ("VFR", "MVFR"):
                 continue
 
             # Calculate distance and direction
             apt_data = config.UNIFIED_AIRPORT_DATA.get(icao, {})
-            apt_lat = apt_data.get('latitude')
-            apt_lon = apt_data.get('longitude')
+            apt_lat = apt_data.get("latitude")
+            apt_lon = apt_data.get("longitude")
             if apt_lat is None or apt_lon is None:
                 continue
 
@@ -477,8 +484,8 @@ class FlightInfoScreen(ModalScreen):
 
         # Cache the final result
         _VFR_ALTERNATES_CACHE[origin_icao] = {
-            'result': alternates,
-            'timestamp': datetime.now(timezone.utc)
+            "result": alternates,
+            "timestamp": datetime.now(timezone.utc),
         }
 
         setattr(self, target_attr, alternates)
@@ -490,8 +497,7 @@ class FlightInfoScreen(ModalScreen):
         # Run the blocking altimeter lookup in a thread pool
         try:
             self.altimeter_info = await loop.run_in_executor(
-                None,
-                self._get_altimeter_info_sync
+                None, self._get_altimeter_info_sync
             )
 
             # Update display immediately with altimeter info
@@ -500,22 +506,18 @@ class FlightInfoScreen(ModalScreen):
 
             # For VFR flights, fetch departure/arrival weather for warnings
             if self._is_vfr_flight():
-                flight_plan = self.flight_data.get('flight_plan')
+                flight_plan = self.flight_data.get("flight_plan")
                 if flight_plan:
-                    departure = flight_plan.get('departure')
-                    arrival = flight_plan.get('arrival')
+                    departure = flight_plan.get("departure")
+                    arrival = flight_plan.get("arrival")
 
                     if departure:
                         self.departure_weather = await loop.run_in_executor(
-                            None,
-                            self._get_airport_weather_sync,
-                            departure
+                            None, self._get_airport_weather_sync, departure
                         )
                     if arrival:
                         self.arrival_weather = await loop.run_in_executor(
-                            None,
-                            self._get_airport_weather_sync,
-                            arrival
+                            None, self._get_airport_weather_sync, arrival
                         )
 
                     # Update display with weather info before searching alternates
@@ -523,10 +525,20 @@ class FlightInfoScreen(ModalScreen):
 
                     # Find alternate airports if departure/arrival has IFR/LIFR
                     # Use async method to update display progressively as alternates are found
-                    if self.departure_weather and self.departure_weather[0] in ('IFR', 'LIFR'):
-                        await self._find_vfr_alternates_async(departure, 'departure_alternates')
-                    if self.arrival_weather and self.arrival_weather[0] in ('IFR', 'LIFR'):
-                        await self._find_vfr_alternates_async(arrival, 'arrival_alternates')
+                    if self.departure_weather and self.departure_weather[0] in (
+                        "IFR",
+                        "LIFR",
+                    ):
+                        await self._find_vfr_alternates_async(
+                            departure, "departure_alternates"
+                        )
+                    if self.arrival_weather and self.arrival_weather[0] in (
+                        "IFR",
+                        "LIFR",
+                    ):
+                        await self._find_vfr_alternates_async(
+                            arrival, "arrival_alternates"
+                        )
                     self.alternates_searched = True
 
                     # Final update with alternates
@@ -538,17 +550,17 @@ class FlightInfoScreen(ModalScreen):
             self.altimeter_info = ""
             self.altimeter_loading = False
             self._update_display()
-    
+
     def _format_title(self) -> str:
         """Format the modal title with callsign and member stats"""
-        callsign = self.flight_data.get('callsign', 'Unknown')
-        pilot_name = self.flight_data.get('name', 'Unknown Pilot')
+        callsign = self.flight_data.get("callsign", "Unknown")
+        pilot_name = self.flight_data.get("name", "Unknown Pilot")
 
         # Add pilot/ATC hours if available (hide if 0)
         stats_str = ""
         if self.member_stats:
-            pilot_hours = self.member_stats.get('pilot', 0)
-            atc_hours = self.member_stats.get('atc', 0)
+            pilot_hours = self.member_stats.get("pilot", 0)
+            atc_hours = self.member_stats.get("atc", 0)
             parts = []
             if pilot_hours:
                 parts.append(f"P:{pilot_hours:,.0f}h")
@@ -558,58 +570,66 @@ class FlightInfoScreen(ModalScreen):
                 stats_str = f" ({' / '.join(parts)})"
 
         return f"{callsign} - {pilot_name}{stats_str}"
-    
+
     def _format_flight_info(self) -> str:
         """Format all flight information for display"""
         lines = []
-        
+
         # Flight Plan section
-        flight_plan = self.flight_data.get('flight_plan')
+        flight_plan = self.flight_data.get("flight_plan")
         if flight_plan:
             # Display info as
             # DEP->ARR (Altn: ALTN) // ACFT
             # ALT // IFR/VFR
-            
+
             # Route
-            departure = flight_plan.get('departure', '----')
-            arrival = flight_plan.get('arrival', '----')
+            departure = flight_plan.get("departure", "----")
+            arrival = flight_plan.get("arrival", "----")
             line = f"{departure} → {arrival}"
-            
+
             # Alternate
-            alternate = flight_plan.get('alternate', '')
+            alternate = flight_plan.get("alternate", "")
             if alternate:
                 line += f" (Altn: {alternate})"
             line += " // "
-            
+
             # Aircraft with equipment suffix (e.g., B738/L, C172/G)
-            aircraft_short = flight_plan.get('aircraft_short', flight_plan.get('aircraft', '----'))
-            aircraft_faa = flight_plan.get('aircraft_faa', '')
+            aircraft_short = flight_plan.get(
+                "aircraft_short", flight_plan.get("aircraft", "----")
+            )
+            aircraft_faa = flight_plan.get("aircraft_faa", "")
             # Extract equipment suffix from FAA format (e.g., "H/B738/L" -> "L")
-            if aircraft_faa and '/' in aircraft_faa:
-                equipment_suffix = aircraft_faa.rsplit('/', 1)[-1]
+            if aircraft_faa and "/" in aircraft_faa:
+                equipment_suffix = aircraft_faa.rsplit("/", 1)[-1]
                 if equipment_suffix:
                     aircraft_short = f"{aircraft_short}/{equipment_suffix}"
             line += f"{aircraft_short} // "
-                        
+
             # Filed altitude and flight rules
-            altitude = flight_plan.get('altitude', '----')
-            flight_rules = flight_plan.get('flight_rules', '?')
+            altitude = flight_plan.get("altitude", "----")
+            flight_rules = flight_plan.get("flight_rules", "?")
 
             # "VFR" in altitude field means VFR flight, regardless of flight_rules
             # Could be "VFR" or "VFR/105" (VFR at 10,500 feet)
-            if str(altitude).upper().startswith('VFR'):
+            if str(altitude).upper().startswith("VFR"):
                 line += altitude  # Display as filed (e.g., "VFR" or "VFR/105")
             else:
-                if altitude != '----':
+                if altitude != "----":
                     try:
                         line += f"{int(altitude):,} // "
                     except ValueError:
                         line += f"{altitude} // "
-                line += "IFR" if flight_rules.upper() == 'I' else "VFR" if flight_rules.upper() == 'V' else "?"
+                line += (
+                    "IFR"
+                    if flight_rules.upper() == "I"
+                    else "VFR"
+                    if flight_rules.upper() == "V"
+                    else "?"
+                )
 
             # Assigned squawk code (if available - "0000" means not assigned)
-            assigned_squawk = flight_plan.get('assigned_transponder', '')
-            if assigned_squawk and assigned_squawk != '0000':
+            assigned_squawk = flight_plan.get("assigned_transponder", "")
+            if assigned_squawk and assigned_squawk != "0000":
                 line += f" // SQ: {assigned_squawk}"
 
             # Add ETA for arrivals (in-flight or landed)
@@ -622,7 +642,7 @@ class FlightInfoScreen(ModalScreen):
             line = ""
 
             # Filed route
-            route = flight_plan.get('route', '')
+            route = flight_plan.get("route", "")
             if route:
                 lines.append("[bold]ROUTE[/bold]")
                 # Wrap long routes to fit in the modal
@@ -636,7 +656,7 @@ class FlightInfoScreen(ModalScreen):
                 max_mea, violations = self.mea_info
                 if max_mea is not None and violations:
                     # Get filed altitude as integer
-                    filed_alt_str = flight_plan.get('altitude', '')
+                    filed_alt_str = flight_plan.get("altitude", "")
                     try:
                         filed_alt = int(filed_alt_str)
                     except (ValueError, TypeError):
@@ -644,12 +664,16 @@ class FlightInfoScreen(ModalScreen):
 
                     if filed_alt > 0 and filed_alt < max_mea:
                         lines.append("[bold yellow]MEA WARNING[/bold yellow]")
-                        lines.append(f"  Filed altitude {filed_alt:,} < required MEA {max_mea:,}")
+                        lines.append(
+                            f"  Filed altitude {filed_alt:,} < required MEA {max_mea:,}"
+                        )
                         # Show segments that exceed filed altitude (limit to 3, highest first)
                         exceeding = [v for v in violations if v.mea > filed_alt]
                         exceeding.sort(key=lambda v: v.mea, reverse=True)
                         for v in exceeding[:3]:
-                            lines.append(f"  [dim]{v.airway} ({v.segment_start}→{v.segment_end}) requires {v.mea:,}[/dim]")
+                            lines.append(
+                                f"  [dim]{v.airway} ({v.segment_start}→{v.segment_end}) requires {v.mea:,}[/dim]"
+                            )
                         lines.append("")
             elif self.mea_loading:
                 lines.append("[dim]Checking MEA requirements...[/dim]")
@@ -657,48 +681,78 @@ class FlightInfoScreen(ModalScreen):
 
             # VFR weather warning - show if VFR flight has non-VFR conditions
             if self._is_vfr_flight():
-                groundspeed = self.flight_data.get('groundspeed', 0)
+                groundspeed = self.flight_data.get("groundspeed", 0)
                 is_on_ground = groundspeed <= 40
                 warning_lines = []
 
                 # Departure weather warning (only show alternates if still on ground)
-                if self.departure_weather and self.departure_weather[0] != 'VFR':
+                if self.departure_weather and self.departure_weather[0] != "VFR":
                     cat, color, vis, ceil = self.departure_weather
                     # Build weather details string
                     details = self._format_weather_details(vis, ceil)
-                    warning_lines.append(f"  {departure} is [{color} bold]{cat}[/{color} bold]{details}")
+                    warning_lines.append(
+                        f"  {departure} is [{color} bold]{cat}[/{color} bold]{details}"
+                    )
 
                     # Show alternate departure airports only if still on ground
-                    if is_on_ground and cat in ('IFR', 'LIFR'):
+                    if is_on_ground and cat in ("IFR", "LIFR"):
                         if self.departure_alternates:
                             alt_strs = []
-                            for alt_icao, _, alt_color, dist, direction in self.departure_alternates:
-                                alt_strs.append(f"[{alt_color}]{alt_icao}[/{alt_color}] ({dist:.0f}nm {direction})")
+                            for (
+                                alt_icao,
+                                _,
+                                alt_color,
+                                dist,
+                                direction,
+                            ) in self.departure_alternates:
+                                alt_strs.append(
+                                    f"[{alt_color}]{alt_icao}[/{alt_color}] ({dist:.0f}nm {direction})"
+                                )
                             warning_lines.append(f"    Consider: {', '.join(alt_strs)}")
                         elif self.alternates_searched:
-                            warning_lines.append("    [dim]No VFR/MVFR alternates within 100nm[/dim]")
+                            warning_lines.append(
+                                "    [dim]No VFR/MVFR alternates within 100nm[/dim]"
+                            )
                         else:
-                            warning_lines.append("    [dim]Searching for alternates...[/dim]")
+                            warning_lines.append(
+                                "    [dim]Searching for alternates...[/dim]"
+                            )
 
                 # Arrival weather warning (show alternates unless already landed at arrival)
-                if self.arrival_weather and self.arrival_weather[0] != 'VFR':
+                if self.arrival_weather and self.arrival_weather[0] != "VFR":
                     cat, color, vis, ceil = self.arrival_weather
                     details = self._format_weather_details(vis, ceil)
-                    warning_lines.append(f"  {arrival} is [{color} bold]{cat}[/{color} bold]{details}")
+                    warning_lines.append(
+                        f"  {arrival} is [{color} bold]{cat}[/{color} bold]{details}"
+                    )
 
                     # Show alternate arrival airports (useful for planning before departure too)
                     # Skip only if already landed at the arrival airport
-                    landed_at_arrival = is_on_ground and self._get_eta_info() == "LANDED"
-                    if not landed_at_arrival and cat in ('IFR', 'LIFR'):
+                    landed_at_arrival = (
+                        is_on_ground and self._get_eta_info() == "LANDED"
+                    )
+                    if not landed_at_arrival and cat in ("IFR", "LIFR"):
                         if self.arrival_alternates:
                             alt_strs = []
-                            for alt_icao, _, alt_color, dist, direction in self.arrival_alternates:
-                                alt_strs.append(f"[{alt_color}]{alt_icao}[/{alt_color}] ({dist:.0f}nm {direction})")
+                            for (
+                                alt_icao,
+                                _,
+                                alt_color,
+                                dist,
+                                direction,
+                            ) in self.arrival_alternates:
+                                alt_strs.append(
+                                    f"[{alt_color}]{alt_icao}[/{alt_color}] ({dist:.0f}nm {direction})"
+                                )
                             warning_lines.append(f"    Consider: {', '.join(alt_strs)}")
                         elif self.alternates_searched:
-                            warning_lines.append("    [dim]No VFR/MVFR alternates within 100nm[/dim]")
+                            warning_lines.append(
+                                "    [dim]No VFR/MVFR alternates within 100nm[/dim]"
+                            )
                         else:
-                            warning_lines.append("    [dim]Searching for alternates...[/dim]")
+                            warning_lines.append(
+                                "    [dim]Searching for alternates...[/dim]"
+                            )
 
                 if warning_lines:
                     lines.append("[bold]VFR WEATHER WARNING[/bold]")
@@ -712,9 +766,9 @@ class FlightInfoScreen(ModalScreen):
             elif self.altimeter_info:
                 lines.append(self.altimeter_info)
                 lines.append("")
-            
+
             # Remarks (only show first part if too long)
-            remarks = flight_plan.get('remarks', '')
+            remarks = flight_plan.get("remarks", "")
             if remarks:
                 lines.append("[bold]REMARKS[/bold]")
                 remarks_lines = self._wrap_text(remarks, 82)
@@ -727,22 +781,25 @@ class FlightInfoScreen(ModalScreen):
         else:
             # No flight plan - show nearest altimeter and airport if on ground
             lines.append("[bold]NO FLIGHT PLAN[/bold]")
-            lines.append("")# Nearest airport if on ground
+            lines.append("")  # Nearest airport if on ground
 
-            groundspeed = self.flight_data.get('groundspeed', 0)
-            if groundspeed <= 40:  # On ground or nearly stopped                
+            groundspeed = self.flight_data.get("groundspeed", 0)
+            if groundspeed <= 40:  # On ground or nearly stopped
                 # Get nearest airport info
                 if config.UNIFIED_AIRPORT_DATA:
                     nearest_airport = get_nearest_airport_if_on_ground(
-                        self.flight_data,
-                        config.UNIFIED_AIRPORT_DATA
+                        self.flight_data, config.UNIFIED_AIRPORT_DATA
                     )
                     if nearest_airport:
-                        airport_data = config.UNIFIED_AIRPORT_DATA.get(nearest_airport, {})
-                        airport_name = airport_data.get('city', 'Unknown')
-                        lines.append(f"[bold]On Ground at [/bold]{nearest_airport} - {airport_name}")
+                        airport_data = config.UNIFIED_AIRPORT_DATA.get(
+                            nearest_airport, {}
+                        )
+                        airport_name = airport_data.get("city", "Unknown")
+                        lines.append(
+                            f"[bold]On Ground at [/bold]{nearest_airport} - {airport_name}"
+                        )
                         lines.append("")
-            
+
             # Altimeter section
             if self.altimeter_loading:
                 lines.append("[dim]Loading nearest altimeter...[/dim]")
@@ -751,9 +808,9 @@ class FlightInfoScreen(ModalScreen):
             else:
                 lines.append("[dim]No altimeter information available[/dim]")
             lines.append("")
-        
+
         return "\n".join(lines)
-    
+
     def _wrap_text(self, text: str, width: int) -> list:
         """Wrap text to specified width"""
         words = text.split()
@@ -777,7 +834,9 @@ class FlightInfoScreen(ModalScreen):
 
         return lines
 
-    def _format_weather_details(self, visibility_str: str | None, ceiling_str: str | None) -> str:
+    def _format_weather_details(
+        self, visibility_str: str | None, ceiling_str: str | None
+    ) -> str:
         """
         Format visibility and ceiling into a METAR-style details string.
 
@@ -801,17 +860,17 @@ class FlightInfoScreen(ModalScreen):
             Formatted ETA string like "ETA 45m (14:30)" for in-flight,
             "LANDED" if on ground at arrival, or None if not applicable.
         """
-        flight_plan = self.flight_data.get('flight_plan')
+        flight_plan = self.flight_data.get("flight_plan")
         if not flight_plan:
             return None
 
-        arrival = flight_plan.get('arrival')
-        if not arrival or arrival == '----':
+        arrival = flight_plan.get("arrival")
+        if not arrival or arrival == "----":
             return None
 
-        groundspeed = self.flight_data.get('groundspeed', 0)
-        latitude = self.flight_data.get('latitude')
-        longitude = self.flight_data.get('longitude')
+        groundspeed = self.flight_data.get("groundspeed", 0)
+        latitude = self.flight_data.get("latitude")
+        longitude = self.flight_data.get("longitude")
 
         if latitude is None or longitude is None:
             return None
@@ -824,8 +883,8 @@ class FlightInfoScreen(ModalScreen):
         if not arrival_airport:
             return None
 
-        arrival_lat = arrival_airport.get('latitude')
-        arrival_lon = arrival_airport.get('longitude')
+        arrival_lat = arrival_airport.get("latitude")
+        arrival_lon = arrival_airport.get("longitude")
         if arrival_lat is None or arrival_lon is None:
             return None
 
@@ -849,49 +908,47 @@ class FlightInfoScreen(ModalScreen):
         # In-flight - calculate ETA
         # Prepare flight dict for calculate_eta (it expects 'arrival' at top level)
         flight_for_eta = {
-            'arrival': arrival,
-            'latitude': latitude,
-            'longitude': longitude,
-            'groundspeed': groundspeed,
-            'flight_plan': flight_plan
+            "arrival": arrival,
+            "latitude": latitude,
+            "longitude": longitude,
+            "groundspeed": groundspeed,
+            "flight_plan": flight_plan,
         }
 
         eta_display, eta_local_time, eta_hours = calculate_eta(
-            flight_for_eta,
-            config.UNIFIED_AIRPORT_DATA,
-            config.AIRCRAFT_APPROACH_SPEEDS
+            flight_for_eta, config.UNIFIED_AIRPORT_DATA, config.AIRCRAFT_APPROACH_SPEEDS
         )
 
-        if eta_display and eta_display not in ('----', ''):
+        if eta_display and eta_display not in ("----", ""):
             return f"ETA {eta_display} ({eta_local_time} LT)"
 
         return None
 
     def _format_time(self, time_str: str) -> str:
         """Format departure time (HHMM format)"""
-        if not time_str or time_str == '----':
-            return '----'
+        if not time_str or time_str == "----":
+            return "----"
         # Format as HH:MM
         if len(time_str) == 4:
             return f"{time_str[:2]}:{time_str[2:]}Z"
         return time_str
-    
+
     def _format_duration(self, duration_str: str) -> str:
         """Format duration (HHMM format)"""
-        if not duration_str or duration_str == '----':
-            return '----'
+        if not duration_str or duration_str == "----":
+            return "----"
         # Format as HH:MM
         if len(duration_str) == 4:
             hours = duration_str[:2]
             minutes = duration_str[2:]
             return f"{hours}h {minutes}m"
         return duration_str
-    
+
     def _get_altimeter_info_sync(self) -> str:
         """Get nearest airport altimeter setting for the flight's current position (synchronous version for executor)"""
         # Check if we have position data
-        latitude = self.flight_data.get('latitude')
-        longitude = self.flight_data.get('longitude')
+        latitude = self.flight_data.get("latitude")
+        longitude = self.flight_data.get("longitude")
 
         if latitude is None or longitude is None:
             return ""
@@ -901,8 +958,8 @@ class FlightInfoScreen(ModalScreen):
 
         try:
             # Get heading and groundspeed to bias search towards airports ahead
-            heading = self.flight_data.get('heading')
-            groundspeed = self.flight_data.get('groundspeed')
+            heading = self.flight_data.get("heading")
+            groundspeed = self.flight_data.get("groundspeed")
 
             # Find nearest airport with METAR (biased towards direction of flight)
             result = find_nearest_airport_with_metar(
@@ -911,22 +968,22 @@ class FlightInfoScreen(ModalScreen):
                 config.UNIFIED_AIRPORT_DATA,
                 max_distance_nm=100.0,
                 aircraft_heading=heading,
-                aircraft_groundspeed=groundspeed
+                aircraft_groundspeed=groundspeed,
             )
-            
+
             if result:
                 airport_icao, altimeter, distance_nm = result
-                
+
                 # Get the city name from airport data
                 airport_data = config.UNIFIED_AIRPORT_DATA.get(airport_icao, {})
-                city_name = airport_data.get('city', airport_icao)
-                
+                city_name = airport_data.get("city", airport_icao)
+
                 altimeter_word = ""
-                if altimeter.startswith('A'):
+                if altimeter.startswith("A"):
                     altimeter_word = "Altimeter"
-                elif altimeter.startswith('Q'):
+                elif altimeter.startswith("Q"):
                     altimeter_word = "QNH"
-                
+
                 return f"[bold]{city_name} {altimeter_word}:[/bold] {altimeter} ({airport_icao}, {distance_nm:.1f}nm)"
             else:
                 # No airport with METAR found within range
@@ -934,10 +991,11 @@ class FlightInfoScreen(ModalScreen):
         except Exception as e:
             # Log the error for debugging
             import traceback
+
             print(f"Error getting altimeter info: {e}")
             traceback.print_exc()
             return ""
-    
+
     def action_close(self) -> None:
         """Close the modal"""
         self.dismiss()
@@ -947,7 +1005,7 @@ class FlightInfoScreen(ModalScreen):
         from .diversion_modal import DiversionModal
 
         # Get the current VATSIM data from the app if available
-        vatsim_data = getattr(self.app, 'vatsim_data', None)
+        vatsim_data = getattr(self.app, "vatsim_data", None)
 
         diversion_modal = DiversionModal(
             flight_data=self.flight_data,
@@ -960,14 +1018,14 @@ class FlightInfoScreen(ModalScreen):
         from .route_weather import RouteWeatherScreen
 
         # Check if flight has a route
-        flight_plan = self.flight_data.get('flight_plan')
+        flight_plan = self.flight_data.get("flight_plan")
         if not flight_plan:
             self.notify("No flight plan filed", severity="warning")
             return
 
-        route = flight_plan.get('route', '')
-        departure = flight_plan.get('departure', '')
-        arrival = flight_plan.get('arrival', '')
+        route = flight_plan.get("route", "")
+        departure = flight_plan.get("departure", "")
+        arrival = flight_plan.get("arrival", "")
 
         if not route and not (departure and arrival):
             self.notify("No route filed", severity="warning")

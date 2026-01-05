@@ -7,7 +7,6 @@ NASR data is downloaded once per 28-day cycle and cached locally.
 """
 
 import io
-import os
 import re
 import urllib.request
 import urllib.error
@@ -18,14 +17,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from common.paths import get_nasr_cache_dir
+
 # NASR download settings
 # The NASR subscription is at a static URL that updates each cycle
 NASR_BASE_URL = "https://nfdc.faa.gov/webContent/28DaySub/"
 NASR_TIMEOUT = 120  # seconds for download (larger file)
 
 # Cache directory (uses user data directory)
-from common.paths import get_nasr_cache_dir
-
 NASR_CACHE_DIR = get_nasr_cache_dir()
 
 
@@ -136,8 +135,7 @@ def _download_nasr_file(url: str, dest_file: Path, quiet: bool = False) -> bool:
     """
     try:
         req = urllib.request.Request(
-            url,
-            headers={'User-Agent': 'VATSIM-Control-Recs/1.0'}
+            url, headers={"User-Agent": "VATSIM-Control-Recs/1.0"}
         )
         with urllib.request.urlopen(req, timeout=NASR_TIMEOUT) as response:
             zip_data = response.read()
@@ -266,7 +264,7 @@ def _parse_dms_to_decimal(dms_str: str) -> Optional[float]:
         Decimal degrees, or None if parsing fails
     """
     # Pattern: DD-MM-SS.sss[NSEW]
-    match = re.match(r'(\d+)-(\d+)-(\d+\.?\d*)\s*([NSEW])', dms_str.strip())
+    match = re.match(r"(\d+)-(\d+)-(\d+\.?\d*)\s*([NSEW])", dms_str.strip())
     if not match:
         return None
 
@@ -277,7 +275,7 @@ def _parse_dms_to_decimal(dms_str: str) -> Optional[float]:
 
     decimal = degrees + minutes / 60 + seconds / 3600
 
-    if direction in ('S', 'W'):
+    if direction in ("S", "W"):
         decimal = -decimal
 
     return decimal
@@ -499,7 +497,9 @@ def _parse_awy1_record(line: str) -> Optional[Tuple[str, AirwaySegmentRestrictio
 
         # Extract MEA opposite direction (positions 85-90)
         mea_opp_str = line[85:90].strip()
-        mea_opposite = int(mea_opp_str) if mea_opp_str and mea_opp_str.isdigit() else None
+        mea_opposite = (
+            int(mea_opp_str) if mea_opp_str and mea_opp_str.isdigit() else None
+        )
 
         # Extract MOCA (positions 101-106)
         moca_str = line[101:106].strip()
@@ -509,13 +509,16 @@ def _parse_awy1_record(line: str) -> Optional[Tuple[str, AirwaySegmentRestrictio
         if mea is None and mea_opposite is None and moca is None:
             return None
 
-        return (airway, AirwaySegmentRestriction(
-            airway=airway,
-            sequence=sequence,
-            mea=mea,
-            mea_opposite=mea_opposite,
-            moca=moca,
-        ))
+        return (
+            airway,
+            AirwaySegmentRestriction(
+                airway=airway,
+                sequence=sequence,
+                mea=mea,
+                mea_opposite=mea_opposite,
+                moca=moca,
+            ),
+        )
 
     except (IndexError, ValueError):
         return None
@@ -551,7 +554,7 @@ def _parse_awy_record(line: str) -> Optional[Tuple[str, AirwayFix]]:
         # Extract airway designator and sequence number
         # Format: "AWY2" + airway (variable length) + spaces + sequence + fix name
         # e.g., "AWY2V27      20REDIN..." or "AWY2J1      100AVENAL..."
-        header_match = re.match(r'AWY2([A-Z][A-Z0-9]*)\s*(\d+)', line)
+        header_match = re.match(r"AWY2([A-Z][A-Z0-9]*)\s*(\d+)", line)
         if not header_match:
             return None
 
@@ -562,8 +565,8 @@ def _parse_awy_record(line: str) -> Optional[Tuple[str, AirwayFix]]:
         # Pattern: digits-digits-digits.decimals + N/S or E/W
         # Some records have no space before lat (e.g., "CAK232-57-03.86N")
         # so we look for 2-digit lat degrees followed by -mm-ss pattern
-        lat_match = re.search(r'(\d{2})-(\d{2})-(\d{2}\.?\d*)([NS])', line)
-        lon_match = re.search(r'(\d{2,3})-(\d{2})-(\d{2}\.?\d*)([EW])', line)
+        lat_match = re.search(r"(\d{2})-(\d{2})-(\d{2}\.?\d*)([NS])", line)
+        lon_match = re.search(r"(\d{2,3})-(\d{2})-(\d{2}\.?\d*)([EW])", line)
 
         if not lat_match or not lon_match:
             return None
@@ -573,7 +576,7 @@ def _parse_awy_record(line: str) -> Optional[Tuple[str, AirwayFix]]:
         lat_min = int(lat_match.group(2))
         lat_sec = float(lat_match.group(3)) if lat_match.group(3) else 0.0
         latitude = lat_deg + lat_min / 60 + lat_sec / 3600
-        if lat_match.group(4) == 'S':
+        if lat_match.group(4) == "S":
             latitude = -latitude
 
         # Parse longitude
@@ -581,34 +584,37 @@ def _parse_awy_record(line: str) -> Optional[Tuple[str, AirwayFix]]:
         lon_min = int(lon_match.group(2))
         lon_sec = float(lon_match.group(3)) if lon_match.group(3) else 0.0
         longitude = lon_deg + lon_min / 60 + lon_sec / 3600
-        if lon_match.group(4) == 'W':
+        if lon_match.group(4) == "W":
             longitude = -longitude
 
         # Extract fix identifier from the remaining part of the line
         # Format is typically: "... V27  *REDIN*CA..." or "...MZB V27  *MZB*C..."
-        remaining = line[lon_match.end():]
+        remaining = line[lon_match.end() :]
 
         fix_id = None
 
         # Pattern 1: Look for *FIXID* pattern (most common for fixes)
-        star_match = re.search(r'\*([A-Z]{2,5})\*', remaining)
+        star_match = re.search(r"\*([A-Z]{2,5})\*", remaining)
         if star_match:
             fix_id = star_match.group(1)
         else:
             # Pattern 2: Look for 3-letter code followed by airway (for VORTACs)
-            id_match = re.search(r'\s+([A-Z]{2,5})\s+' + re.escape(airway), remaining)
+            id_match = re.search(r"\s+([A-Z]{2,5})\s+" + re.escape(airway), remaining)
             if id_match:
                 fix_id = id_match.group(1)
 
         if not fix_id:
             return None
 
-        return (airway, AirwayFix(
-            identifier=fix_id,
-            sequence=sequence,
-            latitude=latitude,
-            longitude=longitude,
-        ))
+        return (
+            airway,
+            AirwayFix(
+                identifier=fix_id,
+                sequence=sequence,
+                latitude=latitude,
+                longitude=longitude,
+            ),
+        )
 
     except (IndexError, ValueError):
         return None
@@ -686,9 +692,7 @@ def load_airway_restrictions() -> Dict[str, Dict[int, AirwaySegmentRestriction]]
 
 
 def get_airway_fixes(
-    airway: str,
-    entry_fix: Optional[str] = None,
-    exit_fix: Optional[str] = None
+    airway: str, entry_fix: Optional[str] = None, exit_fix: Optional[str] = None
 ) -> List[AirwayFix]:
     """Get fixes along an airway, optionally between entry and exit points.
 
@@ -729,7 +733,7 @@ def get_airway_fixes(
     if entry_idx > exit_idx:
         entry_idx, exit_idx = exit_idx, entry_idx
 
-    return fixes[entry_idx:exit_idx + 1]
+    return fixes[entry_idx : exit_idx + 1]
 
 
 def get_waypoint_coordinates(identifier: str) -> Optional[Tuple[float, float]]:
@@ -770,24 +774,24 @@ def _parse_coordinate_fix(identifier: str) -> Optional[Tuple[float, float]]:
         Tuple of (latitude, longitude) or None if not parseable
     """
     # Pattern 1: DDMMN/DDDMMW (e.g., "3530N/11500W")
-    match = re.match(r'(\d{2})(\d{2})([NS])/(\d{3})(\d{2})([EW])', identifier)
+    match = re.match(r"(\d{2})(\d{2})([NS])/(\d{3})(\d{2})([EW])", identifier)
     if match:
         lat = int(match.group(1)) + int(match.group(2)) / 60
-        if match.group(3) == 'S':
+        if match.group(3) == "S":
             lat = -lat
         lon = int(match.group(4)) + int(match.group(5)) / 60
-        if match.group(6) == 'W':
+        if match.group(6) == "W":
             lon = -lon
         return (lat, lon)
 
     # Pattern 2: DDN/DDDW (e.g., "35N/115W")
-    match = re.match(r'(\d{2})([NS])/(\d{2,3})([EW])', identifier)
+    match = re.match(r"(\d{2})([NS])/(\d{2,3})([EW])", identifier)
     if match:
         lat = float(match.group(1))
-        if match.group(2) == 'S':
+        if match.group(2) == "S":
             lat = -lat
         lon = float(match.group(3))
-        if match.group(4) == 'W':
+        if match.group(4) == "W":
             lon = -lon
         return (lat, lon)
 
@@ -795,8 +799,7 @@ def _parse_coordinate_fix(identifier: str) -> Optional[Tuple[float, float]]:
 
 
 def _get_fix_identifier(
-    part: str,
-    airports: Dict[str, Tuple[float, float]]
+    part: str, airports: Dict[str, Tuple[float, float]]
 ) -> Optional[str]:
     """Try to resolve a route part to a known fix/navaid identifier.
 
@@ -807,7 +810,7 @@ def _get_fix_identifier(
     # Check airports
     if part in airports:
         return part
-    if len(part) == 4 and part.startswith('K') and part[1:] in airports:
+    if len(part) == 4 and part.startswith("K") and part[1:] in airports:
         return part
 
     # Check navaids
@@ -824,8 +827,7 @@ def _get_fix_identifier(
 
 
 def parse_route_string(
-    route: str,
-    airports: Optional[Dict[str, Tuple[float, float]]] = None
+    route: str, airports: Optional[Dict[str, Tuple[float, float]]] = None
 ) -> List[Waypoint]:
     """Parse a filed route string into waypoints with coordinates.
 
@@ -853,7 +855,7 @@ def parse_route_string(
         part = parts[i]
 
         # Check if this is an airway (V##, J##, T##, Q##)
-        if re.match(r'^[VJTQ]\d+$', part):
+        if re.match(r"^[VJTQ]\d+$", part):
             # Find entry fix (previous waypoint) and exit fix (next non-airway part)
             entry_fix = waypoints[-1].identifier if waypoints else None
 
@@ -863,15 +865,15 @@ def parse_route_string(
             while j < len(parts):
                 next_part = parts[j]
                 # Skip consecutive airways
-                if re.match(r'^[VJTQ]\d+$', next_part):
+                if re.match(r"^[VJTQ]\d+$", next_part):
                     j += 1
                     continue
                 # Skip DCT
-                if next_part == 'DCT':
+                if next_part == "DCT":
                     j += 1
                     continue
                 # Skip SID/STAR names
-                if re.match(r'^[A-Z]+\d+[A-Z]*$', next_part) and len(next_part) > 5:
+                if re.match(r"^[A-Z]+\d+[A-Z]*$", next_part) and len(next_part) > 5:
                     j += 1
                     continue
                 # Found a potential exit fix
@@ -888,24 +890,26 @@ def parse_route_string(
                         # Skip if this is the entry fix (already in waypoints)
                         if entry_fix and awy_fix.identifier == entry_fix:
                             continue
-                        waypoints.append(Waypoint(
-                            identifier=awy_fix.identifier,
-                            latitude=awy_fix.latitude,
-                            longitude=awy_fix.longitude,
-                            waypoint_type="airway_fix",
-                        ))
+                        waypoints.append(
+                            Waypoint(
+                                identifier=awy_fix.identifier,
+                                latitude=awy_fix.latitude,
+                                longitude=awy_fix.longitude,
+                                waypoint_type="airway_fix",
+                            )
+                        )
                         seen_identifiers.add(awy_fix.identifier)
 
             i += 1
             continue
 
         # Skip SID/STAR names with digits (often at start/end)
-        if re.match(r'^[A-Z]+\d+[A-Z]*$', part) and len(part) > 5:
+        if re.match(r"^[A-Z]+\d+[A-Z]*$", part) and len(part) > 5:
             i += 1
             continue
 
         # Skip DCT (direct)
-        if part == 'DCT':
+        if part == "DCT":
             i += 1
             continue
 
@@ -917,7 +921,7 @@ def parse_route_string(
         if part in airports:
             coords = airports[part]
             waypoint_type = "airport"
-        elif len(part) == 4 and part.startswith('K'):
+        elif len(part) == 4 and part.startswith("K"):
             # Try without K prefix for US airports
             short = part[1:]
             if short in airports:
@@ -942,12 +946,14 @@ def parse_route_string(
                     waypoint_type = "fix"
 
         if coords and part not in seen_identifiers:
-            waypoints.append(Waypoint(
-                identifier=part,
-                latitude=coords[0],
-                longitude=coords[1],
-                waypoint_type=waypoint_type,
-            ))
+            waypoints.append(
+                Waypoint(
+                    identifier=part,
+                    latitude=coords[0],
+                    longitude=coords[1],
+                    waypoint_type=waypoint_type,
+                )
+            )
             seen_identifiers.add(part)
 
         i += 1
@@ -977,8 +983,7 @@ class MeaViolation:
 
 
 def get_max_mea_for_route(
-    route: str,
-    airports: Optional[Dict[str, Tuple[float, float]]] = None
+    route: str, airports: Optional[Dict[str, Tuple[float, float]]] = None
 ) -> Tuple[int | None, List[MeaViolation]]:
     """Get the maximum MEA required for airways in a route.
 
@@ -1014,16 +1019,16 @@ def get_max_mea_for_route(
         part = parts[i]
 
         # Check if this is an airway (V##, J##, T##, Q##)
-        if re.match(r'^[VJTQ]\d+$', part):
+        if re.match(r"^[VJTQ]\d+$", part):
             airway = part
 
             # Find entry fix (previous non-airway, non-DCT part)
             entry_fix = None
             for j in range(i - 1, -1, -1):
                 prev = parts[j]
-                if prev != 'DCT' and not re.match(r'^[VJTQ]\d+$', prev):
+                if prev != "DCT" and not re.match(r"^[VJTQ]\d+$", prev):
                     # Skip SID/STAR names
-                    if not (re.match(r'^[A-Z]+\d+[A-Z]*$', prev) and len(prev) > 5):
+                    if not (re.match(r"^[A-Z]+\d+[A-Z]*$", prev) and len(prev) > 5):
                         entry_fix = prev
                         break
 
@@ -1031,9 +1036,11 @@ def get_max_mea_for_route(
             exit_fix = None
             for j in range(i + 1, len(parts)):
                 next_part = parts[j]
-                if next_part != 'DCT' and not re.match(r'^[VJTQ]\d+$', next_part):
+                if next_part != "DCT" and not re.match(r"^[VJTQ]\d+$", next_part):
                     # Skip SID/STAR names
-                    if not (re.match(r'^[A-Z]+\d+[A-Z]*$', next_part) and len(next_part) > 5):
+                    if not (
+                        re.match(r"^[A-Z]+\d+[A-Z]*$", next_part) and len(next_part) > 5
+                    ):
                         exit_fix = next_part
                         break
 
@@ -1080,12 +1087,14 @@ def get_max_mea_for_route(
                         if not segment_end:
                             segment_end = f"seq{seq}"
 
-                        violations.append(MeaViolation(
-                            airway=airway,
-                            segment_start=segment_start,
-                            segment_end=segment_end,
-                            mea=restr.mea,
-                        ))
+                        violations.append(
+                            MeaViolation(
+                                airway=airway,
+                                segment_start=segment_start,
+                                segment_end=segment_end,
+                                mea=restr.mea,
+                            )
+                        )
 
                         if max_mea is None or restr.mea > max_mea:
                             max_mea = restr.mea

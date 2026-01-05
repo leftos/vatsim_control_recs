@@ -12,12 +12,14 @@ import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 
 from .artcc_boundaries import get_artcc_boundaries
 
 
-def get_artcc_bbox(artcc_code: str, cache_dir: Path) -> Optional[Tuple[float, float, float, float]]:
+def get_artcc_bbox(
+    artcc_code: str, cache_dir: Path
+) -> Optional[Tuple[float, float, float, float]]:
     """
     Calculate bounding box for an ARTCC from its polygon boundaries.
 
@@ -55,14 +57,14 @@ def fetch_metar_single(icao: str) -> Tuple[str, str, float]:
     try:
         url = f"https://aviationweather.gov/api/data/metar?ids={icao}&format=raw"
         req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'VATSIM-Weather-Benchmark/1.0')
+        req.add_header("User-Agent", "VATSIM-Weather-Benchmark/1.0")
 
         with urllib.request.urlopen(req, timeout=10) as response:
-            metar_text = response.read().decode('utf-8').strip()
+            metar_text = response.read().decode("utf-8").strip()
 
         elapsed = time.perf_counter() - start
         return (icao, metar_text, elapsed)
-    except Exception as e:
+    except Exception:
         elapsed = time.perf_counter() - start
         return (icao, "", elapsed)
 
@@ -78,21 +80,20 @@ def fetch_taf_single(icao: str) -> Tuple[str, str, float]:
     try:
         url = f"https://aviationweather.gov/api/data/taf?ids={icao}&format=raw"
         req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'VATSIM-Weather-Benchmark/1.0')
+        req.add_header("User-Agent", "VATSIM-Weather-Benchmark/1.0")
 
         with urllib.request.urlopen(req, timeout=10) as response:
-            taf_text = response.read().decode('utf-8').strip()
+            taf_text = response.read().decode("utf-8").strip()
 
         elapsed = time.perf_counter() - start
         return (icao, taf_text, elapsed)
-    except Exception as e:
+    except Exception:
         elapsed = time.perf_counter() - start
         return (icao, "", elapsed)
 
 
 def fetch_weather_per_airport(
-    airports: List[str],
-    max_workers: int = 10
+    airports: List[str], max_workers: int = 10
 ) -> Tuple[Dict[str, str], Dict[str, str], float]:
     """
     Fetch METAR and TAF for airports using per-airport requests (current approach).
@@ -126,8 +127,7 @@ def fetch_weather_per_airport(
 
 
 def fetch_metar_bbox(
-    bbox: Tuple[float, float, float, float],
-    include_taf: bool = True
+    bbox: Tuple[float, float, float, float], include_taf: bool = True
 ) -> Tuple[Dict[str, str], Dict[str, str], float, int]:
     """
     Fetch METAR (and optionally TAF) using bounding box query.
@@ -153,17 +153,17 @@ def fetch_metar_bbox(
         url = f"https://aviationweather.gov/api/data/metar?bbox={bbox_str}&format=json{taf_param}"
 
         req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'VATSIM-Weather-Benchmark/1.0')
+        req.add_header("User-Agent", "VATSIM-Weather-Benchmark/1.0")
 
         with urllib.request.urlopen(req, timeout=30) as response:
-            data = json.loads(response.read().decode('utf-8'))
+            data = json.loads(response.read().decode("utf-8"))
 
         # Parse response - it's an array of METAR objects
         if isinstance(data, list):
             for entry in data:
-                icao = entry.get('icaoId', '')
-                raw_metar = entry.get('rawOb', '')
-                raw_taf = entry.get('rawTaf', '')
+                icao = entry.get("icaoId", "")
+                raw_metar = entry.get("rawOb", "")
+                raw_taf = entry.get("rawTaf", "")
 
                 if icao and raw_metar:
                     metars[icao] = raw_metar
@@ -180,8 +180,7 @@ def fetch_metar_bbox(
 
 
 def fetch_weather_bbox(
-    bbox: Tuple[float, float, float, float],
-    target_airports: List[str]
+    bbox: Tuple[float, float, float, float], target_airports: List[str]
 ) -> Tuple[Dict[str, str], Dict[str, str], float]:
     """
     Fetch METAR and TAF using bounding box, then filter to target airports.
@@ -201,18 +200,23 @@ def fetch_weather_bbox(
 
 def run_benchmark(artcc: str = "ZOA"):
     """Run the benchmark comparing both approaches."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Weather Fetching Benchmark: {artcc}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%SZ')}")
 
     # Load airports for this ARTCC
-    preset_file = Path(__file__).parent.parent.parent / "data" / "preset_groupings" / f"{artcc}.json"
+    preset_file = (
+        Path(__file__).parent.parent.parent
+        / "data"
+        / "preset_groupings"
+        / f"{artcc}.json"
+    )
     if not preset_file.exists():
         print(f"Error: No preset file found for {artcc}")
         return
 
-    with open(preset_file, 'r') as f:
+    with open(preset_file, "r") as f:
         groupings = json.load(f)
 
     # Get all unique airports
@@ -231,16 +235,18 @@ def run_benchmark(artcc: str = "ZOA"):
         print(f"Error: Could not get bounding box for {artcc}")
         return
 
-    print(f"\nARTCC Bounding Box:")
+    print("\nARTCC Bounding Box:")
     print(f"  Lat: {bbox[0]:.2f} to {bbox[2]:.2f}")
     print(f"  Lon: {bbox[1]:.2f} to {bbox[3]:.2f}")
 
     # Run benchmark: Per-Airport approach
-    print(f"\n{'-'*60}")
+    print(f"\n{'-' * 60}")
     print("Approach 1: Per-Airport Requests (current)")
-    print(f"{'-'*60}")
+    print(f"{'-' * 60}")
 
-    metars_1, tafs_1, elapsed_1 = fetch_weather_per_airport(airports_list, max_workers=10)
+    metars_1, tafs_1, elapsed_1 = fetch_weather_per_airport(
+        airports_list, max_workers=10
+    )
 
     print(f"  API calls: ~{len(airports_list) * 2} (METAR + TAF)")
     print(f"  Time: {elapsed_1:.2f}s")
@@ -252,12 +258,14 @@ def run_benchmark(artcc: str = "ZOA"):
     time.sleep(2)
 
     # Run benchmark: Bounding Box approach
-    print(f"\n{'-'*60}")
+    print(f"\n{'-' * 60}")
     print("Approach 2: Bounding Box Request (new)")
-    print(f"{'-'*60}")
+    print(f"{'-' * 60}")
 
     # First, let's see what the raw bbox returns
-    metars_raw, tafs_raw, elapsed_raw, api_calls = fetch_metar_bbox(bbox, include_taf=True)
+    metars_raw, tafs_raw, elapsed_raw, api_calls = fetch_metar_bbox(
+        bbox, include_taf=True
+    )
 
     print(f"  API calls: {api_calls}")
     print(f"  Time: {elapsed_raw:.2f}s")
@@ -273,28 +281,32 @@ def run_benchmark(artcc: str = "ZOA"):
     print(f"  TAFs for target airports: {len(tafs_2)}/{len(airports_list)}")
 
     # Compare results
-    print(f"\n{'-'*60}")
+    print(f"\n{'-' * 60}")
     print("Comparison")
-    print(f"{'-'*60}")
+    print(f"{'-' * 60}")
 
-    speedup = elapsed_1 / elapsed_raw if elapsed_raw > 0 else float('inf')
+    speedup = elapsed_1 / elapsed_raw if elapsed_raw > 0 else float("inf")
     print(f"  Speedup: {speedup:.1f}x faster")
     print(f"  Time saved: {elapsed_1 - elapsed_raw:.2f}s")
-    print(f"  API call reduction: {len(airports_list) * 2} -> {api_calls} ({(1 - api_calls/(len(airports_list)*2))*100:.0f}% reduction)")
+    print(
+        f"  API call reduction: {len(airports_list) * 2} -> {api_calls} ({(1 - api_calls / (len(airports_list) * 2)) * 100:.0f}% reduction)"
+    )
 
     # Check for missing data
     missing_in_bbox = set(metars_1.keys()) - set(metars_2.keys())
     extra_in_bbox = set(metars_2.keys()) - set(metars_1.keys())
 
     if missing_in_bbox:
-        print(f"\n  METARs found per-airport but not in bbox: {sorted(missing_in_bbox)}")
+        print(
+            f"\n  METARs found per-airport but not in bbox: {sorted(missing_in_bbox)}"
+        )
     if extra_in_bbox:
         print(f"  METARs found in bbox but not per-airport: {sorted(extra_in_bbox)}")
 
     # Sample data comparison
-    print(f"\n{'-'*60}")
+    print(f"\n{'-' * 60}")
     print("Sample Data Verification")
-    print(f"{'-'*60}")
+    print(f"{'-' * 60}")
 
     common_airports = sorted(set(metars_1.keys()) & set(metars_2.keys()))[:3]
     for icao in common_airports:
@@ -305,33 +317,37 @@ def run_benchmark(artcc: str = "ZOA"):
         print(f"    Per-airport: {m1}")
         print(f"    Bbox:        {m2}")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Benchmark Complete")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     return {
-        'per_airport': {
-            'time': elapsed_1,
-            'api_calls': len(airports_list) * 2,
-            'metars': len(metars_1),
-            'tafs': len(tafs_1),
+        "per_airport": {
+            "time": elapsed_1,
+            "api_calls": len(airports_list) * 2,
+            "metars": len(metars_1),
+            "tafs": len(tafs_1),
         },
-        'bbox': {
-            'time': elapsed_raw,
-            'api_calls': api_calls,
-            'metars': len(metars_2),
-            'tafs': len(tafs_2),
-            'total_in_bbox': len(metars_raw),
+        "bbox": {
+            "time": elapsed_raw,
+            "api_calls": api_calls,
+            "metars": len(metars_2),
+            "tafs": len(tafs_2),
+            "total_in_bbox": len(metars_raw),
         },
-        'speedup': speedup,
+        "speedup": speedup,
     }
 
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Benchmark bbox vs per-airport weather fetching")
-    parser.add_argument("--artcc", default="ZOA", help="ARTCC code to benchmark (default: ZOA)")
+    parser = argparse.ArgumentParser(
+        description="Benchmark bbox vs per-airport weather fetching"
+    )
+    parser.add_argument(
+        "--artcc", default="ZOA", help="ARTCC code to benchmark (default: ZOA)"
+    )
     args = parser.parse_args()
 
     run_benchmark(args.artcc)

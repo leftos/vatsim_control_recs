@@ -36,8 +36,8 @@ def build_spatial_grid(airports_data: dict) -> dict:
     spatial_grid = {}
 
     for icao, data in airports_data.items():
-        lat = data.get('latitude')
-        lon = data.get('longitude')
+        lat = data.get("latitude")
+        lon = data.get("longitude")
 
         if lat is None or lon is None:
             continue
@@ -50,11 +50,7 @@ def build_spatial_grid(airports_data: dict) -> dict:
         if cell_key not in spatial_grid:
             spatial_grid[cell_key] = []
 
-        spatial_grid[cell_key].append({
-            'icao': icao,
-            'lat': lat,
-            'lon': lon
-        })
+        spatial_grid[cell_key].append({"icao": icao, "lat": lat, "lon": lon})
 
     return spatial_grid
 
@@ -96,7 +92,7 @@ def main():
     airports_data = load_unified_airport_data(
         apt_base_path=str(data_dir / "APT_BASE.csv"),
         airports_json_path=str(data_dir / "airports.json"),
-        iata_icao_path=str(data_dir / "iata-icao.csv")
+        iata_icao_path=str(data_dir / "iata-icao.csv"),
     )
     print(f"  Loaded {len(airports_data)} airports")
 
@@ -119,13 +115,13 @@ def main():
         "airport_count": len(airports_data),
         "grid_cell_count": len(spatial_grid),
         "spatial_grid": spatial_grid,
-        "metar_stations": sorted(list(metar_stations)) if metar_stations else None
+        "metar_stations": sorted(list(metar_stations)) if metar_stations else None,
     }
 
     # Write cache file
     print(f"\nWriting cache to {cache_file}...")
-    with open(cache_file, 'w', encoding='utf-8') as f:
-        json.dump(cache_data, f, separators=(',', ':'))  # Compact JSON
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump(cache_data, f, separators=(",", ":"))  # Compact JSON
 
     # Report file size
     file_size = cache_file.stat().st_size

@@ -8,7 +8,7 @@ weather conditions, and ATC staffing.
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from backend.core.calculations import haversine_distance_nm, calculate_bearing, bearing_to_compass
+from backend.core.calculations import calculate_bearing, bearing_to_compass
 from backend.core.spatial import get_airport_spatial_index
 from backend.core.aircraft_performance import get_required_runway_length
 from backend.data.runways import get_longest_runway, get_runway_summary
@@ -59,7 +59,7 @@ def find_nearby_airports(
     lon: float,
     airports_data: Dict[str, Dict[str, Any]],
     radius_nm: float = 100.0,
-    max_results: int = 500
+    max_results: int = 500,
 ) -> List[Tuple[str, float, float]]:
     """Find airports within a given radius.
 
@@ -79,8 +79,8 @@ def find_nearby_airports(
     results = []
     for icao, distance in nearby[:max_results]:
         airport_data = airports_data.get(icao, {})
-        apt_lat = airport_data.get('latitude')
-        apt_lon = airport_data.get('longitude')
+        apt_lat = airport_data.get("latitude")
+        apt_lon = airport_data.get("longitude")
 
         if apt_lat is not None and apt_lon is not None:
             bearing = calculate_bearing(lat, lon, apt_lat, apt_lon)
@@ -98,7 +98,7 @@ def find_suitable_diversions(
     filters: Optional[DiversionFilters] = None,
     weather_data: Optional[Dict[str, Tuple[str, str]]] = None,
     controller_data: Optional[Dict[str, List[str]]] = None,
-    max_results: int = 50
+    max_results: int = 50,
 ) -> List[DiversionOption]:
     """Find airports suitable for diversion.
 
@@ -120,7 +120,9 @@ def find_suitable_diversions(
         filters = DiversionFilters()
 
     # Get required runway length for this aircraft
-    required_runway = get_required_runway_length(aircraft_type) if aircraft_type else None
+    required_runway = (
+        get_required_runway_length(aircraft_type) if aircraft_type else None
+    )
 
     # Find nearby airports
     nearby = find_nearby_airports(lat, lon, airports_data, radius_nm, max_results=500)
@@ -129,7 +131,7 @@ def find_suitable_diversions(
 
     for icao, distance, bearing in nearby:
         airport_data = airports_data.get(icao, {})
-        name = airport_data.get('name', icao)
+        name = airport_data.get("name", icao)
 
         # Get runway information
         longest_runway = get_longest_runway(icao)
@@ -156,7 +158,7 @@ def find_suitable_diversions(
 
         # Check weather filter
         if filters.require_good_weather and weather_category:
-            if weather_category not in ('VFR', 'MVFR'):
+            if weather_category not in ("VFR", "MVFR"):
                 continue
 
         # Get controller information

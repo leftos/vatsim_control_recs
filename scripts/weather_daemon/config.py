@@ -2,7 +2,6 @@
 Weather Daemon Configuration
 """
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -13,16 +12,28 @@ class DaemonConfig:
     """Configuration for the weather briefing daemon."""
 
     # Output directory for generated HTML files
-    output_dir: Path = field(default_factory=lambda: Path("/var/www/leftos.dev/weather"))
+    output_dir: Path = field(
+        default_factory=lambda: Path("/var/www/leftos.dev/weather")
+    )
 
     # Path to custom groupings JSON file
-    custom_groupings_path: Path = field(default_factory=lambda: Path(__file__).parent.parent.parent / "data" / "custom_groupings.json")
+    custom_groupings_path: Path = field(
+        default_factory=lambda: Path(__file__).parent.parent.parent
+        / "data"
+        / "custom_groupings.json"
+    )
 
     # Path to preset groupings directory
-    preset_groupings_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent.parent / "data" / "preset_groupings")
+    preset_groupings_dir: Path = field(
+        default_factory=lambda: Path(__file__).parent.parent.parent
+        / "data"
+        / "preset_groupings"
+    )
 
     # Path to data files
-    data_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent.parent / "data")
+    data_dir: Path = field(
+        default_factory=lambda: Path(__file__).parent.parent.parent / "data"
+    )
 
     # ARTCCs to include (None = all)
     artcc_filter: Optional[List[str]] = None
@@ -41,10 +52,18 @@ class DaemonConfig:
     include_presets: bool = True
 
     # ARTCC boundary cache directory
-    artcc_cache_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent.parent / "cache" / "artcc_boundaries")
+    artcc_cache_dir: Path = field(
+        default_factory=lambda: Path(__file__).parent.parent.parent
+        / "cache"
+        / "artcc_boundaries"
+    )
 
     # Weather cache directory (for --use-cached mode)
-    weather_cache_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent.parent / "cache" / "weather")
+    weather_cache_dir: Path = field(
+        default_factory=lambda: Path(__file__).parent.parent.parent
+        / "cache"
+        / "weather"
+    )
 
     # Fetch fresh weather data (False = use cached)
     fetch_fresh_weather: bool = True
@@ -91,37 +110,37 @@ class DaemonConfig:
 
 # ARTCC display names for index page
 ARTCC_NAMES = {
-    'ZAB': 'Albuquerque',
-    'ZAN': 'Anchorage',
-    'ZAU': 'Chicago',
-    'ZBW': 'Boston',
-    'ZDC': 'Washington',
-    'ZDV': 'Denver',
-    'ZFW': 'Fort Worth',
-    'ZHN': 'Honolulu',
-    'ZHU': 'Houston',
-    'ZID': 'Indianapolis',
-    'ZJX': 'Jacksonville',
-    'ZKC': 'Kansas City',
-    'ZLA': 'Los Angeles',
-    'ZLC': 'Salt Lake City',
-    'ZMA': 'Miami',
-    'ZME': 'Memphis',
-    'ZMP': 'Minneapolis',
-    'ZNY': 'New York',
-    'ZOA': 'Oakland',
-    'ZOB': 'Cleveland',
-    'ZSE': 'Seattle',
-    'ZSU': 'San Juan',
-    'ZTL': 'Atlanta',
-    'ZUA': 'Guam',
+    "ZAB": "Albuquerque",
+    "ZAN": "Anchorage",
+    "ZAU": "Chicago",
+    "ZBW": "Boston",
+    "ZDC": "Washington",
+    "ZDV": "Denver",
+    "ZFW": "Fort Worth",
+    "ZHN": "Honolulu",
+    "ZHU": "Houston",
+    "ZID": "Indianapolis",
+    "ZJX": "Jacksonville",
+    "ZKC": "Kansas City",
+    "ZLA": "Los Angeles",
+    "ZLC": "Salt Lake City",
+    "ZMA": "Miami",
+    "ZME": "Memphis",
+    "ZMP": "Minneapolis",
+    "ZNY": "New York",
+    "ZOA": "Oakland",
+    "ZOB": "Cleveland",
+    "ZSE": "Seattle",
+    "ZSU": "San Juan",
+    "ZTL": "Atlanta",
+    "ZUA": "Guam",
 }
 
 # Category colors (Rich markup colors - bright versions for dark backgrounds)
 CATEGORY_COLORS = {
-    'LIFR': '#ffaaff',  # Bright magenta
-    'IFR': '#ff9999',   # Bright red
-    'MVFR': '#77bbff',  # Bright blue
-    'VFR': '#66ff66',   # Bright green
-    'UNK': 'white',
+    "LIFR": "#ffaaff",  # Bright magenta
+    "IFR": "#ff9999",  # Bright red
+    "MVFR": "#77bbff",  # Bright blue
+    "VFR": "#66ff66",  # Bright green
+    "UNK": "white",
 }

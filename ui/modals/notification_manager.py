@@ -5,7 +5,7 @@ Provides toast-style notifications with optional flash animation
 for important alerts (e.g., weather changes, runway changes at staffed airports).
 """
 
-from typing import Optional, Callable
+from typing import Optional
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.timer import Timer

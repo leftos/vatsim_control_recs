@@ -8,7 +8,6 @@ data is older than a configurable threshold.
 """
 
 import csv
-import os
 import threading
 import urllib.request
 import urllib.error
@@ -16,8 +15,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import lru_cache
-from pathlib import Path
 from typing import Optional
+
+from common.paths import get_runways_cache_path, get_runways_metadata_path
 
 
 # OurAirports runway data URL
@@ -28,14 +28,12 @@ DOWNLOAD_TIMEOUT = 60  # seconds
 UPDATE_INTERVAL_DAYS = 28  # Approximately one AIRAC cycle
 
 # Cache file location (uses user data directory)
-from common.paths import get_runways_cache_path, get_runways_metadata_path
-
 RUNWAYS_CACHE_PATH = get_runways_cache_path()
 RUNWAYS_METADATA_PATH = get_runways_metadata_path()
 
 # Thread-safe in-memory cache
 _RUNWAY_DATA_LOCK = threading.Lock()
-_RUNWAY_DATA: Optional[dict[str, list['RunwayInfo']]] = None
+_RUNWAY_DATA: Optional[dict[str, list["RunwayInfo"]]] = None
 
 
 @dataclass
@@ -75,7 +73,7 @@ def _needs_update() -> bool:
         return True
 
     try:
-        with open(RUNWAYS_METADATA_PATH, 'r') as f:
+        with open(RUNWAYS_METADATA_PATH, "r") as f:
             last_update_str = f.read().strip()
             last_update = datetime.fromisoformat(last_update_str)
             return datetime.now() - last_update > timedelta(days=UPDATE_INTERVAL_DAYS)
@@ -87,7 +85,7 @@ def _save_metadata() -> None:
     """Save metadata about the last update."""
     try:
         RUNWAYS_METADATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(RUNWAYS_METADATA_PATH, 'w') as f:
+        with open(RUNWAYS_METADATA_PATH, "w") as f:
             f.write(datetime.now().isoformat())
     except OSError:
         pass
@@ -117,7 +115,7 @@ def download_runway_data(force: bool = False, quiet: bool = False) -> bool:
         RUNWAYS_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
         # Write to cache
-        with open(RUNWAYS_CACHE_PATH, 'wb') as f:
+        with open(RUNWAYS_CACHE_PATH, "wb") as f:
             f.write(data)
 
         _save_metadata()
@@ -180,13 +178,13 @@ def load_runway_data() -> dict[str, list[RunwayInfo]]:
     runways: dict[str, list[RunwayInfo]] = defaultdict(list)
 
     try:
-        with open(RUNWAYS_CACHE_PATH, 'r', encoding='utf-8') as f:
+        with open(RUNWAYS_CACHE_PATH, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 try:
                     # Skip if missing critical data
-                    airport_ident = row.get('airport_ident', '').strip()
-                    length_str = row.get('length_ft', '').strip()
+                    airport_ident = row.get("airport_ident", "").strip()
+                    length_str = row.get("length_ft", "").strip()
 
                     if not airport_ident or not length_str:
                         continue
@@ -198,18 +196,18 @@ def load_runway_data() -> dict[str, list[RunwayInfo]]:
                         continue
 
                     try:
-                        width_ft = int(float(row.get('width_ft', '0').strip() or '0'))
+                        width_ft = int(float(row.get("width_ft", "0").strip() or "0"))
                     except (ValueError, TypeError):
                         width_ft = 0
 
                     # Parse boolean fields
-                    lighted = row.get('lighted', '0').strip() == '1'
-                    closed = row.get('closed', '0').strip() == '1'
+                    lighted = row.get("lighted", "0").strip() == "1"
+                    closed = row.get("closed", "0").strip() == "1"
 
                     # Get identifiers
-                    le_ident = row.get('le_ident', '').strip()
-                    he_ident = row.get('he_ident', '').strip()
-                    surface = row.get('surface', '').strip()
+                    le_ident = row.get("le_ident", "").strip()
+                    he_ident = row.get("he_ident", "").strip()
+                    surface = row.get("surface", "").strip()
 
                     runway = RunwayInfo(
                         airport_ident=airport_ident.upper(),

@@ -19,6 +19,7 @@ from cachetools import LRUCache
 
 from common import logger as debug_logger
 from backend.config.constants import PERSISTENT_CACHE_TTL
+from common.paths import get_user_cache_dir, get_weather_cache_file
 
 # Cache size limits
 MAX_WEATHER_CACHE_SIZE = 1000  # Max entries in weather data caches
@@ -34,17 +35,23 @@ _ARTCC_GROUPINGS_LOCK = threading.Lock()
 # Cache for wind data - LRU with size limit
 # {airport_icao: {'wind_info': str, 'timestamp': datetime}}
 _WIND_DATA_CACHE: LRUCache = LRUCache(maxsize=MAX_WEATHER_CACHE_SIZE)
-_WIND_BLACKLIST: LRUCache = LRUCache(maxsize=MAX_BLACKLIST_SIZE)  # Keys are ICAOs, values are True
+_WIND_BLACKLIST: LRUCache = LRUCache(
+    maxsize=MAX_BLACKLIST_SIZE
+)  # Keys are ICAOs, values are True
 
 # Cache for METAR data - LRU with size limit
 # {airport_icao: {'metar': str, 'timestamp': datetime}}
 _METAR_DATA_CACHE: LRUCache = LRUCache(maxsize=MAX_WEATHER_CACHE_SIZE)
-_METAR_BLACKLIST: LRUCache = LRUCache(maxsize=MAX_BLACKLIST_SIZE)  # Keys are ICAOs, values are True
+_METAR_BLACKLIST: LRUCache = LRUCache(
+    maxsize=MAX_BLACKLIST_SIZE
+)  # Keys are ICAOs, values are True
 
 # Cache for TAF data - LRU with size limit
 # {airport_icao: {'taf': str, 'timestamp': datetime}}
 _TAF_DATA_CACHE: LRUCache = LRUCache(maxsize=MAX_WEATHER_CACHE_SIZE)
-_TAF_BLACKLIST: LRUCache = LRUCache(maxsize=MAX_BLACKLIST_SIZE)  # Keys are ICAOs, values are True
+_TAF_BLACKLIST: LRUCache = LRUCache(
+    maxsize=MAX_BLACKLIST_SIZE
+)  # Keys are ICAOs, values are True
 
 # Cache for aircraft approach speeds
 _AIRCRAFT_APPROACH_SPEEDS: Optional[Dict[str, int]] = None
@@ -180,7 +187,10 @@ def load_aircraft_approach_speeds(filename: str) -> Dict[str, int]:
     Returns:
         Dictionary mapping aircraft ICAO codes to approach speeds in knots
     """
-    from backend.cache.manager import get_aircraft_speeds_cache, set_aircraft_speeds_cache
+    from backend.cache.manager import (
+        get_aircraft_speeds_cache,
+        set_aircraft_speeds_cache,
+    )
 
     cached = get_aircraft_speeds_cache()
     if cached is not None:
@@ -188,14 +198,14 @@ def load_aircraft_approach_speeds(filename: str) -> Dict[str, int]:
 
     approach_speeds = {}
     try:
-        with open(filename, 'r', encoding='utf-8-sig') as f:
+        with open(filename, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                icao_code = row.get('ICAO_Code', '').strip()
-                approach_speed_str = row.get('Approach_Speed_knot', '').strip()
+                icao_code = row.get("ICAO_Code", "").strip()
+                approach_speed_str = row.get("Approach_Speed_knot", "").strip()
 
                 # Only add entries with valid ICAO codes and approach speeds
-                if icao_code and approach_speed_str and approach_speed_str != 'N/A':
+                if icao_code and approach_speed_str and approach_speed_str != "N/A":
                     try:
                         approach_speed = int(approach_speed_str)
                         approach_speeds[icao_code] = approach_speed
@@ -206,18 +216,20 @@ def load_aircraft_approach_speeds(filename: str) -> Dict[str, int]:
         set_aircraft_speeds_cache(approach_speeds)
         return approach_speeds
     except FileNotFoundError:
-        debug_logger.warning(f"Aircraft data file '{filename}' not found. ETA calculations will not use approach speeds.")
+        debug_logger.warning(
+            f"Aircraft data file '{filename}' not found. ETA calculations will not use approach speeds."
+        )
         set_aircraft_speeds_cache({})
         return {}
     except Exception as e:
-        debug_logger.error(f"Error loading aircraft data from '{filename}': {e}. ETA calculations will not use approach speeds.")
+        debug_logger.error(
+            f"Error loading aircraft data from '{filename}': {e}. ETA calculations will not use approach speeds."
+        )
         set_aircraft_speeds_cache({})
         return {}
 
 
 # Persistent cache file path (uses user data directory)
-from common.paths import get_user_cache_dir, get_weather_cache_file
-
 _PERSISTENT_CACHE_DIR = str(get_user_cache_dir())
 _WEATHER_CACHE_FILE = str(get_weather_cache_file())
 
@@ -240,41 +252,43 @@ def save_weather_cache() -> None:
 
     now = datetime.now(timezone.utc)
     cache_data = {
-        'saved_at': now.isoformat(),
-        'ttl_seconds': PERSISTENT_CACHE_TTL,
-        'metar': {},
-        'taf': {},
+        "saved_at": now.isoformat(),
+        "ttl_seconds": PERSISTENT_CACHE_TTL,
+        "metar": {},
+        "taf": {},
     }
 
     # Save METAR cache
     with _METAR_CACHE_LOCK:
         for icao, entry in _METAR_DATA_CACHE.items():
-            if 'timestamp' in entry and 'metar' in entry:
-                timestamp = entry['timestamp']
+            if "timestamp" in entry and "metar" in entry:
+                timestamp = entry["timestamp"]
                 age = (now - timestamp).total_seconds()
                 if age < PERSISTENT_CACHE_TTL:
-                    cache_data['metar'][icao] = {
-                        'metar': entry['metar'],
-                        'timestamp': timestamp.isoformat(),
+                    cache_data["metar"][icao] = {
+                        "metar": entry["metar"],
+                        "timestamp": timestamp.isoformat(),
                     }
 
     # Save TAF cache
     with _TAF_CACHE_LOCK:
         for icao, entry in _TAF_DATA_CACHE.items():
-            if 'timestamp' in entry and 'taf' in entry:
-                timestamp = entry['timestamp']
+            if "timestamp" in entry and "taf" in entry:
+                timestamp = entry["timestamp"]
                 age = (now - timestamp).total_seconds()
                 if age < PERSISTENT_CACHE_TTL:
-                    cache_data['taf'][icao] = {
-                        'taf': entry['taf'],
-                        'timestamp': timestamp.isoformat(),
+                    cache_data["taf"][icao] = {
+                        "taf": entry["taf"],
+                        "timestamp": timestamp.isoformat(),
                     }
 
     # Write to file
     try:
-        with open(_WEATHER_CACHE_FILE, 'w', encoding='utf-8') as f:
+        with open(_WEATHER_CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(cache_data, f)
-        debug_logger.debug(f"Saved weather cache: {len(cache_data['metar'])} METARs, {len(cache_data['taf'])} TAFs")
+        debug_logger.debug(
+            f"Saved weather cache: {len(cache_data['metar'])} METARs, {len(cache_data['taf'])} TAFs"
+        )
     except Exception as e:
         debug_logger.warning(f"Failed to save weather cache: {e}")
 
@@ -295,43 +309,45 @@ def load_weather_cache() -> tuple[int, int]:
     now = datetime.now(timezone.utc)
 
     try:
-        with open(_WEATHER_CACHE_FILE, 'r', encoding='utf-8') as f:
+        with open(_WEATHER_CACHE_FILE, "r", encoding="utf-8") as f:
             cache_data = json.load(f)
 
         # Load METAR cache
-        metar_entries = cache_data.get('metar', {})
+        metar_entries = cache_data.get("metar", {})
         with _METAR_CACHE_LOCK:
             for icao, entry in metar_entries.items():
                 try:
-                    timestamp = datetime.fromisoformat(entry['timestamp'])
+                    timestamp = datetime.fromisoformat(entry["timestamp"])
                     age = (now - timestamp).total_seconds()
                     if age < PERSISTENT_CACHE_TTL:
                         _METAR_DATA_CACHE[icao] = {
-                            'metar': entry['metar'],
-                            'timestamp': timestamp,
+                            "metar": entry["metar"],
+                            "timestamp": timestamp,
                         }
                         metar_count += 1
                 except (KeyError, ValueError):
                     continue
 
         # Load TAF cache
-        taf_entries = cache_data.get('taf', {})
+        taf_entries = cache_data.get("taf", {})
         with _TAF_CACHE_LOCK:
             for icao, entry in taf_entries.items():
                 try:
-                    timestamp = datetime.fromisoformat(entry['timestamp'])
+                    timestamp = datetime.fromisoformat(entry["timestamp"])
                     age = (now - timestamp).total_seconds()
                     if age < PERSISTENT_CACHE_TTL:
                         _TAF_DATA_CACHE[icao] = {
-                            'taf': entry['taf'],
-                            'timestamp': timestamp,
+                            "taf": entry["taf"],
+                            "timestamp": timestamp,
                         }
                         taf_count += 1
                 except (KeyError, ValueError):
                     continue
 
         if metar_count > 0 or taf_count > 0:
-            debug_logger.debug(f"Loaded weather cache: {metar_count} METARs, {taf_count} TAFs")
+            debug_logger.debug(
+                f"Loaded weather cache: {metar_count} METARs, {taf_count} TAFs"
+            )
 
     except Exception as e:
         debug_logger.warning(f"Failed to load weather cache: {e}")

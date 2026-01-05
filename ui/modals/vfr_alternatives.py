@@ -12,7 +12,7 @@ from backend import (
     find_airports_near_position,
     haversine_distance_nm,
     calculate_bearing,
-    bearing_to_compass
+    bearing_to_compass,
 )
 from ui import config
 from .metar_info import get_flight_category, _extract_flight_rules_weather
@@ -86,7 +86,9 @@ class VfrAlternativesScreen(ModalScreen):
         with Container(id="vfr-container"):
             yield Static("VFR Alternatives Finder", id="vfr-title")
             with Container(id="vfr-input-container"):
-                yield Input(placeholder="Enter airport ICAO code (e.g., KSFO)", id="vfr-input")
+                yield Input(
+                    placeholder="Enter airport ICAO code (e.g., KSFO)", id="vfr-input"
+                )
             yield Static("", id="vfr-result", markup=True)
             yield Static("Press Enter to search, Escape to close", id="vfr-hint")
 
@@ -107,7 +109,9 @@ class VfrAlternativesScreen(ModalScreen):
         if self._search_task and not self._search_task.done():
             self._search_task.cancel()
 
-    def _format_weather_details(self, visibility_str: str | None, ceiling_str: str | None) -> str:
+    def _format_weather_details(
+        self, visibility_str: str | None, ceiling_str: str | None
+    ) -> str:
         """
         Format visibility and ceiling into a METAR-style details string.
 
@@ -159,14 +163,16 @@ class VfrAlternativesScreen(ModalScreen):
             result_widget.update(f"[red]Airport {icao} not found in database[/red]")
             return
 
-        origin_lat = origin_data.get('latitude')
-        origin_lon = origin_data.get('longitude')
+        origin_lat = origin_data.get("latitude")
+        origin_lon = origin_data.get("longitude")
         if origin_lat is None or origin_lon is None:
             result_widget.update(f"[red]No coordinates for {icao}[/red]")
             return
 
         # Get full name if available (no length limit)
-        pretty_name = config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
+        pretty_name = (
+            config.DISAMBIGUATOR.get_full_name(icao) if config.DISAMBIGUATOR else icao
+        )
 
         # Build header lines
         header_lines = [f"[bold]{pretty_name} ({icao})[/bold]", ""]
@@ -182,26 +188,32 @@ class VfrAlternativesScreen(ModalScreen):
             category, color = get_flight_category(origin_metar)
             vis_str, ceil_str = _extract_flight_rules_weather(origin_metar)
             details = self._format_weather_details(vis_str, ceil_str)
-            header_lines.append(f"Current conditions: [{color} bold]{category}[/{color} bold] {details}")
+            header_lines.append(
+                f"Current conditions: [{color} bold]{category}[/{color} bold] {details}"
+            )
         else:
             header_lines.append("Current conditions: [dim]No METAR available[/dim]")
 
         header_lines.append("")
-        header_lines.append("[bold]VFR/MVFR Alternatives:[/bold] [dim]Searching...[/dim]")
+        header_lines.append(
+            "[bold]VFR/MVFR Alternatives:[/bold] [dim]Searching...[/dim]"
+        )
 
         result_widget.update("\n".join(header_lines))
 
         # Find nearby airports
         nearby_all = find_airports_near_position(
-            origin_lat, origin_lon,
+            origin_lat,
+            origin_lon,
             config.UNIFIED_AIRPORT_DATA,
             radius_nm=MAX_ALTERNATE_SEARCH_RADIUS_NM,
-            max_results=500
+            max_results=500,
         )
 
         # Filter to airports likely to have METAR
         nearby = [
-            apt_icao for apt_icao in nearby_all
+            apt_icao
+            for apt_icao in nearby_all
             if len(apt_icao) == 4 and apt_icao.isalpha() and apt_icao != icao
         ]
 
@@ -231,7 +243,7 @@ class VfrAlternativesScreen(ModalScreen):
                 continue
 
             category, color = get_flight_category(metar)
-            if category not in ('VFR', 'MVFR'):
+            if category not in ("VFR", "MVFR"):
                 continue
 
             # Get weather details
@@ -239,8 +251,8 @@ class VfrAlternativesScreen(ModalScreen):
 
             # Calculate distance and direction
             apt_data = config.UNIFIED_AIRPORT_DATA.get(apt_icao, {})
-            apt_lat = apt_data.get('latitude')
-            apt_lon = apt_data.get('longitude')
+            apt_lat = apt_data.get("latitude")
+            apt_lon = apt_data.get("longitude")
             if apt_lat is None or apt_lon is None:
                 continue
 
@@ -249,25 +261,40 @@ class VfrAlternativesScreen(ModalScreen):
             direction = bearing_to_compass(bearing)
 
             # Get full name (no length limit)
-            alt_name = config.DISAMBIGUATOR.get_full_name(apt_icao) if config.DISAMBIGUATOR else apt_icao
+            alt_name = (
+                config.DISAMBIGUATOR.get_full_name(apt_icao)
+                if config.DISAMBIGUATOR
+                else apt_icao
+            )
 
-            alternates.append({
-                'icao': apt_icao,
-                'name': alt_name,
-                'category': category,
-                'color': color,
-                'distance': distance,
-                'direction': direction,
-                'vis_str': vis_str,
-                'ceil_str': ceil_str,
-            })
+            alternates.append(
+                {
+                    "icao": apt_icao,
+                    "name": alt_name,
+                    "category": category,
+                    "color": color,
+                    "distance": distance,
+                    "direction": direction,
+                    "vis_str": vis_str,
+                    "ceil_str": ceil_str,
+                }
+            )
 
             # Update display with current results
-            self._update_results(header_lines, alternates, checked_count, len(nearby), result_widget)
+            self._update_results(
+                header_lines, alternates, checked_count, len(nearby), result_widget
+            )
 
         # Final update
         if not self._search_cancelled:
-            self._update_results(header_lines, alternates, checked_count, len(nearby), result_widget, done=True)
+            self._update_results(
+                header_lines,
+                alternates,
+                checked_count,
+                len(nearby),
+                result_widget,
+                done=True,
+            )
 
     def _update_results(
         self,
@@ -276,20 +303,24 @@ class VfrAlternativesScreen(ModalScreen):
         checked: int,
         total: int,
         result_widget: Static,
-        done: bool = False
+        done: bool = False,
     ) -> None:
         """Update the results display"""
         lines = header_lines[:-1]  # Remove the "Searching..." line
 
         if alternates:
             if done:
-                lines.append(f"[bold]VFR/MVFR Alternatives ({len(alternates)} found):[/bold]")
+                lines.append(
+                    f"[bold]VFR/MVFR Alternatives ({len(alternates)} found):[/bold]"
+                )
             else:
-                lines.append(f"[bold]VFR/MVFR Alternatives ({len(alternates)} found):[/bold] [dim]Checking {checked}/{total}...[/dim]")
+                lines.append(
+                    f"[bold]VFR/MVFR Alternatives ({len(alternates)} found):[/bold] [dim]Checking {checked}/{total}...[/dim]"
+                )
 
             for alt in alternates:
-                details = self._format_weather_details(alt['vis_str'], alt['ceil_str'])
-                color = alt['color']
+                details = self._format_weather_details(alt["vis_str"], alt["ceil_str"])
+                color = alt["color"]
                 lines.append(
                     f"  [{color}]{alt['icao']}[/{color}] - {alt['name']} | "
                     f"[{color} bold]{alt['category']}[/{color} bold] {details} | "
@@ -297,9 +328,13 @@ class VfrAlternativesScreen(ModalScreen):
                 )
         else:
             if done:
-                lines.append("[yellow]No VFR/MVFR alternatives found within 100nm[/yellow]")
+                lines.append(
+                    "[yellow]No VFR/MVFR alternatives found within 100nm[/yellow]"
+                )
             else:
-                lines.append(f"[bold]VFR/MVFR Alternatives:[/bold] [dim]Checking {checked}/{total}...[/dim]")
+                lines.append(
+                    f"[bold]VFR/MVFR Alternatives:[/bold] [dim]Checking {checked}/{total}...[/dim]"
+                )
 
         result_widget.update("\n".join(lines))
 

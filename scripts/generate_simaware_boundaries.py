@@ -12,7 +12,6 @@ Source: https://github.com/vatsimnetwork/simaware-tracon-project
 """
 
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,16 +32,16 @@ def parse_geojson_coordinates(feature: dict) -> Optional[List[List[float]]]:
 
     Returns coordinates in [lat, lon] format (converted from GeoJSON [lon, lat]).
     """
-    geometry = feature.get('geometry', {})
-    geom_type = geometry.get('type', '')
-    coordinates = geometry.get('coordinates', [])
+    geometry = feature.get("geometry", {})
+    geom_type = geometry.get("type", "")
+    coordinates = geometry.get("coordinates", [])
 
     if not coordinates:
         return None
 
     points = []
 
-    if geom_type == 'Polygon':
+    if geom_type == "Polygon":
         if coordinates and len(coordinates) > 0:
             ring = coordinates[0]
             for coord in ring:
@@ -50,7 +49,7 @@ def parse_geojson_coordinates(feature: dict) -> Optional[List[List[float]]]:
                     # GeoJSON uses [lon, lat], convert to [lat, lon]
                     points.append([coord[1], coord[0]])
 
-    elif geom_type == 'MultiPolygon':
+    elif geom_type == "MultiPolygon":
         if coordinates and len(coordinates) > 0:
             polygon = coordinates[0]
             if polygon and len(polygon) > 0:
@@ -68,7 +67,7 @@ def process_facility_dir(facility_dir: Path) -> Dict[str, Any]:
 
     for json_file in sorted(facility_dir.glob("*.json")):
         try:
-            with open(json_file, 'r', encoding='utf-8') as f:
+            with open(json_file, "r", encoding="utf-8") as f:
                 feature = json.load(f)
 
             coords = parse_geojson_coordinates(feature)
@@ -76,8 +75,8 @@ def process_facility_dir(facility_dir: Path) -> Dict[str, Any]:
                 # Use filename without .json as key
                 key = json_file.stem
                 boundaries[key] = {
-                    'coordinates': coords,
-                    'name': feature.get('properties', {}).get('name', key),
+                    "coordinates": coords,
+                    "name": feature.get("properties", {}).get("name", key),
                 }
         except (json.JSONDecodeError, Exception) as e:
             print(f"    Warning: Could not parse {json_file.name}: {e}")
@@ -135,15 +134,17 @@ def main():
 
         for i, facility_dir in enumerate(facility_dirs):
             facility = facility_dir.name
-            print(f"  [{i+1}/{len(facility_dirs)}] {facility}...", end=" ", flush=True)
+            print(
+                f"  [{i + 1}/{len(facility_dirs)}] {facility}...", end=" ", flush=True
+            )
 
             boundaries = process_facility_dir(facility_dir)
 
             if boundaries:
                 output_file = OUTPUT_DIR / f"{facility}.json"
-                with open(output_file, 'w', encoding='utf-8') as f:
+                with open(output_file, "w", encoding="utf-8") as f:
                     json.dump(boundaries, f, indent=2, ensure_ascii=False)
-                    f.write('\n')
+                    f.write("\n")
 
                 print(f"{len(boundaries)} boundaries")
                 total_boundaries += len(boundaries)
@@ -151,7 +152,9 @@ def main():
             else:
                 print("no boundaries")
 
-    print(f"\nDone! Processed {total_boundaries} boundaries from {successful_facilities} facilities")
+    print(
+        f"\nDone! Processed {total_boundaries} boundaries from {successful_facilities} facilities"
+    )
     print(f"Output: {OUTPUT_DIR}")
     return 0
 

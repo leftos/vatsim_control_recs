@@ -55,17 +55,12 @@ class SpatialIndex:
         self.airports.clear()
 
         for icao, data in airports_data.items():
-            lat = data.get('latitude')
-            lon = data.get('longitude')
+            lat = data.get("latitude")
+            lon = data.get("longitude")
             if lat is None or lon is None:
                 continue
 
-            airport = {
-                'icao': icao,
-                'latitude': lat,
-                'longitude': lon,
-                'data': data
-            }
+            airport = {"icao": icao, "latitude": lat, "longitude": lon, "data": data}
             self.airports.append(airport)
 
             # Add to grid cell
@@ -92,7 +87,7 @@ class SpatialIndex:
         lat: float,
         lon: float,
         max_distance_nm: Optional[float] = None,
-        filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None
+        filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None,
     ) -> Optional[str]:
         """
         Find the nearest airport to the given coordinates.
@@ -122,7 +117,7 @@ class SpatialIndex:
 
         # Find nearest
         nearest_icao = None
-        min_distance = float('inf')
+        min_distance = float("inf")
 
         for airport in candidates:
             if filter_fn and not filter_fn(airport):
@@ -130,9 +125,7 @@ class SpatialIndex:
 
             try:
                 distance = haversine_distance_nm(
-                    lat, lon,
-                    airport['latitude'],
-                    airport['longitude']
+                    lat, lon, airport["latitude"], airport["longitude"]
                 )
             except ValueError:
                 # Skip airports with invalid coordinates
@@ -141,7 +134,7 @@ class SpatialIndex:
             if distance < min_distance:
                 if max_distance_nm is None or distance <= max_distance_nm:
                     min_distance = distance
-                    nearest_icao = airport['icao']
+                    nearest_icao = airport["icao"]
 
         return nearest_icao
 
@@ -150,7 +143,7 @@ class SpatialIndex:
         lat: float,
         lon: float,
         max_distance_nm: float,
-        filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None
+        filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None,
     ) -> List[Tuple[str, float]]:
         """
         Find all airports within a given distance.
@@ -194,16 +187,14 @@ class SpatialIndex:
 
             try:
                 distance = haversine_distance_nm(
-                    lat, lon,
-                    airport['latitude'],
-                    airport['longitude']
+                    lat, lon, airport["latitude"], airport["longitude"]
                 )
             except ValueError:
                 # Skip airports with invalid coordinates
                 continue
 
             if distance <= max_distance_nm:
-                results.append((airport['icao'], distance))
+                results.append((airport["icao"], distance))
 
         # Sort by distance
         results.sort(key=lambda x: x[1])
@@ -226,7 +217,10 @@ def get_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Spati
     Returns:
         SpatialIndex instance
     """
-    global _AIRPORT_SPATIAL_INDEX, _AIRPORT_SPATIAL_INDEX_TIMESTAMP, _AIRPORT_SPATIAL_INDEX_SIZE
+    global \
+        _AIRPORT_SPATIAL_INDEX, \
+        _AIRPORT_SPATIAL_INDEX_TIMESTAMP, \
+        _AIRPORT_SPATIAL_INDEX_SIZE
 
     current_time = datetime.now(timezone.utc)
     current_size = len(airports_data) if airports_data else 0
@@ -235,10 +229,11 @@ def get_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Spati
         # Check if we need to build or rebuild the index
         # Rebuild if: no index, TTL expired, OR larger dataset requested
         needs_rebuild = (
-            _AIRPORT_SPATIAL_INDEX is None or
-            _AIRPORT_SPATIAL_INDEX_TIMESTAMP is None or
-            (current_time - _AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds() > _SPATIAL_INDEX_TTL_SECONDS or
-            current_size > _AIRPORT_SPATIAL_INDEX_SIZE  # Rebuild for larger datasets
+            _AIRPORT_SPATIAL_INDEX is None
+            or _AIRPORT_SPATIAL_INDEX_TIMESTAMP is None
+            or (current_time - _AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds()
+            > _SPATIAL_INDEX_TTL_SECONDS
+            or current_size > _AIRPORT_SPATIAL_INDEX_SIZE  # Rebuild for larger datasets
         )
 
         if needs_rebuild:
@@ -254,7 +249,10 @@ def get_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> Spati
 
 def clear_spatial_index_cache() -> None:
     """Clear the spatial index cache (thread-safe)."""
-    global _AIRPORT_SPATIAL_INDEX, _AIRPORT_SPATIAL_INDEX_TIMESTAMP, _AIRPORT_SPATIAL_INDEX_SIZE
+    global \
+        _AIRPORT_SPATIAL_INDEX, \
+        _AIRPORT_SPATIAL_INDEX_TIMESTAMP, \
+        _AIRPORT_SPATIAL_INDEX_SIZE
 
     with _AIRPORT_SPATIAL_INDEX_LOCK:
         _AIRPORT_SPATIAL_INDEX = None

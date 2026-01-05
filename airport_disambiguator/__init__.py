@@ -15,7 +15,7 @@ Main Components:
 
 Usage:
     from airport_disambiguator import AirportDisambiguator
-    
+
     disambiguator = AirportDisambiguator('airports.json')
     pretty_name = disambiguator.get_pretty_name('KSFO')
 """
@@ -25,9 +25,9 @@ from .disambiguator import AirportDisambiguator
 
 # Public API - maintain backwards compatibility
 __all__ = [
-    'AirportDisambiguator',
-    'DisambiguatorConfig',
-    'DEFAULT_CONFIG',
+    "AirportDisambiguator",
+    "DisambiguatorConfig",
+    "DEFAULT_CONFIG",
 ]
 
-__version__ = '2.0.0'
+__version__ = "2.0.0"

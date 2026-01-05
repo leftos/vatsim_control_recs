@@ -19,12 +19,12 @@ from common import logger as debug_logger
 # ADG (Airplane Design Group) to minimum runway length mapping (in feet)
 # These are conservative estimates based on typical aircraft in each group
 ADG_RUNWAY_REQUIREMENTS: Dict[str, int] = {
-    "I": 3000,      # Small single-engine (C172, PA28)
-    "II": 4500,     # Small twin, light business jets (C500, BE20)
-    "III": 6000,    # Regional jets, narrow-body (CRJ, B737, A320)
-    "IV": 8000,     # Wide-body (B767, A300)
-    "V": 9500,      # Large wide-body (B777, A350)
-    "VI": 11000,    # Largest aircraft (B747, A380)
+    "I": 3000,  # Small single-engine (C172, PA28)
+    "II": 4500,  # Small twin, light business jets (C500, BE20)
+    "III": 6000,  # Regional jets, narrow-body (CRJ, B737, A320)
+    "IV": 8000,  # Wide-body (B767, A300)
+    "V": 9500,  # Large wide-body (B777, A350)
+    "VI": 11000,  # Largest aircraft (B747, A380)
 }
 
 # Aircraft class fallback mapping (if ADG not available)
@@ -64,12 +64,12 @@ def _load_aircraft_data(filename: str) -> tuple[Dict[str, str], Dict[str, str]]:
         class_data: Dict[str, str] = {}
 
         try:
-            with open(filename, 'r', encoding='utf-8-sig') as f:
+            with open(filename, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    icao_code = row.get('ICAO_Code', '').strip()
-                    adg = row.get('ADG', '').strip()
-                    aircraft_class = row.get('Class', '').strip()
+                    icao_code = row.get("ICAO_Code", "").strip()
+                    adg = row.get("ADG", "").strip()
+                    aircraft_class = row.get("Class", "").strip()
 
                     if icao_code:
                         if adg:
@@ -97,7 +97,7 @@ def _load_aircraft_data(filename: str) -> tuple[Dict[str, str], Dict[str, str]]:
 def get_aircraft_data_path() -> str:
     """Get the path to the aircraft data CSV file."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(script_dir, '..', '..', 'data', 'aircraft_data.csv')
+    return os.path.join(script_dir, "..", "..", "data", "aircraft_data.csv")
 
 
 @lru_cache(maxsize=500)

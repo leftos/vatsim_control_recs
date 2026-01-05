@@ -14,70 +14,72 @@ from typing import Dict, Set, Tuple
 
 # Runway number pattern with spoken direction forms
 # Matches: "17R", "17L", "17 R", "17R AND LEFT", "17R AND 17L", "17R, 17L AND CENTER"
-RWY_NUM_PATTERN = r'\d{1,2}\s*[LRC]?(?:\s*(?:AND|&|,|/)\s*(?:\d{1,2}\s*[LRC]?|LEFT|RIGHT|CENTER))*'
+RWY_NUM_PATTERN = (
+    r"\d{1,2}\s*[LRC]?(?:\s*(?:AND|&|,|/)\s*(?:\d{1,2}\s*[LRC]?|LEFT|RIGHT|CENTER))*"
+)
 
 # Approach type keywords
-APPROACH_TYPES = r'ILS|RNAV|VISUAL|VIS|LOC|VOR|NDB|GPS|LDA|SDF|RNP'
+APPROACH_TYPES = r"ILS|RNAV|VISUAL|VIS|LOC|VOR|NDB|GPS|LDA|SDF|RNP"
 
 # Runway/RWY prefix
-RWY_PREFIX = r'RWYS?|RUNWAYS?'
+RWY_PREFIX = r"RWYS?|RUNWAYS?"
 
 # Approach suffix keywords (APCH, APPROACH, etc.)
-APPROACH_SUFFIX = r'APCHS?|APPROACH(?:ES)?|APPS?'
+APPROACH_SUFFIX = r"APCHS?|APPROACH(?:ES)?|APPS?"
 
 # Landing operation keywords
-LANDING_KW = r'LANDING|LDG|LNDG|ARRIVING|ARR'
+LANDING_KW = r"LANDING|LDG|LNDG|ARRIVING|ARR"
 
 # Departing operation keywords
-DEPARTING_KW = r'DEPARTING|DEPARTURES?|DEPTG?|DEPG|DEP'
+DEPARTING_KW = r"DEPARTING|DEPARTURES?|DEPTG?|DEPG|DEP"
 
 # Character class for runway specs (used in parse_runway_assignments for loose matching)
 # Includes digits, L/R/C, LEFT/RIGHT/CENTER letters, and common separators
-RWY_CHARS = r'[\d\sLRCAND,/EFIGHTCENTER]+'
+RWY_CHARS = r"[\d\sLRCAND,/EFIGHTCENTER]+"
 
 # =============================================================================
 # Patterns to remove METAR-duplicated info from ATIS text
 # These detect and remove raw METAR-format data embedded in ATIS
 METAR_REMOVAL_PATTERNS = [
     # Weather intro with time: "WEATHER AT 0100Z.", "WEATHER AT 0130ZUTC."
-    r'\bWEATHER\s+AT\s+\d{4}Z?(UTC)?\.?\s*',
+    r"\bWEATHER\s+AT\s+\d{4}Z?(UTC)?\.?\s*",
     # Observed at time
-    r'\bOBSERVED\s+AT\s+\d{4}\s*(UTC)*(UTC)*\.?\s*',
+    r"\bOBSERVED\s+AT\s+\d{4}\s*(UTC)*(UTC)*\.?\s*",
     # METAR reference
-    r'\bMETAR\s+\d+\s*',
+    r"\bMETAR\s+\d+\s*",
     # Raw wind format: 07005KT, VRB02KT, 24005G15KT, with optional variable
-    r'\b(\d{3}|VRB)\d{2,3}(G\d{2,3})?KT\b(\s+\d{3}V\d{3})?\s*',
+    r"\b(\d{3}|VRB)\d{2,3}(G\d{2,3})?KT\b(\s+\d{3}V\d{3})?\s*",
     # Visibility: VIS 10KM, 15SM, 9SM, 9999
-    r'\bVIS\s+\d+\s*(KM)?\s*',
-    r'\b\d+SM\b\s*',
-    r'\b9999\b\s*',
+    r"\bVIS\s+\d+\s*(KM)?\s*",
+    r"\b\d+SM\b\s*",
+    r"\b9999\b\s*",
     # CAVOK (ceiling and visibility OK)
-    r'\bCAVOK\b\s*',
+    r"\bCAVOK\b\s*",
     # Cloud layers: FEW005, SCT100, BKN010, OVC060, VV003 (with optional ///)
-    r'\b(FEW|SCT|BKN|OVC|VV)\d{3}(///)?(\s+(FEW|SCT|BKN|OVC|VV)\d{3}(///)?)*\s*',
+    r"\b(FEW|SCT|BKN|OVC|VV)\d{3}(///)?(\s+(FEW|SCT|BKN|OVC|VV)\d{3}(///)?)*\s*",
     # Sky clear
-    r'\bSKY\s+CLEAR\b\s*',
-    r'\bCLR\b\s*',
+    r"\bSKY\s+CLEAR\b\s*",
+    r"\bCLR\b\s*",
     # Temp/Dewpoint various formats: 11/00, M03/M07, T02 DP00, T02 DPM02, "26 22" (space-separated)
-    r'\bM?\d{2}/M?\d{2}\b\s*',
-    r'\bT\d{2}\s+DPM?\d{2}\b\s*',
-    r'\b\d{2}\s+\d{2}\b(?=\s+[AQ]\d{4}|\s*\.|\s*$)\s*',  # "26 22" before altimeter or end
+    r"\bM?\d{2}/M?\d{2}\b\s*",
+    r"\bT\d{2}\s+DPM?\d{2}\b\s*",
+    r"\b\d{2}\s+\d{2}\b(?=\s+[AQ]\d{4}|\s*\.|\s*$)\s*",  # "26 22" before altimeter or end
     # Altimeter with spoken: A2997 (TWO NINER SEVEN SEVEN)
-    r'\b[AQ]\d{4}\b\s*(\([A-Z\s]+\))?(-?HPA)?\.?\s*',
-    r'\bQNH\d{3,4}\b\s*',
+    r"\b[AQ]\d{4}\b\s*(\([A-Z\s]+\))?(-?HPA)?\.?\s*",
+    r"\bQNH\d{3,4}\b\s*",
     # Weather phenomena: -DZ, +RA, BR, FG, etc. - must be standalone words
-    r'(?<!\w)[-+]?(DZ|RA|SN|SG|IC|PL|GR|GS|BR|FG|FU|VA|DU|SA|HZ|PY)(?!\w)\s*',
+    r"(?<!\w)[-+]?(DZ|RA|SN|SG|IC|PL|GR|GS|BR|FG|FU|VA|DU|SA|HZ|PY)(?!\w)\s*",
     # TDZ (touchdown zone) wind readings - remove "WIND RWY XX TDZ" or standalone "TDZ"
-    r'\bWIND\s+RWY\s+\d+\s+TDZ\b\s*',
-    r'\bTDZ\s+\d{5}(G\d{2,3})?KT\b(\s+\d{3}V\d{3})?\s*',
-    r'\bTDZ\s*$',  # TDZ at end
+    r"\bWIND\s+RWY\s+\d+\s+TDZ\b\s*",
+    r"\bTDZ\s+\d{5}(G\d{2,3})?KT\b(\s+\d{3}V\d{3})?\s*",
+    r"\bTDZ\s*$",  # TDZ at end
     # Standalone hyphen or dash leftover
-    r'\s+-\s+',
-    r'\s+-$',
+    r"\s+-\s+",
+    r"\s+-$",
     # Trend: TEMPO, BECMG with conditions
-    r'\bTREND\s+\w+(\s+\w+)*\s*',
+    r"\bTREND\s+\w+(\s+\w+)*\s*",
     # Orphaned "UTC." leftover
-    r'\bUTC\.\s*',
+    r"\bUTC\.\s*",
 ]
 
 
@@ -98,21 +100,21 @@ def filter_atis_text(atis_text: str) -> str:
     # Remove METAR patterns
     filtered = atis_text
     for pattern in METAR_REMOVAL_PATTERNS:
-        filtered = re.sub(pattern, ' ', filtered, flags=re.IGNORECASE)
+        filtered = re.sub(pattern, " ", filtered, flags=re.IGNORECASE)
 
     # Clean up multiple spaces and trim
-    filtered = re.sub(r'\s+', ' ', filtered).strip()
+    filtered = re.sub(r"\s+", " ", filtered).strip()
 
     # Remove orphaned parentheses and punctuation
-    filtered = re.sub(r'\(\s*\)', '', filtered)
-    filtered = re.sub(r'\s+\.', '.', filtered)
-    filtered = re.sub(r'\s+,', ',', filtered)
+    filtered = re.sub(r"\(\s*\)", "", filtered)
+    filtered = re.sub(r"\s+\.", ".", filtered)
+    filtered = re.sub(r"\s+,", ",", filtered)
     # Clean up multiple dots - normalize to single dot or ellipsis
-    filtered = re.sub(r'\.{4,}', '...', filtered)  # 4+ dots -> ellipsis
-    filtered = re.sub(r'\.\.\.\.', '...', filtered)  # 4 dots -> ellipsis
-    filtered = re.sub(r'(?<!\.)\.\.(?!\.)', '.', filtered)  # exactly 2 dots -> 1 dot
+    filtered = re.sub(r"\.{4,}", "...", filtered)  # 4+ dots -> ellipsis
+    filtered = re.sub(r"\.\.\.\.", "...", filtered)  # 4 dots -> ellipsis
+    filtered = re.sub(r"(?<!\.)\.\.(?!\.)", ".", filtered)  # exactly 2 dots -> 1 dot
     # Clean up space before punctuation one more time
-    filtered = re.sub(r'\s+\.', '.', filtered)
+    filtered = re.sub(r"\s+\.", ".", filtered)
 
     return filtered
 
@@ -133,7 +135,7 @@ def _extract_runway_numbers(text: str) -> Set[str]:
 
     # Pattern 1: Match runway numbers with optional space before direction
     # e.g., "17R", "17L", "17 RIGHT", "17 LEFT", "17RIGHT"
-    pattern = r'\b(\d{1,2})\s*([LRC]|LEFT|RIGHT|CENTER)?\b'
+    pattern = r"\b(\d{1,2})\s*([LRC]|LEFT|RIGHT|CENTER)?\b"
     for match in re.finditer(pattern, text, re.IGNORECASE):
         num = match.group(1)
         suffix = match.group(2) or ""
@@ -145,7 +147,7 @@ def _extract_runway_numbers(text: str) -> Set[str]:
     # Pattern 2: Handle standalone LEFT/RIGHT/CENTER that refer to the previous runway number
     # e.g., "17R AND LEFT" means 17R and 17L
     if last_runway_num:
-        standalone_pattern = r'\b(AND|&|,)\s+(LEFT|RIGHT|CENTER)\b'
+        standalone_pattern = r"\b(AND|&|,)\s+(LEFT|RIGHT|CENTER)\b"
         for match in re.finditer(standalone_pattern, text, re.IGNORECASE):
             direction = match.group(2).upper()
             suffix = suffix_map.get(direction, "")
@@ -176,10 +178,10 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     # Pattern 1: Compound LDG/DEPTG or LDG AND DEPTG format (both ops on same runways)
     # e.g., "LDG/DEPTG 4/8", "LDG AND DEPTG RWY 27", "ARR/DEP RWY 36"
     compound_pattern = (
-        rf'\b(?:{LANDING_KW})\s*(?:/|AND)\s*'
-        rf'(?:{DEPARTING_KW})\s*'
-        rf'(?:{RWY_PREFIX})?\s*'
-        rf'({RWY_CHARS})'
+        rf"\b(?:{LANDING_KW})\s*(?:/|AND)\s*"
+        rf"(?:{DEPARTING_KW})\s*"
+        rf"(?:{RWY_PREFIX})?\s*"
+        rf"({RWY_CHARS})"
     )
     for match in re.finditer(compound_pattern, text):
         rwys = _extract_runway_numbers(match.group(1))
@@ -189,15 +191,15 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     # Pattern 2: Landing/Arriving runways
     # e.g., "LDG RWY 16L", "LANDING RUNWAY 27", "ARR RWY 35", "LNDG RWYS 17R AND LEFT"
     landing_pattern = (
-        rf'\b(?:{LANDING_KW})\s+'
-        rf'(?:{RWY_PREFIX})?\s*'
-        rf'({RWY_CHARS})'
+        rf"\b(?:{LANDING_KW})\s+"
+        rf"(?:{RWY_PREFIX})?\s*"
+        rf"({RWY_CHARS})"
     )
     for match in re.finditer(landing_pattern, text):
         # Skip if this is part of a compound pattern (already handled)
         start = match.start()
-        prefix_check = text[max(0, start - 5):start]
-        if '/' in prefix_check or 'AND' in prefix_check:
+        prefix_check = text[max(0, start - 5) : start]
+        if "/" in prefix_check or "AND" in prefix_check:
             continue
         rwys = _extract_runway_numbers(match.group(1))
         landing.update(rwys)
@@ -205,15 +207,15 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     # Pattern 3: Departing runways
     # e.g., "DEP RWY 16R", "DEPARTING RWYS 26L, 27R", "DEPTG RWY 18"
     departing_pattern = (
-        rf'\b(?:{DEPARTING_KW})\s+'
-        rf'(?:{RWY_PREFIX})?\s*'
-        rf'({RWY_CHARS})'
+        rf"\b(?:{DEPARTING_KW})\s+"
+        rf"(?:{RWY_PREFIX})?\s*"
+        rf"({RWY_CHARS})"
     )
     for match in re.finditer(departing_pattern, text):
         # Skip if this is part of a compound pattern
         start = match.start()
-        prefix_check = text[max(0, start - 5):start]
-        if '/' in prefix_check or 'AND' in prefix_check:
+        prefix_check = text[max(0, start - 5) : start]
+        if "/" in prefix_check or "AND" in prefix_check:
             continue
         rwys = _extract_runway_numbers(match.group(1))
         departing.update(rwys)
@@ -222,11 +224,11 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     # e.g., "ILS RWY 22R", "RNAV-Y RWY 35", "VISUAL APPROACH RWY 26"
     # Also handles spoken forms: "ILS RWYS 17R AND LEFT" means 17R and 17L
     approach_pattern = (
-        rf'\b(?:{APPROACH_TYPES})[-\s]?[XYZWUK]?\s*'
-        rf'(?:{APPROACH_SUFFIX})?\s*'
-        r'(?:TO\s+)?'
-        rf'(?:{RWY_PREFIX})?\s*'
-        rf'({RWY_NUM_PATTERN})'
+        rf"\b(?:{APPROACH_TYPES})[-\s]?[XYZWUK]?\s*"
+        rf"(?:{APPROACH_SUFFIX})?\s*"
+        r"(?:TO\s+)?"
+        rf"(?:{RWY_PREFIX})?\s*"
+        rf"({RWY_NUM_PATTERN})"
     )
     for match in re.finditer(approach_pattern, text):
         rwys = _extract_runway_numbers(match.group(1))
@@ -236,12 +238,12 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     # e.g., "EXPECT ILS RWY 35L", "EXP VIS APCH RWY 27"
     # Also handles spoken forms: "EXPECT ILS RWYS 17R AND LEFT"
     expect_pattern = (
-        r'\b(?:EXPECT|EXPT?|EXPECTED)\s+'
-        r'(?:PROC\s+)?'
-        rf'(?:{APPROACH_TYPES})[-\s]?[XYZWUK]?\s*'
-        rf'(?:{APPROACH_SUFFIX})?\s*'
-        rf'(?:{RWY_PREFIX})?\s*'
-        rf'({RWY_NUM_PATTERN})'
+        r"\b(?:EXPECT|EXPT?|EXPECTED)\s+"
+        r"(?:PROC\s+)?"
+        rf"(?:{APPROACH_TYPES})[-\s]?[XYZWUK]?\s*"
+        rf"(?:{APPROACH_SUFFIX})?\s*"
+        rf"(?:{RWY_PREFIX})?\s*"
+        rf"({RWY_NUM_PATTERN})"
     )
     for match in re.finditer(expect_pattern, text):
         rwys = _extract_runway_numbers(match.group(1))
@@ -250,15 +252,15 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     # Pattern 6: RWY XX FOR ARR/DEP (Australian/international style)
     # e.g., "RWY 03 FOR ARR", "RWY 06 FOR DEP"
     for_pattern = (
-        rf'\b(?:{RWY_PREFIX})\s*'
-        r'(\d{1,2}[LRC]?)\s+'
-        r'FOR\s+(?:ALL\s+(?:OTHER\s+)?)?'
-        r'(ARR(?:IVALS?)?|DEP(?:ARTURES?)?)'
+        rf"\b(?:{RWY_PREFIX})\s*"
+        r"(\d{1,2}[LRC]?)\s+"
+        r"FOR\s+(?:ALL\s+(?:OTHER\s+)?)?"
+        r"(ARR(?:IVALS?)?|DEP(?:ARTURES?)?)"
     )
     for match in re.finditer(for_pattern, text):
         rwy = match.group(1)
         op_type = match.group(2).upper()
-        if op_type.startswith('ARR'):
+        if op_type.startswith("ARR"):
             landing.add(rwy)
         else:
             departing.add(rwy)
@@ -266,16 +268,16 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     # Pattern 7: SIMUL/INSTR operations
     # e.g., "SIMUL DEPARTURES RWYS 24 AND 25"
     simul_pattern = (
-        r'\b(?:SIMUL?(?:TANEOUS)?|INSTR?)\s+'
-        r'(DEPARTURES?|ARRIVALS?|DEPS?|ARRS?)\s+'
-        r'(?:IN\s+(?:PROG(?:RESS)?|USE|EFFECT)\s+)?'
-        rf'(?:{RWY_PREFIX})?\s*'
-        rf'({RWY_NUM_PATTERN})'
+        r"\b(?:SIMUL?(?:TANEOUS)?|INSTR?)\s+"
+        r"(DEPARTURES?|ARRIVALS?|DEPS?|ARRS?)\s+"
+        r"(?:IN\s+(?:PROG(?:RESS)?|USE|EFFECT)\s+)?"
+        rf"(?:{RWY_PREFIX})?\s*"
+        rf"({RWY_NUM_PATTERN})"
     )
     for match in re.finditer(simul_pattern, text):
         op_type = match.group(1).upper()
         rwys = _extract_runway_numbers(match.group(2))
-        if op_type.startswith('ARR'):
+        if op_type.startswith("ARR"):
             landing.update(rwys)
         else:
             departing.update(rwys)
@@ -301,7 +303,7 @@ def format_runway_summary(assignments: Dict[str, Set[str]]) -> str:
 
     # Sort runways for consistent display (handle malformed runway strings gracefully)
     def runway_sort_key(x: str) -> Tuple[int, str]:
-        match = re.match(r'\d+', x)
+        match = re.match(r"\d+", x)
         return (int(match.group()) if match else 99, x)
 
     landing_sorted = sorted(landing, key=runway_sort_key)
@@ -337,110 +339,129 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
     if atis_code:
         # NATO phonetic alphabet mapping
         phonetic = {
-            'A': 'ALFA', 'B': 'BRAVO', 'C': 'CHARLIE', 'D': 'DELTA',
-            'E': 'ECHO', 'F': 'FOXTROT', 'G': 'GOLF', 'H': 'HOTEL',
-            'I': 'INDIA', 'J': 'JULIET', 'K': 'KILO', 'L': 'LIMA',
-            'M': 'MIKE', 'N': 'NOVEMBER', 'O': 'OSCAR', 'P': 'PAPA',
-            'Q': 'QUEBEC', 'R': 'ROMEO', 'S': 'SIERRA', 'T': 'TANGO',
-            'U': 'UNIFORM', 'V': 'VICTOR', 'W': 'WHISKEY', 'X': 'XRAY',
-            'Y': 'YANKEE', 'Z': 'ZULU'
+            "A": "ALFA",
+            "B": "BRAVO",
+            "C": "CHARLIE",
+            "D": "DELTA",
+            "E": "ECHO",
+            "F": "FOXTROT",
+            "G": "GOLF",
+            "H": "HOTEL",
+            "I": "INDIA",
+            "J": "JULIET",
+            "K": "KILO",
+            "L": "LIMA",
+            "M": "MIKE",
+            "N": "NOVEMBER",
+            "O": "OSCAR",
+            "P": "PAPA",
+            "Q": "QUEBEC",
+            "R": "ROMEO",
+            "S": "SIERRA",
+            "T": "TANGO",
+            "U": "UNIFORM",
+            "V": "VICTOR",
+            "W": "WHISKEY",
+            "X": "XRAY",
+            "Y": "YANKEE",
+            "Z": "ZULU",
         }
         letter = atis_code.upper()
-        phonetic_word = phonetic.get(letter, '')
+        phonetic_word = phonetic.get(letter, "")
 
         # Replace phonetic word (e.g., "KILO" -> cyan)
         if phonetic_word:
             result = re.sub(
-                rf'\b({phonetic_word})\b',
-                r'[cyan bold]\1[/cyan bold]',
+                rf"\b({phonetic_word})\b",
+                r"[cyan bold]\1[/cyan bold]",
                 result,
-                flags=re.IGNORECASE
+                flags=re.IGNORECASE,
             )
         # Also highlight standalone letter after INFO/INFORMATION/ATIS
         result = re.sub(
-            rf'\b(INFORMATION|INFO|ATIS)\s+({letter})\b',
-            rf'\1 [cyan bold]\2[/cyan bold]',
+            rf"\b(INFORMATION|INFO|ATIS)\s+({letter})\b",
+            r"\1 [cyan bold]\2[/cyan bold]",
             result,
-            flags=re.IGNORECASE
+            flags=re.IGNORECASE,
         )
 
     # Pattern 1: Approach type + optional variant + optional comma + RWY + runway numbers
     # e.g., "ILS Z RWY 22R", "RNAV-Y RWY 35", "ILS RWYS 16R AND 16L", "ILS, RWY 12"
     # Also handles spoken forms: "ILS RWYS 17R AND LEFT" means 17R and 17L
     result = re.sub(
-        rf'\b({APPROACH_TYPES})[-\s]?([XYZWUK])?,?\s*'
-        rf'({RWY_PREFIX})?\s*'
-        rf'({RWY_NUM_PATTERN})\b',
-        r'[yellow]\g<0>[/yellow]',
+        rf"\b({APPROACH_TYPES})[-\s]?([XYZWUK])?,?\s*"
+        rf"({RWY_PREFIX})?\s*"
+        rf"({RWY_NUM_PATTERN})\b",
+        r"[yellow]\g<0>[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern 2: Approach type + APCH/APPROACH + RWY + runway numbers
     # e.g., "ILS APCH RWY 35L", "VISUAL APPROACH RWY 26R", "VIS APCH RWYS 17L, 17R"
     # Also handles spoken forms: "ILS APCH RWYS 17R AND LEFT"
     result = re.sub(
-        rf'\b({APPROACH_TYPES}|INSTR?)[-\s]?([XYZWUK])?\s*'
-        rf'({APPROACH_SUFFIX})\s*'
-        rf'((?:TO\s+)?(?:{RWY_PREFIX})?\s*{RWY_NUM_PATTERN})?',
-        r'[yellow]\g<0>[/yellow]',
+        rf"\b({APPROACH_TYPES}|INSTR?)[-\s]?([XYZWUK])?\s*"
+        rf"({APPROACH_SUFFIX})\s*"
+        rf"((?:TO\s+)?(?:{RWY_PREFIX})?\s*{RWY_NUM_PATTERN})?",
+        r"[yellow]\g<0>[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern 3: APCH + approach type (Canadian/other style)
     # e.g., "APCH ILS OR RNAV RWY 27"
     # Also handles spoken forms: "APCH ILS RWYS 17R AND LEFT"
     result = re.sub(
-        rf'\b(APCH)\s+((?:{APPROACH_TYPES})(?:\s+OR\s+(?:{APPROACH_TYPES}))*)'
-        rf'(\s+(?:{RWY_PREFIX})\s*{RWY_NUM_PATTERN})?',
-        r'[yellow]\g<0>[/yellow]',
+        rf"\b(APCH)\s+((?:{APPROACH_TYPES})(?:\s+OR\s+(?:{APPROACH_TYPES}))*)"
+        rf"(\s+(?:{RWY_PREFIX})\s*{RWY_NUM_PATTERN})?",
+        r"[yellow]\g<0>[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern 4: Standalone approach mentions
     # e.g., "ILS APPROACHES", "VISUAL APCHS IN USE", "INST APCHS"
     result = re.sub(
-        rf'\b({APPROACH_TYPES}|INSTR?)\s+'
-        rf'({APPROACH_SUFFIX})\b',
-        r'[yellow]\1 \2[/yellow]',
+        rf"\b({APPROACH_TYPES}|INSTR?)\s+"
+        rf"({APPROACH_SUFFIX})\b",
+        r"[yellow]\1 \2[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern 5: EXPECT/EXP + approach type
     # e.g., "EXPECT ILS APPROACH", "EXP VIS APCH", "EXPT PROC ILS"
     result = re.sub(
-        r'\b(EXPECT|EXPT?|EXPECTED)\s+(?:PROC\s+)?'
-        rf'({APPROACH_TYPES}|INSTR?)[-\s]?([XYZWUK])?\b',
-        r'[yellow]\g<0>[/yellow]',
+        r"\b(EXPECT|EXPT?|EXPECTED)\s+(?:PROC\s+)?"
+        rf"({APPROACH_TYPES}|INSTR?)[-\s]?([XYZWUK])?\b",
+        r"[yellow]\g<0>[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern 6: Compound LDG/DEPTG or LDG AND DEPTG format - must come before Pattern 7
     # e.g., "LDG/DEPTG 4/8", "LNDG AND DEPG RWY 17R, 17L", "LDG AND DEPTG RWY 27"
     # Also handles spoken forms: "LDG/DEPTG 17R AND LEFT"
     result = re.sub(
-        rf'\b((?:{LANDING_KW})\s*(?:/|AND)\s*(?:{DEPARTING_KW}))\s*'
-        rf'((?:{RWY_PREFIX})?\s*)?'
-        rf'({RWY_NUM_PATTERN})\b',
-        r'[yellow]\g<0>[/yellow]',
+        rf"\b((?:{LANDING_KW})\s*(?:/|AND)\s*(?:{DEPARTING_KW}))\s*"
+        rf"((?:{RWY_PREFIX})?\s*)?"
+        rf"({RWY_NUM_PATTERN})\b",
+        r"[yellow]\g<0>[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern 6b: ARR/DEP compound format
     # e.g., "ARR/DEP RWY 36", "ARR AND DEP RWY 30"
     # Also handles spoken forms: "ARR/DEP 17R AND LEFT"
     result = re.sub(
-        r'\b(ARR(?:IVING)?\s*(?:/|AND)\s*DEP(?:ARTING)?)\s*'
-        rf'((?:{RWY_PREFIX})?\s*)?'
-        rf'({RWY_NUM_PATTERN})\b',
-        r'[yellow]\g<0>[/yellow]',
+        r"\b(ARR(?:IVING)?\s*(?:/|AND)\s*DEP(?:ARTING)?)\s*"
+        rf"((?:{RWY_PREFIX})?\s*)?"
+        rf"({RWY_NUM_PATTERN})\b",
+        r"[yellow]\g<0>[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern 7: Runway assignments (LDG/ARR/DEP + RWY + numbers)
@@ -449,38 +470,38 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
     # Handles spoken forms: "17R AND LEFT", "28L AND RIGHT"
     # Uses negative lookbehind to avoid matching after "/" or "AND " (already handled by Pattern 6)
     result = re.sub(
-        rf'(?<!/)(?<!AND )\b({LANDING_KW}|{DEPARTING_KW})\s+'
-        rf'((?:{RWY_PREFIX})?\s*)?'
-        rf'({RWY_NUM_PATTERN})\b',
-        r'[yellow]\g<0>[/yellow]',
+        rf"(?<!/)(?<!AND )\b({LANDING_KW}|{DEPARTING_KW})\s+"
+        rf"((?:{RWY_PREFIX})?\s*)?"
+        rf"({RWY_NUM_PATTERN})\b",
+        r"[yellow]\g<0>[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern 8: INSTR DEPARTURES IN PROG + RWYS (LAX style)
     # e.g., "INSTR DEPARTURES IN PROG RWYS 24 AND 25"
     # Also handles spoken forms: "SIMUL ARRIVALS RWYS 17R AND LEFT"
     result = re.sub(
-        r'\b(INSTR?|SIMUL?(?:TANEOUS)?)\s+'
-        r'(DEPARTURES?|ARRIVALS?|DEPS?|ARRS?)\s+'
-        r'(?:IN\s+(?:PROG(?:RESS)?|USE|EFFECT)\s+)?'
-        rf'((?:{RWY_PREFIX})?\s*)?'
-        rf'({RWY_NUM_PATTERN})\b',
-        r'[yellow]\g<0>[/yellow]',
+        r"\b(INSTR?|SIMUL?(?:TANEOUS)?)\s+"
+        r"(DEPARTURES?|ARRIVALS?|DEPS?|ARRS?)\s+"
+        r"(?:IN\s+(?:PROG(?:RESS)?|USE|EFFECT)\s+)?"
+        rf"((?:{RWY_PREFIX})?\s*)?"
+        rf"({RWY_NUM_PATTERN})\b",
+        r"[yellow]\g<0>[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # Pattern 9: RWY XX FOR ARR/DEP (Australian/international style)
     # e.g., "RWY 03 FOR ARR", "RWY 06 FOR DEP", "RWY 03 FOR ALL DEP"
     result = re.sub(
-        rf'\b({RWY_PREFIX})\s*'
-        r'(\d{1,2}[LRC]?)\s+'
-        r'FOR\s+(?:ALL\s+(?:OTHER\s+)?)?'
-        r'(ARR(?:IVALS?)?|DEP(?:ARTURES?)?)\b',
-        r'[yellow]\g<0>[/yellow]',
+        rf"\b({RWY_PREFIX})\s*"
+        r"(\d{1,2}[LRC]?)\s+"
+        r"FOR\s+(?:ALL\s+(?:OTHER\s+)?)?"
+        r"(ARR(?:IVALS?)?|DEP(?:ARTURES?)?)\b",
+        r"[yellow]\g<0>[/yellow]",
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     return result

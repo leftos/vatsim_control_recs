@@ -21,7 +21,7 @@ _LOG_FILE: Optional[str] = None
 _initialized = False
 
 # Configure logger (starts with NullHandler until file logging is set up)
-_logger = logging.getLogger('vatsim_debug')
+_logger = logging.getLogger("vatsim_debug")
 _logger.setLevel(logging.DEBUG)
 _logger.addHandler(logging.NullHandler())
 
@@ -31,6 +31,7 @@ def _get_logs_dir() -> str:
     global _LOGS_DIR
     if _LOGS_DIR is None:
         from common.paths import get_user_logs_dir
+
         _LOGS_DIR = str(get_user_logs_dir())
     return _LOGS_DIR
 
@@ -39,7 +40,9 @@ def _get_log_file() -> str:
     """Get the current log file path."""
     global _LOG_FILE
     if _LOG_FILE is None:
-        _LOG_FILE = os.path.join(_get_logs_dir(), f'debug_{datetime.now().strftime("%Y%m%d")}.log')
+        _LOG_FILE = os.path.join(
+            _get_logs_dir(), f"debug_{datetime.now().strftime('%Y%m%d')}.log"
+        )
     return _LOG_FILE
 
 
@@ -69,13 +72,13 @@ def _init_file_logging() -> bool:
 
         # Create file handler
         log_file = _get_log_file()
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
 
         # Create formatter
         formatter = logging.Formatter(
-            '%(asctime)s.%(msecs)03d | %(levelname)-8s | %(message)s',
-            datefmt='%H:%M:%S'
+            "%(asctime)s.%(msecs)03d | %(levelname)-8s | %(message)s",
+            datefmt="%H:%M:%S",
         )
         file_handler.setFormatter(formatter)
 
@@ -100,7 +103,7 @@ def cleanup_old_logs(days_to_keep: int = 10) -> None:
         cutoff_date = datetime.now() - timedelta(days=days_to_keep)
         logs_path = Path(logs_dir)
 
-        for log_file in logs_path.glob('debug_*.log'):
+        for log_file in logs_path.glob("debug_*.log"):
             try:
                 # Get file modification time
                 file_mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
@@ -149,6 +152,7 @@ def get_log_file_path() -> str:
 # Expose LOGS_DIR and LOG_FILE as module-level proxy objects that are lazily evaluated
 class _PathProxy:
     """Proxy class to provide lazy path access."""
+
     def __init__(self, getter):
         self._getter = getter
 

@@ -14,7 +14,16 @@ from common.logger import (
     get_log_file_path,
     LOG_FILE,
     LOGS_DIR,
-    cleanup_old_logs
+    cleanup_old_logs,
 )
 
-__all__ = ['debug', 'info', 'warning', 'error', 'get_log_file_path', 'LOG_FILE', 'LOGS_DIR', 'cleanup_old_logs']
+__all__ = [
+    "debug",
+    "info",
+    "warning",
+    "error",
+    "get_log_file_path",
+    "LOG_FILE",
+    "LOGS_DIR",
+    "cleanup_old_logs",
+]

@@ -8,9 +8,7 @@ CIFP data is downloaded once per AIRAC cycle (28 days) and cached locally.
 """
 
 import io
-import os
 import re
-import shutil
 import urllib.request
 import urllib.error
 import zipfile
@@ -19,6 +17,8 @@ from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+
+from common.paths import get_cifp_cache_dir
 
 
 # AIRAC epoch: Cycle 2501 effective date
@@ -31,8 +31,6 @@ CIFP_BASE_URL = "https://aeronav.faa.gov/Upload_313-d/cifp/"
 CIFP_TIMEOUT = 60  # seconds for download
 
 # Cache directory (uses user data directory)
-from common.paths import get_cifp_cache_dir
-
 CIFP_CACHE_DIR = get_cifp_cache_dir()
 
 
