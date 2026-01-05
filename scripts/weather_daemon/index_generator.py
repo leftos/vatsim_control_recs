@@ -525,6 +525,41 @@ def generate_html(
         "features": geojson_features,
     }
 
+    # Build ARTCC-level airport data for focus feature
+    artcc_airport_data = {}
+    for artcc, groupings in artcc_groupings.items():
+        if artcc == "custom":
+            continue
+        # Collect all unique airports across all groupings in this ARTCC
+        seen_icaos = set()
+        airports_list = []
+        for g in groupings:
+            for point in g.get("airport_weather_points", []):
+                icao = point.get("icao")
+                if icao and icao not in seen_icaos and point.get("category") != "UNK" and point.get("lat") and point.get("lon"):
+                    seen_icaos.add(icao)
+                    # Get pretty name from unified airport data
+                    airport_name = ""
+                    if unified_airport_data and icao in unified_airport_data:
+                        airport_name = unified_airport_data[icao].get("name", "")
+                        if airport_name:
+                            airport_name = airport_name.title()
+                    airports_list.append({
+                        "icao": icao,
+                        "name": airport_name,
+                        "lat": point.get("lat"),
+                        "lon": point.get("lon"),
+                        "category": point.get("category"),
+                        "color": MARKER_COLORS.get(point.get("category"), MARKER_COLORS["UNK"]),
+                        "visibility": point.get("visibility"),
+                        "ceiling": point.get("ceiling"),
+                        "wind": point.get("wind"),
+                        "phenomena": point.get("phenomena", []),
+                        "taf_changes": point.get("taf_changes", []),
+                    })
+        if airports_list:
+            artcc_airport_data[artcc] = airports_list
+
     # Build ARTCC bounds for zoom reference (CONUS only)
     artcc_bounds = {}
     for artcc, polys in boundaries.items():
@@ -610,10 +645,35 @@ def generate_html(
                     all_polygon_coords.append(polygon_coords)
 
             if all_polygon_coords:
+                # Include airport weather points for focus feature (filter out UNK)
+                airports_for_focus = []
+                for point in g.get("airport_weather_points", []):
+                    if point.get("category") != "UNK" and point.get("lat") and point.get("lon"):
+                        icao = point.get("icao")
+                        # Get pretty name from unified airport data
+                        airport_name = ""
+                        if unified_airport_data and icao in unified_airport_data:
+                            airport_name = unified_airport_data[icao].get("name", "")
+                            if airport_name:
+                                airport_name = airport_name.title()
+                        airports_for_focus.append({
+                            "icao": icao,
+                            "name": airport_name,
+                            "lat": point.get("lat"),
+                            "lon": point.get("lon"),
+                            "category": point.get("category"),
+                            "color": MARKER_COLORS.get(point.get("category"), MARKER_COLORS["UNK"]),
+                            "visibility": point.get("visibility"),
+                            "ceiling": point.get("ceiling"),
+                            "wind": point.get("wind"),
+                            "phenomena": point.get("phenomena", []),
+                            "taf_changes": point.get("taf_changes", []),
+                        })
                 grouping_polygons[str(grouping_id)] = {
                     "name": grouping_name,
                     "artcc": artcc,
                     "coords": all_polygon_coords,  # Now a list of polygons
+                    "airports": airports_for_focus,
                 }
             grouping_id += 1
 
@@ -646,10 +706,35 @@ def generate_html(
                     all_polygon_coords.append(polygon_coords)
 
             if all_polygon_coords:
+                # Include airport weather points for focus feature (filter out UNK)
+                airports_for_focus = []
+                for point in g.get("airport_weather_points", []):
+                    if point.get("category") != "UNK" and point.get("lat") and point.get("lon"):
+                        icao = point.get("icao")
+                        # Get pretty name from unified airport data
+                        airport_name = ""
+                        if unified_airport_data and icao in unified_airport_data:
+                            airport_name = unified_airport_data[icao].get("name", "")
+                            if airport_name:
+                                airport_name = airport_name.title()
+                        airports_for_focus.append({
+                            "icao": icao,
+                            "name": airport_name,
+                            "lat": point.get("lat"),
+                            "lon": point.get("lon"),
+                            "category": point.get("category"),
+                            "color": MARKER_COLORS.get(point.get("category"), MARKER_COLORS["UNK"]),
+                            "visibility": point.get("visibility"),
+                            "ceiling": point.get("ceiling"),
+                            "wind": point.get("wind"),
+                            "phenomena": point.get("phenomena", []),
+                            "taf_changes": point.get("taf_changes", []),
+                        })
                 grouping_polygons[str(grouping_id)] = {
                     "name": grouping_name,
                     "artcc": None,  # No ARTCC for unmapped custom groupings
                     "coords": all_polygon_coords,  # Now a list of polygons
+                    "airports": airports_for_focus,
                 }
             grouping_id += 1
 
@@ -727,15 +812,30 @@ def generate_html(
         }}
 
         .sidebar-header .zulu-clock {{
-            font-size: 1.4rem;
-            font-weight: 700;
+            font-size: 1rem;
+            font-weight: 600;
             color: #aaccff;
             font-family: 'Consolas', 'Monaco', monospace;
-            margin: 8px 0;
-            padding: 6px 12px;
+            margin: 4px 0;
+            padding: 3px 8px;
             background: rgba(15, 52, 96, 0.6);
             border-radius: 4px;
             display: inline-block;
+        }}
+
+        .sidebar-header .interaction-hint {{
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 8px;
+            line-height: 1.4;
+        }}
+
+        .sidebar-header .interaction-hint kbd {{
+            background: #333;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-family: inherit;
+            color: #ccc;
         }}
 
         .legend {{
@@ -835,6 +935,28 @@ def generate_html(
             transform: translateX(3px);
         }}
 
+        .grouping-link.focused {{
+            background: #4a4a00;
+            border: 1px solid #ffff00;
+            box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
+        }}
+
+        .grouping-link.focused:hover {{
+            background: #5a5a10;
+        }}
+
+        .focus-indicator {{
+            display: none;
+            color: #ffff00;
+            font-size: 0.7rem;
+            margin-left: 6px;
+        }}
+
+        .grouping-link.focused .focus-indicator,
+        .artcc-briefing-link.focused .focus-indicator {{
+            display: inline;
+        }}
+
         .grouping-name {{
             font-size: 0.9rem;
         }}
@@ -876,6 +998,16 @@ def generate_html(
         .artcc-briefing-link:hover {{
             background: linear-gradient(135deg, #1a4a8e 0%, #2a6ace 100%);
             transform: translateX(3px);
+        }}
+
+        .artcc-briefing-link.focused {{
+            background: #4a4a00;
+            border: 1px solid #ffff00;
+            box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
+        }}
+
+        .artcc-briefing-link.focused:hover {{
+            background: #5a5a10;
         }}
 
         .artcc-briefing-link .icon {{
@@ -1258,6 +1390,9 @@ def generate_html(
                         <span>VFR</span>
                     </div>
                 </div>
+                <div class="interaction-hint">
+                    <kbd>Click</kbd> sector to open briefing · <kbd>Right-click</kbd> to focus
+                </div>
             </div>
             {sidebar_html}
         </div>
@@ -1287,6 +1422,8 @@ def generate_html(
         map.getPane('regionalAirports').style.zIndex = 645;
         map.createPane('majorAirports');
         map.getPane('majorAirports').style.zIndex = 650;
+        map.createPane('focusedAirports');
+        map.getPane('focusedAirports').style.zIndex = 655;
 
         // Ensure tooltips render above all markers
         map.getPane('tooltipPane').style.zIndex = 700;
@@ -1417,11 +1554,42 @@ def generate_html(
         // ARTCC bounds for stable zooming
         const artccBounds = {json.dumps(artcc_bounds)};
 
+        // ARTCC-level airport data for focus feature
+        const artccAirportData = {json.dumps(artcc_airport_data)};
+
         // Variable to hold the current hover polygon layer
         let hoverPolygon = null;
 
+        // Focus state variables
+        let focusedGroupingId = null;
+        let focusedArtcc = null;  // For ARTCC-level focus
+        let focusedPolygon = null;
+        let focusedAirportMarkers = L.layerGroup();
+
+        // Category colors for marker styling (used by both regular and focused markers)
+        const categoryColors = {{
+            'VFR': '#00cc00',
+            'MVFR': '#0066ff',
+            'IFR': '#ff0000',
+            'LIFR': '#ff00ff',
+            'UNK': '#888888',
+        }};
+
+        // Function to create polygon layers from coords
+        function createPolygonLayers(coords, style) {{
+            return coords.map(polyCoords => {{
+                const latLngs = polyCoords.map(c => [c[1], c[0]]);
+                return L.polygon(latLngs, style);
+            }});
+        }}
+
         // Function to show grouping polygon on hover
         function showGroupingPolygon(groupingId) {{
+            // If we're focused on this grouping, don't show hover polygon
+            if (focusedGroupingId === groupingId) {{
+                return;
+            }}
+
             // Remove existing hover polygon
             if (hoverPolygon) {{
                 map.removeLayer(hoverPolygon);
@@ -1430,27 +1598,20 @@ def generate_html(
 
             const data = groupingPolygons[groupingId];
             if (data && data.coords && data.coords.length > 0) {{
-                // data.coords is now a list of polygons (may be >1 if there are gaps)
-                // Each polygon is an array of [lon, lat] points
-                const polygonLayers = data.coords.map(polyCoords => {{
-                    // Leaflet expects [lat, lon] but our coords are [lon, lat]
-                    const latLngs = polyCoords.map(c => [c[1], c[0]]);
-                    return L.polygon(latLngs, {{
-                        color: '#ffff00',
-                        weight: 2,
-                        fillColor: '#ffff00',
-                        fillOpacity: 0.2,
-                        dashArray: '5, 5',
-                    }});
+                const polygonLayers = createPolygonLayers(data.coords, {{
+                    color: '#ffff00',
+                    weight: 2,
+                    fillColor: '#ffff00',
+                    fillOpacity: 0.2,
+                    dashArray: '5, 5',
                 }});
 
-                // Create a layer group if multiple polygons, or just use the single one
                 hoverPolygon = polygonLayers.length === 1
                     ? polygonLayers[0].addTo(map)
                     : L.layerGroup(polygonLayers).addTo(map);
 
-                // Zoom to ARTCC bounds (stable) instead of grouping bounds (jumpy)
-                if (data.artcc && artccBounds[data.artcc]) {{
+                // Only zoom if not focused on any grouping or ARTCC
+                if (!focusedGroupingId && !focusedArtcc && data.artcc && artccBounds[data.artcc]) {{
                     const bounds = artccBounds[data.artcc];
                     map.fitBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]], {{ padding: [20, 20], maxZoom: 7 }});
                 }}
@@ -1465,14 +1626,391 @@ def generate_html(
             }}
         }}
 
-        // Add hover listeners to grouping links
+        // Function to focus on a grouping
+        function focusGrouping(groupingId) {{
+            // If already focused on this grouping, unfocus
+            if (focusedGroupingId === groupingId) {{
+                unfocusGrouping();
+                return;
+            }}
+
+            // Clear any existing focus
+            unfocusGrouping();
+
+            const data = groupingPolygons[groupingId];
+            if (!data) return;
+
+            focusedGroupingId = groupingId;
+
+            // Show focused polygon (solid style)
+            if (data.coords && data.coords.length > 0) {{
+                const polygonLayers = createPolygonLayers(data.coords, {{
+                    color: '#ffff00',
+                    weight: 3,
+                    fillColor: '#ffff00',
+                    fillOpacity: 0.15,
+                }});
+
+                focusedPolygon = polygonLayers.length === 1
+                    ? polygonLayers[0].addTo(map)
+                    : L.layerGroup(polygonLayers).addTo(map);
+            }}
+
+            // Show airport markers for this grouping (same style as regular markers)
+            if (data.airports && data.airports.length > 0) {{
+                data.airports.forEach(airport => {{
+                    const marker = L.circleMarker([airport.lat, airport.lon], {{
+                        radius: 6,
+                        fillColor: airport.color,
+                        color: '#000000',
+                        weight: 1,
+                        fillOpacity: 0.9,
+                        pane: 'focusedAirports',
+                    }});
+
+                    // Build weather card tooltip (same as regular markers)
+                    const catColor = categoryColors[airport.category] || categoryColors['UNK'];
+                    let weatherHtml = '';
+                    const weatherItems = [];
+                    if (airport.ceiling) weatherItems.push(`<span>☁ ${{airport.ceiling}}</span>`);
+                    if (airport.visibility) weatherItems.push(`<span>👁 ${{airport.visibility}}</span>`);
+                    if (airport.wind) weatherItems.push(`<span>💨 ${{airport.wind}}</span>`);
+                    if (airport.phenomena && airport.phenomena.length > 0) {{
+                        weatherItems.push(`<span class="phenomena">${{airport.phenomena.join(', ')}}</span>`);
+                    }}
+                    if (weatherItems.length > 0) {{
+                        weatherHtml = `<div class="weather-row">${{weatherItems.join('')}}</div>`;
+                    }}
+
+                    let tafHtml = '';
+                    if (airport.taf_changes && airport.taf_changes.length > 0) {{
+                        const tafLines = airport.taf_changes.map(change => {{
+                            const trendClass = change.trend === 'worsening' ? 'trend-down' : 'trend-up';
+                            const trendIcon = change.trend === 'worsening' ? '▼' : '▲';
+                            const tafCatColor = categoryColors[change.category] || categoryColors['UNK'];
+                            const details = [];
+                            if (change.ceiling) details.push(change.ceiling);
+                            if (change.visibility) details.push(change.visibility);
+                            if (change.wind) details.push(change.wind);
+                            if (change.phenomena && change.phenomena.length > 0) {{
+                                details.push(change.phenomena.join(', '));
+                            }}
+                            const detailsStr = details.length > 0 ? ` ${{details.join(' ')}}` : '';
+                            return `<div class="taf-row">
+                                <span class="${{trendClass}}">${{trendIcon}}</span>
+                                <span>${{change.type}} ${{change.time_str}}</span>
+                                <span class="taf-cat" style="background-color: ${{tafCatColor}}">${{change.category}}</span>
+                                <span class="taf-details">${{detailsStr}}</span>
+                            </div>`;
+                        }}).join('');
+                        tafHtml = tafLines;
+                    }}
+
+                    // Build header with name (ICAO) or just ICAO if no name
+                    const headerText = airport.name ? `${{airport.name}} (${{airport.icao}})` : airport.icao;
+
+                    const tooltipContent = `
+                        <div class="marker-weather-card" style="border-color: ${{catColor}}">
+                            <div class="card-header">
+                                <span class="icao">${{headerText}}</span>
+                                <span class="category" style="background-color: ${{catColor}}">${{airport.category}}</span>
+                            </div>
+                            ${{weatherHtml}}
+                            ${{tafHtml}}
+                        </div>
+                    `;
+
+                    marker.bindTooltip(tooltipContent, {{
+                        permanent: false,
+                        direction: 'top',
+                        offset: [0, -8],
+                        className: 'airport-marker-tooltip',
+                    }});
+
+                    focusedAirportMarkers.addLayer(marker);
+                }});
+                focusedAirportMarkers.addTo(map);
+            }}
+
+            // Update UI to show focused state
+            document.querySelectorAll('.grouping-link').forEach(link => {{
+                link.classList.remove('focused');
+            }});
+            const focusedLink = document.querySelector(`.grouping-link[data-grouping-id="${{groupingId}}"]`);
+            if (focusedLink) {{
+                focusedLink.classList.add('focused');
+            }}
+
+            // Pan/zoom to show the focused sector
+            // Only zoom out if the sector is larger than current view; otherwise just pan
+            if (data.coords && data.coords.length > 0) {{
+                // Calculate bounds of all polygons in the grouping
+                let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+                data.coords.forEach(poly => {{
+                    poly.forEach(coord => {{
+                        const lon = coord[0], lat = coord[1];
+                        if (lat < minLat) minLat = lat;
+                        if (lat > maxLat) maxLat = lat;
+                        if (lon < minLon) minLon = lon;
+                        if (lon > maxLon) maxLon = lon;
+                    }});
+                }});
+
+                const sectorBounds = L.latLngBounds([[minLat, minLon], [maxLat, maxLon]]);
+                const currentBounds = map.getBounds();
+
+                // Compare sector size to current view size
+                const sectorHeight = maxLat - minLat;
+                const sectorWidth = maxLon - minLon;
+                const viewHeight = currentBounds.getNorth() - currentBounds.getSouth();
+                const viewWidth = currentBounds.getEast() - currentBounds.getWest();
+
+                // Only zoom if sector is larger than current view
+                if (sectorHeight > viewHeight || sectorWidth > viewWidth) {{
+                    map.fitBounds(sectorBounds, {{ padding: [20, 20], maxZoom: 7 }});
+                }} else {{
+                    // Just pan to center the sector
+                    map.panTo(sectorBounds.getCenter());
+                }}
+            }} else if (data.artcc && artccBounds[data.artcc]) {{
+                // Fallback to ARTCC bounds if no polygon coords
+                const bounds = artccBounds[data.artcc];
+                map.fitBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]], {{ padding: [20, 20], maxZoom: 7 }});
+            }}
+
+            saveFocusState();
+        }}
+
+        // Function to unfocus (works for both grouping and ARTCC focus)
+        function unfocusGrouping() {{
+            if (focusedPolygon) {{
+                map.removeLayer(focusedPolygon);
+                focusedPolygon = null;
+            }}
+
+            focusedAirportMarkers.clearLayers();
+            if (map.hasLayer(focusedAirportMarkers)) {{
+                map.removeLayer(focusedAirportMarkers);
+            }}
+
+            // Remove focused class from all links
+            document.querySelectorAll('.grouping-link, .artcc-briefing-link').forEach(link => {{
+                link.classList.remove('focused');
+            }});
+
+            focusedGroupingId = null;
+            focusedArtcc = null;
+        }}
+
+        // Function to focus on an entire ARTCC
+        function focusArtcc(artccCode) {{
+            // If already focused on this ARTCC, unfocus
+            if (focusedArtcc === artccCode) {{
+                unfocusGrouping();
+                saveFocusState();
+                return;
+            }}
+
+            // Clear any existing focus
+            unfocusGrouping();
+
+            const airports = artccAirportData[artccCode];
+            const bounds = artccBounds[artccCode];
+            if (!airports && !bounds) return;
+
+            focusedArtcc = artccCode;
+
+            // Show ARTCC boundary polygon using GeoJSON data
+            const artccFeature = artccData.features.find(f => f.properties.artcc === artccCode);
+            if (artccFeature) {{
+                focusedPolygon = L.geoJSON(artccFeature, {{
+                    style: {{
+                        color: '#ffff00',
+                        weight: 3,
+                        fillColor: '#ffff00',
+                        fillOpacity: 0.1,
+                    }}
+                }}).addTo(map);
+            }}
+
+            // Show airport markers for all airports in this ARTCC
+            if (airports && airports.length > 0) {{
+                airports.forEach(airport => {{
+                    const marker = L.circleMarker([airport.lat, airport.lon], {{
+                        radius: 6,
+                        fillColor: airport.color,
+                        color: '#000000',
+                        weight: 1,
+                        fillOpacity: 0.9,
+                        pane: 'focusedAirports',
+                    }});
+
+                    // Build weather card tooltip (same as regular markers)
+                    const catColor = categoryColors[airport.category] || categoryColors['UNK'];
+                    let weatherHtml = '';
+                    const weatherItems = [];
+                    if (airport.ceiling) weatherItems.push(`<span>☁ ${{airport.ceiling}}</span>`);
+                    if (airport.visibility) weatherItems.push(`<span>👁 ${{airport.visibility}}</span>`);
+                    if (airport.wind) weatherItems.push(`<span>💨 ${{airport.wind}}</span>`);
+                    if (airport.phenomena && airport.phenomena.length > 0) {{
+                        weatherItems.push(`<span class="phenomena">${{airport.phenomena.join(', ')}}</span>`);
+                    }}
+                    if (weatherItems.length > 0) {{
+                        weatherHtml = `<div class="weather-row">${{weatherItems.join('')}}</div>`;
+                    }}
+
+                    let tafHtml = '';
+                    if (airport.taf_changes && airport.taf_changes.length > 0) {{
+                        const tafLines = airport.taf_changes.map(change => {{
+                            const trendClass = change.trend === 'worsening' ? 'trend-down' : 'trend-up';
+                            const trendIcon = change.trend === 'worsening' ? '▼' : '▲';
+                            const tafCatColor = categoryColors[change.category] || categoryColors['UNK'];
+                            const details = [];
+                            if (change.ceiling) details.push(change.ceiling);
+                            if (change.visibility) details.push(change.visibility);
+                            if (change.wind) details.push(change.wind);
+                            if (change.phenomena && change.phenomena.length > 0) {{
+                                details.push(change.phenomena.join(', '));
+                            }}
+                            const detailsStr = details.length > 0 ? ` ${{details.join(' ')}}` : '';
+                            return `<div class="taf-row">
+                                <span class="${{trendClass}}">${{trendIcon}}</span>
+                                <span>${{change.type}} ${{change.time_str}}</span>
+                                <span class="taf-cat" style="background-color: ${{tafCatColor}}">${{change.category}}</span>
+                                <span class="taf-details">${{detailsStr}}</span>
+                            </div>`;
+                        }}).join('');
+                        tafHtml = tafLines;
+                    }}
+
+                    const headerText = airport.name ? `${{airport.name}} (${{airport.icao}})` : airport.icao;
+                    const tooltipContent = `
+                        <div class="marker-weather-card" style="border-color: ${{catColor}}">
+                            <div class="card-header">
+                                <span class="icao">${{headerText}}</span>
+                                <span class="category" style="background-color: ${{catColor}}">${{airport.category}}</span>
+                            </div>
+                            ${{weatherHtml}}
+                            ${{tafHtml}}
+                        </div>
+                    `;
+
+                    marker.bindTooltip(tooltipContent, {{
+                        permanent: false,
+                        direction: 'top',
+                        offset: [0, -8],
+                        className: 'airport-marker-tooltip',
+                    }});
+
+                    focusedAirportMarkers.addLayer(marker);
+                }});
+                focusedAirportMarkers.addTo(map);
+            }}
+
+            // Update UI to show focused state
+            document.querySelectorAll('.artcc-briefing-link').forEach(link => {{
+                link.classList.remove('focused');
+            }});
+            const focusedLink = document.querySelector(`.artcc-briefing-link[data-artcc="${{artccCode}}"]`);
+            if (focusedLink) {{
+                focusedLink.classList.add('focused');
+            }}
+
+            // Pan/zoom to ARTCC
+            if (bounds) {{
+                const artccBnds = L.latLngBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]]);
+                const currentBounds = map.getBounds();
+                const artccHeight = bounds.north - bounds.south;
+                const artccWidth = bounds.east - bounds.west;
+                const viewHeight = currentBounds.getNorth() - currentBounds.getSouth();
+                const viewWidth = currentBounds.getEast() - currentBounds.getWest();
+
+                if (artccHeight > viewHeight || artccWidth > viewWidth) {{
+                    map.fitBounds(artccBnds, {{ padding: [20, 20], maxZoom: 7 }});
+                }} else {{
+                    map.panTo(artccBnds.getCenter());
+                }}
+            }}
+
+            saveFocusState();
+        }}
+
+        // Save focus state to localStorage
+        const FOCUS_STATE_KEY = 'vatsim-weather-focus';
+        function saveFocusState() {{
+            try {{
+                if (focusedGroupingId) {{
+                    localStorage.setItem(FOCUS_STATE_KEY, JSON.stringify({{ type: 'grouping', id: focusedGroupingId }}));
+                }} else if (focusedArtcc) {{
+                    localStorage.setItem(FOCUS_STATE_KEY, JSON.stringify({{ type: 'artcc', id: focusedArtcc }}));
+                }} else {{
+                    localStorage.removeItem(FOCUS_STATE_KEY);
+                }}
+            }} catch (e) {{}}
+        }}
+
+        // Restore focus state from localStorage
+        function restoreFocusState() {{
+            try {{
+                const state = JSON.parse(localStorage.getItem(FOCUS_STATE_KEY));
+                if (state) {{
+                    if (state.type === 'grouping' && state.id) {{
+                        focusGrouping(state.id);
+                    }} else if (state.type === 'artcc' && state.id) {{
+                        focusArtcc(state.id);
+                    }}
+                }}
+            }} catch (e) {{}}
+        }}
+
+        // Add hover and right-click listeners to grouping links
         document.querySelectorAll('.grouping-link').forEach(link => {{
             const groupingId = link.dataset.groupingId;
             if (groupingId) {{
                 link.addEventListener('mouseenter', () => showGroupingPolygon(groupingId));
                 link.addEventListener('mouseleave', hideGroupingPolygon);
+
+                // Right-click to focus/unfocus
+                link.addEventListener('contextmenu', (e) => {{
+                    e.preventDefault();
+                    focusGrouping(groupingId);
+                }});
             }}
         }});
+
+        // Add right-click listeners to ARTCC briefing links
+        document.querySelectorAll('.artcc-briefing-link').forEach(link => {{
+            const artccCode = link.dataset.artcc;
+            if (artccCode) {{
+                link.addEventListener('contextmenu', (e) => {{
+                    e.preventDefault();
+                    focusArtcc(artccCode);
+                }});
+            }}
+        }});
+
+        // Click on map to unfocus (but not on markers or polygons)
+        map.on('click', (e) => {{
+            // Only unfocus if clicking on the map itself, not on a feature
+            if ((focusedGroupingId || focusedArtcc) &&
+                (e.originalEvent.target === map.getContainer().querySelector('.leaflet-tile-pane') ||
+                e.originalEvent.target.classList.contains('leaflet-interactive') === false)) {{
+                unfocusGrouping();
+                saveFocusState();
+            }}
+        }});
+
+        // Escape key to unfocus (but not when modal is open)
+        document.addEventListener('keydown', (e) => {{
+            const modalEl = document.getElementById('briefing-modal');
+            if (e.key === 'Escape' && (focusedGroupingId || focusedArtcc) && !modalEl.classList.contains('active')) {{
+                unfocusGrouping();
+                saveFocusState();
+            }}
+        }});
+
+        // Restore focus state on page load
+        restoreFocusState();
 
         // Sidebar state persistence
         const SIDEBAR_STATE_KEY = 'vatsim-weather-sidebar';
@@ -1680,15 +2218,6 @@ def generate_html(
 
         // Airport markers data
         const airportMarkers = {json.dumps(airport_markers or [])};
-
-        // Category colors for card styling
-        const categoryColors = {{
-            'VFR': '#00cc00',
-            'MVFR': '#0066ff',
-            'IFR': '#ff0000',
-            'LIFR': '#ff00ff',
-            'UNK': '#888888',
-        }};
 
         // Layer groups for airport markers (separated by visibility tier)
         const majorMarkerGroup = L.layerGroup();
@@ -1932,8 +2461,8 @@ def build_sidebar_html(
 
         # ARTCC-wide briefing link at the top
         artcc_briefing_html = f'''
-                <a href="{artcc}/_all.html" class="artcc-briefing-link">
-                    <span class="artcc-briefing-name">All {display_name} Airports</span>
+                <a href="{artcc}/_all.html" class="artcc-briefing-link" data-artcc="{artcc}">
+                    <span class="artcc-briefing-name">All {display_name} Airports<span class="focus-indicator">🎯</span></span>
                     <span class="icon">📋</span>
                 </a>'''
 
@@ -1949,7 +2478,7 @@ def build_sidebar_html(
             custom_marker = ' <span class="custom-marker">★</span>' if is_custom else ""
             groupings_html += f'''
                 <a href="{path_prefix}/{g["filename"]}" class="grouping-link" data-grouping-id="{grouping_id}">
-                    <span class="grouping-name">{g["name"]}{custom_marker}</span>
+                    <span class="grouping-name">{g["name"]}{custom_marker}<span class="focus-indicator">🎯</span></span>
                     <span class="grouping-airports">{airport_count} airports</span>
                 </a>'''
             grouping_id += 1
@@ -1992,7 +2521,7 @@ def build_sidebar_html(
             airport_count = g.get("airport_count", 0)
             groupings_html += f'''
                 <a href="custom/{g["filename"]}" class="grouping-link" data-grouping-id="{grouping_id}">
-                    <span class="grouping-name">{g["name"]}</span>
+                    <span class="grouping-name">{g["name"]}<span class="focus-indicator">🎯</span></span>
                     <span class="grouping-airports">{airport_count} airports</span>
                 </a>'''
             grouping_id += 1
