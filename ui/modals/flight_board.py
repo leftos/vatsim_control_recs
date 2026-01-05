@@ -123,12 +123,12 @@ class FlightBoardScreen(ModalScreen):
     }
 
     #notification-spacer {
-        width: 1fr;
+        width: 40%;
         height: 1;
     }
 
     #notification-scroll {
-        width: 1fr;
+        width: 60%;
         height: auto;
         overflow-y: auto;
         scrollbar-size: 0 0;
