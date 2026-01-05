@@ -90,7 +90,9 @@ class DaemonConfig:
     skip_if_unchanged: bool = True
 
     # Lock file path (prevents concurrent runs)
-    lock_file: Path = field(default_factory=lambda: Path("/tmp/weather-daemon.lock"))
+    # NOTE: Must NOT be in /tmp when using systemd with PrivateTmp=true,
+    # as the service sees a different /tmp than SSH commands
+    lock_file: Path = field(default_factory=lambda: Path("/opt/vatsim-weather-daemon/cache/weather-daemon.lock"))
 
     def __post_init__(self):
         """Ensure paths are Path objects and create directories."""
