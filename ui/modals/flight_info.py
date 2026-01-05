@@ -87,6 +87,7 @@ class FlightInfoScreen(ModalScreen):
     BINDINGS = [
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
+        Binding("c", "copy_route", "Copy Route", priority=True),
         Binding("d", "show_diversions", "Find Diversions", priority=True),
         Binding("w", "show_route_weather", "Route Weather", priority=True),
     ]
@@ -132,7 +133,8 @@ class FlightInfoScreen(ModalScreen):
                     id="flight-info-content",
                 )
             yield Static(
-                "D: Diversions | W: Route Wx | Escape/Q: Close", id="flight-info-hint"
+                "C: Copy Route | D: Diversions | W: Route Wx | Escape/Q: Close",
+                id="flight-info-hint",
             )
 
     async def on_mount(self) -> None:
@@ -999,6 +1001,26 @@ class FlightInfoScreen(ModalScreen):
     def action_close(self) -> None:
         """Close the modal"""
         self.dismiss()
+
+    def action_copy_route(self) -> None:
+        """Copy the flight route to clipboard"""
+        flight_plan = self.flight_data.get("flight_plan")
+        if not flight_plan:
+            self.notify("No flight plan filed", severity="warning")
+            return
+
+        route = flight_plan.get("route", "")
+        if not route:
+            self.notify("No route filed", severity="warning")
+            return
+
+        try:
+            import pyperclip
+
+            pyperclip.copy(route)
+            self.notify("Route copied to clipboard", severity="information")
+        except Exception:
+            self.notify("Failed to copy to clipboard", severity="error")
 
     def action_show_diversions(self) -> None:
         """Open the diversion finder modal for this flight"""
