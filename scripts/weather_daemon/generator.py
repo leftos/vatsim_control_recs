@@ -905,6 +905,23 @@ class WeatherBriefingGenerator:
                 console.print(card)
             console.print()
 
+        # Show airports without METAR data
+        missing_airports = [
+            icao for icao in self.airports
+            if not self.weather_data.get(icao, {}).get("metar")
+        ]
+        if missing_airports:
+            console.print(
+                f"[bold #cc6666]━━━ AIRPORTS WITHOUT METAR DATA ━━━[/bold #cc6666]"
+            )
+            console.print(
+                f"[#aaaaaa]The following {len(missing_airports)} airport(s) are in this grouping but have no METAR available from aviationweather.gov:[/#aaaaaa]"
+            )
+            # Sort and format as a comma-separated list
+            missing_str = ", ".join(sorted(missing_airports))
+            console.print(f"[#888888]{missing_str}[/#888888]")
+            console.print()
+
         html_content = console.export_html(inline_styles=True)
 
         # Add cache control meta tags to prevent browser caching
