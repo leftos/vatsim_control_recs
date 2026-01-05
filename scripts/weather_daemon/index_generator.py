@@ -1590,11 +1590,12 @@ def generate_html(
         function openBriefingModal(url, title) {{
             currentBriefingUrl = url;
             modalTitle.textContent = title;
-            modalIframe.src = url;
+            // Add timestamp parameter to bust browser cache
+            modalIframe.src = url + '?_t=' + Date.now();
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
 
-            // Save modal state
+            // Save modal state (with original clean URL)
             try {{
                 localStorage.setItem(MODAL_STATE_KEY, JSON.stringify({{ url, title }}));
             }} catch (e) {{}}
@@ -1626,16 +1627,11 @@ def generate_html(
                     fetch(state.url, {{ cache: 'no-store' }})
                         .then(response => response.text())
                         .then(html => {{
-                            // Create new iframe and load content via srcdoc
-                            const newIframe = document.createElement('iframe');
-                            newIframe.id = 'modal-iframe';
-                            newIframe.className = 'modal-iframe';
-                            newIframe.srcdoc = html;
-                            modalIframe.parentNode.replaceChild(newIframe, modalIframe);
-                            modalIframe = newIframe;
+                            // Load content via srcdoc to bypass cache
+                            modalIframe.srcdoc = html;
                         }})
                         .catch(() => {{
-                            // Fallback to src if fetch fails
+                            // Fallback to src with cache-busting if fetch fails
                             modalIframe.src = state.url + '?_t=' + Date.now();
                         }});
                     // Don't re-save to localStorage - keep the original clean URL
