@@ -2361,7 +2361,7 @@ def generate_html(
         setInterval(updateZuluClock, 1000);
 
         // Auto-refresh countdown timer
-        const REFRESH_INTERVAL = 30; // seconds
+        const REFRESH_INTERVAL = 60; // seconds
         let secondsRemaining = REFRESH_INTERVAL;
         const countdownEl = document.getElementById('countdown');
         const modalCountdownEl = document.getElementById('modal-countdown');
