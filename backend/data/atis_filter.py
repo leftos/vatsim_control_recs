@@ -8,6 +8,14 @@ ATIS text filtering and parsing.
 import re
 from typing import Any, Dict, Set, Tuple
 
+from backend.data.weather_parsing import (
+    VISIBILITY_REMOVAL_PATTERNS,
+    WIND_REMOVAL_PATTERNS,
+    CLOUD_REMOVAL_PATTERNS,
+    TEMP_DEWPOINT_REMOVAL_PATTERNS,
+    ALTIMETER_REMOVAL_PATTERNS,
+)
+
 # =============================================================================
 # Shared pattern components for runway/approach parsing and colorization
 # =============================================================================
@@ -40,6 +48,7 @@ RWY_CHARS = r"[\d\sLRCAND,/EFIGHTCENTER]+"
 # =============================================================================
 # Patterns to remove METAR-duplicated info from ATIS text
 # These detect and remove raw METAR-format data embedded in ATIS
+# Note: Core patterns are imported from weather_parsing.py for consistency
 METAR_REMOVAL_PATTERNS = [
     # Weather intro with time: "WEATHER AT 0100Z.", "WEATHER AT 0130ZUTC."
     r"\bWEATHER\s+AT\s+\d{4}Z?(UTC)?\.?\s*",
@@ -47,26 +56,16 @@ METAR_REMOVAL_PATTERNS = [
     r"\bOBSERVED\s+AT\s+\d{4}\s*(UTC)*(UTC)*\.?\s*",
     # METAR reference
     r"\bMETAR\s+\d+\s*",
-    # Raw wind format: 07005KT, VRB02KT, 24005G15KT, with optional variable
-    r"\b(\d{3}|VRB)\d{2,3}(G\d{2,3})?KT\b(\s+\d{3}V\d{3})?\s*",
-    # Visibility: VIS 10KM, 15SM, 9SM, 9999
-    r"\bVIS\s+\d+\s*(KM)?\s*",
-    r"\b\d+SM\b\s*",
-    r"\b9999\b\s*",
-    # CAVOK (ceiling and visibility OK)
-    r"\bCAVOK\b\s*",
-    # Cloud layers: FEW005, SCT100, BKN010, OVC060, VV003 (with optional ///)
-    r"\b(FEW|SCT|BKN|OVC|VV)\d{3}(///)?(\s+(FEW|SCT|BKN|OVC|VV)\d{3}(///)?)*\s*",
-    # Sky clear
-    r"\bSKY\s+CLEAR\b\s*",
-    r"\bCLR\b\s*",
-    # Temp/Dewpoint various formats: 11/00, M03/M07, T02 DP00, T02 DPM02, "26 22" (space-separated)
-    r"\bM?\d{2}/M?\d{2}\b\s*",
-    r"\bT\d{2}\s+DPM?\d{2}\b\s*",
-    r"\b\d{2}\s+\d{2}\b(?=\s+[AQ]\d{4}|\s*\.|\s*$)\s*",  # "26 22" before altimeter or end
-    # Altimeter with spoken: A2997 (TWO NINER SEVEN SEVEN)
-    r"\b[AQ]\d{4}\b\s*(\([A-Z\s]+\))?(-?HPA)?\.?\s*",
-    r"\bQNH\d{3,4}\b\s*",
+    # Wind patterns (from shared constants)
+    *WIND_REMOVAL_PATTERNS,
+    # Visibility patterns (from shared constants)
+    *VISIBILITY_REMOVAL_PATTERNS,
+    # Cloud patterns (from shared constants)
+    *CLOUD_REMOVAL_PATTERNS,
+    # Temperature/dewpoint patterns (from shared constants)
+    *TEMP_DEWPOINT_REMOVAL_PATTERNS,
+    # Altimeter patterns (from shared constants)
+    *ALTIMETER_REMOVAL_PATTERNS,
     # Weather phenomena: -DZ, +RA, BR, FG, etc. - must be standalone words
     r"(?<!\w)[-+]?(DZ|RA|SN|SG|IC|PL|GR|GS|BR|FG|FU|VA|DU|SA|HZ|PY)(?!\w)\s*",
     # TDZ (touchdown zone) wind readings - remove "WIND RWY XX TDZ" or standalone "TDZ"

@@ -82,6 +82,148 @@ WEATHER_INTENSITY = {
     "VC": "Vicinity",
 }
 
+# =============================================================================
+# METAR component patterns - shared between weather parsing and ATIS filtering
+# =============================================================================
+
+# Patterns for matching tokens (anchored, for token matching in parse_weather_phenomena)
+# Patterns for removal from text (word boundary, for ATIS filter)
+
+# --- Visibility patterns ---
+VISIBILITY_TOKEN_PATTERNS = [
+    r"^[PM]?\d+SM$",  # Whole number: 10SM, P6SM, M10SM
+    r"^M?\d+/\d+SM$",  # Fractional: 3/4SM, M1/4SM
+    r"^\d+$",  # Standalone number from mixed fraction like "1" in "1 1/2SM"
+]
+
+VISIBILITY_REMOVAL_PATTERNS = [
+    r"\bVIS\s+\d+(\s+\d+)?/\d+\s*(KM)?\s*",  # VIS 3/4, VIS 1 1/2 (fractional)
+    r"\bVIS\s+\d+\s*(KM)?\s*",  # VIS 10, VIS 10KM (whole number)
+    r"\b\d+\s+\d+/\d+SM\b\s*",  # 1 1/2SM (mixed fraction)
+    r"\bM?\d+/\d+SM\b\s*",  # 3/4SM, M1/4SM (simple/less-than fraction)
+    r"\b\d+SM\b\s*",  # 10SM (whole number)
+    r"\b9999\b\s*",  # 9999 (meters, 10km+)
+]
+
+# --- Wind patterns ---
+WIND_TOKEN_PATTERNS = [
+    r"^(\d{3}|VRB)\d{2,3}(G\d{2,3})?KT$",  # Wind: 27005KT, VRB05KT, 27015G25KT
+    r"^\d{3}V\d{3}$",  # Variable wind direction: 240V300
+]
+
+WIND_REMOVAL_PATTERNS = [
+    r"\b(\d{3}|VRB)\d{2,3}(G\d{2,3})?KT\b(\s+\d{3}V\d{3})?\s*",  # Wind with optional variable
+]
+
+# --- Cloud patterns ---
+CLOUD_TOKEN_PATTERNS = [
+    r"^(SKC|CLR|FEW|SCT|BKN|OVC|VV)\d{0,3}(CB|TCU)?$",  # Cloud layers with optional CB/TCU
+]
+
+CLOUD_REMOVAL_PATTERNS = [
+    r"\b(FEW|SCT|BKN|OVC|VV)\d{3}(///)?(\s+(FEW|SCT|BKN|OVC|VV)\d{3}(///)?)*\s*",
+    r"\bSKY\s+CLEAR\b\s*",
+    r"\bCLR\b\s*",
+    r"\bCAVOK\b\s*",
+]
+
+# --- Temperature/Dewpoint patterns ---
+TEMP_DEWPOINT_TOKEN_PATTERNS = [
+    r"^[AM]?\d{2}/[AM]?\d{2}$",  # Standard: 08/08, M03/M07
+]
+
+TEMP_DEWPOINT_REMOVAL_PATTERNS = [
+    r"\bM?\d{2}/M?\d{2}\b\s*",  # Standard: 08/08, M03/M07
+    r"\bT\d{2}\s+DPM?\d{2}\b\s*",  # Spoken: T02 DP00, T02 DPM02
+    r"\b\d{2}\s+\d{2}\b(?=\s+[AQ]\d{4}|\s*\.|\s*$)\s*",  # "26 22" before altimeter
+]
+
+# --- Altimeter patterns ---
+ALTIMETER_TOKEN_PATTERNS = [
+    r"^[AQ]\d{4}$",  # Altimeter: A2992, Q1013
+]
+
+ALTIMETER_REMOVAL_PATTERNS = [
+    r"\b[AQ]\d{4}\b\s*(\([A-Z\s]+\))?(-?HPA)?\.?\s*",  # With optional spoken
+    r"\bQNH\d{3,4}\b\s*",  # QNH format
+]
+
+
+def _matches_any_pattern(token: str, patterns: list) -> bool:
+    """Check if a token matches any pattern in the list."""
+    for pattern in patterns:
+        if re.match(pattern, token):
+            return True
+    return False
+
+
+def is_visibility_token(token: str) -> bool:
+    """
+    Check if a token is a visibility value.
+
+    Used by parse_weather_phenomena to skip visibility parts when parsing weather.
+
+    Args:
+        token: A whitespace-separated token from a METAR string
+
+    Returns:
+        True if the token is a visibility value, False otherwise
+    """
+    return _matches_any_pattern(token, VISIBILITY_TOKEN_PATTERNS)
+
+
+def is_wind_token(token: str) -> bool:
+    """Check if a token is a wind value (e.g., 27005KT, VRB05KT, 240V300)."""
+    return _matches_any_pattern(token, WIND_TOKEN_PATTERNS)
+
+
+def is_cloud_token(token: str) -> bool:
+    """Check if a token is a cloud layer (e.g., FEW015, BKN030, OVC050, VV003)."""
+    return _matches_any_pattern(token, CLOUD_TOKEN_PATTERNS)
+
+
+def is_temp_dewpoint_token(token: str) -> bool:
+    """Check if a token is temperature/dewpoint (e.g., 08/08, M03/M07)."""
+    return _matches_any_pattern(token, TEMP_DEWPOINT_TOKEN_PATTERNS)
+
+
+def is_altimeter_token(token: str) -> bool:
+    """Check if a token is an altimeter setting (e.g., A2992, Q1013)."""
+    return _matches_any_pattern(token, ALTIMETER_TOKEN_PATTERNS)
+
+
+def is_non_weather_token(token: str) -> bool:
+    """
+    Check if a token is a non-weather METAR component.
+
+    Used by parse_weather_phenomena to skip non-weather parts.
+
+    Args:
+        token: A whitespace-separated token from a METAR string
+
+    Returns:
+        True if the token is NOT a weather phenomenon, False otherwise
+    """
+    # Timestamp (e.g., 240153Z)
+    if re.match(r"^\d{6}Z$", token):
+        return True
+    # Wind and variable wind
+    if is_wind_token(token):
+        return True
+    # Visibility
+    if is_visibility_token(token):
+        return True
+    # Cloud layers
+    if is_cloud_token(token):
+        return True
+    # Temperature/dewpoint
+    if is_temp_dewpoint_token(token):
+        return True
+    # Altimeter
+    if is_altimeter_token(token):
+        return True
+    return False
+
 
 def get_airport_size_priority(airport_info: Dict[str, Any]) -> int:
     """Get airport size priority for sorting (lower = more significant).
@@ -461,27 +603,13 @@ def parse_weather_phenomena(metar: str) -> List[str]:
     parts = metar.split()
 
     for part in parts:
-        # Skip parts that are clearly not weather (timestamps, wind, visibility, clouds, temps)
-        if re.match(r"^\d{6}Z$", part):  # Timestamp
-            continue
-        if re.match(r"^\d{5}(G\d+)?KT$", part):  # Wind
-            continue
-        if re.match(r"^(VRB)?\d{3}V\d{3}$", part):  # Variable wind
-            continue
-        if re.match(r"^[PM]?\d+SM$", part):  # Visibility
-            continue
-        if re.match(r"^\d+/\d+SM$", part):  # Fractional visibility
-            continue
-        if re.match(r"^(SKC|CLR|FEW|SCT|BKN|OVC|VV)\d{3}", part):  # Clouds
-            continue
-        if re.match(r"^[AM]?\d{2}/[AM]?\d{2}$", part):  # Temp/dewpoint
-            continue
-        if re.match(r"^A\d{4}$", part):  # Altimeter
-            continue
-        if re.match(r"^Q\d{4}$", part):  # QNH
-            continue
-        if re.match(r"^RMK", part):  # Start of remarks - stop processing
+        # Stop at remarks section
+        if re.match(r"^RMK", part):
             break
+
+        # Skip non-weather METAR components (timestamp, wind, visibility, clouds, etc.)
+        if is_non_weather_token(part):
+            continue
 
         # Try to parse as weather phenomenon
         parsed = _parse_single_weather(part)
