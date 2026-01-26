@@ -814,7 +814,18 @@ class FlightBoardScreen(ModalScreen):
                 new_has_runways = new_landing or new_departing
 
                 if old_has_runways and new_has_runways:
-                    if new_landing != old_landing or new_departing != old_departing:
+                    # Normalize for comparison: when only landing runways are listed,
+                    # the implication is the same runways are used for departing.
+                    # So L/D:17L,17R and L:17L,17R should be treated as equivalent.
+                    old_landing_norm = old_landing
+                    old_departing_norm = old_departing if old_departing else old_landing
+                    new_landing_norm = new_landing
+                    new_departing_norm = new_departing if new_departing else new_landing
+
+                    if (
+                        new_landing_norm != old_landing_norm
+                        or new_departing_norm != old_departing_norm
+                    ):
                         self._show_runway_notification(
                             icao, new_landing, new_departing, old_landing, old_departing
                         )
