@@ -536,6 +536,32 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
             flags=re.IGNORECASE,
         )
 
+    # Pattern 0a: SIMUL with VISUAL approaches and runways ending with APP IN USE
+    # e.g., "SIMUL CHARTED VISUAL FMS BRIDGE RY 28R AND TIPP TOE RY 28L APP IN USE"
+    # Captures from SIMUL through APP IN USE when VISUAL is present
+    result = re.sub(
+        r"\bSIMUL(?:TANEOUS)?\s+(?:[A-Z]+\s+)*VISUAL\s+[^.]*?"
+        rf"(?:RY|{RWY_PREFIX})\s*{RWY_NUM_PATTERN}"
+        r"(?:\s+AND\s+[^.]*?(?:RY|RWY)\s*\d+[LRC]?)*"
+        r"\s+APP(?:S|ROACH(?:ES)?)?\s+IN\s+USE\b",
+        r"[yellow]\g<0>[/yellow]",
+        result,
+        flags=re.IGNORECASE,
+    )
+
+    # Pattern 0b: Comma-separated approach list ending with APCHS IN USE
+    # e.g., "ILS, RNAV Y, RNAV Z, FAIRGROUNDS VISUAL, RWY 30L APCHS IN USE"
+    # Matches approach types/names separated by commas, then RWY and APCHS
+    result = re.sub(
+        rf"\b({APPROACH_TYPES})[-\s]?[XYZWUK]?"
+        r"(?:,\s*(?:[A-Z]+\s+)*(?:" + APPROACH_TYPES + r"|VISUAL)[-\s]?[XYZWUK]?)*"
+        rf",?\s*(?:{RWY_PREFIX})\s*{RWY_NUM_PATTERN}\s+"
+        rf"({APPROACH_SUFFIX})\s+IN\s+USE\b",
+        r"[yellow]\g<0>[/yellow]",
+        result,
+        flags=re.IGNORECASE,
+    )
+
     # Pattern 1: Compound approach types with AND separator (must come before single approach pattern)
     # e.g., "ILS, AND VA, RWYS 30 AND 28R", "ILS AND RNAV RWYS 28L, 28R"
     # Handles multiple approach types listed together before runway info
