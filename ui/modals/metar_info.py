@@ -12,6 +12,7 @@ from textual.app import ComposeResult
 
 from backend import get_metar, get_taf
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
+from backend.data.datis_api import get_datis_for_airport
 from backend.data.atis_filter import filter_atis_text, colorize_atis_text
 from backend.data.weather_parsing import (
     get_flight_category,
@@ -463,8 +464,21 @@ class MetarInfoScreen(ModalScreen):
 
         # ATIS (filtered to remove METAR-duplicated info, with colorized runway/approach info)
         # Supports dual ATIS (departure/arrival) - atis_list is a list of ATIS entries
+        # Prefer VATSIM ATIS; fall back to RW D-ATIS if no VATSIM ATIS available
+        atis_list = []
+        atis_source = None
         if vatsim_data:
             atis_list = self._get_atis_for_airport(vatsim_data, icao)
+            if atis_list:
+                atis_source = "vatsim"
+
+        # Fall back to RW D-ATIS if no VATSIM ATIS
+        if not atis_list:
+            atis_list = get_datis_for_airport(icao)
+            if atis_list:
+                atis_source = "rw"
+
+        if atis_list:
             for atis_info in atis_list:
                 atis_code = atis_info.get("atis_code", "")
                 atis_type = atis_info.get("type", "combined")
@@ -472,17 +486,18 @@ class MetarInfoScreen(ModalScreen):
                 # Filter out METAR-duplicated info
                 filtered_text = filter_atis_text(raw_text)
                 if filtered_text:
-                    # Add type label for departure/arrival ATIS
+                    # Build type label for departure/arrival ATIS
                     type_label = ""
                     if atis_type == "departure":
                         type_label = "[cyan]DEP:[/cyan] "
                     elif atis_type == "arrival":
                         type_label = "[cyan]ARR:[/cyan] "
+                    # Add source indicator
+                    source_label = "[#ffaa00](RW)[/#ffaa00] " if atis_source == "rw" else ""
                     # Colorize ATIS: letter in cyan, approaches/runways in yellow
                     colorized_text = colorize_atis_text(filtered_text, atis_code)
-                    result_lines.append(f"[dim]{type_label}{colorized_text}[/dim]")
-            if atis_list:
-                result_lines.append("")
+                    result_lines.append(f"[dim]{source_label}{type_label}{colorized_text}[/dim]")
+            result_lines.append("")
 
         # METAR with highlighted flight category components
         if metar:

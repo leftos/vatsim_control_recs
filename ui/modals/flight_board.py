@@ -18,6 +18,7 @@ from backend import (
 )
 from backend.core.flights import get_airport_flight_details
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
+from backend.data.datis_api import get_datis_for_airports
 from backend.data.atis_filter import (
     parse_approach_info,
     parse_runway_assignments,
@@ -693,10 +694,18 @@ class FlightBoardScreen(ModalScreen):
 
         metars, vatsim_data = await asyncio.gather(metar_task, vatsim_task)
 
-        # Get ATIS info for runway extraction
+        # Get ATIS info for runway extraction - prefer VATSIM, fall back to RW D-ATIS
         atis_data = {}
         if vatsim_data:
             atis_data = get_atis_for_airports(vatsim_data, airports)
+
+        # Fetch RW D-ATIS for airports without VATSIM ATIS
+        airports_without_vatsim_atis = [
+            icao for icao in airports if icao not in atis_data
+        ]
+        if airports_without_vatsim_atis:
+            rw_atis_data = get_datis_for_airports(airports_without_vatsim_atis)
+            atis_data.update(rw_atis_data)
 
         # Build baseline weather state
         for icao in airports:
@@ -749,10 +758,18 @@ class FlightBoardScreen(ModalScreen):
 
         metars, vatsim_data = await asyncio.gather(metar_task, vatsim_task)
 
-        # Get ATIS info for airports
+        # Get ATIS info for airports - prefer VATSIM, fall back to RW D-ATIS
         atis_data = {}
         if vatsim_data:
             atis_data = get_atis_for_airports(vatsim_data, airports)
+
+        # Fetch RW D-ATIS for airports without VATSIM ATIS
+        airports_without_vatsim_atis = [
+            icao for icao in airports if icao not in atis_data
+        ]
+        if airports_without_vatsim_atis:
+            rw_atis_data = get_datis_for_airports(airports_without_vatsim_atis)
+            atis_data.update(rw_atis_data)
 
         # Check for weather changes
         for icao in airports:

@@ -15,6 +15,7 @@ from textual.app import ComposeResult
 
 from backend import get_metar_batch, get_taf_batch
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
+from backend.data.datis_api import get_datis_for_airports
 from backend.core.calculations import haversine_distance_nm
 from backend.core.route import (
     sample_route_points,
@@ -231,12 +232,20 @@ class FlightWeatherBriefingScreen(ModalScreen):
                 metar_task, taf_task, vatsim_task
             )
 
-            # Get ATIS data from VATSIM data
+            # Get ATIS data - prefer VATSIM, fall back to RW D-ATIS
             atis_data = (
                 get_atis_for_airports(vatsim_data, unique_airports)
                 if vatsim_data
                 else {}
             )
+
+            # Fetch RW D-ATIS for airports without VATSIM ATIS
+            airports_without_vatsim_atis = [
+                icao for icao in unique_airports if icao not in atis_data
+            ]
+            if airports_without_vatsim_atis:
+                rw_atis_data = get_datis_for_airports(airports_without_vatsim_atis)
+                atis_data.update(rw_atis_data)
 
         except Exception as e:
             self._update_content(f"[red]Error fetching weather: {e}[/red]")

@@ -1664,3 +1664,184 @@ def get_weather_for_airports_bbox(
     # Ensure all requested airports have an entry (empty string if not found)
     result = {icao: all_metars.get(icao, "") for icao in airport_icaos}
     return result
+
+
+def get_weather_smart(
+    airports: List[str],
+    airport_coords: Dict[str, Tuple[float, float]],
+    include_taf: bool = True,
+    cluster_radius_nm: float = 300.0,
+    min_airports_for_bbox: int = 5,
+    max_bbox_area_per_airport: float = 50000.0,
+    max_workers: int = 10,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """
+    Intelligently fetch weather data using a hybrid bbox/individual approach.
+
+    Clusters airports geographically and decides whether to use efficient bbox
+    queries (for dense clusters) or individual station queries (for sparse airports).
+
+    Args:
+        airports: List of ICAO codes to fetch weather for
+        airport_coords: Dict mapping ICAO to (lat, lon) tuples
+        include_taf: Whether to include TAF data
+        cluster_radius_nm: Max distance for airports to be in same cluster (~300nm default)
+        min_airports_for_bbox: Minimum airports in cluster to use bbox query (default: 5)
+        max_bbox_area_per_airport: Max bbox area (sq degrees) per airport before
+            falling back to individual queries (default: 50000)
+        max_workers: Maximum concurrent threads for parallel fetching
+        progress_callback: Optional callback(completed, total) for progress updates
+
+    Returns:
+        Tuple of (metars_dict, tafs_dict) where keys are ICAO codes
+    """
+    if not airports:
+        return ({}, {})
+
+    # Filter to airports with known coordinates
+    airports_with_coords = [a for a in airports if a in airport_coords]
+    airports_without_coords = [a for a in airports if a not in airport_coords]
+
+    # Cluster airports geographically using simple greedy clustering
+    clusters: List[List[str]] = []
+    unclustered = set(airports_with_coords)
+
+    while unclustered:
+        # Start a new cluster with an arbitrary airport
+        seed = next(iter(unclustered))
+        seed_lat, seed_lon = airport_coords[seed]
+        cluster = [seed]
+        unclustered.remove(seed)
+
+        # Add nearby airports to this cluster
+        to_check = list(unclustered)
+        for icao in to_check:
+            lat, lon = airport_coords[icao]
+            dist = haversine_distance_nm(seed_lat, seed_lon, lat, lon)
+            if dist <= cluster_radius_nm:
+                cluster.append(icao)
+                unclustered.remove(icao)
+
+        clusters.append(cluster)
+
+    # Decide bbox vs individual for each cluster
+    bbox_clusters: List[Tuple[Tuple[float, float, float, float], List[str]]] = []
+    individual_airports: List[str] = list(airports_without_coords)
+
+    for cluster in clusters:
+        if len(cluster) < min_airports_for_bbox:
+            # Too few airports - use individual queries
+            individual_airports.extend(cluster)
+            continue
+
+        # Calculate bounding box for cluster
+        lats = [airport_coords[a][0] for a in cluster]
+        lons = [airport_coords[a][1] for a in cluster]
+        min_lat, max_lat = min(lats), max(lats)
+        min_lon, max_lon = min(lons), max(lons)
+
+        # Add padding (0.5 degrees ~30nm)
+        padding = 0.5
+        min_lat -= padding
+        max_lat += padding
+        min_lon -= padding
+        max_lon += padding
+
+        # Calculate bbox area (rough approximation in square degrees)
+        bbox_area = (max_lat - min_lat) * (max_lon - min_lon)
+        area_per_airport = bbox_area / len(cluster)
+
+        if area_per_airport > max_bbox_area_per_airport:
+            # Airports too spread out - use individual queries
+            individual_airports.extend(cluster)
+        else:
+            # Dense cluster - use bbox query
+            bbox = (min_lat, min_lon, max_lat, max_lon)
+            bbox_clusters.append((bbox, cluster))
+
+    # Track airports that need fallback fetching after bbox failures
+    fallback_airports: List[str] = []
+
+    all_metars: Dict[str, str] = {}
+    all_tafs: Dict[str, str] = {}
+
+    # Progress tracking: count airports processed, not work units
+    total_airports = len(airports)
+    airports_processed = 0
+
+    def update_progress():
+        if progress_callback:
+            progress_callback(airports_processed, total_airports)
+
+    # Fetch bbox clusters in parallel
+    if bbox_clusters:
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(bbox_clusters))) as executor:
+            future_to_cluster = {
+                executor.submit(fetch_weather_bbox, bbox, include_taf): (bbox, airports_in_cluster)
+                for bbox, airports_in_cluster in bbox_clusters
+            }
+
+            for future in as_completed(future_to_cluster):
+                bbox, airports_in_cluster = future_to_cluster[future]
+                try:
+                    metars, tafs = future.result()
+                    # Filter to only the airports we want from this bbox
+                    cluster_set = set(a.upper() for a in airports_in_cluster)
+                    for icao, metar in metars.items():
+                        if icao.upper() in cluster_set:
+                            all_metars[icao] = metar
+                    for icao, taf in tafs.items():
+                        if icao.upper() in cluster_set:
+                            all_tafs[icao] = taf
+                    # Update progress for airports in this cluster
+                    airports_processed += len(airports_in_cluster)
+                    update_progress()
+                except Exception:
+                    # Bbox failed - fall back to individual for these airports
+                    fallback_airports.extend(airports_in_cluster)
+
+    # Combine individual airports with any fallback airports from failed bbox queries
+    all_individual = individual_airports + fallback_airports
+
+    # Fetch individual airports in parallel
+    if all_individual:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Fetch METARs
+            future_to_icao = {
+                executor.submit(get_metar, icao): icao for icao in all_individual
+            }
+
+            for future in as_completed(future_to_icao):
+                icao = future_to_icao[future]
+                try:
+                    metar = future.result()
+                    if metar:
+                        all_metars[icao] = metar
+                except Exception:
+                    pass
+
+                airports_processed += 1
+                update_progress()
+
+        # Fetch TAFs separately if requested (no progress update - already counted)
+        if include_taf:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_icao = {
+                    executor.submit(get_taf, icao): icao for icao in all_individual
+                }
+
+                for future in as_completed(future_to_icao):
+                    icao = future_to_icao[future]
+                    try:
+                        taf = future.result()
+                        if taf:
+                            all_tafs[icao] = taf
+                    except Exception:
+                        pass
+
+    # Ensure all requested airports have an entry
+    result_metars = {icao: all_metars.get(icao, "") for icao in airports}
+    result_tafs = {icao: all_tafs.get(icao, "") for icao in airports} if include_taf else {}
+
+    return (result_metars, result_tafs)

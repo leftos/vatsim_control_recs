@@ -24,6 +24,7 @@ from backend.data.weather import (
     reset_rate_limit_state,
     fetch_weather_bbox,
     get_weather_batch_bbox,
+    get_weather_smart,
 )
 
 # Import groupings functions
@@ -100,6 +101,7 @@ __all__ = [
     "reset_rate_limit_state",
     "fetch_weather_bbox",
     "get_weather_batch_bbox",
+    "get_weather_smart",
     "load_all_groupings",
     "load_unified_airport_data",
     "WIND_SOURCE",

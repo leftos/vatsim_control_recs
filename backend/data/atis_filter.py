@@ -27,7 +27,7 @@ RWY_NUM_PATTERN = (
 )
 
 # Approach type keywords
-APPROACH_TYPES = r"ILS|RNAV|VISUAL|VIS|LOC|VOR|NDB|GPS|LDA|SDF|RNP"
+APPROACH_TYPES = r"ILS|RNAV|VISUAL|VIS|VA|LOC|VOR|NDB|GPS|LDA|SDF|RNP"
 
 # Runway/RWY prefix
 RWY_PREFIX = r"RWYS?|RUNWAYS?"
@@ -66,8 +66,9 @@ METAR_REMOVAL_PATTERNS = [
     *TEMP_DEWPOINT_REMOVAL_PATTERNS,
     # Altimeter patterns (from shared constants)
     *ALTIMETER_REMOVAL_PATTERNS,
-    # Weather phenomena: -DZ, +RA, BR, FG, etc. - must be standalone words
-    r"(?<!\w)[-+]?(DZ|RA|SN|SG|IC|PL|GR|GS|BR|FG|FU|VA|DU|SA|HZ|PY)(?!\w)\s*",
+    # Weather phenomena: -DZ, +RA, BR, FG, FZFG, TSRA, etc. - must be standalone words
+    # Includes compound codes like FZFG, FZRA, FZDZ, TSRA, TSSN, VCSH, etc.
+    r"(?<!\w)[-+]?(VC|MI|PR|BC|DR|BL|SH|TS|FZ)?(DZ|RA|SN|SG|IC|PL|GR|GS|BR|FG|FU|VA|DU|SA|HZ|PY|UP)(?!\w)\s*",
     # TDZ (touchdown zone) wind readings - remove "WIND RWY XX TDZ" or standalone "TDZ"
     r"\bWIND\s+RWY\s+\d+\s+TDZ\b\s*",
     r"\bTDZ\s+\d{5}(G\d{2,3})?KT\b(\s+\d{3}V\d{3})?\s*",
@@ -79,12 +80,92 @@ METAR_REMOVAL_PATTERNS = [
     r"\bTREND\s+\w+(\s+\w+)*\s*",
     # Orphaned "UTC." leftover
     r"\bUTC\.\s*",
+    # METAR remarks section: RMK followed by codes like AO2, SLP###, T########, P####, VIRGA, etc.
+    # This removes the entire RMK section up to but not including the next period
+    r"\bRMK\s+(?:AO[12]|SLP\d{3}|T\d{8}|P\d{4}|VIRGA[\w\s-]*|[A-Z0-9]{2,6})(?:\s+(?:AO[12]|SLP\d{3}|T\d{8}|P\d{4}|VIRGA[\w\s-]*|[A-Z0-9]{2,6}))*\.?\s*",
 ]
+
+
+def _find_metar_ops_boundary(atis_text: str) -> int:
+    """
+    Find the boundary between METAR portion and operational portion of ATIS.
+
+    ATIS structure is typically:
+    1. Header: "XXX ATIS INFO [LETTER] [TIME]Z."
+    2. METAR: Wind, visibility, weather, clouds, temp/dewpoint, altimeter
+    3. Spoken altimeter: "(THREE ZERO ONE THREE)"
+    4. Optional RMK section: "RMK AO2 SLP### T########"
+    5. Period marking end of METAR
+    6. Operational info: Approaches, runways, NOTAMs, etc.
+
+    Returns:
+        Index where operational portion begins, or 0 if boundary not found
+    """
+    # Operational keywords that mark the start of the ops section
+    OPS_KEYWORDS = (
+        r"APPROACH|APCH|APCHS|"
+        r"ARR\b|ARRIVAL|"
+        r"DEP\b|DEPS\b|DEPG|DEPARTURE|"
+        r"SIMUL|SIMULTANEOUS|"
+        r"ILS\b|RNAV|VISUAL|VIS\b|"
+        r"LDG\b|LNDG|LANDING|"
+        r"RWY|RY\b|RWYS|RUNWAY|"
+        r"INST\b|"
+        r"NOTAM|TWY|TAXIWAY|"
+        r"ATTN|CAUTION|"
+        r"FLOW\b|LOW\b|"
+        r"CTC\b|CONTACT"
+    )
+
+    # Look for altimeter + spoken form pattern
+    # Example: "A3013 (THREE ZERO ONE THREE)"
+    altimeter_pattern = r"[AQ]\d{4}\s*\([A-Z\s]+\)"
+    alt_match = re.search(altimeter_pattern, atis_text, re.IGNORECASE)
+
+    if alt_match:
+        search_start = alt_match.end()
+
+        # Check if there's an RMK section after the altimeter
+        # RMK section ends at a period followed by operational keyword
+        rmk_match = re.search(r"\bRMK\b", atis_text[search_start:], re.IGNORECASE)
+
+        if rmk_match:
+            # Found RMK - look for period + ops keyword after it
+            rmk_start = search_start + rmk_match.start()
+            ops_pattern = rf"\.\s*(?={OPS_KEYWORDS})"
+            ops_match = re.search(ops_pattern, atis_text[rmk_start:], re.IGNORECASE)
+            if ops_match:
+                return rmk_start + ops_match.end()
+        else:
+            # No RMK section - look for period + ops keyword after altimeter
+            ops_pattern = rf"\.\s*(?={OPS_KEYWORDS})"
+            ops_match = re.search(ops_pattern, atis_text[search_start:], re.IGNORECASE)
+            if ops_match:
+                return search_start + ops_match.end()
+
+    # Fallback: look for period + operational keyword pattern anywhere
+    # This handles cases where altimeter format is non-standard
+    ops_pattern = rf"\.\s*(?={OPS_KEYWORDS})"
+    fallback_match = re.search(ops_pattern, atis_text, re.IGNORECASE)
+    if fallback_match:
+        return fallback_match.end()
+
+    # No boundary found - return 0 to filter entire text (old behavior)
+    return 0
 
 
 def filter_atis_text(atis_text: str) -> str:
     """
     Filter METAR-duplicated information from ATIS text.
+
+    Only filters the METAR portion of the ATIS, preserving the operational
+    information (approaches, runways, NOTAMs, etc.) that follows.
+
+    For US-style ATIS with altimeter + spoken form pattern (e.g., "A3013 (THREE ZERO...)"),
+    filters weather data before the operational section.
+
+    For non-standard or international ATIS formats, returns the text with minimal
+    cleanup to avoid removing important operational information.
 
     Args:
         atis_text: Full ATIS text as single string
@@ -96,15 +177,51 @@ def filter_atis_text(atis_text: str) -> str:
     if not atis_text:
         return ""
 
-    # Remove METAR patterns
-    filtered = atis_text
-    for pattern in METAR_REMOVAL_PATTERNS:
-        filtered = re.sub(pattern, " ", filtered, flags=re.IGNORECASE)
+    # Check if this is a US-style ATIS with altimeter + spoken form
+    # Only apply aggressive filtering if we find this pattern
+    altimeter_spoken_pattern = r"[AQ]\d{4}\s*\([A-Z\s]+\)"
+    has_us_format = re.search(altimeter_spoken_pattern, atis_text, re.IGNORECASE)
 
-    # Clean up multiple spaces and trim
+    if has_us_format:
+        # Find boundary between METAR and operational portions
+        boundary = _find_metar_ops_boundary(atis_text)
+
+        if boundary > 0:
+            # Split into METAR and operational portions
+            metar_portion = atis_text[:boundary]
+            ops_portion = atis_text[boundary:]
+
+            # Only filter the METAR portion
+            filtered_metar = metar_portion
+            for pattern in METAR_REMOVAL_PATTERNS:
+                filtered_metar = re.sub(pattern, " ", filtered_metar, flags=re.IGNORECASE)
+
+            # Clean up the filtered METAR portion
+            filtered_metar = re.sub(r"\s+", " ", filtered_metar).strip()
+            filtered_metar = re.sub(r"\(\s*\)", "", filtered_metar)
+
+            # Combine: filtered METAR + unchanged operational portion
+            # Remove leading/trailing periods and spaces from the join point
+            filtered_metar = filtered_metar.rstrip(". ")
+            ops_portion = ops_portion.lstrip(". ")
+
+            if filtered_metar and ops_portion:
+                filtered = f"{filtered_metar}. {ops_portion}"
+            elif ops_portion:
+                filtered = ops_portion
+            else:
+                filtered = filtered_metar
+        else:
+            # Has US format but no clear boundary - filter entire text carefully
+            filtered = atis_text
+            for pattern in METAR_REMOVAL_PATTERNS:
+                filtered = re.sub(pattern, " ", filtered, flags=re.IGNORECASE)
+    else:
+        # Non-US format - don't filter weather, just clean up formatting
+        filtered = atis_text
+
+    # Final cleanup (applies to all formats)
     filtered = re.sub(r"\s+", " ", filtered).strip()
-
-    # Remove orphaned parentheses and punctuation
     filtered = re.sub(r"\(\s*\)", "", filtered)
     filtered = re.sub(r"\s+\.", ".", filtered)
     filtered = re.sub(r"\s+,", ",", filtered)
@@ -112,6 +229,8 @@ def filter_atis_text(atis_text: str) -> str:
     filtered = re.sub(r"\.{4,}", "...", filtered)  # 4+ dots -> ellipsis
     filtered = re.sub(r"\.\.\.\.", "...", filtered)  # 4 dots -> ellipsis
     filtered = re.sub(r"(?<!\.)\.\.(?!\.)", ".", filtered)  # exactly 2 dots -> 1 dot
+    # Clean double periods
+    filtered = re.sub(r"\.\s*\.", ".", filtered)
     # Clean up space before punctuation one more time
     filtered = re.sub(r"\s+\.", ".", filtered)
 
@@ -417,11 +536,25 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
             flags=re.IGNORECASE,
         )
 
-    # Pattern 1: Approach type + optional variant + optional comma + RWY + runway numbers
+    # Pattern 1: Compound approach types with AND separator (must come before single approach pattern)
+    # e.g., "ILS, AND VA, RWYS 30 AND 28R", "ILS AND RNAV RWYS 28L, 28R"
+    # Handles multiple approach types listed together before runway info
+    result = re.sub(
+        rf"\b({APPROACH_TYPES})[-\s]?([XYZWUK])?"
+        rf"(?:,?\s+AND\s+(?:{APPROACH_TYPES})[-\s]?[XYZWUK]?)+"
+        rf",?\s*({RWY_PREFIX})\s*"
+        rf"({RWY_NUM_PATTERN})\b",
+        r"[yellow]\g<0>[/yellow]",
+        result,
+        flags=re.IGNORECASE,
+    )
+
+    # Pattern 2: Approach type + optional variant + optional comma + RWY + runway numbers
     # e.g., "ILS Z RWY 22R", "RNAV-Y RWY 35", "ILS RWYS 16R AND 16L", "ILS, RWY 12"
     # Also handles spoken forms: "ILS RWYS 17R AND LEFT" means 17R and 17L
+    # Uses negative lookbehind to avoid matching after "AND " (already handled by compound Pattern 1)
     result = re.sub(
-        rf"\b({APPROACH_TYPES})[-\s]?([XYZWUK])?,?\s*"
+        rf"(?<!AND )(?<!AND)\b({APPROACH_TYPES})[-\s]?([XYZWUK])?,?\s*"
         rf"({RWY_PREFIX})?\s*"
         rf"({RWY_NUM_PATTERN})\b",
         r"[yellow]\g<0>[/yellow]",
@@ -429,7 +562,7 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
         flags=re.IGNORECASE,
     )
 
-    # Pattern 2: Approach type + APCH/APPROACH + RWY + runway numbers
+    # Pattern 3: Approach type + APCH/APPROACH + RWY + runway numbers
     # e.g., "ILS APCH RWY 35L", "VISUAL APPROACH RWY 26R", "VIS APCH RWYS 17L, 17R"
     # Also handles spoken forms: "ILS APCH RWYS 17R AND LEFT"
     result = re.sub(
@@ -549,5 +682,23 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
         result,
         flags=re.IGNORECASE,
     )
+
+    # Clean up nested yellow tags - keep only the outermost ones
+    # Repeatedly remove inner [yellow] and [/yellow] tags until stable
+    prev_result = None
+    while prev_result != result:
+        prev_result = result
+        # Remove [yellow] that appears after another [yellow] without a closing tag in between
+        result = re.sub(
+            r"(\[yellow\])([^\[]*)\[yellow\]",
+            r"\1\2",
+            result,
+        )
+        # Remove [/yellow] that appears before another [/yellow] without an opening tag in between
+        result = re.sub(
+            r"\[/yellow\]([^\[]*)\[/yellow\]",
+            r"\1[/yellow]",
+            result,
+        )
 
     return result

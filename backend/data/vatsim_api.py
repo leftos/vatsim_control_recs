@@ -320,6 +320,7 @@ def get_atis_for_airports(
                     "atis_code": atis.get("atis_code", ""),
                     "text_atis": text_atis,
                     "frequency": atis.get("frequency", ""),
+                    "source": "vatsim",  # VATSIM indicator
                 }
 
                 if icao not in result:

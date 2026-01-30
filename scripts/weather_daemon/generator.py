@@ -412,6 +412,7 @@ from backend.core.groupings import (  # noqa: E402
     resolve_grouping_recursively,
 )
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports  # noqa: E402
+from backend.data.datis_api import get_datis_for_airports  # noqa: E402
 from backend.data.atis_filter import filter_atis_text, colorize_atis_text  # noqa: E402
 from airport_disambiguator import AirportDisambiguator  # noqa: E402
 
@@ -826,10 +827,12 @@ class WeatherBriefingGenerator:
                     )
 
         # ATIS info - supports dual ATIS (departure/arrival)
+        # Shows source label (RW) for real-world D-ATIS when no VATSIM ATIS available
         atis_list = data.get("atis") or []
         for atis in atis_list:
             atis_code = atis.get("atis_code", "")
             atis_type = atis.get("type", "combined")
+            atis_source = atis.get("source", "vatsim")
             raw_text = atis.get("text_atis", "")
             filtered_text = filter_atis_text(raw_text)
             if filtered_text:
@@ -839,8 +842,10 @@ class WeatherBriefingGenerator:
                     type_label = "[cyan]DEP:[/cyan] "
                 elif atis_type == "arrival":
                     type_label = "[cyan]ARR:[/cyan] "
+                # Add source indicator for RW D-ATIS
+                source_label = "[#ffaa00](RW)[/#ffaa00] " if atis_source == "rw" else ""
                 display_text = colorize_atis_text(filtered_text, atis_code)
-                lines.append(f"  [#aaaaaa]{type_label}{display_text}[/#aaaaaa]")
+                lines.append(f"  [#aaaaaa]{source_label}{type_label}{display_text}[/#aaaaaa]")
 
         return "\n".join(lines)
 
@@ -1319,16 +1324,35 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
                 f"Rate limit recovery: {rate_status['error_count']} errors, recovered"
             )
 
-        # Fetch VATSIM data for ATIS
+        # Fetch VATSIM data for ATIS (preferred source)
         print("  Fetching VATSIM ATIS data...")
         logger.info("Fetching VATSIM ATIS data")
         vatsim_data = download_vatsim_data()
         atis_data = (
             get_atis_for_airports(vatsim_data, airports_list) if vatsim_data else {}
         )
+        vatsim_atis_count = len([a for a in atis_data.values() if a]) if atis_data else 0
+        print(f"    Found {vatsim_atis_count} airports with VATSIM ATIS")
+        logger.info(f"Found {vatsim_atis_count} airports with active VATSIM ATIS")
+
+        # Fetch RW D-ATIS for airports without VATSIM ATIS (fallback)
+        airports_without_vatsim_atis = [
+            icao for icao in airports_list if icao not in atis_data
+        ]
+        if airports_without_vatsim_atis:
+            print("  Fetching RW D-ATIS for airports without VATSIM ATIS...")
+            logger.info(
+                f"Fetching RW D-ATIS for {len(airports_without_vatsim_atis)} airports"
+            )
+            rw_atis_data = get_datis_for_airports(airports_without_vatsim_atis)
+            rw_atis_count = len([a for a in rw_atis_data.values() if a])
+            atis_data.update(rw_atis_data)
+            print(f"    Found {rw_atis_count} airports with RW D-ATIS")
+            logger.info(f"Found {rw_atis_count} airports with RW D-ATIS")
+
         atis_count = len([a for a in atis_data.values() if a]) if atis_data else 0
-        print(f"    Found {atis_count} airports with ATIS")
-        logger.info(f"Found {atis_count} airports with active ATIS")
+        print(f"    Total ATIS: {atis_count} airports")
+        logger.info(f"Total ATIS: {atis_count} airports")
 
         # Cache weather data for next run
         _save_weather_cache(config.weather_cache_dir, metars, tafs, atis_data)

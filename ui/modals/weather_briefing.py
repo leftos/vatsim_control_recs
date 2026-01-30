@@ -14,8 +14,9 @@ from textual.containers import Container, VerticalScroll
 from textual.binding import Binding
 from textual.app import ComposeResult
 
-from backend import get_metar_batch, get_taf_batch
+from backend import get_metar_batch, get_taf_batch, get_weather_smart
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
+from backend.data.datis_api import get_datis_for_airports
 from backend.data.atis_filter import filter_atis_text, colorize_atis_text
 from backend.briefing import (
     AreaClusterer,
@@ -201,66 +202,90 @@ class WeatherBriefingScreen(ModalScreen):
 
     async def _fetch_all_weather_async(self) -> None:
         """Fetch all weather data in parallel"""
+        try:
+            await self._fetch_all_weather_async_inner()
+        except Exception as e:
+            # Show error in the content widget
+            try:
+                content_widget = self.query_one("#briefing-content", Static)
+                content_widget.update(f"[red]Error fetching weather: {e}[/red]")
+                summary_widget = self.query_one("#briefing-summary", Static)
+                summary_widget.update("[red]Error[/red]")
+            except Exception:
+                pass
+            raise  # Re-raise to log the error
+
+    async def _fetch_all_weather_async_inner(self) -> None:
+        """Inner implementation of weather fetching"""
         loop = asyncio.get_event_loop()
         total_airports = len(self.airports)
 
         # Track completion status for parallel fetches
         progress = {
-            "metar": (0, total_airports),
-            "taf": (0, total_airports),
+            "weather": (0, total_airports),
             "vatsim": False,
         }
 
         def update_fetch_progress():
-            metar_done, metar_total = progress["metar"]
-            taf_done, taf_total = progress["taf"]
+            weather_done, weather_total = progress["weather"]
             vatsim_done = progress["vatsim"]
 
-            metar_str = (
-                "[green]METAR ✓[/green]"
-                if metar_done == metar_total
-                else f"[dim]METAR {metar_done}/{metar_total}[/dim]"
-            )
-            taf_str = (
-                "[green]TAF ✓[/green]"
-                if taf_done == taf_total
-                else f"[dim]TAF {taf_done}/{taf_total}[/dim]"
+            weather_str = (
+                "[green]Weather ✓[/green]"
+                if weather_done == weather_total
+                else f"[dim]Weather {weather_done}/{weather_total}[/dim]"
             )
             vatsim_str = (
                 "[green]ATIS ✓[/green]" if vatsim_done else "[dim]ATIS...[/dim]"
             )
 
-            self._update_progress(f"Fetching: {metar_str} | {taf_str} | {vatsim_str}")
+            self._update_progress(f"Fetching: {weather_str} | {vatsim_str}")
 
-        # Progress callbacks for batch functions
-        def metar_progress(completed, total):
-            progress["metar"] = (completed, total)
-            # Schedule UI update on main thread
-            loop.call_soon_threadsafe(update_fetch_progress)
-
-        def taf_progress(completed, total):
-            progress["taf"] = (completed, total)
+        # Progress callback for smart weather fetch
+        def weather_progress(completed, total):
+            progress["weather"] = (completed, total)
             loop.call_soon_threadsafe(update_fetch_progress)
 
         # Initial progress
         update_fetch_progress()
 
-        # Create tasks for parallel fetching
-        async def fetch_metars():
-            result = await loop.run_in_executor(
-                None,
-                lambda: get_metar_batch(
-                    self.airports, progress_callback=metar_progress
-                ),
-            )
-            return result
+        # Build airport coordinates from unified data for smart fetching
+        airport_coords = {}
+        if config.UNIFIED_AIRPORT_DATA:
+            for icao in self.airports:
+                apt_data = config.UNIFIED_AIRPORT_DATA.get(icao, {})
+                lat = apt_data.get("latitude")
+                lon = apt_data.get("longitude")
+                if lat is not None and lon is not None:
+                    airport_coords[icao] = (lat, lon)
 
-        async def fetch_tafs():
-            result = await loop.run_in_executor(
-                None,
-                lambda: get_taf_batch(self.airports, progress_callback=taf_progress),
-            )
-            return result
+        # Create tasks for parallel fetching
+        async def fetch_weather():
+            # Use smart fetching if we have coordinates for most airports
+            if len(airport_coords) >= len(self.airports) * 0.8:
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: get_weather_smart(
+                        self.airports,
+                        airport_coords,
+                        include_taf=True,
+                        progress_callback=weather_progress,
+                    ),
+                )
+                return result
+            else:
+                # Fall back to individual batch queries if coordinates unavailable
+                metars = await loop.run_in_executor(
+                    None,
+                    lambda: get_metar_batch(
+                        self.airports, progress_callback=weather_progress
+                    ),
+                )
+                tafs = await loop.run_in_executor(
+                    None,
+                    lambda: get_taf_batch(self.airports),
+                )
+                return (metars, tafs)
 
         async def fetch_vatsim():
             result = await loop.run_in_executor(None, download_vatsim_data)
@@ -269,16 +294,26 @@ class WeatherBriefingScreen(ModalScreen):
             return result
 
         # Fetch all in parallel
-        metars, tafs, vatsim_data = await asyncio.gather(
-            fetch_metars(), fetch_tafs(), fetch_vatsim()
+        (metars, tafs), vatsim_data = await asyncio.gather(
+            fetch_weather(), fetch_vatsim()
         )
 
-        # Extract ATIS info
+        # Extract ATIS info - prefer VATSIM, fall back to RW D-ATIS
         self._update_progress("Extracting ATIS information...")
         await asyncio.sleep(0)
         atis_data = {}
         if vatsim_data:
             atis_data = get_atis_for_airports(vatsim_data, self.airports)
+
+        # Fetch RW D-ATIS for airports without VATSIM ATIS
+        airports_without_vatsim_atis = [
+            icao for icao in self.airports if icao not in atis_data
+        ]
+        if airports_without_vatsim_atis:
+            rw_atis_data = await loop.run_in_executor(
+                None, lambda: get_datis_for_airports(airports_without_vatsim_atis)
+            )
+            atis_data.update(rw_atis_data)
 
         # Build weather data structure with progress updates
         update_interval = max(
@@ -624,10 +659,12 @@ class WeatherBriefingScreen(ModalScreen):
 
         # ATIS info (filtered to show only non-METAR info)
         # Supports dual ATIS (departure/arrival) - atis_data is a list
+        # Shows source label (RW) for real-world D-ATIS when no VATSIM ATIS available
         atis_list = data.get("atis") or []
         for atis in atis_list:
             atis_code = atis.get("atis_code", "")
             atis_type = atis.get("type", "combined")
+            atis_source = atis.get("source", "vatsim")
             raw_text = atis.get("text_atis", "")
             # Filter out METAR-duplicated info
             filtered_text = filter_atis_text(raw_text)
@@ -638,9 +675,11 @@ class WeatherBriefingScreen(ModalScreen):
                     type_label = "[cyan]DEP:[/cyan] "
                 elif atis_type == "arrival":
                     type_label = "[cyan]ARR:[/cyan] "
+                # Add source indicator for RW D-ATIS
+                source_label = "[#ffaa00](RW)[/#ffaa00] " if atis_source == "rw" else ""
                 # Colorize ATIS letter if present
                 display_text = colorize_atis_text(filtered_text, atis_code)
-                lines.append(f"  [dim]{type_label}{display_text}[/dim]")
+                lines.append(f"  [dim]{source_label}{type_label}{display_text}[/dim]")
 
         return "\n".join(lines)
 
