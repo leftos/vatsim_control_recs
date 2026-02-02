@@ -222,8 +222,10 @@ def load_preset_groupings() -> Dict[str, List[str]]:
                     if isinstance(value["airports"], list):
                         airports = [str(v) for v in value["airports"]]
 
-                # Filter out single-airport groupings
-                if airports and len(airports) > 1:
+                # Filter out single-airport groupings unless they have a facility_id
+                # (keeps legitimate single-airport TRACONs like ITO Hilo)
+                facility_id = value.get("facility_id") if isinstance(value, dict) else None
+                if airports and (len(airports) > 1 or facility_id):
                     all_preset_groupings[key] = airports
 
         except json.JSONDecodeError as e:
