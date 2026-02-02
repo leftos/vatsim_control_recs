@@ -299,6 +299,48 @@ def get_artcc_boundaries(cache_dir: Path) -> Dict[str, List[List[Tuple[float, fl
     """
     boundaries = download_artcc_boundaries(cache_dir)
     if boundaries:
+        # Override ZAN with domestic ARTCC boundary from vatspy-data-project PAZA-D
+        # vNAS returns oceanic FIR which extends to 90°N; PAZA-D is the domestic boundary
+        # Source: https://github.com/vatsimnetwork/vatspy-data-project/blob/master/Boundaries.geojson
+        boundaries["ZAN"] = [
+            [
+                # Starting from northwest corner, going clockwise
+                (73.0, -168.973056),
+                (73.0, -141.0),
+                # Eastern border (Canadian border at 141°W)
+                (62.0, -141.0),
+                # Southeast Alaska panhandle
+                (60.35, -139.183333),
+                (59.566667, -135.033333),
+                (57.0, -132.083333),
+                (54.491667, -131.8),
+                (54.583333, -132.833333),
+                (54.108333, -134.0),
+                (54.108333, -135.45),
+                (54.0, -136.0),
+                (53.3675, -137.0),
+                # Southern coast / Gulf of Alaska
+                (56.761667, -151.75),
+                (56.0, -153.0),
+                (53.5, -160.0),
+                # Aleutian chain
+                (52.599722, -163.679167),
+                (53.465278, -167.337222),
+                (54.217222, -167.744167),
+                (55.0, -167.0),
+                (56.966667, -165.0),
+                # Western coast / Bering Sea
+                (58.246944, -166.924722),
+                (58.739444, -167.713056),
+                (59.331111, -167.913889),
+                (60.5875, -168.363611),
+                (62.67, -170.7525),
+                (62.583333, -175.0),
+                (65.0, -168.973056),
+                # Close the polygon
+                (73.0, -168.973056),
+            ]
+        ]
         return boundaries
 
     # Fall back to embedded boundaries

@@ -1142,14 +1142,17 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
                     artcc_groupings = json.load(f)
 
                 for grouping_name, grouping_data in artcc_groupings.items():
-                    # Filter out single-airport groupings
+                    # Filter out single-airport groupings unless they have a facility_id
+                    # (keeps legitimate single-airport TRACONs like ITO Hilo)
                     if isinstance(grouping_data, dict):
                         airports = grouping_data.get("airports", [])
+                        facility_id = grouping_data.get("facility_id")
                     elif isinstance(grouping_data, list):
                         airports = grouping_data
+                        facility_id = None
                     else:
                         continue
-                    if len(airports) <= 1:
+                    if len(airports) <= 1 and not facility_id:
                         continue
 
                     # Resolve nested groupings (airports resolved from all_groupings)

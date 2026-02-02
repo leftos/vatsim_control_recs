@@ -1,9 +1,10 @@
 {
-  "HNL Honolulu ATCT": {
+  "HNL Honolulu ATCT/TRACON": {
     "airports": [
-      "KHHI",
-      "KHNL",
-      "KJRF"
+      "PHNL",
+      "PHJR",
+      "PHIK",
+      "PHHI"
     ],
     "position_prefixes": [
       "HNL"
@@ -12,5 +13,89 @@
       "APP"
     ],
     "facility_id": "HNL"
+  },
+  "ITO Hilo TRACON": {
+    "airports": [
+      "PHTO"
+    ],
+    "position_prefixes": [
+      "ITO"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "ITO"
+  },
+  "OGG Maui TRACON": {
+    "airports": [
+      "PHOG",
+      "PHJH"
+    ],
+    "position_prefixes": [
+      "OGG"
+    ],
+    "position_suffixes": [
+      "APP"
+    ],
+    "facility_id": "OGG"
+  },
+  "Kauai Sector": {
+    "airports": [
+      "PHLI",
+      "PHBK",
+      "PHPA",
+      "PHDH"
+    ],
+    "position_prefixes": [
+      "HNL"
+    ],
+    "position_suffixes": [
+      "02"
+    ],
+    "facility_id": null
+  },
+  "Molokai Sector": {
+    "airports": [
+      "PHMK",
+      "PHLU",
+      "PHNG"
+    ],
+    "position_prefixes": [
+      "HNL"
+    ],
+    "position_suffixes": [
+      "03"
+    ],
+    "facility_id": null
+  },
+  "Lanai Sector": {
+    "airports": [
+      "PHNY",
+      "PHJH"
+    ],
+    "position_prefixes": [
+      "HNL"
+    ],
+    "position_suffixes": [
+      "04"
+    ],
+    "facility_id": null
+  },
+  "Big Island Sector": {
+    "airports": [
+      "PHKO",
+      "PHMU",
+      "PHSF",
+      "PHHN",
+      "PHUP",
+      "ITO Hilo TRACON"
+    ],
+    "position_prefixes": [
+      "HNL"
+    ],
+    "position_suffixes": [
+      "05"
+    ],
+    "facility_id": null
   }
 }

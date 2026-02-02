@@ -114,13 +114,15 @@ class WeatherTileGenerator:
         airport_weather: Dict[str, Dict[str, Any]],
         output_dir: Path,
         conus_artccs: Set[str],
-        max_distance_deg: float = 1.0,
+        max_distance_nm: float = 60.0,
         zoom_levels: Tuple[int, ...] = (4, 5, 6, 7, 8, 9, 10),
     ):
         """Initialize the tile generator with KD-tree for efficient lookups."""
         self.output_dir = output_dir
         self.zoom_levels = zoom_levels
-        self.max_distance_sq = max_distance_deg**2
+        # Store max distance in nautical miles for latitude-independent coverage
+        # 1 degree of latitude = 60 nm, so we convert to degrees at query time
+        self.max_distance_nm = max_distance_nm
 
         # Build combined list of all CONUS boundary polygons
         self.all_boundaries: List[List[Tuple[float, float]]] = []
@@ -128,18 +130,13 @@ class WeatherTileGenerator:
             if artcc in conus_artccs:
                 self.all_boundaries.extend(polys)
 
-        # Calculate CONUS bounding box first (needed for cosine correction)
+        # Calculate bounding box of all regions
         self.bounds = self._calculate_bounds(artcc_boundaries, conus_artccs)
 
-        # Calculate reference latitude for cosine correction
-        # At CONUS latitudes (~25-50°N), 1° longitude < 1° latitude in ground distance
-        # We scale longitude by cos(ref_lat) to normalize distances
-        self.ref_lat = (self.bounds.north + self.bounds.south) / 2
-        self.cos_ref_lat = math.cos(math.radians(self.ref_lat))
-
-        # Build airport arrays and KD-tree for spatial queries
+        # Build airport arrays for spatial queries
+        # Note: We store raw coordinates and apply per-pixel cosine correction during tile generation
+        # This ensures accurate distance calculations at all latitudes (especially important for Alaska)
         valid_categories = {"VFR", "MVFR", "IFR", "LIFR"}
-        coords = []
         raw_coords = []
         categories = []
 
@@ -148,24 +145,17 @@ class WeatherTileGenerator:
             if cat in valid_categories:
                 lat, lon = data["lat"], data["lon"]
                 raw_coords.append((lat, lon))
-                # Apply cosine correction to longitude for equal-distance KD-tree
-                coords.append((lat, lon * self.cos_ref_lat))
                 categories.append(CATEGORY_INDEX[cat])
 
-        if coords:
+        if raw_coords:
             self.airport_coords = np.array(raw_coords, dtype=np.float32)
-            self.airport_coords_scaled = np.array(coords, dtype=np.float32)
             self.airport_categories = np.array(categories, dtype=np.int8)
-            # Build KD-tree with scaled coordinates for circular distance regions
-            self.kdtree = cKDTree(self.airport_coords_scaled)
         else:
             self.airport_coords = np.array([], dtype=np.float32)
-            self.airport_coords_scaled = np.array([], dtype=np.float32)
             self.airport_categories = np.array([], dtype=np.int8)
-            self.kdtree = None
 
         logger.info(
-            f"WeatherTileGenerator initialized with {len(coords)} airports (KD-tree indexed, ref_lat={self.ref_lat:.1f}°)"
+            f"WeatherTileGenerator initialized with {len(raw_coords)} airports"
         )
 
     def _calculate_bounds(
@@ -205,11 +195,12 @@ class WeatherTileGenerator:
 
     def _generate_tile(self, tile_x: int, tile_y: int, zoom: int) -> Optional[bytes]:
         """
-        Generate a single tile using KD-tree for memory-efficient nearest neighbor lookups.
+        Generate a single tile using per-pixel cosine-corrected distance calculations.
 
-        Memory usage: O(tile_size^2) instead of O(tile_size^2 * num_airports)
+        Uses the tile's center latitude for cosine correction, which is accurate enough
+        within a single tile and properly handles high-latitude regions like Alaska.
         """
-        if self.kdtree is None:
+        if len(self.airport_coords) == 0:
             return None
 
         tile_bounds = get_tile_bounds(tile_x, tile_y, zoom)
@@ -245,22 +236,37 @@ class WeatherTileGenerator:
         if not np.any(inside_any):
             return None
 
-        # Flatten coordinates for KD-tree query
-        # Apply same cosine correction used when building the tree
-        lons_scaled = lons * self.cos_ref_lat
+        # Use tile center latitude for cosine correction
+        # This is accurate within a single tile (tiles span ~1-2 degrees of latitude)
+        tile_center_lat = (tile_bounds.north + tile_bounds.south) / 2
+        cos_lat = math.cos(math.radians(tile_center_lat))
+
+        # Build a temporary KD-tree with coordinates scaled for this tile's latitude
+        airport_lats = self.airport_coords[:, 0]
+        airport_lons = self.airport_coords[:, 1]
+        scaled_coords = np.column_stack([airport_lats, airport_lons * cos_lat])
+        kdtree = cKDTree(scaled_coords)
+
+        # Scale pixel coordinates with the same factor
+        lons_scaled = lons * cos_lat
         coords_flat = np.column_stack([lats.ravel(), lons_scaled.ravel()])
 
         # Query KD-tree for nearest airport to each pixel
-        # This is O(n log m) where n=pixels, m=airports - much more memory efficient
-        distances, indices = self.kdtree.query(coords_flat, k=1)
+        distances, indices = kdtree.query(coords_flat, k=1)
 
         # Reshape results
         distances = distances.reshape(TILE_SIZE, TILE_SIZE)
         indices = indices.reshape(TILE_SIZE, TILE_SIZE)
 
+        # Convert max distance from nautical miles to degrees
+        # 1 degree of latitude = 60 nm always
+        # In cosine-scaled space, latitude degrees are the unit of measure
+        max_distance_deg = self.max_distance_nm / 60.0
+        max_distance_sq = max_distance_deg**2
+
         # Get categories and apply distance mask
         pixel_categories = self.airport_categories[indices]
-        valid_mask = inside_any & (distances**2 <= self.max_distance_sq)
+        valid_mask = inside_any & (distances**2 <= max_distance_sq)
 
         if not np.any(valid_mask):
             return None
@@ -286,7 +292,7 @@ class WeatherTileGenerator:
         Args:
             max_workers: Number of parallel workers. Keep low (1-2) for memory-constrained servers.
         """
-        if self.kdtree is None:
+        if len(self.airport_coords) == 0:
             logger.warning("No airports with valid weather data")
             print("    WARNING: No airports with valid weather data")
             return {}

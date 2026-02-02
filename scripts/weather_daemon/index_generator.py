@@ -15,14 +15,17 @@ from .config import DaemonConfig, ARTCC_NAMES
 from .artcc_boundaries import get_artcc_boundaries
 from .simaware_boundaries import get_all_grouping_boundaries
 
-# Continental US ARTCCs to display on the map (excludes oceanic/remote)
+# Facilities to display on the map
+# Note: ZUA (Guam) excluded - positive longitude (+145E) breaks tile bounding box calculation
 CONUS_ARTCCS = {
     "ZAB",
+    "ZAN",
     "ZAU",
     "ZBW",
     "ZDC",
     "ZDV",
     "ZFW",
+    "ZHN",
     "ZHU",
     "ZID",
     "ZJX",
@@ -1415,6 +1418,7 @@ def generate_html(
             zoom: initialZoom,
             minZoom: 3,
             maxZoom: 10,
+            worldCopyJump: true,  // Jump to same location when panning across dateline
         }});
 
         // Create custom panes for airport markers (major airports on top of regional)
@@ -2453,9 +2457,19 @@ def build_sidebar_html(
             stats_html += f'<span class="stat stat-vfr">{stats["VFR"]}</span>'
 
         # Link to FAA/NWS real-world aviation weather briefing
+        # Non-CONUS ARTCCs need special handling - they don't have CWSU pages
+        if artcc == "ZHN":
+            awc_url = "https://www.weather.gov/hfo/aviation"
+            awc_name = "NWS Weather Briefing"
+        elif artcc == "ZAN":
+            awc_url = "https://www.weather.gov/aawu"
+            awc_name = "NWS Weather Briefing"
+        else:
+            awc_url = f"https://aviationweather.gov/pdwb/?cwsu={artcc.lower()}"
+            awc_name = "FAA Weather Briefing"
         awc_briefing_html = f"""
-                <a href="https://aviationweather.gov/pdwb/?cwsu={artcc.lower()}" target="_blank" class="awc-briefing-link">
-                    <span class="awc-briefing-name">FAA Weather Briefing</span>
+                <a href="{awc_url}" target="_blank" class="awc-briefing-link">
+                    <span class="awc-briefing-name">{awc_name}</span>
                     <span class="icon">🌐</span>
                 </a>"""
 

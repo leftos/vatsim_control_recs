@@ -161,9 +161,5 @@ data/cifp/FAACIFP*
 test_artcc_cache/
 test_output/
 
-cache/artcc_boundaries/
-cache/weather_cache/
-cache/weather/
+cache/
 temp/
-cache/simaware*
-cache/simaware_boundaries/
