@@ -39,11 +39,12 @@
     ],
     "facility_id": "OGG"
   },
-  "Sector 2 Kauai": {
+  "Kauai Sector": {
     "airports": [
       "PHLI",
       "PHBK",
-      "PHPA"
+      "PHPA",
+      "PHDH"
     ],
     "position_prefixes": [
       "HNL"
@@ -53,7 +54,7 @@
     ],
     "facility_id": null
   },
-  "Sector 3 Molokai": {
+  "Molokai Sector": {
     "airports": [
       "PHMK",
       "PHLU",
@@ -67,7 +68,7 @@
     ],
     "facility_id": null
   },
-  "Sector 4 Lanai": {
+  "Lanai Sector": {
     "airports": [
       "PHNY",
       "PHJH"
@@ -80,7 +81,7 @@
     ],
     "facility_id": null
   },
-  "Sector 5 Big Island": {
+  "Big Island Sector": {
     "airports": [
       "PHKO",
       "PHMU",
@@ -93,30 +94,6 @@
     ],
     "position_suffixes": [
       "05"
-    ],
-    "facility_id": null
-  },
-  "Sector 6 West": {
-    "airports": [
-      "PHDH"
-    ],
-    "position_prefixes": [
-      "HNL"
-    ],
-    "position_suffixes": [
-      "06"
-    ],
-    "facility_id": null
-  },
-  "Sector 7 East": {
-    "airports": [
-      "PHTO"
-    ],
-    "position_prefixes": [
-      "HNL"
-    ],
-    "position_suffixes": [
-      "07"
     ],
     "facility_id": null
   }
