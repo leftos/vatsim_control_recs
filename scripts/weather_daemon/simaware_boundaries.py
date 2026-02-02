@@ -79,10 +79,11 @@ def load_preset_grouping_data(
                         "facility_id": None,
                     }
 
-                # Filter out single-airport groupings
+                # Filter out single-airport groupings unless they have a facility_id
                 if grouping_data:
                     airports = grouping_data.get("airports", [])
-                    if len(airports) > 1:
+                    facility_id = grouping_data.get("facility_id")
+                    if len(airports) > 1 or facility_id:
                         all_data[key] = grouping_data
 
         except Exception:
