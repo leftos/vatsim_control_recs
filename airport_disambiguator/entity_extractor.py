@@ -31,6 +31,11 @@ class EntityExtractor:
                 self._nlp = spacy.load("en_core_web_sm")
                 sys.stdout.flush()
             except OSError:
+                if getattr(sys, 'frozen', False):
+                    raise OSError(
+                        "spaCy model 'en_core_web_sm' not found in bundled application. "
+                        "The PyInstaller build may be missing the model data."
+                    )
                 # Model not found, download it
                 print("\n" + "=" * 80)
                 print("FIRST-TIME SETUP: Downloading spaCy Language Model")

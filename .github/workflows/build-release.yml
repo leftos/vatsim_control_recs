@@ -1,0 +1,120 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: vatsim_control_recs-windows
+            archive_cmd: Compress-Archive -Path dist/vatsim_control_recs/* -DestinationPath vatsim_control_recs-windows.zip
+            archive_ext: zip
+          - os: ubuntu-latest
+            artifact: vatsim_control_recs-linux
+            archive_cmd: tar -czf vatsim_control_recs-linux.tar.gz -C dist vatsim_control_recs
+            archive_ext: tar.gz
+          - os: macos-latest
+            artifact: vatsim_control_recs-macos
+            archive_cmd: tar -czf vatsim_control_recs-macos.tar.gz -C dist vatsim_control_recs
+            archive_ext: tar.gz
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller -r requirements.txt
+          python -m spacy download en_core_web_sm
+
+      - name: Build with PyInstaller
+        run: pyinstaller vatsim_control_recs.spec --noconfirm
+
+      - name: Archive build
+        run: ${{ matrix.archive_cmd }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.${{ matrix.archive_ext }}
+          retention-days: 5
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Delete existing latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete latest --yes --cleanup-tag || true
+
+      - name: Create rolling release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > release_notes.md <<'NOTES'
+          Automated build from the latest commit on `main`.
+
+          ## Download
+
+          | Platform | File |
+          |----------|------|
+          | Windows  | `vatsim_control_recs-windows.zip` |
+          | macOS (Apple Silicon) | `vatsim_control_recs-macos.tar.gz` |
+          | Linux    | `vatsim_control_recs-linux.tar.gz` |
+
+          ## Usage
+
+          **Windows**: Extract the zip, then run `vatsim_control_recs\vatsim_control_recs.exe`
+
+          **macOS**: Extract and run:
+          ```
+          tar xzf vatsim_control_recs-macos.tar.gz
+          ./vatsim_control_recs/vatsim_control_recs
+          ```
+          > First launch: right-click the executable → Open (macOS Gatekeeper requires this for unsigned apps)
+
+          **Linux**: Extract and run:
+          ```
+          tar xzf vatsim_control_recs-linux.tar.gz
+          ./vatsim_control_recs/vatsim_control_recs
+          ```
+
+          All command-line options (e.g. `--airports KSFO KLAX`) work the same as the Python version.
+          NOTES
+          sed -i 's/^          //' release_notes.md
+          gh release create latest \
+            artifacts/vatsim_control_recs-windows/vatsim_control_recs-windows.zip \
+            artifacts/vatsim_control_recs-linux/vatsim_control_recs-linux.tar.gz \
+            artifacts/vatsim_control_recs-macos/vatsim_control_recs-macos.tar.gz \
+            --prerelease \
+            --title "Latest Build" \
+            --notes-file release_notes.md

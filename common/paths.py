@@ -18,7 +18,11 @@ from pathlib import Path
 APP_NAME = "VATSIMControlRecs"
 
 # Project root directory (where main.py lives) - for read-only data
-_PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+# When frozen by PyInstaller (--onedir), sys._MEIPASS points to the bundle directory
+if getattr(sys, 'frozen', False):
+    _PROJECT_ROOT = Path(sys._MEIPASS).resolve()
+else:
+    _PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
 
 def get_project_root() -> Path:

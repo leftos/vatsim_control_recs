@@ -263,15 +263,17 @@ def ensure_spacy_model_installed():
         return False
 
 
-# Ensure we're running in a virtual environment (creates one if needed)
-ensure_venv_and_restart()
+# Skip bootstrap when running as a frozen PyInstaller executable
+if not getattr(sys, 'frozen', False):
+    # Ensure we're running in a virtual environment (creates one if needed)
+    ensure_venv_and_restart()
 
-# Ensure dependencies are installed before importing them
-if not ensure_requirements_installed():
-    sys.exit(1)
+    # Ensure dependencies are installed before importing them
+    if not ensure_requirements_installed():
+        sys.exit(1)
 
-if not ensure_spacy_model_installed():
-    sys.exit(1)
+    if not ensure_spacy_model_installed():
+        sys.exit(1)
 
 from backend import analyze_flights_data, load_unified_airport_data  # noqa: E402
 from backend import ensure_cifp_data, ensure_runway_data, cleanup_old_cifp_caches  # noqa: E402
