@@ -7,15 +7,17 @@ Usage:
 
 from PyInstaller.utils.hooks import collect_all
 
-# Collect spaCy, its language model, and Textual (includes CSS/templates)
+# Collect spaCy, its language model, Textual (includes CSS/templates),
+# and Rich (includes dynamically-loaded _unicode_data modules)
 spacy_datas, spacy_binaries, spacy_hiddenimports = collect_all('spacy')
 model_datas, model_binaries, model_hiddenimports = collect_all('en_core_web_sm')
 textual_datas, textual_binaries, textual_hiddenimports = collect_all('textual')
+rich_datas, rich_binaries, rich_hiddenimports = collect_all('rich')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=spacy_binaries + model_binaries + textual_binaries,
+    binaries=spacy_binaries + model_binaries + textual_binaries + rich_binaries,
     datas=[
         # Application data files
         ('data/APT_BASE.csv', 'data'),
@@ -25,8 +27,8 @@ a = Analysis(
         ('data/airport_spatial_cache.json', 'data'),
         ('data/custom_groupings.json', 'data'),
         ('data/preset_groupings', 'data/preset_groupings'),
-    ] + spacy_datas + model_datas + textual_datas,
-    hiddenimports=spacy_hiddenimports + model_hiddenimports + textual_hiddenimports,
+    ] + spacy_datas + model_datas + textual_datas + rich_datas,
+    hiddenimports=spacy_hiddenimports + model_hiddenimports + textual_hiddenimports + rich_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
