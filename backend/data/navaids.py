@@ -972,7 +972,7 @@ def clear_navaid_cache() -> None:
     load_airway_restrictions.cache_clear()
 
 
-@dataclass
+@dataclass(frozen=True)
 class MeaViolation:
     """Information about an MEA violation on a route segment."""
 
@@ -1073,19 +1073,24 @@ def get_max_mea_for_route(
 
                     if in_range and restr.mea is not None:
                         # Find the fix identifiers for this segment
+                        # airway_fixes is sorted by sequence, so find the fix
+                        # at this sequence and the one immediately before it
                         segment_end = None
                         segment_start = None
+                        prev_fix = None
                         for fix in airway_fixes:
                             if fix.sequence == seq:
                                 segment_end = fix.identifier
-                            elif fix.sequence == seq - 10:  # Typical spacing is 10
-                                segment_start = fix.identifier
+                                if prev_fix is not None:
+                                    segment_start = prev_fix.identifier
+                                break
+                            prev_fix = fix
 
-                        # If we can't find exact fixes, use generic labels
+                        # If we can't find fix names, use the airway name
                         if not segment_start:
-                            segment_start = f"seq{seq - 10}"
+                            segment_start = airway
                         if not segment_end:
-                            segment_end = f"seq{seq}"
+                            segment_end = airway
 
                         violations.append(
                             MeaViolation(
@@ -1100,5 +1105,9 @@ def get_max_mea_for_route(
                             max_mea = restr.mea
 
         i += 1
+
+    # Deduplicate violations (same airway segment can appear if airway is
+    # listed multiple times in the route string)
+    violations = list(dict.fromkeys(violations))
 
     return (max_mea, violations)
