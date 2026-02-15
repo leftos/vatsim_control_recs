@@ -111,6 +111,24 @@ def calculate_eta(
             arrival_airport["longitude"],
         )
 
+        # Attempt route-based distance calculation for more accurate ETA
+        flight_plan = flight.get("flight_plan")
+        if flight_plan and flight_plan.get("route"):
+            from backend.core.route_distance import get_route_remaining_distance
+
+            route_distance = get_route_remaining_distance(
+                flight_plan["route"],
+                flight["latitude"],
+                flight["longitude"],
+                arrival_airport["latitude"],
+                arrival_airport["longitude"],
+                departure=flight_plan.get("departure"),
+                arrival=flight_plan.get("arrival"),
+            )
+            # Use route distance if valid (must be >= straight-line to be plausible)
+            if route_distance is not None and route_distance >= lateral_distance:
+                lateral_distance = route_distance
+
         # Account for altitude: aircraft need distance to descend
         # Using the 3:1 rule: 3nm per 1000ft of altitude to lose
         APPROACH_AGL = 2500  # Target altitude AGL for approach (feet)

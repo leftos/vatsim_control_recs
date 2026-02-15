@@ -88,6 +88,22 @@ class CifpApproach:
         return [f.fix_identifier for f in self.fixes if f.fix_type == "IF"]
 
 
+@dataclass
+class CifpDP:
+    """A departure procedure (SID) with waypoints."""
+
+    identifier: str  # e.g., "CNDEL5"
+    waypoints: list[str]  # All waypoints in the common route
+
+
+@dataclass
+class CifpSTAR:
+    """A STAR (Standard Terminal Arrival Route) with waypoints."""
+
+    identifier: str  # e.g., "SCOLA1"
+    waypoints: list[str]  # All waypoints in the common route
+
+
 # --- AIRAC Cycle Calculation ---
 
 
@@ -514,9 +530,275 @@ def has_instrument_approaches(airport: str) -> bool:
     return len(approaches) > 0
 
 
-def clear_approach_cache() -> None:
-    """Clear the LRU cache for approach lookups.
+def parse_dp_record(line: str) -> Optional[tuple[str, str, str, int]]:
+    """Parse a single CIFP DP (departure procedure) record.
+
+    ARINC 424 DP records (subsection D):
+    - Position 14-19: DP identifier (e.g., "CNDEL5")
+    - Position 21-25: Transition name ("ALL"/blank = common route)
+    - Position 27-29: Sequence number
+    - Position 30-34: Fix identifier
+
+    Returns:
+        Tuple of (dp_id, transition, fix_identifier, sequence) or None
+    """
+    if len(line) < 35:
+        return None
+
+    if not line.startswith("SUSAP"):
+        return None
+
+    if len(line) < 13 or line[12] != "D":
+        return None
+
+    dp_id = line[13:19].strip()
+    transition = line[20:25].strip()
+    sequence_str = line[26:29].strip()
+    fix_identifier = line[29:34].strip()
+
+    try:
+        sequence = int(sequence_str)
+    except ValueError:
+        sequence = 0
+
+    if not fix_identifier or not dp_id:
+        return None
+
+    return (dp_id, transition, fix_identifier, sequence)
+
+
+def parse_star_record(line: str) -> Optional[tuple[str, str, str, int]]:
+    """Parse a single CIFP STAR record.
+
+    ARINC 424 STAR records (subsection E):
+    - Position 14-19: STAR identifier (e.g., "SCOLA1")
+    - Position 21-25: Transition name ("ALL"/blank = common route)
+    - Position 27-29: Sequence number
+    - Position 30-34: Fix identifier
+
+    Returns:
+        Tuple of (star_id, transition, fix_identifier, sequence) or None
+    """
+    if len(line) < 35:
+        return None
+
+    if not line.startswith("SUSAP"):
+        return None
+
+    if len(line) < 13 or line[12] != "E":
+        return None
+
+    star_id = line[13:19].strip()
+    transition = line[20:25].strip()
+    sequence_str = line[26:29].strip()
+    fix_identifier = line[29:34].strip()
+
+    try:
+        sequence = int(sequence_str)
+    except ValueError:
+        sequence = 0
+
+    if not fix_identifier or not star_id:
+        return None
+
+    return (star_id, transition, fix_identifier, sequence)
+
+
+@lru_cache(maxsize=100)
+def get_dp_data(airport: str, dp_name: str) -> Optional[CifpDP]:
+    """Get DP (departure procedure) common route waypoints from CIFP.
+
+    Args:
+        airport: Airport code (e.g., "OAK", "KOAK")
+        dp_name: DP name (e.g., "CNDEL5")
+
+    Returns:
+        CifpDP with common route waypoints, or None if not found
+    """
+    cifp_path = ensure_cifp_data(quiet=True)
+    if not cifp_path:
+        return None
+
+    airport = airport.upper()
+    if airport.startswith("K") and len(airport) == 4:
+        airport_code = airport[1:]
+    else:
+        airport_code = airport
+
+    dp_name = dp_name.upper().strip()
+
+    # Extract base procedure ID: "CNDEL5" -> prefix "CNDEL5"
+    # CIFP records may have extra chars (e.g., "CNDEL54" for variant)
+    dp_id_prefix = dp_name
+
+    search_prefix = f"SUSAP K{airport_code}"
+
+    dp_records: dict[str, list[tuple[str, int]]] = {}
+
+    try:
+        with open(cifp_path, "r", encoding="latin-1") as f:
+            for line in f:
+                if not line.startswith(search_prefix):
+                    continue
+
+                result = parse_dp_record(line)
+                if not result:
+                    continue
+
+                dp_id, transition, fix_id, sequence = result
+
+                if not dp_id.startswith(dp_id_prefix):
+                    continue
+
+                if transition not in dp_records:
+                    dp_records[transition] = []
+                dp_records[transition].append((fix_id, sequence))
+    except (OSError, IOError):
+        return None
+
+    if not dp_records:
+        return None
+
+    # Extract waypoints from procedure
+    all_waypoints: list[str] = []
+    seen_waypoints: set[str] = set()
+
+    # Try common route first: transition is "ALL" or ""
+    common_route_key = (
+        "ALL" if "ALL" in dp_records else "" if "" in dp_records else None
+    )
+    if common_route_key is not None:
+        sorted_fixes = sorted(dp_records[common_route_key], key=lambda x: x[1])
+        for fix, _ in sorted_fixes:
+            if fix and fix not in seen_waypoints:
+                all_waypoints.append(fix)
+                seen_waypoints.add(fix)
+
+    # If no common route, use the first enroute transition's waypoints
+    # (enroute transitions = not "RW*", not "ALL", not "")
+    if not all_waypoints:
+        enroute_transitions = sorted(
+            t for t in dp_records.keys()
+            if t and t != "ALL" and not t.startswith("RW")
+        )
+        if enroute_transitions:
+            first_trans = enroute_transitions[0]
+            sorted_fixes = sorted(dp_records[first_trans], key=lambda x: x[1])
+            for fix, _ in sorted_fixes:
+                if fix and fix not in seen_waypoints:
+                    all_waypoints.append(fix)
+                    seen_waypoints.add(fix)
+
+    # Filter out runway/airport references and empty strings
+    all_waypoints = [
+        w for w in all_waypoints
+        if w and not w.startswith("RW") and not w.endswith(airport_code)
+    ]
+
+    if not all_waypoints:
+        return None
+
+    return CifpDP(identifier=dp_id_prefix, waypoints=all_waypoints)
+
+
+@lru_cache(maxsize=100)
+def get_star_data(airport: str, star_name: str) -> Optional[CifpSTAR]:
+    """Get STAR common route waypoints from CIFP.
+
+    Args:
+        airport: Airport code (e.g., "RNO", "KRNO")
+        star_name: STAR name (e.g., "SCOLA1")
+
+    Returns:
+        CifpSTAR with common route waypoints, or None if not found
+    """
+    cifp_path = ensure_cifp_data(quiet=True)
+    if not cifp_path:
+        return None
+
+    airport = airport.upper()
+    if airport.startswith("K") and len(airport) == 4:
+        airport_code = airport[1:]
+    else:
+        airport_code = airport
+
+    star_name = star_name.upper().strip()
+    star_id_prefix = star_name
+
+    search_prefix = f"SUSAP K{airport_code}"
+
+    star_records: dict[str, list[tuple[str, int]]] = {}
+
+    try:
+        with open(cifp_path, "r", encoding="latin-1") as f:
+            for line in f:
+                if not line.startswith(search_prefix):
+                    continue
+
+                result = parse_star_record(line)
+                if not result:
+                    continue
+
+                star_id, transition, fix_id, sequence = result
+
+                if not star_id.startswith(star_id_prefix):
+                    continue
+
+                if transition not in star_records:
+                    star_records[transition] = []
+                star_records[transition].append((fix_id, sequence))
+    except (OSError, IOError):
+        return None
+
+    if not star_records:
+        return None
+
+    # Extract waypoints from procedure
+    all_waypoints: list[str] = []
+    seen_waypoints: set[str] = set()
+
+    # Try common route first: transition is "ALL" or ""
+    common_route_key = (
+        "ALL" if "ALL" in star_records else "" if "" in star_records else None
+    )
+    if common_route_key is not None:
+        sorted_fixes = sorted(star_records[common_route_key], key=lambda x: x[1])
+        for fix, _ in sorted_fixes:
+            if fix and fix not in seen_waypoints:
+                all_waypoints.append(fix)
+                seen_waypoints.add(fix)
+
+    # If no common route, use the first runway transition's waypoints
+    # (STARs end at the runway, so runway transitions contain the main path)
+    if not all_waypoints:
+        rw_transitions = sorted(
+            t for t in star_records.keys() if t.startswith("RW")
+        )
+        if rw_transitions:
+            first_rw = rw_transitions[0]
+            sorted_fixes = sorted(star_records[first_rw], key=lambda x: x[1])
+            for fix, _ in sorted_fixes:
+                if fix and fix not in seen_waypoints:
+                    all_waypoints.append(fix)
+                    seen_waypoints.add(fix)
+
+    # Filter out runway/airport references and empty strings
+    all_waypoints = [
+        w for w in all_waypoints
+        if w and not w.startswith("RW") and not w.endswith(airport_code)
+    ]
+
+    if not all_waypoints:
+        return None
+
+    return CifpSTAR(identifier=star_id_prefix, waypoints=all_waypoints)
+
+
+def clear_cifp_cache() -> None:
+    """Clear the LRU caches for CIFP lookups.
 
     Useful when CIFP data is updated.
     """
     get_approaches_for_airport.cache_clear()
+    get_dp_data.cache_clear()
+    get_star_data.cache_clear()

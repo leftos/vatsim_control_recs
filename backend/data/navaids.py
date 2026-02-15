@@ -826,16 +826,86 @@ def _get_fix_identifier(
     return None
 
 
+def _expand_sid_star(
+    part: str,
+    position: int,
+    total_parts: int,
+    departure: Optional[str],
+    arrival: Optional[str],
+    waypoints: List[Waypoint],
+    seen_identifiers: set,
+) -> None:
+    """Try to expand a SID/STAR name into waypoints via CIFP lookup.
+
+    Modifies waypoints and seen_identifiers in-place.
+    If at the start of route, tries as SID using departure airport.
+    If at the end of route, tries as STAR using arrival airport.
+    Falls back to trying both if position is ambiguous.
+    """
+    try:
+        from backend.data.cifp import get_dp_data, get_star_data
+    except ImportError:
+        return
+
+    procedure_waypoints: list[str] = []
+
+    # Near start of route -> likely a SID
+    if position <= 1 and departure:
+        dp = get_dp_data(departure, part)
+        if dp:
+            procedure_waypoints = dp.waypoints
+
+    # Near end of route -> likely a STAR
+    if not procedure_waypoints and position >= total_parts - 2 and arrival:
+        star = get_star_data(arrival, part)
+        if star:
+            procedure_waypoints = star.waypoints
+
+    # If position is ambiguous, try both
+    if not procedure_waypoints:
+        if departure:
+            dp = get_dp_data(departure, part)
+            if dp:
+                procedure_waypoints = dp.waypoints
+        if not procedure_waypoints and arrival:
+            star = get_star_data(arrival, part)
+            if star:
+                procedure_waypoints = star.waypoints
+
+    # Resolve each procedure waypoint to coordinates and add
+    for wp_name in procedure_waypoints:
+        if wp_name in seen_identifiers:
+            continue
+        coords = get_waypoint_coordinates(wp_name)
+        if coords:
+            waypoints.append(
+                Waypoint(
+                    identifier=wp_name,
+                    latitude=coords[0],
+                    longitude=coords[1],
+                    waypoint_type="procedure_fix",
+                )
+            )
+            seen_identifiers.add(wp_name)
+
+
 def parse_route_string(
-    route: str, airports: Optional[Dict[str, Tuple[float, float]]] = None
+    route: str,
+    airports: Optional[Dict[str, Tuple[float, float]]] = None,
+    departure: Optional[str] = None,
+    arrival: Optional[str] = None,
 ) -> List[Waypoint]:
     """Parse a filed route string into waypoints with coordinates.
 
     Expands airways (V, J, T, Q routes) into their constituent fixes.
+    Expands SID/STAR procedure names into their common route waypoints
+    when departure/arrival airport context is provided.
 
     Args:
         route: Filed route string (e.g., "SUNOL V27 BSR")
         airports: Optional dict mapping ICAO codes to (lat, lon) tuples
+        departure: Optional departure airport ICAO code (for SID expansion)
+        arrival: Optional arrival airport ICAO code (for STAR expansion)
 
     Returns:
         List of Waypoint objects with coordinates (unknown waypoints omitted)
@@ -847,12 +917,27 @@ def parse_route_string(
     waypoints: List[Waypoint] = []
     seen_identifiers: set = set()  # Avoid duplicates
 
+    # Regex for speed/altitude annotations (e.g., N0491F320, M082F350, K0956F320)
+    _speed_alt_re = re.compile(r"^[NKM]\d{3,4}[FA]\d{3}$")
+
     # Split route on whitespace
     parts = route.upper().split()
 
     i = 0
     while i < len(parts):
         part = parts[i]
+
+        # Strip speed/altitude annotations from fix names (e.g., "OVSUN/N0491F320" -> "OVSUN")
+        # Leave coordinate fixes like "3530N/11500W" untouched
+        if "/" in part:
+            before_slash, after_slash = part.split("/", 1)
+            if _speed_alt_re.match(after_slash):
+                part = before_slash
+
+        # Skip standalone speed/altitude tokens (e.g., "N0491F320", "M082F350")
+        if _speed_alt_re.match(part):
+            i += 1
+            continue
 
         # Check if this is an airway (V##, J##, T##, Q##)
         if re.match(r"^[VJTQ]\d+$", part):
@@ -864,6 +949,15 @@ def parse_route_string(
             j = i + 1
             while j < len(parts):
                 next_part = parts[j]
+                # Strip speed/altitude annotations from next part too
+                if "/" in next_part:
+                    bp, ap = next_part.split("/", 1)
+                    if _speed_alt_re.match(ap):
+                        next_part = bp
+                # Skip standalone speed/altitude tokens
+                if _speed_alt_re.match(next_part):
+                    j += 1
+                    continue
                 # Skip consecutive airways
                 if re.match(r"^[VJTQ]\d+$", next_part):
                     j += 1
@@ -903,8 +997,12 @@ def parse_route_string(
             i += 1
             continue
 
-        # Skip SID/STAR names with digits (often at start/end)
+        # Expand SID/STAR names via CIFP if airport context is available
         if re.match(r"^[A-Z]+\d+[A-Z]*$", part) and len(part) > 5:
+            _expand_sid_star(
+                part, i, len(parts), departure, arrival,
+                waypoints, seen_identifiers,
+            )
             i += 1
             continue
 
