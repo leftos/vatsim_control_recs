@@ -88,8 +88,9 @@ def calculate_eta(
 ) -> Tuple[str, str, float]:
     """
     Calculate ETA for a flight and return display strings.
-    Uses a two-phase calculation: current groundspeed for most of the journey,
-    then approach speed for the final 5 nautical miles.
+    Uses a multi-phase calculation: current groundspeed above 10,000ft,
+    clamped to 250kts below 10,000ft (using a 3-degree glide path to
+    estimate the segment distance), then approach speed for the final 5nm.
 
     Args:
         flight: Flight data dictionary with position, speed, and destination
@@ -144,11 +145,35 @@ def calculate_eta(
         # Effective distance is the greater of lateral or descent requirement
         distance = max(lateral_distance, descent_distance_required)
 
-        # Default: use current groundspeed for entire distance
         groundspeed = flight["groundspeed"]
-        eta_hours = distance / groundspeed
 
-        # If we have aircraft approach speeds, use more sophisticated calculation
+        # Calculate below-10,000ft speed restriction segment
+        # Below 10,000ft MSL, speed is clamped to 250kts using a naive
+        # 3-degree glide path to estimate the distance of that segment
+        BELOW_10K_SPEED_LIMIT = 250  # kts
+
+        if current_altitude <= 10000:
+            # Aircraft is already below 10k; entire distance is speed-restricted
+            below_10k_distance = distance
+        else:
+            # Aircraft is above 10k; estimate below-10k segment from glide path
+            if airport_elevation < 10000:
+                descent_below_10k = (10000 - airport_elevation) / 1000 * DESCENT_GRADIENT
+                below_10k_distance = min(descent_below_10k, distance)
+            else:
+                below_10k_distance = 0
+
+        above_10k_distance = distance - below_10k_distance
+        below_10k_speed = min(groundspeed, BELOW_10K_SPEED_LIMIT)
+
+        # Default: two-phase (above 10k at groundspeed, below 10k at clamped speed)
+        eta_hours = 0
+        if above_10k_distance > 0:
+            eta_hours += above_10k_distance / groundspeed
+        if below_10k_distance > 0:
+            eta_hours += below_10k_distance / below_10k_speed
+
+        # If we have aircraft approach speeds, refine with a final approach phase
         if aircraft_approach_speeds:
             # Extract aircraft type from flight plan
             aircraft_type = None
@@ -157,17 +182,25 @@ def calculate_eta(
             ):
                 aircraft_type = flight["flight_plan"]["aircraft_short"]
 
-            # If we have approach speed for this aircraft type, use two-phase calculation
             if aircraft_type and aircraft_type in aircraft_approach_speeds:
                 approach_speed = aircraft_approach_speeds[aircraft_type]
                 final_approach_distance = 5.0  # nautical miles
 
                 if distance > final_approach_distance:
-                    # Two-phase: current speed for most of journey, approach speed for final 5 nm
-                    cruise_distance = distance - final_approach_distance
-                    cruise_time = cruise_distance / groundspeed
-                    approach_time = final_approach_distance / approach_speed
-                    eta_hours = cruise_time + approach_time
+                    # Three-phase: above 10k at groundspeed, below 10k at clamped speed,
+                    # final approach at approach speed
+                    # Final approach is closest to the airport (within the below-10k zone)
+                    below_10k_cruise = max(0, below_10k_distance - final_approach_distance)
+                    # If approach extends above 10k (high-elevation airports), reduce above_10k
+                    approach_above_10k = max(0, final_approach_distance - below_10k_distance)
+                    above_10k_cruise = max(0, above_10k_distance - approach_above_10k)
+
+                    eta_hours = 0
+                    if above_10k_cruise > 0:
+                        eta_hours += above_10k_cruise / groundspeed
+                    if below_10k_cruise > 0:
+                        eta_hours += below_10k_cruise / below_10k_speed
+                    eta_hours += final_approach_distance / approach_speed
                 else:
                     # Already within final approach distance, use minimum of current speed or approach speed
                     # (aircraft may already be slower than approach speed)
