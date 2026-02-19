@@ -43,7 +43,7 @@ COMMANDS = [
     {"name": "Open Flight Board", "shortcut": "Enter", "action": "open_flight_board"},
     {"name": "Show Help", "shortcut": "?/F1", "action": "show_help"},
     {"name": "Command Palette", "shortcut": "F2", "action": "show_command_palette"},
-    {"name": "Quit", "shortcut": "Ctrl+C", "action": "quit"},
+    {"name": "Quit", "shortcut": "Ctrl+Z", "action": "quit"},
 ]
 
 

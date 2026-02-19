@@ -144,7 +144,7 @@ class VATSIMControlApp(App):
 
     BINDINGS = [
         # Visible in footer (compact labels)
-        Binding("ctrl+c", "quit", "Quit", priority=True),
+        Binding("ctrl+z", "quit", "Quit", priority=True),
         Binding("ctrl+r", "refresh", "Refresh", priority=True),
         Binding("f1", "show_help", "Help", priority=True),
         Binding("f2", "show_command_palette", "Cmds", priority=True),

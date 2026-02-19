@@ -9,7 +9,7 @@ from textual.app import ComposeResult
 
 LEFT_COLUMN = """\
 [bold]General[/bold]
- Ctrl+C   Quit
+ Ctrl+Z   Quit
  Ctrl+R   Refresh data
  Ctrl+P   Pause/Resume
 
