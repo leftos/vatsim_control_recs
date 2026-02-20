@@ -30,7 +30,7 @@ RWY_NUM_PATTERN = (
 APPROACH_TYPES = r"ILS|RNAV|VISUAL|VIS|VA|LOC|VOR|NDB|GPS|LDA|SDF|RNP"
 
 # Runway/RWY prefix
-RWY_PREFIX = r"RWYS?|RUNWAYS?"
+RWY_PREFIX = r"RWYS?|RUNWAYS?|RY"
 
 # Approach suffix keywords (APCH, APPROACH, etc.)
 APPROACH_SUFFIX = r"APCHS?|APPROACH(?:ES)?|APPS?"
@@ -536,13 +536,13 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
             flags=re.IGNORECASE,
         )
 
-    # Pattern 0a: SIMUL with VISUAL approaches and runways ending with APP IN USE
+    # Pattern 0a: SIMUL with approaches and runways ending with APP IN USE
     # e.g., "SIMUL CHARTED VISUAL FMS BRIDGE RY 28R AND TIPP TOE RY 28L APP IN USE"
-    # Captures from SIMUL through APP IN USE when VISUAL is present
+    # e.g., "SIMUL CLSLY SPCD DPNDNT ILS RY 28R AND ILS RY 28L APP IN USE"
     result = re.sub(
-        r"\bSIMUL(?:TANEOUS)?\s+(?:[A-Z]+\s+)*VISUAL\s+[^.]*?"
-        rf"(?:RY|{RWY_PREFIX})\s*{RWY_NUM_PATTERN}"
-        r"(?:\s+AND\s+[^.]*?(?:RY|RWY)\s*\d+[LRC]?)*"
+        rf"\bSIMUL(?:TANEOUS)?\s+(?:[A-Z]+\s+)*(?:{APPROACH_TYPES})\s+[^.]*?"
+        rf"(?:{RWY_PREFIX})\s*{RWY_NUM_PATTERN}"
+        rf"(?:\s+AND\s+[^.]*?(?:{RWY_PREFIX})\s*\d+[LRC]?)*"
         r"\s+APP(?:S|ROACH(?:ES)?)?\s+IN\s+USE\b",
         r"[yellow]\g<0>[/yellow]",
         result,
@@ -709,22 +709,25 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
         flags=re.IGNORECASE,
     )
 
-    # Clean up nested yellow tags - keep only the outermost ones
-    # Repeatedly remove inner [yellow] and [/yellow] tags until stable
-    prev_result = None
-    while prev_result != result:
-        prev_result = result
-        # Remove [yellow] that appears after another [yellow] without a closing tag in between
-        result = re.sub(
-            r"(\[yellow\])([^\[]*)\[yellow\]",
-            r"\1\2",
-            result,
-        )
-        # Remove [/yellow] that appears before another [/yellow] without an opening tag in between
-        result = re.sub(
-            r"\[/yellow\]([^\[]*)\[/yellow\]",
-            r"\1[/yellow]",
-            result,
-        )
+    # Flatten nested yellow tags — keep only the outermost ones.
+    # Track depth: emit open/close tags only at depth transitions 0↔1.
+    parts: list[str] = []
+    depth = 0
+    i = 0
+    while i < len(result):
+        if result[i : i + 8] == "[yellow]":
+            if depth == 0:
+                parts.append("[yellow]")
+            depth += 1
+            i += 8
+        elif result[i : i + 9] == "[/yellow]":
+            depth -= 1
+            if depth == 0:
+                parts.append("[/yellow]")
+            i += 9
+        else:
+            parts.append(result[i])
+            i += 1
+    result = "".join(parts)
 
     return result
