@@ -10,9 +10,11 @@ from textual.app import ComposeResult
 from backend.data.statsim_api import (
     fetch_flights_from_origin,
     fetch_flights_to_destination,
+    STATSIM_API_KEY,
     STATSIM_DEFAULT_DAYS_BACK,
     STATSIM_MAX_DAYS_PER_QUERY,
 )
+from common import logger as log
 from ui import config
 
 
@@ -95,6 +97,15 @@ class HistoricalStatsScreen(ModalScreen):
         self._search_cancelled = False
         self._results: dict = {}
         self._query_airports: list = []  # Store the airports that were queried
+        log.info(
+            f"HistoricalStatsScreen init: "
+            f"tracked={len(self.tracked_airports)} airports, "
+            f"API key={'set (' + str(len(STATSIM_API_KEY)) + ' chars)' if STATSIM_API_KEY else 'NOT SET'}"
+        )
+        if self.tracked_airports:
+            log.debug(
+                f"HistoricalStats tracked airports: {sorted(self.tracked_airports)}"
+            )
 
     def compose(self) -> ComposeResult:
         with Container(id="stats-container"):
@@ -122,6 +133,7 @@ class HistoricalStatsScreen(ModalScreen):
 
     def on_mount(self) -> None:
         """Focus the input when mounted and set up the table"""
+        log.debug("HistoricalStats on_mount called")
         # Set up table columns
         table = self.query_one("#stats-table", DataTable)
         table.add_column("ICAO", width=6)
@@ -129,6 +141,15 @@ class HistoricalStatsScreen(ModalScreen):
         table.add_column("Deps", width=8)
         table.add_column("Arrs", width=8)
         table.add_column("Total", width=8)
+
+        # Warn if API key is missing
+        if not STATSIM_API_KEY:
+            status = self.query_one("#stats-status", Static)
+            status.update(
+                "[yellow]Warning: STATSIM_API_KEY not set. "
+                "Add it to a .env file or set the environment variable. "
+                "Get a key at statsim.net/api-keys[/yellow]"
+            )
 
         # Focus the input
         stats_input = self.query_one("#stats-input", Input)
@@ -142,6 +163,7 @@ class HistoricalStatsScreen(ModalScreen):
 
     def action_search(self) -> None:
         """Start searching for historical stats"""
+        log.info("HistoricalStats action_search triggered")
         # Cancel any existing search
         self._search_cancelled = True
         if self._search_task and not self._search_task.done():
@@ -152,13 +174,16 @@ class HistoricalStatsScreen(ModalScreen):
 
     async def _search_async(self) -> None:
         """Async search that updates UI progressively as results come in"""
+        log.info("HistoricalStats _search_async started")
         stats_input = self.query_one("#stats-input", Input)
         status_widget = self.query_one("#stats-status", Static)
         table = self.query_one("#stats-table", DataTable)
 
         # Parse input
         input_text = stats_input.value.strip().upper()
+        log.debug(f"HistoricalStats input text: '{input_text}'")
         if not input_text:
+            log.debug("HistoricalStats: empty input, returning")
             status_widget.update(
                 "[yellow]Please enter at least one airport ICAO code[/yellow]"
             )
@@ -168,6 +193,7 @@ class HistoricalStatsScreen(ModalScreen):
         query_airports = [icao.strip() for icao in input_text.split() if icao.strip()]
 
         if not query_airports:
+            log.debug("HistoricalStats: no airports after split, returning")
             status_widget.update(
                 "[yellow]Please enter at least one airport ICAO code[/yellow]"
             )
@@ -182,6 +208,12 @@ class HistoricalStatsScreen(ModalScreen):
             else:
                 invalid_airports.append(icao)
 
+        log.info(
+            f"HistoricalStats airport validation: "
+            f"valid={valid_airports}, invalid={invalid_airports}, "
+            f"UNIFIED_AIRPORT_DATA={'loaded (' + str(len(config.UNIFIED_AIRPORT_DATA)) + ' entries)' if config.UNIFIED_AIRPORT_DATA else 'NOT LOADED'}"
+        )
+
         if invalid_airports and not valid_airports:
             status_widget.update(
                 f"[red]Unknown airports: {', '.join(invalid_airports)}[/red]"
@@ -189,8 +221,18 @@ class HistoricalStatsScreen(ModalScreen):
             return
 
         if not self.tracked_airports:
+            log.warning("HistoricalStats: no tracked airports, returning")
             status_widget.update(
                 "[yellow]No airports are currently being tracked[/yellow]"
+            )
+            return
+
+        if not STATSIM_API_KEY:
+            log.warning("HistoricalStats: no API key, returning")
+            status_widget.update(
+                "[red]STATSIM_API_KEY not set. "
+                "Get a key at statsim.net/api-keys and set the "
+                "STATSIM_API_KEY environment variable.[/red]"
             )
             return
 
@@ -201,6 +243,12 @@ class HistoricalStatsScreen(ModalScreen):
 
         # Show initial status (2 queries per airport per chunk: origin + destination)
         total_queries = len(valid_airports) * 2 * num_chunks
+        log.info(
+            f"HistoricalStats search starting: "
+            f"airports={valid_airports}, chunks={num_chunks}, "
+            f"total_queries={total_queries}, "
+            f"tracked_count={len(self.tracked_airports)}"
+        )
         warning = ""
         if invalid_airports:
             warning = (
@@ -228,17 +276,21 @@ class HistoricalStatsScreen(ModalScreen):
         max_concurrent = 4
         current_concurrent = max_concurrent
         error_count = 0
+        last_error = ""
         error_threshold = 2  # Back off after this many errors
 
         loop = asyncio.get_event_loop()
         results = {}
         completed = 0
+        total_flights_fetched = 0
+        total_matches = 0
         pending_tasks = set()
         query_index = 0
 
-        def process_flights(query_type: str, flights: list) -> None:
-            """Process flight results and update results dict."""
+        def process_flights(query_type: str, icao: str, flights: list) -> int:
+            """Process flight results and update results dict. Returns match count."""
             nonlocal results
+            matches = 0
             for flight in flights:
                 if query_type == "origin":
                     # Flights FROM query airport - check destination
@@ -252,6 +304,7 @@ class HistoricalStatsScreen(ModalScreen):
                             results[dest] = {"departures": 0, "arrivals": 0, "total": 0}
                         results[dest]["arrivals"] += 1
                         results[dest]["total"] += 1
+                        matches += 1
                 else:
                     # Flights TO query airport - check origin
                     origin = (
@@ -268,9 +321,15 @@ class HistoricalStatsScreen(ModalScreen):
                             }
                         results[origin]["departures"] += 1
                         results[origin]["total"] += 1
+                        matches += 1
+            return matches
 
         async def execute_query(query_type: str, icao: str, days_offset: int) -> tuple:
             """Execute a single API query for a specific time chunk."""
+            log.debug(
+                f"HistoricalStats query: type={query_type}, "
+                f"icao={icao}, offset={days_offset}"
+            )
             if query_type == "origin":
                 flights = await loop.run_in_executor(
                     None,
@@ -287,11 +346,16 @@ class HistoricalStatsScreen(ModalScreen):
                     STATSIM_MAX_DAYS_PER_QUERY,
                     days_offset,
                 )
+            log.debug(
+                f"HistoricalStats query result: type={query_type}, "
+                f"icao={icao}, offset={days_offset}, flights={len(flights)}"
+            )
             return (query_type, icao, flights)
 
         try:
             while query_index < len(queries) or pending_tasks:
                 if self._search_cancelled:
+                    log.info("HistoricalStats search cancelled by user")
                     # Cancel all pending tasks
                     for task in pending_tasks:
                         task.cancel()
@@ -326,8 +390,18 @@ class HistoricalStatsScreen(ModalScreen):
                 for task in done:
                     try:
                         query_type, icao, flights = task.result()
-                        process_flights(query_type, flights)
+                        flight_count = len(flights)
+                        total_flights_fetched += flight_count
+                        matches = process_flights(query_type, icao, flights)
+                        total_matches += matches
                         completed += 1
+
+                        log.debug(
+                            f"HistoricalStats processed: type={query_type}, "
+                            f"icao={icao}, flights={flight_count}, "
+                            f"matches={matches}, "
+                            f"progress={completed}/{total_queries}"
+                        )
 
                         # Reset error count on success if we're throttled
                         if current_concurrent < max_concurrent and error_count > 0:
@@ -337,17 +411,25 @@ class HistoricalStatsScreen(ModalScreen):
                                     current_concurrent + 1, max_concurrent
                                 )
 
-                    except Exception:
+                    except Exception as e:
                         completed += 1
                         error_count += 1
+                        last_error = str(e)
+                        log.error(
+                            f"HistoricalStats query failed: "
+                            f"error={last_error}, "
+                            f"error_count={error_count}, "
+                            f"progress={completed}/{total_queries}"
+                        )
 
                         # Back off if too many errors
                         if error_count >= error_threshold and current_concurrent > 1:
                             current_concurrent = 1
-                            status_widget.update(
-                                f"[yellow]Errors detected, reducing concurrency...[/yellow] "
-                                f"{completed}/{total_queries}{warning}"
-                            )
+
+                        status_widget.update(
+                            f"[red]Error ({error_count}): {last_error}[/red] "
+                            f"{completed}/{total_queries}{warning}"
+                        )
 
                 # Update table with current results
                 self._results = results.copy()
@@ -355,22 +437,37 @@ class HistoricalStatsScreen(ModalScreen):
 
             # Final update
             if not self._search_cancelled:
+                log.info(
+                    f"HistoricalStats search complete: "
+                    f"total_flights_fetched={total_flights_fetched}, "
+                    f"total_matches={total_matches}, "
+                    f"result_airports={len(results)}, "
+                    f"errors={error_count}"
+                )
                 if results:
                     status_widget.update(
                         f"[green]Complete! Found {len(results)} tracked airports with "
                         f"traffic to/from {', '.join(valid_airports)}[/green]{warning}"
                     )
+                elif error_count > 0:
+                    status_widget.update(
+                        f"[red]All {error_count} queries failed. "
+                        f"Last error: {last_error}[/red]"
+                    )
                 else:
                     status_widget.update(
                         f"[yellow]No flights found between tracked airports and "
-                        f"{', '.join(valid_airports)} in the last {STATSIM_DEFAULT_DAYS_BACK} days[/yellow]{warning}"
+                        f"{', '.join(valid_airports)} in the last {STATSIM_DEFAULT_DAYS_BACK} days "
+                        f"({total_flights_fetched} flights checked)[/yellow]{warning}"
                     )
 
         except asyncio.CancelledError:
+            log.info("HistoricalStats search cancelled (CancelledError)")
             for task in pending_tasks:
                 task.cancel()
             status_widget.update("[dim]Search cancelled[/dim]")
         except Exception as e:
+            log.error(f"HistoricalStats unexpected error: {e}", exc_info=True)
             status_widget.update(f"[red]Error: {e}[/red]")
 
     def _update_table(

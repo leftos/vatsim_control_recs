@@ -5,21 +5,52 @@ This module provides functions to query the statsim.net API for historical
 VATSIM flight data, useful for analyzing traffic patterns between airports.
 """
 
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Set, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from common import logger as debug_logger
+from common import logger as log
+from common.paths import get_project_root
 
+
+def _load_env_file() -> None:
+    """Load key=value pairs from .env file next to main.py into os.environ."""
+    env_path = get_project_root() / ".env"
+    log.debug(f"Statsim: looking for .env at {env_path}")
+    if not env_path.is_file():
+        log.debug("Statsim: .env file not found")
+        return
+    loaded = []
+    with open(env_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip("\"'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+                loaded.append(key)
+    log.info(f"Statsim: loaded {len(loaded)} keys from .env: {loaded}")
+
+
+_load_env_file()
 
 # API configuration
 STATSIM_API_BASE_URL = "https://api.statsim.net"
-STATSIM_API_TIMEOUT = 15  # seconds per request
+STATSIM_API_TIMEOUT = 60  # seconds per request
+STATSIM_API_KEY = os.environ.get("STATSIM_API_KEY", "")
 STATSIM_MAX_DAYS_PER_QUERY = 30  # API has ~30 day limit per query
 STATSIM_DEFAULT_DAYS_BACK = (
     90  # Total days to query (in chunks of STATSIM_MAX_DAYS_PER_QUERY)
+)
+
+log.info(
+    f"Statsim: API key {'set (' + str(len(STATSIM_API_KEY)) + ' chars)' if STATSIM_API_KEY else 'NOT SET'}"
 )
 
 
@@ -52,7 +83,11 @@ def fetch_flights_from_origin(
         timeout: Request timeout in seconds
 
     Returns:
-        List of flight dictionaries, or empty list on error
+        List of flight dictionaries
+
+    Raises:
+        requests.RequestException: On HTTP errors
+        ValueError: On unexpected response format
 
     Example:
         days_back=30, days_offset=0  -> last 30 days (now-30 to now)
@@ -68,24 +103,25 @@ def fetch_flights_from_origin(
         "from": _format_datetime_for_api(from_date),
         "to": _format_datetime_for_api(to_date),
     }
+    headers = {"X-API-Key": STATSIM_API_KEY} if STATSIM_API_KEY else {}
 
-    try:
-        response = requests.get(url, params=params, timeout=timeout)
-        response.raise_for_status()
-        return response.json()
-    except requests.Timeout:
-        debug_logger.warning(f"Statsim API timeout fetching flights from origin {icao}")
-        return []
-    except requests.RequestException as e:
-        debug_logger.warning(
-            f"Statsim API error fetching flights from origin {icao}: {e}"
+    log.debug(
+        f"Statsim GET origin: icao={icao}, "
+        f"from={params['from']}, to={params['to']}, "
+        f"has_key={bool(STATSIM_API_KEY)}"
+    )
+
+    response = requests.get(url, params=params, headers=headers, timeout=timeout)
+    log.debug(f"Statsim origin {icao}: HTTP {response.status_code}")
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, list):
+        raise ValueError(
+            f"Unexpected response from Statsim origin {icao}: "
+            f"{type(data).__name__}: {str(data)[:200]}"
         )
-        return []
-    except Exception as e:
-        debug_logger.warning(
-            f"Unexpected error fetching flights from origin {icao}: {e}"
-        )
-        return []
+    log.debug(f"Statsim origin {icao}: {len(data)} flights returned")
+    return data
 
 
 def fetch_flights_to_destination(
@@ -104,7 +140,11 @@ def fetch_flights_to_destination(
         timeout: Request timeout in seconds
 
     Returns:
-        List of flight dictionaries, or empty list on error
+        List of flight dictionaries
+
+    Raises:
+        requests.RequestException: On HTTP errors
+        ValueError: On unexpected response format
 
     Example:
         days_back=30, days_offset=0  -> last 30 days (now-30 to now)
@@ -120,26 +160,25 @@ def fetch_flights_to_destination(
         "from": _format_datetime_for_api(from_date),
         "to": _format_datetime_for_api(to_date),
     }
+    headers = {"X-API-Key": STATSIM_API_KEY} if STATSIM_API_KEY else {}
 
-    try:
-        response = requests.get(url, params=params, timeout=timeout)
-        response.raise_for_status()
-        return response.json()
-    except requests.Timeout:
-        debug_logger.warning(
-            f"Statsim API timeout fetching flights to destination {icao}"
+    log.debug(
+        f"Statsim GET destination: icao={icao}, "
+        f"from={params['from']}, to={params['to']}, "
+        f"has_key={bool(STATSIM_API_KEY)}"
+    )
+
+    response = requests.get(url, params=params, headers=headers, timeout=timeout)
+    log.debug(f"Statsim destination {icao}: HTTP {response.status_code}")
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, list):
+        raise ValueError(
+            f"Unexpected response from Statsim destination {icao}: "
+            f"{type(data).__name__}: {str(data)[:200]}"
         )
-        return []
-    except requests.RequestException as e:
-        debug_logger.warning(
-            f"Statsim API error fetching flights to destination {icao}: {e}"
-        )
-        return []
-    except Exception as e:
-        debug_logger.warning(
-            f"Unexpected error fetching flights to destination {icao}: {e}"
-        )
-        return []
+    log.debug(f"Statsim destination {icao}: {len(data)} flights returned")
+    return data
 
 
 def get_historical_stats_for_airports(
@@ -327,7 +366,7 @@ def get_historical_stats_concurrent(
                     progress_callback(completed_queries, total_queries, results)
 
             except Exception as e:
-                debug_logger.warning(f"Error processing statsim query result: {e}")
+                log.warning(f"Error processing statsim query result: {e}")
                 completed_queries += 1
                 if progress_callback:
                     progress_callback(completed_queries, total_queries, results)

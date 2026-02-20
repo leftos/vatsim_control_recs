@@ -450,6 +450,24 @@ Use the quick-add syntax:
 
 ---
 
+### Historical Flight Statistics
+
+**Access:** `Ctrl+S`
+
+View historical traffic patterns between airports using data from statsim.net.
+Enter one or more airport ICAO codes to see which of your tracked airports have
+the most departures and arrivals to/from those airports over the last 90 days.
+
+**Requires a free API key from statsim.net:**
+1. Get a key at https://statsim.net/api-keys
+2. Create a `.env` file in the application directory with:
+   ```
+   STATSIM_API_KEY=your-key-here
+   ```
+   Or set the `STATSIM_API_KEY` environment variable directly.
+
+---
+
 ### Command Palette
 
 **Access:** `F2`
