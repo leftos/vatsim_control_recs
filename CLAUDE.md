@@ -152,15 +152,18 @@ The global `backend.config.constants.WIND_SOURCE` controls which source is used.
 - Flights on ground without flight plan: Counted as departure at nearest airport
 
 **Unified Airport Data**: Three sources merged into `unified_airport_data`:
-- `APT_BASE.csv` - FAA airport data (coordinates, tower type, ARTCC)
-- `airports.json` - OurAirports.com data (names, types)
-- `iata-icao.csv` - IATA/ICAO code mappings
+- `raw/APT_BASE.csv` - FAA airport data (coordinates, tower type, ARTCC)
+- `raw/airports.json` - OurAirports.com data (names, types)
+- `raw/iata-icao.csv` - IATA/ICAO code mappings
+
+**Airport Name Resolution**: The disambiguator checks `data/airport_names.csv` first for pre-computed display names. Airports not in the CSV fall back to on-demand NER-based disambiguation. To fix a name, edit the CSV directly. To regenerate the CSV (preserving manual edits): `python scripts/generate_airport_names.py`
 
 ## Data Files
 
-- `data/APT_BASE.csv` - FAA airport database
-- `data/airports.json` - OurAirports.com airport database
-- `data/iata-icao.csv` - IATA/ICAO code mappings
+- `data/airport_names.csv` - Human-editable airport display names (authoritative source)
+- `data/raw/APT_BASE.csv` - FAA airport database
+- `data/raw/airports.json` - OurAirports.com airport database
+- `data/raw/iata-icao.csv` - IATA/ICAO code mappings
 - `data/aircraft_data.csv` - Aircraft approach speeds for ETA calculation
 - `data/custom_groupings.json` - User-defined airport groupings
 

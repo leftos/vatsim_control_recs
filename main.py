@@ -409,13 +409,14 @@ def main():
     # Load unified airport data if we need to expand countries or groupings
     if args.countries or args.groupings:
         ui_config.UNIFIED_AIRPORT_DATA = load_unified_airport_data(
-            apt_base_path=os.path.join(script_dir, "data", "APT_BASE.csv"),
-            airports_json_path=os.path.join(script_dir, "data", "airports.json"),
-            iata_icao_path=os.path.join(script_dir, "data", "iata-icao.csv"),
+            apt_base_path=os.path.join(script_dir, "data", "raw", "APT_BASE.csv"),
+            airports_json_path=os.path.join(script_dir, "data", "raw", "airports.json"),
+            iata_icao_path=os.path.join(script_dir, "data", "raw", "iata-icao.csv"),
         )
         ui_config.DISAMBIGUATOR = AirportDisambiguator(
-            os.path.join(script_dir, "data", "airports.json"),
+            os.path.join(script_dir, "data", "raw", "airports.json"),
             unified_data=ui_config.UNIFIED_AIRPORT_DATA,
+            names_csv_path=os.path.join(script_dir, "data", "airport_names.csv"),
         )
 
     # Start with explicitly provided airports

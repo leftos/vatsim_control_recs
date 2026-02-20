@@ -1100,16 +1100,19 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
     # Load airport data
     print("  Loading airport data...")
     unified_airport_data = load_unified_airport_data(
-        str(config.data_dir / "APT_BASE.csv"),
-        str(config.data_dir / "airports.json"),
-        str(config.data_dir / "iata-icao.csv"),
+        str(config.data_dir / "raw" / "APT_BASE.csv"),
+        str(config.data_dir / "raw" / "airports.json"),
+        str(config.data_dir / "raw" / "iata-icao.csv"),
     )
 
     # Initialize disambiguator
     print("  Initializing airport disambiguator...")
-    airports_json_path = str(config.data_dir / "airports.json")
+    airports_json_path = str(config.data_dir / "raw" / "airports.json")
     disambiguator = AirportDisambiguator(
-        airports_json_path, lazy_load=True, unified_data=unified_airport_data
+        airports_json_path,
+        lazy_load=True,
+        unified_data=unified_airport_data,
+        names_csv_path=str(config.data_dir / "airport_names.csv"),
     )
 
     # Load all groupings

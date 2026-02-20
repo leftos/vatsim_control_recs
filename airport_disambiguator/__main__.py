@@ -131,7 +131,7 @@ def main():
 Examples:
   python -m airport_disambiguator KMER KBAB KNZY
   python -m airport_disambiguator --verbose KLGB
-  python -m airport_disambiguator --apt-base data/APT_BASE.csv --airports data/airports.json --iata-icao data/iata-icao.csv KSFO KLAX
+  python -m airport_disambiguator --apt-base data/raw/APT_BASE.csv --airports data/raw/airports.json --iata-icao data/raw/iata-icao.csv KSFO KLAX
         """,
     )
 
@@ -140,18 +140,23 @@ Examples:
     )
     parser.add_argument(
         "--apt-base",
-        default="data/APT_BASE.csv",
-        help="Path to APT_BASE.csv file (default: data/APT_BASE.csv)",
+        default="data/raw/APT_BASE.csv",
+        help="Path to APT_BASE.csv file (default: data/raw/APT_BASE.csv)",
     )
     parser.add_argument(
         "--airports",
-        default="data/airports.json",
-        help="Path to airports.json file (default: data/airports.json)",
+        default="data/raw/airports.json",
+        help="Path to airports.json file (default: data/raw/airports.json)",
     )
     parser.add_argument(
         "--iata-icao",
-        default="data/iata-icao.csv",
-        help="Path to iata-icao.csv file (default: data/iata-icao.csv)",
+        default="data/raw/iata-icao.csv",
+        help="Path to iata-icao.csv file (default: data/raw/iata-icao.csv)",
+    )
+    parser.add_argument(
+        "--names-csv",
+        default="data/airport_names.csv",
+        help="Path to airport_names.csv file (default: data/airport_names.csv)",
     )
     parser.add_argument(
         "--verbose",
@@ -177,7 +182,11 @@ Examples:
             print(f"\nLoaded {len(unified_data)} airports from unified data")
 
         # Create disambiguator with unified data
-        disambiguator = AirportDisambiguator(args.airports, unified_data=unified_data)
+        disambiguator = AirportDisambiguator(
+            args.airports,
+            unified_data=unified_data,
+            names_csv_path=args.names_csv,
+        )
 
         if args.verbose:
             print(

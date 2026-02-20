@@ -99,9 +99,9 @@ def analyze_flights_data(
     if unified_airport_data is None:
         print("Loading airport database...")
         unified_airport_data = load_unified_airport_data(
-            apt_base_path=os.path.join(_script_dir, "data", "APT_BASE.csv"),
-            airports_json_path=os.path.join(_script_dir, "data", "airports.json"),
-            iata_icao_path=os.path.join(_script_dir, "data", "iata-icao.csv"),
+            apt_base_path=os.path.join(_script_dir, "data", "raw", "APT_BASE.csv"),
+            airports_json_path=os.path.join(_script_dir, "data", "raw", "airports.json"),
+            iata_icao_path=os.path.join(_script_dir, "data", "raw", "iata-icao.csv"),
         )
         if unified_airport_data is None:
             return None, None, 0, {}, None
@@ -109,8 +109,9 @@ def analyze_flights_data(
     # Create disambiguator if not provided
     if disambiguator is None:
         disambiguator = AirportDisambiguator(
-            os.path.join(_script_dir, "data", "airports.json"),
+            os.path.join(_script_dir, "data", "raw", "airports.json"),
             unified_data=unified_airport_data,
+            names_csv_path=os.path.join(_script_dir, "data", "airport_names.csv"),
         )
 
     all_airports_data = load_airport_data(unified_airport_data)

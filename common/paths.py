@@ -37,7 +37,8 @@ def get_project_root() -> Path:
 def get_data_dir() -> Path:
     """Get the project's data directory (for read-only data files).
 
-    This is where static data like airports.json, APT_BASE.csv live.
+    This is where static data like airport_names.csv live.
+    Raw airport data sources are in the 'raw' subdirectory.
 
     Returns:
         Path to the project's data directory

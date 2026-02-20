@@ -1,5 +1,7 @@
 """Main airport disambiguator class providing the public API."""
 
+import csv
+import os
 import sys
 import time
 from typing import Any, Dict, Optional
@@ -25,6 +27,7 @@ class AirportDisambiguator:
         lazy_load: bool = True,
         unified_data: Optional[Dict[str, Dict[str, Any]]] = None,
         config: Optional[DisambiguatorConfig] = None,
+        names_csv_path: Optional[str] = None,
     ):
         """
         Initialize the airport disambiguator.
@@ -34,6 +37,7 @@ class AirportDisambiguator:
             lazy_load: If True, process locations on-demand. If False, process all upfront.
             unified_data: Optional pre-loaded unified airport data
             config: Optional configuration object (uses default if not provided)
+            names_csv_path: Optional path to airport_names.csv for pre-computed names
         """
         self.airports_file_path = airports_file_path
         self.lazy_load = lazy_load
@@ -53,9 +57,36 @@ class AirportDisambiguator:
         self.icao_to_full_name = {}
         self._processed_locations = set()
 
+        # Load pre-computed names from CSV (before eager loading)
+        if names_csv_path:
+            self._load_names_csv(names_csv_path)
+
         # Process all airports upfront if not lazy loading
         if not lazy_load:
             self._eager_load_all()
+
+    def _load_names_csv(self, path: str) -> None:
+        """Load pre-computed airport names from CSV.
+
+        Pre-populates the name caches so CSV entries take priority
+        over NER-generated names.
+        """
+        if not os.path.exists(path):
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    icao = row.get("icao", "").strip()
+                    name = row.get("name", "").strip()
+                    if icao and name:
+                        self.icao_to_full_name[icao] = name
+                        self.icao_to_pretty_name[icao] = (
+                            self.name_processor.abbreviate_long_name(name)
+                        )
+        except (OSError, csv.Error):
+            pass
 
     def _eager_load_all(self):
         """Process all airports upfront (eager loading mode)."""
@@ -105,6 +136,8 @@ class AirportDisambiguator:
         if len(icaos) == 1:
             # Single airport in this location
             icao = icaos[0]
+            if icao in self.icao_to_full_name:
+                return
             airport_details = self.data_manager.get_airport_details(icao)
             if airport_details:
                 full_name = self.disambiguation_engine.disambiguate_single_airport(
@@ -120,12 +153,13 @@ class AirportDisambiguator:
             disambiguated = self.disambiguation_engine.disambiguate_multiple_airports(
                 icaos, self.data_manager.airports_data, location
             )
-            # Store full names before abbreviation
-            self.icao_to_full_name.update(disambiguated)
-            # Apply abbreviation for long names
+            # Only store names for airports not already in the cache (CSV entries win)
             for icao, name in disambiguated.items():
-                disambiguated[icao] = self.name_processor.abbreviate_long_name(name)
-            self.icao_to_pretty_name.update(disambiguated)
+                if icao not in self.icao_to_full_name:
+                    self.icao_to_full_name[icao] = name
+                    self.icao_to_pretty_name[icao] = (
+                        self.name_processor.abbreviate_long_name(name)
+                    )
 
     def _process_location(self, location: str):
         """Process all airports in a specific location on-demand (lazy loading)."""

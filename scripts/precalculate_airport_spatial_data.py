@@ -90,9 +90,9 @@ def main():
 
     print("Loading unified airport data...")
     airports_data = load_unified_airport_data(
-        apt_base_path=str(data_dir / "APT_BASE.csv"),
-        airports_json_path=str(data_dir / "airports.json"),
-        iata_icao_path=str(data_dir / "iata-icao.csv"),
+        apt_base_path=str(data_dir / "raw" / "APT_BASE.csv"),
+        airports_json_path=str(data_dir / "raw" / "airports.json"),
+        iata_icao_path=str(data_dir / "raw" / "iata-icao.csv"),
     )
     print(f"  Loaded {len(airports_data)} airports")
 

@@ -20,9 +20,10 @@ a = Analysis(
     binaries=spacy_binaries + model_binaries + textual_binaries + rich_binaries,
     datas=[
         # Application data files
-        ('data/APT_BASE.csv', 'data'),
-        ('data/airports.json', 'data'),
-        ('data/iata-icao.csv', 'data'),
+        ('data/raw/APT_BASE.csv', 'data/raw'),
+        ('data/raw/airports.json', 'data/raw'),
+        ('data/raw/iata-icao.csv', 'data/raw'),
+        ('data/airport_names.csv', 'data'),
         ('data/aircraft_data.csv', 'data'),
         ('data/airport_spatial_cache.json', 'data'),
         ('data/custom_groupings.json', 'data'),
