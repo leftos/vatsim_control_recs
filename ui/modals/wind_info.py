@@ -56,9 +56,17 @@ class WindInfoScreen(ModalScreen):
         Binding("enter", "fetch_wind", "Fetch Wind", priority=True),
     ]
 
-    def __init__(self):
+    def __init__(self, initial_icao: str | None = None):
+        """
+        Initialize the wind info lookup modal.
+
+        Args:
+            initial_icao: Optional ICAO code to pre-fill and auto-fetch
+        """
         super().__init__()
         self.wind_result = ""
+        self.initial_icao = initial_icao
+        self._autofill_clear_available = initial_icao is not None
 
     def compose(self) -> ComposeResult:
         with Container(id="wind-container"):
@@ -71,9 +79,26 @@ class WindInfoScreen(ModalScreen):
             yield Static("Press Enter to fetch, Escape to close", id="wind-hint")
 
     def on_mount(self) -> None:
-        """Focus the input when mounted"""
+        """Focus the input when mounted, and auto-fetch if initial_icao provided"""
         wind_input = self.query_one("#wind-input", Input)
-        wind_input.focus()
+
+        if self.initial_icao:
+            wind_input.value = self.initial_icao
+            self.action_fetch_wind()
+        else:
+            wind_input.focus()
+
+    def on_key(self, event) -> None:
+        """Handle special backspace behavior for autofilled input."""
+        if event.key == "backspace" and self._autofill_clear_available:
+            wind_input = self.query_one("#wind-input", Input)
+            wind_input.value = ""
+            wind_input.focus()
+            self._autofill_clear_available = False
+            event.prevent_default()
+            event.stop()
+        elif self._autofill_clear_available and event.is_printable:
+            self._autofill_clear_available = False
 
     def action_fetch_wind(self) -> None:
         """Fetch wind information for the entered airport"""

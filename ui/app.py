@@ -921,19 +921,29 @@ class VATSIMControlApp(App):
 
     def action_show_wind_lookup(self) -> None:
         """Show the wind information lookup modal"""
-        wind_screen = WindInfoScreen()
+        initial_icao = self._get_context_icao()
+        wind_screen = WindInfoScreen(initial_icao=initial_icao)
         self.push_screen(wind_screen)
 
     def action_show_metar_lookup(self) -> None:
         """Show the METAR lookup modal.
 
-        Pre-fills airport based on context (checked in priority order):
+        Pre-fills airport based on context (see _get_context_icao).
+        """
+        initial_icao = self._get_context_icao()
+        metar_screen = MetarInfoScreen(initial_icao=initial_icao)
+        self.push_screen(metar_screen)
+
+    def _get_context_icao(self) -> str | None:
+        """Determine an ICAO code from the current UI context.
+
+        Checked in priority order:
         1. DiversionModal: Selected diversion airport
         2. FlightInfoScreen: Departure (if on ground) or arrival (if in flight)
         3. FlightBoardScreen: Departure/arrival airport from selected row
         4. Airports tab: Currently selected airport
         """
-        initial_icao = None
+        icao = None
 
         # Check modal screens in priority order (most specific first)
         for screen in self.screen_stack:
@@ -946,7 +956,7 @@ class VATSIMControlApp(App):
                         # First column is a Text object with "ICAO name" format
                         airport_text = str(row_data[0])
                         # Extract ICAO (first 4 characters before space)
-                        initial_icao = airport_text.split()[0].strip()
+                        icao = airport_text.split()[0].strip()
                 except Exception:
                     pass
                 break
@@ -967,13 +977,13 @@ class VATSIMControlApp(App):
                         eta_info and eta_info.startswith("ETA")
                     ):
                         # Landed at arrival or in flight - use arrival airport
-                        initial_icao = flight_plan.get("arrival")
+                        icao = flight_plan.get("arrival")
                     elif groundspeed <= 40:
                         # On ground but not at arrival - use departure airport
-                        initial_icao = flight_plan.get("departure")
+                        icao = flight_plan.get("departure")
                     else:
                         # Fallback: in flight, use arrival
-                        initial_icao = flight_plan.get("arrival")
+                        icao = flight_plan.get("arrival")
                 break
 
             # FlightBoardScreen: Use departure/arrival from selected row
@@ -1008,16 +1018,16 @@ class VATSIMControlApp(App):
                             row_data = focused_table.get_row_at(
                                 focused_table.cursor_row
                             )
-                            initial_icao = str(row_data[1]).strip()
+                            icao = str(row_data[1]).strip()
                         except Exception:
                             pass
                     else:
                         # For single airport, the board airport is the departure/arrival airport
-                        initial_icao = str(screen.airport_icao_or_list)
+                        icao = str(screen.airport_icao_or_list)
                 break
 
         # Fall back to airports tab selection if no modal selection
-        if initial_icao is None:
+        if icao is None:
             tabs = self.query_one("#tabs", TabbedContent)
             if tabs.active == "airports":
                 airports_table = self.query_one("#airports-table", SplitFlapDataTable)
@@ -1031,12 +1041,11 @@ class VATSIMControlApp(App):
                         sorted_airports = sorted(
                             self.airport_data, key=airport_grouping_sort_key
                         )
-                        initial_icao = sorted_airports[airports_table.cursor_row].icao
+                        icao = sorted_airports[airports_table.cursor_row].icao
                     except (IndexError, KeyError):
                         pass
 
-        metar_screen = MetarInfoScreen(initial_icao=initial_icao)
-        self.push_screen(metar_screen)
+        return icao
 
     def action_show_vfr_alternatives(self) -> None:
         """Show the VFR alternatives finder modal.
