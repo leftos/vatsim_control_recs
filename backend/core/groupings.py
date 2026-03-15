@@ -8,10 +8,41 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
 
 from backend.cache.manager import get_artcc_groupings_cache, set_artcc_groupings_cache
-from common.paths import load_merged_groupings
+from common.paths import get_user_favorites_file, load_merged_groupings
 
 # Path to preset groupings directory
 PRESET_GROUPINGS_DIR = Path(__file__).parent.parent.parent / "data" / "preset_groupings"
+
+
+def load_user_favorites() -> Dict[str, List[str]]:
+    """Load user-saved favorites from the favorites file.
+
+    Returns:
+        Dictionary mapping favorite names to lists of references
+        (airport ICAOs and/or grouping names)
+    """
+    favorites_file = get_user_favorites_file()
+    if not favorites_file.exists():
+        return {}
+
+    try:
+        with open(favorites_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if isinstance(v, list)}
+    except (json.JSONDecodeError, OSError):
+        pass
+
+    return {}
+
+
+def get_user_favorite_names() -> Set[str]:
+    """Return the set of user-saved favorite grouping names.
+
+    Returns:
+        Set of favorite names from the user's favorites.json
+    """
+    return set(load_user_favorites().keys())
 
 
 def find_grouping_case_insensitive(
@@ -246,7 +277,8 @@ def load_all_groupings(
     Load and merge all groupings sources in order of precedence:
     1. ARTCC groupings (lowest priority - from unified airport data)
     2. Preset groupings (from data/preset_groupings/*.json files)
-    3. Custom groupings (highest priority - user-defined)
+    3. Custom groupings (community-contributed)
+    4. User favorites (highest priority - per-user saved combinations)
 
     Args:
         custom_groupings_filename: Deprecated, ignored. Kept for backwards compatibility.
@@ -261,12 +293,17 @@ def load_all_groupings(
     # Load preset groupings (medium priority)
     preset_groupings = load_preset_groupings()
 
-    # Load custom groupings (highest priority)
+    # Load custom groupings (community-contributed)
     custom_groupings = load_custom_groupings()
+
+    # Load user favorites (highest priority)
+    user_favorites = load_user_favorites()
 
     # Merge them in order of precedence (later entries override earlier)
     all_groupings = {**artcc_groupings, **preset_groupings}
     if custom_groupings:
         all_groupings.update(custom_groupings)
+    if user_favorites:
+        all_groupings.update(user_favorites)
 
     return all_groupings

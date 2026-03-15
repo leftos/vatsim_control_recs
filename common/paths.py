@@ -148,6 +148,19 @@ def get_custom_groupings_file() -> Path:
     return get_user_data_dir() / "custom_groupings.json"
 
 
+def get_user_favorites_file() -> Path:
+    """Get the path to the user's saved favorites file.
+
+    Favorites are per-user saved grouping combinations created via
+    the GoTo multi-select UI. Separate from custom_groupings.json
+    which is a shared/community-contributed file.
+
+    Returns:
+        Path to favorites.json in user data directory
+    """
+    return get_user_data_dir() / "favorites.json"
+
+
 def get_project_groupings_file() -> Path:
     """Get the path to the project's custom groupings file (read-only default).
 

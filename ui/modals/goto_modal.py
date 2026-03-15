@@ -1,8 +1,9 @@
 """Go To Modal Screen - Unified navigation to airports, groupings, and flights"""
 
 import asyncio
+import json
 import os
-from typing import List, Tuple, Any, Callable, Optional, TYPE_CHECKING
+from typing import List, Tuple, Any, Callable, Optional, Set, TYPE_CHECKING
 
 from textual.screen import ModalScreen
 from textual.widgets import Static, Input, OptionList
@@ -12,13 +13,30 @@ from textual.binding import Binding
 from textual.app import ComposeResult
 
 from backend.data.vatsim_api import download_vatsim_data
-from backend.core.groupings import load_all_groupings, resolve_grouping_recursively
+from backend.core.groupings import (
+    get_user_favorite_names,
+    load_all_groupings,
+    resolve_grouping_recursively,
+)
 from ui import config
 from .flight_info import FlightInfoScreen
 from .flight_board import FlightBoardScreen
+from common.paths import get_user_favorites_file
+from .confirm_modal import ConfirmModal
+from .save_grouping import SaveGroupingModal
 
 if TYPE_CHECKING:
     from ui.app import VATSIMControlApp
+
+
+HINT_SINGLE_SELECT = (
+    "@ Airport | # Flight | $ Grouping"
+    " | Tab Multi-select | Ctrl+D Delete \u2605 | Enter Open | Esc Close"
+)
+HINT_MULTI_SELECT = (
+    "Enter/Space Toggle | Ctrl+Enter Open"
+    " | Ctrl+S Save | Ctrl+D Delete \u2605 | Tab Single-select | Esc Close"
+)
 
 
 class GoToScreen(ModalScreen):
@@ -52,6 +70,16 @@ class GoToScreen(ModalScreen):
 
     #goto-input {
         margin-bottom: 1;
+    }
+
+    #goto-selection-summary {
+        color: $text-muted;
+        margin-bottom: 1;
+        display: none;
+    }
+
+    #goto-selection-summary.has-selection {
+        display: block;
     }
 
     #goto-list {
@@ -91,12 +119,20 @@ class GoToScreen(ModalScreen):
         self.callback = callback
         self.custom_title = title
         self.tracked_airports: List[str] = []
-        self.all_groupings: dict = {}  # All available groupings (name -> airports)
+        self.all_groupings: dict = {}
         self.pilots: List[dict] = []
         self.all_results: List[Tuple[str, str, Any]] = []
         self.filtered_results: List[Tuple[str, str, Any]] = []
         self.data_loaded = False
         self._load_worker = None
+
+        # Multi-select state
+        self.multi_select_mode: bool = False
+        self.selected_items: List[Tuple[str, str, Any]] = []
+        self.selected_identifiers: Set[str] = set()
+
+        # User grouping names for star prefix
+        self.user_grouping_names: Set[str] = set()
 
     def compose(self) -> ComposeResult:
         # Determine placeholder and hint based on filter_type
@@ -105,11 +141,12 @@ class GoToScreen(ModalScreen):
             hint = "Enter: Select | Esc: Close"
         else:
             placeholder = "Search... (@airport, #flight, $grouping)"
-            hint = "@ Airport | # Flight | $ Grouping | Enter Select | Esc Close"
+            hint = HINT_SINGLE_SELECT
 
         with Container(id="goto-container"):
             yield Static(self.custom_title, id="goto-title")
             yield Input(placeholder=placeholder, id="goto-input")
+            yield Static("", id="goto-selection-summary")
             yield OptionList(Option("Loading...", disabled=True), id="goto-list")
             yield Static(hint, id="goto-hint")
 
@@ -118,25 +155,68 @@ class GoToScreen(ModalScreen):
         self.query_one("#goto-input", Input).focus()
         self._load_worker = self.run_worker(self._load_data(), exclusive=True)
 
+    def _can_multi_select(self) -> bool:
+        """Multi-select is disabled in callback mode and grouping-only filter."""
+        return self.callback is None and self.filter_type is None
+
     def on_key(self, event) -> None:
         """Handle key events for navigation between input and list"""
         option_list = self.query_one("#goto-list", OptionList)
         input_widget = self.query_one("#goto-input", Input)
 
-        # Check which widget has focus
         input_focused = input_widget.has_focus
         list_focused = option_list.has_focus
 
+        # Tab: toggle multi-select mode
+        if event.key == "tab" and self._can_multi_select():
+            self.multi_select_mode = not self.multi_select_mode
+            self._update_hint_text()
+            self._update_option_list()
+            event.prevent_default()
+            event.stop()
+            return
+
+        # Ctrl+Enter: open multi-select flight board
+        # Terminals vary: some send "ctrl+enter", others map it to "ctrl+j" or "ctrl+m"
+        if event.key in ("ctrl+enter", "ctrl+j") and self.multi_select_mode:
+            self._open_multi_select_flight_board()
+            event.prevent_default()
+            event.stop()
+            return
+
+        # Ctrl+S: save selection as favorite
+        if event.key == "ctrl+s" and self.multi_select_mode:
+            self._save_selection()
+            event.prevent_default()
+            event.stop()
+            return
+
+        # Ctrl+D: delete highlighted favorite
+        if event.key == "ctrl+d":
+            self._prompt_delete_favorite()
+            event.prevent_default()
+            event.stop()
+            return
+
+        # Space in multi-select mode when list is focused: toggle selection
+        if (
+            event.key == "space"
+            and self.multi_select_mode
+            and list_focused
+        ):
+            self._toggle_highlighted()
+            event.prevent_default()
+            event.stop()
+            return
+
         if input_focused:
             if event.key == "down":
-                # Move from input to first item in list
                 if option_list.option_count > 0:
                     option_list.focus()
                     option_list.highlighted = 0
                     event.prevent_default()
                     event.stop()
             elif event.key == "up":
-                # Move from input to last item in list
                 if option_list.option_count > 0:
                     option_list.focus()
                     option_list.highlighted = option_list.option_count - 1
@@ -145,7 +225,6 @@ class GoToScreen(ModalScreen):
 
         elif list_focused:
             if event.key == "up" and option_list.highlighted == 0:
-                # At first item, cycle to input
                 input_widget.focus()
                 event.prevent_default()
                 event.stop()
@@ -153,7 +232,6 @@ class GoToScreen(ModalScreen):
                 event.key == "down"
                 and option_list.highlighted == option_list.option_count - 1
             ):
-                # At last item, cycle to input
                 input_widget.focus()
                 event.prevent_default()
                 event.stop()
@@ -164,19 +242,22 @@ class GoToScreen(ModalScreen):
             self._load_worker.cancel()
 
     async def _load_data(self) -> None:
-        """Load all data sources, using cached data when available for instant responsiveness"""
-        # Check if app has pre-built results cache ready (fastest path)
+        """Load all data sources, using cached data when available"""
+        loop = asyncio.get_event_loop()
+
+        # Load user grouping names for star prefix (file I/O)
+        self.user_grouping_names = await loop.run_in_executor(
+            None, get_user_favorite_names
+        )
+
         if self.vatsim_app.goto_cache_ready:
-            # Use pre-built cache directly
             self.all_groupings = self.vatsim_app.cached_groupings
             self.tracked_airports = list(self.vatsim_app.airport_allowlist or [])
             self.pilots = self.vatsim_app.cached_pilots
 
             if self.filter_type is None:
-                # No filter - use cache as-is
                 self.all_results = list(self.vatsim_app.cached_goto_results)
             else:
-                # Filter the cached results by type
                 self.all_results = [
                     (item_type, identifier, data)
                     for item_type, identifier, data in self.vatsim_app.cached_goto_results
@@ -185,21 +266,15 @@ class GoToScreen(ModalScreen):
                 ]
 
             self.data_loaded = True
-            # Re-apply current filter if user already typed something
             self._apply_current_filter()
             return
 
-        # Fallback path: build results manually (for filtered modals or before cache is ready)
-        loop = asyncio.get_event_loop()
-
-        # Access app data
+        # Fallback path
         self.tracked_airports = list(self.vatsim_app.airport_allowlist or [])
 
-        # Use cached groupings from app if available (warmed up on mount)
         if self.vatsim_app.cached_groupings:
             self.all_groupings = self.vatsim_app.cached_groupings
         else:
-            # Fallback: load groupings in executor (file I/O)
             script_dir = os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             )
@@ -210,32 +285,24 @@ class GoToScreen(ModalScreen):
                 config.UNIFIED_AIRPORT_DATA or {},
             )
 
-        # Use cached pilots from app if available (kept fresh by refresh cycle)
         if self.vatsim_app.cached_pilots:
             self.pilots = self.vatsim_app.cached_pilots
         else:
-            # Fallback: load VATSIM data in executor (first invocation before cache is ready)
             try:
                 vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
-
                 if vatsim_data:
                     self.pilots = vatsim_data.get("pilots", [])
             except Exception:
-                # If VATSIM data fails, continue with just airports and groupings
                 pass
 
-        # Build initial results in executor (don't block event loop)
         await loop.run_in_executor(None, self._build_all_results)
         self.data_loaded = True
-
-        # Re-apply current filter if user already typed something
         self._apply_current_filter()
 
     def _build_all_results(self) -> None:
         """Build the complete results list, respecting filter_type if set"""
         self.all_results = []
 
-        # Add airports (unless filtered to groupings only)
         if self.filter_type != "$":
             for icao in sorted(self.tracked_airports):
                 pretty_name = (
@@ -245,11 +312,9 @@ class GoToScreen(ModalScreen):
                 )
                 self.all_results.append(("airport", icao, pretty_name))
 
-        # Add all available groupings
         for name in sorted(self.all_groupings.keys()):
             self.all_results.append(("grouping", name, None))
 
-        # Add flights (sorted by callsign) (unless filtered to groupings only)
         if self.filter_type != "$":
             for pilot in sorted(self.pilots, key=lambda p: p.get("callsign", "")):
                 callsign = pilot.get("callsign", "")
@@ -257,26 +322,37 @@ class GoToScreen(ModalScreen):
                     self.all_results.append(("flight", callsign, pilot))
 
     def _format_label(self, item_type: str, identifier: str, data: Any) -> str:
-        """Format the display label for an item
+        """Format the display label for an item.
 
-        Uses filter symbols as prefixes for consistency:
-        @ for airports, # for flights, $ for groupings
+        Uses filter symbols as prefixes: @ for airports, # for flights,
+        $ for groupings (or star for user groupings).
+        In multi-select mode, prepends a checkbox indicator.
         """
+        # Build base label
         if item_type == "airport":
-            return f"@ {identifier} - {data}"
+            base = f"@ {identifier} - {data}"
         elif item_type == "grouping":
-            # Show recursively expanded airport count to distinguish from flights
             resolved_airports = resolve_grouping_recursively(
                 identifier, self.all_groupings
             )
             airport_count = len(resolved_airports)
-            return f"$ {identifier} ({airport_count} airports)"
+            prefix = "\u2605" if identifier in self.user_grouping_names else "$"
+            base = f"{prefix} {identifier} ({airport_count} airports)"
         elif item_type == "flight":
             fp = data.get("flight_plan") or {}
             dep = fp.get("departure") or "----"
             arr = fp.get("arrival") or "----"
-            return f"# {identifier} - {dep} -> {arr}"
-        return identifier
+            base = f"# {identifier} - {dep} -> {arr}"
+        else:
+            base = identifier
+
+        # Prepend checkbox in multi-select mode
+        if self.multi_select_mode:
+            key = f"{item_type}:{identifier}"
+            check = "[x]" if key in self.selected_identifiers else "[ ]"
+            return f"{check} {base}"
+
+        return base
 
     def _update_option_list(self) -> None:
         """Update the option list with current filtered results"""
@@ -287,12 +363,18 @@ class GoToScreen(ModalScreen):
             option_list.add_option(Option("Loading...", disabled=True))
             return
 
-        if not self.filtered_results:
+        # In multi-select mode, filter out flights
+        results = self.filtered_results
+        if self.multi_select_mode:
+            results = [
+                r for r in results if r[0] != "flight"
+            ]
+
+        if not results:
             option_list.add_option(Option("No results found", disabled=True))
             return
 
-        # Limit to 100 results for performance
-        for item_type, identifier, data in self.filtered_results[:100]:
+        for item_type, identifier, data in results[:100]:
             label = self._format_label(item_type, identifier, data)
             option_list.add_option(Option(label, id=f"{item_type}:{identifier}"))
 
@@ -312,7 +394,6 @@ class GoToScreen(ModalScreen):
 
     def _filter_results(self, query: str) -> None:
         """Filter all_results based on query string."""
-        # Check for type filter prefix
         type_filter = None
         if query.startswith("@"):
             type_filter = "airport"
@@ -331,16 +412,13 @@ class GoToScreen(ModalScreen):
         else:
             self.filtered_results = []
             for item_type, identifier, data in self.all_results:
-                # Skip if type doesn't match filter
                 if type_filter and item_type != type_filter:
                     continue
 
-                # If no query text, include all of this type
                 if not query:
                     self.filtered_results.append((item_type, identifier, data))
                     continue
 
-                # Search within the item
                 searchable = identifier.lower()
                 if item_type == "airport" and data:
                     searchable += " " + data.lower()
@@ -353,13 +431,7 @@ class GoToScreen(ModalScreen):
                     self.filtered_results.append((item_type, identifier, data))
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Filter results as user types
-
-        Special prefixes for type filtering:
-        - @ for airports only
-        - # for flights only
-        - $ for groupings only
-        """
+        """Filter results as user types"""
         if not self.data_loaded:
             return
 
@@ -368,14 +440,267 @@ class GoToScreen(ModalScreen):
         self._update_option_list()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle Enter key in input - select top result if available"""
-        await self._execute_selected()
+        """Handle Enter key in input"""
+        if self.multi_select_mode:
+            self._toggle_highlighted()
+        else:
+            await self._execute_selected()
 
     async def on_option_list_option_selected(
         self, event: OptionList.OptionSelected
     ) -> None:
-        """Handle option selection"""
-        await self._execute_selected()
+        """Handle option selection (Enter/click on list item)"""
+        if self.multi_select_mode:
+            self._toggle_highlighted()
+        else:
+            await self._execute_selected()
+
+    def _toggle_highlighted(self) -> None:
+        """Toggle selection of the currently highlighted item."""
+        option_list = self.query_one("#goto-list", OptionList)
+        if option_list.highlighted is None:
+            return
+
+        # Build the effective results list (same filtering as _update_option_list)
+        results = self.filtered_results
+        if self.multi_select_mode:
+            results = [r for r in results if r[0] != "flight"]
+
+        max_index = min(100, len(results))
+        if option_list.highlighted >= max_index:
+            return
+
+        item_type, identifier, data = results[option_list.highlighted]
+        self._toggle_selection(item_type, identifier, data)
+
+    def _toggle_selection(
+        self, item_type: str, identifier: str, data: Any
+    ) -> None:
+        """Add or remove an item from the multi-select selection."""
+        key = f"{item_type}:{identifier}"
+        if key in self.selected_identifiers:
+            self.selected_identifiers.discard(key)
+            self.selected_items = [
+                (t, i, d)
+                for t, i, d in self.selected_items
+                if f"{t}:{i}" != key
+            ]
+        else:
+            self.selected_identifiers.add(key)
+            self.selected_items.append((item_type, identifier, data))
+
+        self._update_selection_summary()
+        self._update_option_list()
+
+    def _update_selection_summary(self) -> None:
+        """Update the selection summary widget text."""
+        summary_widget = self.query_one("#goto-selection-summary", Static)
+
+        if not self.selected_items:
+            summary_widget.update("")
+            summary_widget.remove_class("has-selection")
+            return
+
+        # Build display names
+        names = []
+        for item_type, identifier, _data in self.selected_items:
+            if item_type == "airport":
+                names.append(identifier)
+            elif item_type == "grouping":
+                names.append(identifier)
+
+        # Count total unique airports
+        all_airports: Set[str] = set()
+        for item_type, identifier, _data in self.selected_items:
+            if item_type == "airport":
+                all_airports.add(identifier)
+            elif item_type == "grouping":
+                all_airports.update(
+                    resolve_grouping_recursively(identifier, self.all_groupings)
+                )
+
+        # Build text with truncation for >3 items
+        if len(names) <= 3:
+            items_text = ", ".join(names)
+        else:
+            items_text = ", ".join(names[:3]) + f" + {len(names) - 3} more"
+
+        summary_widget.update(
+            f"Selected: {items_text} ({len(all_airports)} airports total)"
+        )
+        summary_widget.add_class("has-selection")
+
+    def _update_hint_text(self) -> None:
+        """Update the hint text based on current mode."""
+        hint_widget = self.query_one("#goto-hint", Static)
+        if self.multi_select_mode:
+            hint_widget.update(HINT_MULTI_SELECT)
+        else:
+            hint_widget.update(HINT_SINGLE_SELECT)
+
+    def _open_multi_select_flight_board(self) -> None:
+        """Open a flight board for the multi-select selection."""
+        if not self.selected_items:
+            return
+
+        # Resolve all selected items to a flat, deduplicated set of ICAO codes
+        all_airports: Set[str] = set()
+        names: List[str] = []
+        for item_type, identifier, _data in self.selected_items:
+            names.append(identifier)
+            if item_type == "airport":
+                all_airports.add(identifier)
+            elif item_type == "grouping":
+                all_airports.update(
+                    resolve_grouping_recursively(identifier, self.all_groupings)
+                )
+
+        if not all_airports:
+            return
+
+        # Build title
+        if len(names) <= 3:
+            title = " + ".join(names)
+        else:
+            title = " + ".join(names[:3]) + f" + {len(names) - 3} more"
+
+        self.dismiss()
+
+        enable_anims = (
+            not self.vatsim_app.args.disable_animations
+            if self.vatsim_app.args
+            else True
+        )
+        max_eta = self.vatsim_app.args.max_eta_hours if self.vatsim_app.args else 1.0
+
+        self.vatsim_app.flight_board_open = True
+        flight_board = FlightBoardScreen(
+            title,
+            list(all_airports),
+            max_eta,
+            self.vatsim_app.refresh_interval,
+            config.DISAMBIGUATOR,
+            enable_anims,
+        )
+        self.vatsim_app.active_flight_board = flight_board
+        self.vatsim_app.push_screen(flight_board)
+
+    def _save_selection(self) -> None:
+        """Save the current multi-select selection as a custom grouping."""
+        if not self.multi_select_mode or not self.selected_items:
+            return
+
+        # Build the raw reference list (mix of ICAOs and grouping names)
+        raw_items: List[str] = []
+        for item_type, identifier, _data in self.selected_items:
+            raw_items.append(identifier)
+
+        # Compute resolved airport count for the hint
+        all_airports: Set[str] = set()
+        for item_type, identifier, _data in self.selected_items:
+            if item_type == "airport":
+                all_airports.add(identifier)
+            elif item_type == "grouping":
+                all_airports.update(
+                    resolve_grouping_recursively(identifier, self.all_groupings)
+                )
+
+        # Stash for callback
+        self._pending_save_items = raw_items
+
+        save_modal = SaveGroupingModal(
+            raw_items,
+            resolve_count=len(all_airports),
+        )
+        self.app.push_screen(
+            save_modal, callback=self._on_save_dismissed
+        )
+
+    def _on_save_dismissed(self, result: Optional[str]) -> None:
+        """Handle SaveGroupingModal dismissal."""
+        if result is None:
+            return
+
+        saved_name = result
+        saved_items = getattr(self, "_pending_save_items", [])
+
+        # Invalidate app-level cache so next open is fresh
+        self.vatsim_app.invalidate_goto_cache()
+        self.user_grouping_names = get_user_favorite_names()
+
+        # Inject the new favorite into local state so it's visible immediately
+        self.all_groupings[saved_name] = saved_items
+        self.all_results.append(("grouping", saved_name, None))
+
+        # Switch to single-select with the new name pre-filled
+        self.multi_select_mode = False
+        self.selected_items.clear()
+        self.selected_identifiers.clear()
+        self._update_selection_summary()
+        self._update_hint_text()
+
+        input_widget = self.query_one("#goto-input", Input)
+        input_widget.value = saved_name
+        input_widget.focus()
+
+    def _get_highlighted_item(self) -> Optional[Tuple[str, str, Any]]:
+        """Return the currently highlighted item, or None."""
+        option_list = self.query_one("#goto-list", OptionList)
+        if option_list.highlighted is None:
+            return None
+
+        results = self.filtered_results
+        if self.multi_select_mode:
+            results = [r for r in results if r[0] != "flight"]
+
+        max_index = min(100, len(results))
+        if option_list.highlighted >= max_index:
+            return None
+
+        return results[option_list.highlighted]
+
+    def _prompt_delete_favorite(self) -> None:
+        """Prompt to delete the highlighted item if it's a user favorite."""
+        item = self._get_highlighted_item()
+        if item is None:
+            return
+
+        item_type, identifier, _data = item
+        if item_type != "grouping" or identifier not in self.user_grouping_names:
+            return
+
+        self.app.push_screen(
+            ConfirmModal(f"Delete favorite '{identifier}'?"),
+            callback=lambda confirmed: self._on_delete_confirmed(
+                confirmed, identifier
+            ),
+        )
+
+    def _on_delete_confirmed(self, confirmed: bool, name: str) -> None:
+        """Handle delete confirmation result."""
+        if not confirmed:
+            return
+
+        favorites_file = get_user_favorites_file()
+        try:
+            with open(favorites_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data.pop(name, None)
+            with open(favorites_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except (json.JSONDecodeError, OSError):
+            return
+
+        # Update local state
+        self.all_groupings.pop(name, None)
+        self.all_results = [
+            r for r in self.all_results
+            if not (r[0] == "grouping" and r[1] == name)
+        ]
+        self.user_grouping_names.discard(name)
+        self.vatsim_app.invalidate_goto_cache()
+
+        self._apply_current_filter()
 
     async def _execute_selected(self) -> None:
         """Execute action for the selected item"""
@@ -384,7 +709,6 @@ class GoToScreen(ModalScreen):
         if option_list.highlighted is None or not self.filtered_results:
             return
 
-        # Ensure we're within bounds of both the displayed list (max 100) and filtered results
         max_index = min(100, len(self.filtered_results))
         if option_list.highlighted >= max_index:
             return
@@ -393,7 +717,6 @@ class GoToScreen(ModalScreen):
 
         self.dismiss()
 
-        # If callback is provided, use it instead of navigating
         if self.callback:
             if item_type == "grouping":
                 airport_list = list(
@@ -401,10 +724,8 @@ class GoToScreen(ModalScreen):
                 )
                 self.callback((identifier, airport_list))
             elif item_type == "airport":
-                # For airports, return as a single-item list
                 self.callback((identifier, [identifier]))
             elif item_type == "flight":
-                # For flights, pass as ("flight", flight_data) tuple
                 self.callback(("flight", data))
             else:
                 self.callback(None)
@@ -443,7 +764,6 @@ class GoToScreen(ModalScreen):
 
     def _open_grouping(self, name: str) -> None:
         """Open flight board for a grouping"""
-        # Use the already-loaded groupings
         airport_list = list(resolve_grouping_recursively(name, self.all_groupings))
         enable_anims = (
             not self.vatsim_app.args.disable_animations
@@ -466,7 +786,6 @@ class GoToScreen(ModalScreen):
 
     def action_close(self) -> None:
         """Close the modal"""
-        # If callback is provided, call it with None to indicate cancellation
         if self.callback:
             self.callback(None)
         self.dismiss()

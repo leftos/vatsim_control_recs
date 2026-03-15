@@ -342,6 +342,11 @@ class VATSIMControlApp(App):
         self.cached_goto_results = results
         self.goto_cache_ready = True
 
+    def invalidate_goto_cache(self) -> None:
+        """Reset the GoTo cache and re-warm it in the background."""
+        self.goto_cache_ready = False
+        self.run_worker(self._warm_up_goto_cache(), exclusive=False)
+
     def _disable_activity_watching(self) -> None:
         """Safely disable user activity tracking with lock."""
         with self._activity_lock:
@@ -387,6 +392,14 @@ class VATSIMControlApp(App):
             self.groupings_manager.populate(self.groupings_data)
 
         self._enable_activity_watching()  # Re-enable user activity tracking
+
+    def check_action(self, action: str, parameters: tuple) -> bool | None:
+        """Disable actions that shouldn't fire when a modal is open."""
+        from textual.screen import ModalScreen
+
+        if action == "show_historical_stats" and isinstance(self.screen, ModalScreen):
+            return False
+        return True
 
     async def action_quit(self) -> None:
         """Quit the application."""

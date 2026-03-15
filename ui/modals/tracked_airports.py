@@ -245,7 +245,9 @@ class TrackedAirportsModal(ModalScreen):
         """Handle result from save grouping modal"""
         if result:
             status_widget = self.query_one("#tracked-status", Static)
-            status_widget.update(result)
+            status_widget.update(
+                f"Saved '{result}' with {len(self.airport_allowlist)} airports"
+            )
 
     def action_close(self) -> None:
         """Close and return the updated airport list"""

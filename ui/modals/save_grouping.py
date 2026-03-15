@@ -1,6 +1,7 @@
 """Save Grouping Modal Screen"""
 
 import json
+from typing import Optional
 
 from textual.screen import ModalScreen
 from textual.widgets import Static, Input
@@ -8,17 +9,17 @@ from textual.containers import Container
 from textual.binding import Binding
 from textual.app import ComposeResult
 
-from common.paths import get_custom_groupings_file
+from common.paths import get_user_favorites_file
 
 
 class SaveGroupingModal(ModalScreen):
-    """Modal screen for saving tracked airports as a custom grouping"""
+    """Modal screen for saving airports/groupings as a user favorite"""
 
     CSS = """
     SaveGroupingModal {
         align: center middle;
     }
-    
+
     #save-grouping-container {
         width: 60;
         height: auto;
@@ -26,25 +27,25 @@ class SaveGroupingModal(ModalScreen):
         border: thick $primary;
         padding: 1 2;
     }
-    
+
     #save-grouping-title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
     }
-    
+
     #save-grouping-input-container {
         height: auto;
         margin-bottom: 1;
     }
-    
+
     #save-grouping-result {
         text-align: center;
         height: auto;
         margin-top: 1;
         color: $text-muted;
     }
-    
+
     #save-grouping-hint {
         text-align: center;
         color: $text-muted;
@@ -57,23 +58,39 @@ class SaveGroupingModal(ModalScreen):
         Binding("enter", "save_grouping", "Save", priority=True),
     ]
 
-    def __init__(self, airport_list: list):
+    def __init__(
+        self,
+        airport_list: list,
+        resolve_count: Optional[int] = None,
+    ):
+        """
+        Args:
+            airport_list: List of airport ICAOs and/or grouping names to save.
+            resolve_count: Total resolved airport count (shown when items
+                include grouping references that expand to more airports).
+        """
         super().__init__()
         self.airport_list = airport_list
+        self.resolve_count = resolve_count
 
     def compose(self) -> ComposeResult:
+        item_count = len(self.airport_list)
+        hint_parts = [f"This will save {item_count} airports/groupings"]
+        if self.resolve_count is not None and self.resolve_count != item_count:
+            hint_parts.append(f" (resolves to {self.resolve_count} airports)")
+        hint_parts.append(
+            " to favorites\nPress Enter to save, Escape to cancel"
+        )
+
         with Container(id="save-grouping-container"):
-            yield Static("Save as Custom Grouping", id="save-grouping-title")
+            yield Static("Save as Favorite", id="save-grouping-title")
             with Container(id="save-grouping-input-container"):
                 yield Input(
                     placeholder="Enter grouping name (e.g., My Airports)",
                     id="save-grouping-input",
                 )
             yield Static("", id="save-grouping-result")
-            yield Static(
-                f"This will save {len(self.airport_list)} airports to custom_groupings.json\nPress Enter to save, Escape to cancel",
-                id="save-grouping-hint",
-            )
+            yield Static("".join(hint_parts), id="save-grouping-hint")
 
     def on_mount(self) -> None:
         """Focus the input when mounted"""
@@ -81,7 +98,7 @@ class SaveGroupingModal(ModalScreen):
         grouping_input.focus()
 
     def action_save_grouping(self) -> None:
-        """Save the grouping to user's custom_groupings.json"""
+        """Save the grouping to the user's favorites file"""
         grouping_input = self.query_one("#save-grouping-input", Input)
         grouping_name = grouping_input.value.strip()
 
@@ -90,32 +107,25 @@ class SaveGroupingModal(ModalScreen):
             result_widget.update("Please enter a grouping name")
             return
 
-        # Get path to user's custom_groupings.json
-        groupings_file = get_custom_groupings_file()
+        favorites_file = get_user_favorites_file()
 
         try:
-            # Load existing user groupings (not merged with project defaults)
-            groupings_data = {}
-            if groupings_file.exists():
-                with open(groupings_file, "r", encoding="utf-8") as f:
-                    groupings_data = json.load(f)
+            existing_data = {}
+            if favorites_file.exists():
+                with open(favorites_file, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
 
-            # Add or update the grouping
-            groupings_data[grouping_name] = sorted(self.airport_list)
+            existing_data[grouping_name] = sorted(self.airport_list)
 
-            # Ensure parent directory exists
-            groupings_file.parent.mkdir(parents=True, exist_ok=True)
+            favorites_file.parent.mkdir(parents=True, exist_ok=True)
 
-            # Save back to user file
-            with open(groupings_file, "w", encoding="utf-8") as f:
-                json.dump(groupings_data, f, indent=2, ensure_ascii=False)
+            with open(favorites_file, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, indent=2, ensure_ascii=False)
 
-            self.dismiss(
-                f"Saved '{grouping_name}' with {len(self.airport_list)} airports"
-            )
+            self.dismiss(grouping_name)
         except Exception as e:
             result_widget = self.query_one("#save-grouping-result", Static)
-            result_widget.update(f"Error saving grouping: {str(e)}")
+            result_widget.update(f"Error saving: {str(e)}")
 
     def action_close(self) -> None:
         """Close without saving"""
