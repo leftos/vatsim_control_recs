@@ -13,14 +13,16 @@ A comprehensive guide for installing and using the VATSIM Control Recommendation
 - [Features](#features)
   - [Flight Boards](#flight-boards)
   - [Flight Information](#flight-information)
+  - [Go To Navigation](#go-to-navigation)
   - [Weather Lookups](#weather-lookups)
   - [Weather Briefings](#weather-briefings)
   - [VFR Alternatives Finder](#vfr-alternatives-finder)
   - [Diversion Airport Finder](#diversion-airport-finder)
-  - [Go To Navigation](#go-to-navigation)
+  - [Historical Flight Statistics](#historical-flight-statistics)
   - [Tracked Airports Manager](#tracked-airports-manager)
   - [Command Palette](#command-palette)
 - [Custom Groupings](#custom-groupings)
+- [Favorites](#favorites)
 - [Weather Data Sources](#weather-data-sources)
 - [Visual Features](#visual-features)
 - [Tips & Tricks](#tips--tricks)
@@ -69,6 +71,17 @@ python main.py
 
 On first run, you'll see progress messages as dependencies are installed. Subsequent launches will start immediately.
 
+### Optional: Historical Statistics API Key
+
+To use the Historical Flight Statistics feature (`Ctrl+S`), you need a free API key from statsim.net:
+
+1. Get a key at https://statsim.net/api-keys
+2. Create a `.env` file in the application directory:
+   ```
+   STATSIM_API_KEY=your-key-here
+   ```
+   Or set the `STATSIM_API_KEY` environment variable directly.
+
 ### Verifying Installation
 
 To verify everything is set up correctly without launching the full app:
@@ -95,6 +108,12 @@ This launches the application tracking all airports with active traffic.
 
 ```bash
 python main.py --airports KSFO KLAX KJFK KORD
+```
+
+### Track all airports within an ARTCC, including separate arrival counts for time-limited ETA and all arrivals
+
+```bash
+python main.py --groupings "ZOA All" --include-all-arriving
 ```
 
 ### Track All Airports in Specific Countries
@@ -151,6 +170,11 @@ python main.py --include-all-staffed --countries US
 python main.py --max-eta-hours 2.0
 ```
 
+**Show all filed arrivals alongside ETA-filtered arrivals:**
+```bash
+python main.py --include-all-arriving --airports KSFO KLAX
+```
+
 **Use up-to-the-minute wind data:**
 ```bash
 python main.py --wind-source minute
@@ -184,6 +208,8 @@ Shows all tracked airports with columns:
 - **Altim**: Current altimeter setting (inches Hg)
 - **Positions**: Staffed ATC positions
 
+When `--include-all-arriving` is used, the Arr column shows `arr/arr_all` format when the counts differ (e.g., `3/  7` means 3 within the ETA window, 7 total filed). The Total column behaves similarly.
+
 #### Custom Groupings Tab
 Shows configured airport groupings with aggregated statistics.
 
@@ -210,11 +236,11 @@ When viewing weather information, airports are color-coded by flight category:
 
 ## Keyboard Shortcuts
 
-### General Navigation
+### Main View
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+C` | Quit the application |
+| `Ctrl+Z` | Quit the application |
 | `Ctrl+R` | Refresh data immediately |
 | `Ctrl+P` | Pause/Resume auto-refresh |
 | `Tab` | Switch between tabs |
@@ -305,17 +331,58 @@ Displays comprehensive flight details:
 - Nearest altimeter setting with distance from airport
 - Pilot and ATC hours (from VATSIM stats)
 
+**MEA Violation Warning:**
+For IFR flights, shows warnings if the aircraft is below the Minimum Enroute Altitude for any segment of their filed route.
+
 **VFR Weather Warning:**
 For VFR flights, shows warnings if departure or arrival has non-VFR conditions and suggests nearby VFR/MVFR alternate airports within 100nm.
 
 **Flight Info Shortcuts:**
 | Shortcut | Action |
 |----------|--------|
+| `C` | Copy route to clipboard |
 | `D` | Find diversion airports |
 | `W` | View route weather |
 | `Escape` or `Q` | Close |
 
 The flight info screen auto-refreshes every 15 seconds.
+
+---
+
+### Go To Navigation
+
+**Access:** `Ctrl+G` or `Ctrl+L`
+
+Unified search modal for quickly navigating to:
+- **Airports**: Type airport ICAO or name
+- **Flights**: Type callsign to find specific flights
+- **Groupings**: Type grouping name
+
+**Filter Prefixes:**
+- `@` - Search airports only (e.g., `@SFO`)
+- `#` - Search flights only (e.g., `#AAL123`)
+- `$` - Search groupings only (e.g., `$Bay`)
+
+**Multi-Select Mode:**
+Press `Tab` to toggle multi-select mode, which allows selecting multiple airports/groupings to open at once:
+- `Enter` or `Space` - Toggle selection of highlighted item
+- `Ctrl+Enter` - Open all selected items
+- `Ctrl+S` - Save selection as a favorite (see [Favorites](#favorites))
+
+**Per-Airport Filtering:**
+In multi-select mode, press `F` on a selected item to cycle its filter:
+- `[  ]` - Both departures and arrivals (default)
+- `[D>]` - Departures only
+- `[<A]` - Arrivals only
+
+This filtering is preserved when saving as a favorite.
+
+**Favorite Management:**
+- Favorites appear with a star prefix in the results list
+- `E` - Edit an existing favorite (loads its airports into multi-select)
+- `Ctrl+D` - Delete a favorite (with confirmation)
+
+Uses a pre-built cache for instant search responsiveness.
 
 ---
 
@@ -337,7 +404,7 @@ Look up current wind conditions for any airport. Shows:
 - Wind speed (knots)
 - Gust speed if applicable
 
-Uses the configured wind source (METAR or minute-by-minute data).
+Pre-fills the airport code based on context. Uses the configured wind source (METAR or minute-by-minute data).
 
 ---
 
@@ -352,7 +419,9 @@ Works for airports, groupings, and flights:
 **For Airports/Groupings:**
 - **METAR data** for each airport
 - **TAF data** (Terminal Aerodrome Forecast) when available
-- **ATIS information** if online
+- **ATIS information** from VATSIM and real-world D-ATIS (fallback)
+- **Approach type** with SIMUL ILS highlighted
+- **Runway assignments** (departure and arrival runways)
 - **Flight category summary** (counts of VFR/MVFR/IFR/LIFR)
 - **TAF trend indicators** showing improving/worsening conditions
 
@@ -407,23 +476,39 @@ For in-flight aircraft, finds suitable diversion airports:
 - Runway lengths and approach types available
 - Highlights staffed airports with controller information
 
+**Diversion Modal Shortcuts:**
+| Shortcut | Action |
+|----------|--------|
+| `R` | Refresh data |
+| `1` | Sort by position |
+| `2` | Sort by destination |
+| `3` | Sort by runway |
+| `Escape` | Close |
+
 ---
 
-### Go To Navigation
+### Historical Flight Statistics
 
-**Access:** `Ctrl+G` or `Ctrl+L`
+**Access:** `Ctrl+S`
 
-Unified search modal for quickly navigating to:
-- **Airports**: Type airport ICAO or name
-- **Flights**: Type callsign to find specific flights
-- **Groupings**: Type grouping name
+View historical traffic patterns between airports using data from statsim.net.
+Enter one or more airport ICAO codes to see which of your tracked airports have
+the most departures and arrivals to/from those airports over the last 90 days.
 
-**Filter Prefixes:**
-- `@` - Search airports only (e.g., `@SFO`)
-- `#` - Search flights only (e.g., `#AAL123`)
-- `$` - Search groupings only (e.g., `$Bay`)
+**Requires a free API key from statsim.net:**
+1. Get a key at https://statsim.net/api-keys
+2. Create a `.env` file in the application directory with:
+   ```
+   STATSIM_API_KEY=your-key-here
+   ```
+   Or set the `STATSIM_API_KEY` environment variable directly.
 
-Uses a pre-built cache for instant search responsiveness.
+**Historical Stats Shortcuts:**
+| Shortcut | Action |
+|----------|--------|
+| `Enter` | Search |
+| `C` | Copy results to clipboard |
+| `Escape` | Close |
 
 ---
 
@@ -447,24 +532,6 @@ Use the quick-add syntax:
 - `+KSFO +KOAK` - Add airports
 - `-KSJC -KMRY` - Remove airports
 - Mix additions and removals in one command
-
----
-
-### Historical Flight Statistics
-
-**Access:** `Ctrl+S`
-
-View historical traffic patterns between airports using data from statsim.net.
-Enter one or more airport ICAO codes to see which of your tracked airports have
-the most departures and arrivals to/from those airports over the last 90 days.
-
-**Requires a free API key from statsim.net:**
-1. Get a key at https://statsim.net/api-keys
-2. Create a `.env` file in the application directory with:
-   ```
-   STATSIM_API_KEY=your-key-here
-   ```
-   Or set the `STATSIM_API_KEY` environment variable directly.
 
 ---
 
@@ -503,11 +570,15 @@ Groupings can contain other groupings! In the example above, "California" contai
 
 ### Preset Groupings
 
-The application includes preset groupings in `data/preset_groupings/` organized by ARTCC. These are loaded automatically.
+The application includes preset groupings in `data/preset_groupings/` organized by ARTCC (23 US ARTCCs). These are loaded automatically.
 
 ### ARTCC Groupings
 
 Auto-generated groupings like "ZOA All", "ZLA All" contain all airports in that ARTCC.
+
+### SimAware Boundary Groupings
+
+Over 600 worldwide facility boundary groupings from SimAware data are available in `data/simaware_boundaries/`.
 
 ### Creating Groupings from UI
 
@@ -515,6 +586,45 @@ Auto-generated groupings like "ZOA All", "ZLA All" contain all airports in that 
 2. Add all desired airports
 3. Press `S` to save as a custom grouping
 4. Enter a name for the grouping
+
+### Creating Groupings from Go To
+
+1. Open Go To (`Ctrl+G`)
+2. Press `Tab` to enter multi-select mode
+3. Select airports and groupings
+4. Press `Ctrl+S` to save as a favorite (see [Favorites](#favorites))
+
+---
+
+## Favorites
+
+Favorites are user-saved multi-airport selections that appear in the Go To modal with a star prefix. Unlike custom groupings, favorites support per-airport dep/arr filtering.
+
+### Creating a Favorite
+
+1. Open Go To (`Ctrl+G`)
+2. Press `Tab` to enter multi-select mode
+3. Select airports, groupings, or a mix
+4. Optionally press `F` on items to set dep/arr filters
+5. Press `Ctrl+S` and enter a name
+
+### Using Favorites
+
+Favorites appear at the top of Go To search results with a star prefix. Select one and press `Enter` to open a flight board showing only the selected airports (with filters applied).
+
+### Managing Favorites
+
+- **Edit**: Highlight a favorite in Go To and press `E` to load its airports into multi-select mode for modification
+- **Delete**: Highlight a favorite and press `Ctrl+D` to delete (with confirmation)
+
+### Per-Airport Filtering
+
+When creating or editing a favorite, press `F` on a selected airport to cycle its filter:
+- Both departures and arrivals (default)
+- Departures only (`[D>]` indicator)
+- Arrivals only (`[<A]` indicator)
+
+Favorites are stored in `data/favorites.json`.
 
 ---
 
@@ -541,6 +651,12 @@ python main.py --wind-source minute
 - Up-to-the-minute wind observations
 - More frequent updates than METAR
 - Useful for rapidly changing conditions
+
+### D-ATIS Integration
+
+Weather briefings also pull ATIS information from two sources:
+- **VATSIM ATIS**: ATIS broadcast by VATSIM controllers
+- **Real-world D-ATIS**: Fallback to FAA D-ATIS when VATSIM ATIS is unavailable
 
 ---
 
@@ -570,6 +686,13 @@ For large airport lists, tables load progressively:
 python main.py --progressive-load --progressive-chunk-size 30
 ```
 
+### Notification Toasts
+
+Grouping flight boards show toast notifications when:
+- Runway assignments change at member airports
+- Weather conditions change significantly
+- New ATIS information is published
+
 ---
 
 ## Tips & Tricks
@@ -579,31 +702,36 @@ python main.py --progressive-load --progressive-chunk-size 30
 1. **Use groupings** to organize airports by sector or facility
 2. **Enable `--include-all-staffed`** to see positions even at quiet airports
 3. **Pause auto-refresh** (`Ctrl+P`) when analyzing specific flights
+4. **Save favorites** with per-airport filters for quick access to common views
 
 ### Quick Navigation
 
 1. Use `Ctrl+G` (Go To) for fastest navigation to any airport, flight, or grouping
 2. Use filter prefixes (`@`, `#`, `$`) to narrow searches
 3. Press `Enter` directly from the main table to open flight boards
+4. Use the command palette (`F2`) to discover available commands
 
 ### Weather Analysis
 
 1. Open sector weather briefings (`Ctrl+B`) for comprehensive coverage
 2. Use VFR alternatives finder (`Ctrl+A`) to suggest diversions to VFR pilots
 3. Check route weather (`W` from flight info) to anticipate pilot requests
+4. Weather briefings include approach type and runway assignments from ATIS
 
 ### Performance
 
 1. **Disable animations** for faster updates on slower systems
 2. **Use progressive loading** for large airport lists
 3. **Filter airports** rather than tracking entire countries for better responsiveness
+4. **Increase refresh interval** (`--refresh-interval 30`) to reduce API calls
 
 ### Common Workflows
 
 **Sector Controller:**
-1. Start with your sector grouping: `python main.py --groupings "NCT A+C"`
-2. Use `Ctrl+B` for sector weather briefing
-3. Monitor flight boards for specific airports
+1. Start with your sector grouping: `python main.py --groupings "NCT"`
+2. Or save a favorite with per-airport dep/arr filtering via Go To
+3. Use `Ctrl+B` for sector weather briefing
+4. Monitor flight boards for specific airports
 
 **Approach Controller:**
 1. Track your approach airports: `python main.py --airports KSFO KOAK KSJC`
@@ -614,6 +742,7 @@ python main.py --progressive-load --progressive-chunk-size 30
 1. Use Go To (`Ctrl+G`) to find specific flights by callsign
 2. Press `W` to view route weather
 3. Press `D` to find diversion airports if needed
+4. Press `C` to copy route to clipboard
 
 ---
 
@@ -680,6 +809,6 @@ Debug information is written to `debug_logs/debug_YYYYMMDD.log`. Logs older than
 
 - **Application**: VATSIM Control Recommendations
 - **Framework**: Textual (Terminal UI)
-- **Data Sources**: VATSIM API, Aviation Weather Center, weather.gov
+- **Data Sources**: VATSIM API, Aviation Weather Center, weather.gov, D-ATIS (FAA), StatsIM
 
-For bug reports and feature requests, please open an issue on the project repository.
+For bug reports and feature requests, please open an issue on the project repository or join the [Discord](https://discord.gg/TR3FSpzvvp).
