@@ -17,6 +17,9 @@ PRESET_GROUPINGS_DIR = Path(__file__).parent.parent.parent / "data" / "preset_gr
 def load_user_favorites() -> Dict[str, List[str]]:
     """Load user-saved favorites from the favorites file.
 
+    Supports both old format (value is a list) and enriched format
+    (value is a dict with "airports" and optional "filters" keys).
+
     Returns:
         Dictionary mapping favorite names to lists of references
         (airport ICAOs and/or grouping names)
@@ -29,7 +32,47 @@ def load_user_favorites() -> Dict[str, List[str]]:
         with open(favorites_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
-            return {k: v for k, v in data.items() if isinstance(v, list)}
+            result: Dict[str, List[str]] = {}
+            for k, v in data.items():
+                if isinstance(v, list):
+                    result[k] = v
+                elif isinstance(v, dict) and "airports" in v:
+                    airports = v["airports"]
+                    if isinstance(airports, list):
+                        result[k] = airports
+            return result
+    except (json.JSONDecodeError, OSError):
+        pass
+
+    return {}
+
+
+def load_favorite_filters(name: str) -> Dict[str, str]:
+    """Load per-airport dep/arr filters for a named favorite.
+
+    Args:
+        name: The favorite name to look up
+
+    Returns:
+        Dictionary mapping airport ICAOs to "dep" or "arr".
+        Empty dict if no filters are saved or the favorite doesn't exist.
+    """
+    favorites_file = get_user_favorites_file()
+    if not favorites_file.exists():
+        return {}
+
+    try:
+        with open(favorites_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            entry = data.get(name)
+            if isinstance(entry, dict) and "filters" in entry:
+                filters = entry["filters"]
+                if isinstance(filters, dict):
+                    return {
+                        k: v for k, v in filters.items()
+                        if isinstance(k, str) and v in ("dep", "arr")
+                    }
     except (json.JSONDecodeError, OSError):
         pass
 

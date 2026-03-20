@@ -1,7 +1,7 @@
 """Flight Board Modal Screen"""
 
 import asyncio
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from textual.screen import ModalScreen
 from textual.widgets import Static
@@ -162,12 +162,14 @@ class FlightBoardScreen(ModalScreen):
         refresh_interval: int = 15,
         disambiguator=None,
         enable_animations: bool = True,
+        airport_filters: Optional[Dict[str, str]] = None,
     ):
         super().__init__()
         self.title = title
         self.airport_icao_or_list = airport_icao_or_list
         self.max_eta_hours = max_eta_hours
         self.disambiguator = disambiguator
+        self.airport_filters = airport_filters
         self.departures_data = []
         self.arrivals_data = []
         self.refresh_interval = refresh_interval
@@ -295,6 +297,7 @@ class FlightBoardScreen(ModalScreen):
                     unified_data_to_use,
                     aircraft_speeds_to_use,
                     vatsim_data,
+                    self.airport_filters,
                 )
                 return (
                     vatsim_data,

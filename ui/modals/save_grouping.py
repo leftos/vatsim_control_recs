@@ -1,7 +1,7 @@
 """Save Grouping Modal Screen"""
 
 import json
-from typing import Optional
+from typing import Dict, Optional
 
 from textual.screen import ModalScreen
 from textual.widgets import Static, Input
@@ -62,16 +62,24 @@ class SaveGroupingModal(ModalScreen):
         self,
         airport_list: list,
         resolve_count: Optional[int] = None,
+        filters: Optional[Dict[str, str]] = None,
+        prefill_name: Optional[str] = None,
     ):
         """
         Args:
             airport_list: List of airport ICAOs and/or grouping names to save.
             resolve_count: Total resolved airport count (shown when items
                 include grouping references that expand to more airports).
+            filters: Per-airport dep/arr filters to persist. Maps ICAO to
+                "dep" or "arr". None or empty means no filters.
+            prefill_name: Pre-fill the name input (used when editing an
+                existing favorite).
         """
         super().__init__()
         self.airport_list = airport_list
         self.resolve_count = resolve_count
+        self.filters = filters or {}
+        self.prefill_name = prefill_name
 
     def compose(self) -> ComposeResult:
         item_count = len(self.airport_list)
@@ -88,6 +96,7 @@ class SaveGroupingModal(ModalScreen):
                 yield Input(
                     placeholder="Enter grouping name (e.g., My Airports)",
                     id="save-grouping-input",
+                    value=self.prefill_name or "",
                 )
             yield Static("", id="save-grouping-result")
             yield Static("".join(hint_parts), id="save-grouping-hint")
@@ -115,7 +124,13 @@ class SaveGroupingModal(ModalScreen):
                 with open(favorites_file, "r", encoding="utf-8") as f:
                     existing_data = json.load(f)
 
-            existing_data[grouping_name] = sorted(self.airport_list)
+            if self.filters:
+                existing_data[grouping_name] = {
+                    "airports": sorted(self.airport_list),
+                    "filters": self.filters,
+                }
+            else:
+                existing_data[grouping_name] = sorted(self.airport_list)
 
             favorites_file.parent.mkdir(parents=True, exist_ok=True)
 
