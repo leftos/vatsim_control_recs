@@ -23,7 +23,7 @@ from backend.data.weather_parsing import (
 # Runway number pattern with spoken direction forms
 # Matches: "17R", "17L", "17 R", "17R AND LEFT", "17R AND 17L", "17R, 17L AND CENTER", "10L OR 10R"
 RWY_NUM_PATTERN = (
-    r"\d{1,2}\s*[LRC]?(?:\s*(?:AND|OR|&|,|/)\s*(?:\d{1,2}\s*[LRC]?|LEFT|RIGHT|CENTER))*"
+    r"\d{1,2}\s*(?:[LRC](?![A-Za-z]))?(?:\s*(?:AND|OR|&|,|/)\s*(?:\d{1,2}\s*(?:[LRC](?![A-Za-z]))?|LEFT|RIGHT|CENTER))*"
 )
 
 # Approach type keywords
@@ -253,7 +253,7 @@ def _extract_runway_numbers(text: str) -> Set[str]:
 
     # Pattern 1: Match runway numbers with optional space before direction
     # e.g., "17R", "17L", "17 RIGHT", "17 LEFT", "17RIGHT"
-    pattern = r"\b(\d{1,2})\s*([LRC]|LEFT|RIGHT|CENTER)?\b"
+    pattern = r"\b(\d{1,2})\s*([LRC](?![A-Za-z])|LEFT|RIGHT|CENTER)?\b"
     for match in re.finditer(pattern, text, re.IGNORECASE):
         num = match.group(1)
         suffix = match.group(2) or ""
