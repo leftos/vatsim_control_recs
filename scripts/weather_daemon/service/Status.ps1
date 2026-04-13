@@ -1,14 +1,10 @@
 # Check Weather Daemon Status
 # Usage: .\Status.ps1
 
-$Domain = "leftos.dev"
 $User = "root"
+. "$PSScriptRoot\_Env.ps1"
 
 Write-Host "=== Weather Daemon Status ===" -ForegroundColor Green
-
-$ServerIP = [System.Net.Dns]::GetHostAddresses($Domain) |
-    Where-Object { $_.AddressFamily -eq 'InterNetwork' } |
-    Select-Object -First 1 -ExpandProperty IPAddressToString
 
 Write-Host "`nTimer Status:" -ForegroundColor Yellow
 ssh "$User@$ServerIP" "systemctl status weather-daemon.timer --no-pager"

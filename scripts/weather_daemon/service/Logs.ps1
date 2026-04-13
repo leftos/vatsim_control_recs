@@ -6,14 +6,10 @@ param(
     [switch]$Follow
 )
 
-$Domain = "leftos.dev"
 $User = "root"
+. "$PSScriptRoot\_Env.ps1"
 
 Write-Host "=== Weather Daemon Logs ===" -ForegroundColor Green
-
-$ServerIP = [System.Net.Dns]::GetHostAddresses($Domain) |
-    Where-Object { $_.AddressFamily -eq 'InterNetwork' } |
-    Select-Object -First 1 -ExpandProperty IPAddressToString
 
 if ($Follow) {
     Write-Host "Following logs (Ctrl+C to stop)..." -ForegroundColor Yellow

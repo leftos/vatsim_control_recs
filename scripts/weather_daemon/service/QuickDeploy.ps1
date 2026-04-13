@@ -6,17 +6,12 @@
 
 $ErrorActionPreference = "Stop"
 
-$Domain = "leftos.dev"
 $User = "root"
 $RemotePath = "/opt/vatsim-weather-daemon"
+. "$PSScriptRoot\_Env.ps1"
 
 Write-Host "=== Quick Deploy (Git Pull) ===" -ForegroundColor Green
-
-$ServerIP = [System.Net.Dns]::GetHostAddresses($Domain) |
-    Where-Object { $_.AddressFamily -eq 'InterNetwork' } |
-    Select-Object -First 1 -ExpandProperty IPAddressToString
-
-Write-Host "Resolved to: $ServerIP" -ForegroundColor Cyan
+Write-Host "Server: $ServerIP" -ForegroundColor Cyan
 
 # Stop the timer and service before deployment
 Write-Host "Stopping weather daemon timer and service..." -ForegroundColor Yellow
