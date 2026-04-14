@@ -229,8 +229,9 @@ def filter_atis_text(atis_text: str) -> str:
     filtered = re.sub(r"\.{4,}", "...", filtered)  # 4+ dots -> ellipsis
     filtered = re.sub(r"\.\.\.\.", "...", filtered)  # 4 dots -> ellipsis
     filtered = re.sub(r"(?<!\.)\.\.(?!\.)", ".", filtered)  # exactly 2 dots -> 1 dot
-    # Clean double periods
-    filtered = re.sub(r"\.\s*\.", ".", filtered)
+    # Collapse dots separated by whitespace (e.g., ". .") — require at least one
+    # whitespace char so this does not eat consecutive dots like "..." → ".."
+    filtered = re.sub(r"\.\s+\.", ".", filtered)
     # Clean up space before punctuation one more time
     filtered = re.sub(r"\s+\.", ".", filtered)
 
@@ -361,6 +362,27 @@ def parse_approach_info(atis_text: str) -> Dict[str, Any]:
         rf"({RWY_NUM_PATTERN})"
     )
     for match in re.finditer(approach_pattern, text):
+        approach_type = match.group(1)
+        rwys = _extract_runway_numbers(match.group(2))
+        landing.update(rwys)
+        add_approaches(rwys, approach_type)
+
+    # Pattern 4b: "<TYPE> APPROACH(ES) IN USE[,.] LNDG <RWY>"
+    # Associates a standalone "approaches in use" phrase with a following landing
+    # clause when the runway is not attached directly to the approach type.
+    # e.g., "VISUAL APPROACHES IN USE, LNDG 35R"
+    #       "ILS APPROACHES IN USE. LDG RWY 17R AND LEFT"
+    # The separator between "IN USE" and the landing keyword is restricted to
+    # whitespace/punctuation so we do not bridge unrelated sentences.
+    approaches_in_use_pattern = (
+        rf"\b({APPROACH_TYPES})[-\s]?[XYZWUK]?\s*"
+        rf"(?:{APPROACH_SUFFIX})\s+IN\s+USE"
+        r"[\s,.]+"
+        rf"(?:{LANDING_KW})\s+"
+        rf"(?:{RWY_PREFIX})?\s*"
+        rf"({RWY_CHARS})"
+    )
+    for match in re.finditer(approaches_in_use_pattern, text):
         approach_type = match.group(1)
         rwys = _extract_runway_numbers(match.group(2))
         landing.update(rwys)
