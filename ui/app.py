@@ -19,6 +19,7 @@ from backend import analyze_flights_data
 from backend.core.groupings import load_all_groupings
 
 from widgets.split_flap_datatable import SplitFlapDataTable
+from .terminal_driver import get_textual_driver_class
 from .tables import (
     TableManager,
     create_airports_table_config,
@@ -179,7 +180,7 @@ class VATSIMControlApp(App):
         args=None,
         airport_allowlist=None,
     ):
-        super().__init__()
+        super().__init__(driver_class=get_textual_driver_class())
         self.title = "VATSIM Control Recommendations"
         self.original_airport_data: List[Any] = (
             list(airport_data) if airport_data else []
@@ -508,8 +509,6 @@ class VATSIMControlApp(App):
 
     async def fetch_data_async(self):
         """Asynchronously fetch data from VATSIM."""
-        global UNIFIED_AIRPORT_DATA, DISAMBIGUATOR
-
         # Import at module level to update globals
         from . import config
 
