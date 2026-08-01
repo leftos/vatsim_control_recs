@@ -8,11 +8,12 @@ Notifications are stacked vertically from the bottom-right and each has
 an independent auto-dismiss timer.
 """
 
-from typing import Optional, Dict, Tuple
-from textual.screen import ModalScreen
-from textual.widgets import Static
+import contextlib
+
 from textual.containers import VerticalScroll
+from textual.screen import ModalScreen
 from textual.timer import Timer
+from textual.widgets import Static
 
 
 class Notification(Static):
@@ -27,7 +28,9 @@ class Notification(Static):
         flash_interval: float,
         flash_cycles: int,
     ):
-        super().__init__(text_bright, id=notification_id, classes="notification-item", markup=True)
+        super().__init__(
+            text_bright, id=notification_id, classes="notification-item", markup=True
+        )
         self.text_bright = text_bright
         self.text_dim = text_dim
         self.flash = flash
@@ -35,7 +38,7 @@ class Notification(Static):
         self.flash_cycles = flash_cycles
 
         # Flash animation state
-        self._flash_timer: Optional[Timer] = None
+        self._flash_timer: Timer | None = None
         self._flash_count = 0
         self._flash_bright = True
 
@@ -111,7 +114,7 @@ class NotificationManager:
         self.flash_cycles = flash_cycles
 
         # Track active notifications with their dismiss timers
-        self._notifications: Dict[str, Tuple[Notification, Timer]] = {}
+        self._notifications: dict[str, tuple[Notification, Timer]] = {}
         self._next_id = 0
 
     def cleanup(self) -> None:
@@ -124,7 +127,7 @@ class NotificationManager:
     def show(
         self,
         text_bright: str,
-        text_dim: Optional[str] = None,
+        text_dim: str | None = None,
         flash: bool = False,
     ) -> None:
         """
@@ -168,10 +171,8 @@ class NotificationManager:
 
         except Exception as e:
             # Log error for debugging
-            try:
+            with contextlib.suppress(BaseException):
                 self.screen.notify(f"Notification error: {e}", severity="error")
-            except:
-                pass
 
     def _dismiss_notification(self, notification_id: str) -> None:
         """Dismiss a specific notification by ID."""
@@ -182,10 +183,8 @@ class NotificationManager:
         timer.stop()
         notification.cleanup()
 
-        try:
+        with contextlib.suppress(Exception):
             notification.remove()
-        except Exception:
-            pass
 
     def dismiss(self) -> None:
         """Dismiss the topmost (most recent) notification."""

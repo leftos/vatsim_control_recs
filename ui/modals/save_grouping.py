@@ -1,13 +1,13 @@
 """Save Grouping Modal Screen"""
 
 import json
-from typing import Dict, Optional
+from typing import ClassVar
 
-from textual.screen import ModalScreen
-from textual.widgets import Static, Input
-from textual.containers import Container
-from textual.binding import Binding
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container
+from textual.screen import ModalScreen
+from textual.widgets import Input, Static
 
 from common.paths import get_user_favorites_file
 
@@ -53,7 +53,7 @@ class SaveGroupingModal(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("enter", "save_grouping", "Save", priority=True),
     ]
@@ -61,9 +61,9 @@ class SaveGroupingModal(ModalScreen):
     def __init__(
         self,
         airport_list: list,
-        resolve_count: Optional[int] = None,
-        filters: Optional[Dict[str, str]] = None,
-        prefill_name: Optional[str] = None,
+        resolve_count: int | None = None,
+        filters: dict[str, str] | None = None,
+        prefill_name: str | None = None,
     ):
         """
         Args:
@@ -86,9 +86,7 @@ class SaveGroupingModal(ModalScreen):
         hint_parts = [f"This will save {item_count} airports/groupings"]
         if self.resolve_count is not None and self.resolve_count != item_count:
             hint_parts.append(f" (resolves to {self.resolve_count} airports)")
-        hint_parts.append(
-            " to favorites\nPress Enter to save, Escape to cancel"
-        )
+        hint_parts.append(" to favorites\nPress Enter to save, Escape to cancel")
 
         with Container(id="save-grouping-container"):
             yield Static("Save as Favorite", id="save-grouping-title")
@@ -121,7 +119,7 @@ class SaveGroupingModal(ModalScreen):
         try:
             existing_data = {}
             if favorites_file.exists():
-                with open(favorites_file, "r", encoding="utf-8") as f:
+                with open(favorites_file, encoding="utf-8") as f:
                     existing_data = json.load(f)
 
             if self.filters:
@@ -140,7 +138,7 @@ class SaveGroupingModal(ModalScreen):
             self.dismiss(grouping_name)
         except Exception as e:
             result_widget = self.query_one("#save-grouping-result", Static)
-            result_widget.update(f"Error saving: {str(e)}")
+            result_widget.update(f"Error saving: {e!s}")
 
     def action_close(self) -> None:
         """Close without saving"""

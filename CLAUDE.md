@@ -111,7 +111,6 @@ The codebase is organized into distinct layers:
 - `backend/briefing/taf_parsing.py` - TAF parsing for terminal forecasts
 - `backend/cache/manager.py` - Cache manager for aircraft data and ARTCC groupings
 - `backend/config/constants.py` - Configuration constants (wind source, cache TTLs)
-- `backend/utils/auto_setup.py` - Automatic setup utilities (venv, dependencies, spaCy model)
 
 **`ui/`** - Textual-based user interface
 
@@ -296,14 +295,15 @@ The file `data/test-vatsim-data.json` contains sample VATSIM API responses but i
 **Option 1: Load via Python**
 ```python
 import json
-with open('data/test-vatsim-data.json') as f:
+
+with open("data/test-vatsim-data.json") as f:
     data = json.load(f)
 
 # Explore structure
-data.keys()                          # Top-level keys: 'general', 'pilots', 'controllers', 'atis', etc.
-data['pilots'][0].keys()             # Fields available on a pilot
-data['pilots'][0]['flight_plan'].keys()  # Flight plan fields
-data['pilots'][0]                    # Full pilot record example
+data.keys()  # Top-level keys: 'general', 'pilots', 'controllers', 'atis', etc.
+data["pilots"][0].keys()  # Fields available on a pilot
+data["pilots"][0]["flight_plan"].keys()  # Flight plan fields
+data["pilots"][0]  # Full pilot record example
 ```
 
 **Option 2: Use grep for quick searches**

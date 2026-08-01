@@ -8,14 +8,13 @@ NASR data is downloaded once per 28-day cycle and cached locally.
 
 import io
 import re
-import urllib.request
 import urllib.error
+import urllib.request
 import zipfile
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from common.paths import get_nasr_cache_dir
 
@@ -101,7 +100,8 @@ def get_current_nasr_cycle_date() -> str:
     Returns:
         Date string in YYYY-MM-DD format
     """
-    today = date.today()
+    # AIRAC cycles change on a UTC boundary, not the machine's local one
+    today = datetime.now(timezone.utc).date()
     days_since_epoch = (today - AIRAC_EPOCH).days
     cycle_number = days_since_epoch // CYCLE_DAYS
 
@@ -159,7 +159,7 @@ def _download_nasr_file(url: str, dest_file: Path, quiet: bool = False) -> bool:
         return False
 
 
-def ensure_nasr_data(quiet: bool = False) -> Optional[Path]:
+def ensure_nasr_data(quiet: bool = False) -> Path | None:
     """Download NASR data if missing or outdated.
 
     Auto-downloads new NASR data when a new cycle begins.
@@ -204,10 +204,9 @@ def ensure_nasr_data(quiet: bool = False) -> Optional[Path]:
     if not awy_file.exists():
         if not quiet:
             print(f"Downloading NASR AWY data from {awy_url}...")
-        if not _download_nasr_file(awy_url, awy_file, quiet):
-            # Airways are optional - don't fail if we can't get them
-            if not quiet:
-                print("Warning: Could not download airway data")
+        # Airways are optional - don't fail if we can't get them
+        if not _download_nasr_file(awy_url, awy_file, quiet) and not quiet:
+            print("Warning: Could not download airway data")
 
     if not quiet:
         print(f"NASR data cached to {cache_path}")
@@ -254,7 +253,7 @@ def cleanup_old_nasr_caches(keep_cycles: int = 2) -> int:
 # --- NAV.txt Parsing ---
 
 
-def _parse_dms_to_decimal(dms_str: str) -> Optional[float]:
+def _parse_dms_to_decimal(dms_str: str) -> float | None:
     """Parse DMS (degrees-minutes-seconds) string to decimal degrees.
 
     Args:
@@ -281,7 +280,7 @@ def _parse_dms_to_decimal(dms_str: str) -> Optional[float]:
     return decimal
 
 
-def _parse_nav_record(line: str) -> Optional[Navaid]:
+def _parse_nav_record(line: str) -> Navaid | None:
     """Parse a NAV.txt record line.
 
     NAV.txt format is fixed-width. Key fields (as of 2025-12-25 cycle):
@@ -340,7 +339,7 @@ def _parse_nav_record(line: str) -> Optional[Navaid]:
         return None
 
 
-def _parse_fix_record(line: str) -> Optional[Fix]:
+def _parse_fix_record(line: str) -> Fix | None:
     """Parse a FIX.txt record line.
 
     FIX.txt format is fixed-width. Key fields:
@@ -393,7 +392,7 @@ def _parse_fix_record(line: str) -> Optional[Fix]:
 
 
 @lru_cache(maxsize=1)
-def load_navaids() -> Dict[str, Navaid]:
+def load_navaids() -> dict[str, Navaid]:
     """Load all navaids from NASR data.
 
     Returns:
@@ -407,24 +406,23 @@ def load_navaids() -> Dict[str, Navaid]:
     if not nav_file.exists():
         return {}
 
-    navaids: Dict[str, Navaid] = {}
+    navaids: dict[str, Navaid] = {}
 
     try:
-        with open(nav_file, "r", encoding="latin-1") as f:
+        with open(nav_file, encoding="latin-1") as f:
             for line in f:
                 navaid = _parse_nav_record(line)
-                if navaid:
-                    # Use identifier as key (may have duplicates - use first)
-                    if navaid.identifier not in navaids:
-                        navaids[navaid.identifier] = navaid
-    except (OSError, IOError):
+                # Use identifier as key (may have duplicates - use first)
+                if navaid and navaid.identifier not in navaids:
+                    navaids[navaid.identifier] = navaid
+    except OSError:
         return {}
 
     return navaids
 
 
 @lru_cache(maxsize=1)
-def load_fixes() -> Dict[str, Fix]:
+def load_fixes() -> dict[str, Fix]:
     """Load all fixes from NASR data.
 
     Returns:
@@ -438,23 +436,22 @@ def load_fixes() -> Dict[str, Fix]:
     if not fix_file.exists():
         return {}
 
-    fixes: Dict[str, Fix] = {}
+    fixes: dict[str, Fix] = {}
 
     try:
-        with open(fix_file, "r", encoding="latin-1") as f:
+        with open(fix_file, encoding="latin-1") as f:
             for line in f:
                 fix = _parse_fix_record(line)
-                if fix:
-                    # Use identifier as key
-                    if fix.identifier not in fixes:
-                        fixes[fix.identifier] = fix
-    except (OSError, IOError):
+                # Use identifier as key
+                if fix and fix.identifier not in fixes:
+                    fixes[fix.identifier] = fix
+    except OSError:
         return {}
 
     return fixes
 
 
-def _parse_awy1_record(line: str) -> Optional[Tuple[str, AirwaySegmentRestriction]]:
+def _parse_awy1_record(line: str) -> tuple[str, AirwaySegmentRestriction] | None:
     """Parse an AWY.txt AWY1 record line for MEA/MOCA data.
 
     AWY.txt format is fixed-width. AWY1 records contain altitude restrictions:
@@ -524,7 +521,7 @@ def _parse_awy1_record(line: str) -> Optional[Tuple[str, AirwaySegmentRestrictio
         return None
 
 
-def _parse_awy_record(line: str) -> Optional[Tuple[str, AirwayFix]]:
+def _parse_awy_record(line: str) -> tuple[str, AirwayFix] | None:
     """Parse an AWY.txt record line (AWY2 records only).
 
     AWY.txt format is fixed-width. AWY2 records contain fix details:
@@ -621,7 +618,7 @@ def _parse_awy_record(line: str) -> Optional[Tuple[str, AirwayFix]]:
 
 
 @lru_cache(maxsize=1)
-def load_airways() -> Dict[str, List[AirwayFix]]:
+def load_airways() -> dict[str, list[AirwayFix]]:
     """Load all airways from NASR data.
 
     Returns:
@@ -635,10 +632,10 @@ def load_airways() -> Dict[str, List[AirwayFix]]:
     if not awy_file.exists():
         return {}
 
-    airways: Dict[str, List[AirwayFix]] = {}
+    airways: dict[str, list[AirwayFix]] = {}
 
     try:
-        with open(awy_file, "r", encoding="latin-1") as f:
+        with open(awy_file, encoding="latin-1") as f:
             for line in f:
                 result = _parse_awy_record(line)
                 if result:
@@ -651,14 +648,14 @@ def load_airways() -> Dict[str, List[AirwayFix]]:
         for airway in airways:
             airways[airway].sort(key=lambda f: f.sequence)
 
-    except (OSError, IOError):
+    except OSError:
         return {}
 
     return airways
 
 
 @lru_cache(maxsize=1)
-def load_airway_restrictions() -> Dict[str, Dict[int, AirwaySegmentRestriction]]:
+def load_airway_restrictions() -> dict[str, dict[int, AirwaySegmentRestriction]]:
     """Load MEA/MOCA restrictions for all airways from NASR data.
 
     Returns:
@@ -673,10 +670,10 @@ def load_airway_restrictions() -> Dict[str, Dict[int, AirwaySegmentRestriction]]
     if not awy_file.exists():
         return {}
 
-    restrictions: Dict[str, Dict[int, AirwaySegmentRestriction]] = {}
+    restrictions: dict[str, dict[int, AirwaySegmentRestriction]] = {}
 
     try:
-        with open(awy_file, "r", encoding="latin-1") as f:
+        with open(awy_file, encoding="latin-1") as f:
             for line in f:
                 result = _parse_awy1_record(line)
                 if result:
@@ -685,15 +682,15 @@ def load_airway_restrictions() -> Dict[str, Dict[int, AirwaySegmentRestriction]]
                         restrictions[airway] = {}
                     restrictions[airway][restriction.sequence] = restriction
 
-    except (OSError, IOError):
+    except OSError:
         return {}
 
     return restrictions
 
 
 def get_airway_fixes(
-    airway: str, entry_fix: Optional[str] = None, exit_fix: Optional[str] = None
-) -> List[AirwayFix]:
+    airway: str, entry_fix: str | None = None, exit_fix: str | None = None
+) -> list[AirwayFix]:
     """Get fixes along an airway, optionally between entry and exit points.
 
     Args:
@@ -736,7 +733,7 @@ def get_airway_fixes(
     return fixes[entry_idx : exit_idx + 1]
 
 
-def get_waypoint_coordinates(identifier: str) -> Optional[Tuple[float, float]]:
+def get_waypoint_coordinates(identifier: str) -> tuple[float, float] | None:
     """Get coordinates for a waypoint identifier.
 
     Searches navaids first, then fixes.
@@ -764,7 +761,7 @@ def get_waypoint_coordinates(identifier: str) -> Optional[Tuple[float, float]]:
     return None
 
 
-def _parse_coordinate_fix(identifier: str) -> Optional[Tuple[float, float]]:
+def _parse_coordinate_fix(identifier: str) -> tuple[float, float] | None:
     """Parse a coordinate-based fix like "3530N/11500W" or "35N115W".
 
     Args:
@@ -799,8 +796,8 @@ def _parse_coordinate_fix(identifier: str) -> Optional[Tuple[float, float]]:
 
 
 def _get_fix_identifier(
-    part: str, airports: Dict[str, Tuple[float, float]]
-) -> Optional[str]:
+    part: str, airports: dict[str, tuple[float, float]]
+) -> str | None:
     """Try to resolve a route part to a known fix/navaid identifier.
 
     Returns the identifier if found, None otherwise.
@@ -830,9 +827,9 @@ def _expand_sid_star(
     part: str,
     position: int,
     total_parts: int,
-    departure: Optional[str],
-    arrival: Optional[str],
-    waypoints: List[Waypoint],
+    departure: str | None,
+    arrival: str | None,
+    waypoints: list[Waypoint],
     seen_identifiers: set,
 ) -> None:
     """Try to expand a SID/STAR name into waypoints via CIFP lookup.
@@ -891,10 +888,10 @@ def _expand_sid_star(
 
 def parse_route_string(
     route: str,
-    airports: Optional[Dict[str, Tuple[float, float]]] = None,
-    departure: Optional[str] = None,
-    arrival: Optional[str] = None,
-) -> List[Waypoint]:
+    airports: dict[str, tuple[float, float]] | None = None,
+    departure: str | None = None,
+    arrival: str | None = None,
+) -> list[Waypoint]:
     """Parse a filed route string into waypoints with coordinates.
 
     Expands airways (V, J, T, Q routes) into their constituent fixes.
@@ -914,7 +911,7 @@ def parse_route_string(
         return []
 
     airports = airports or {}
-    waypoints: List[Waypoint] = []
+    waypoints: list[Waypoint] = []
     seen_identifiers: set = set()  # Avoid duplicates
 
     # Regex for speed/altitude annotations (e.g., N0491F320, M082F350, K0956F320)
@@ -1000,8 +997,13 @@ def parse_route_string(
         # Expand SID/STAR names via CIFP if airport context is available
         if re.match(r"^[A-Z]+\d+[A-Z]*$", part) and len(part) > 5:
             _expand_sid_star(
-                part, i, len(parts), departure, arrival,
-                waypoints, seen_identifiers,
+                part,
+                i,
+                len(parts),
+                departure,
+                arrival,
+                waypoints,
+                seen_identifiers,
             )
             i += 1
             continue
@@ -1038,10 +1040,7 @@ def parse_route_string(
             if coords:
                 # Determine type
                 navaids = load_navaids()
-                if part in navaids:
-                    waypoint_type = "navaid"
-                else:
-                    waypoint_type = "fix"
+                waypoint_type = "navaid" if part in navaids else "fix"
 
         if coords and part not in seen_identifiers:
             waypoints.append(
@@ -1081,8 +1080,8 @@ class MeaViolation:
 
 
 def get_max_mea_for_route(
-    route: str, airports: Optional[Dict[str, Tuple[float, float]]] = None
-) -> Tuple[int | None, List[MeaViolation]]:
+    route: str, airports: dict[str, tuple[float, float]] | None = None
+) -> tuple[int | None, list[MeaViolation]]:
     """Get the maximum MEA required for airways in a route.
 
     Parses the route string, identifies airways used, and looks up
@@ -1109,7 +1108,7 @@ def get_max_mea_for_route(
 
     # Parse route to find airways and their entry/exit points
     parts = route.upper().split()
-    violations: List[MeaViolation] = []
+    violations: list[MeaViolation] = []
     max_mea: int | None = None
 
     i = 0
@@ -1124,23 +1123,29 @@ def get_max_mea_for_route(
             entry_fix = None
             for j in range(i - 1, -1, -1):
                 prev = parts[j]
-                if prev != "DCT" and not re.match(r"^[VJTQ]\d+$", prev):
-                    # Skip SID/STAR names
-                    if not (re.match(r"^[A-Z]+\d+[A-Z]*$", prev) and len(prev) > 5):
-                        entry_fix = prev
-                        break
+                # Skip airways, DCT and SID/STAR names
+                if (
+                    prev != "DCT"
+                    and not re.match(r"^[VJTQ]\d+$", prev)
+                    and not (re.match(r"^[A-Z]+\d+[A-Z]*$", prev) and len(prev) > 5)
+                ):
+                    entry_fix = prev
+                    break
 
             # Find exit fix (next non-airway, non-DCT part)
             exit_fix = None
             for j in range(i + 1, len(parts)):
                 next_part = parts[j]
-                if next_part != "DCT" and not re.match(r"^[VJTQ]\d+$", next_part):
-                    # Skip SID/STAR names
-                    if not (
+                # Skip airways, DCT and SID/STAR names
+                if (
+                    next_part != "DCT"
+                    and not re.match(r"^[VJTQ]\d+$", next_part)
+                    and not (
                         re.match(r"^[A-Z]+\d+[A-Z]*$", next_part) and len(next_part) > 5
-                    ):
-                        exit_fix = next_part
-                        break
+                    )
+                ):
+                    exit_fix = next_part
+                    break
 
             # Look up MEA for this airway
             if airway in restrictions and airway in airways_data:

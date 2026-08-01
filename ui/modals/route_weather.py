@@ -1,18 +1,19 @@
 """Route Weather Modal Screen - Weather along a flight's filed route"""
 
 import asyncio
-from typing import List, Dict, Any, Set
+from typing import Any, ClassVar
+
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
-from textual.containers import Container, VerticalScroll
-from textual.binding import Binding
-from textual.app import ComposeResult
 
-from backend import get_metar_batch, haversine_distance_nm, find_airports_near_position
-from backend.data.navaids import parse_route_string, Waypoint
+from backend import find_airports_near_position, get_metar_batch, haversine_distance_nm
+from backend.data.navaids import Waypoint, parse_route_string
 from backend.data.weather_parsing import (
-    get_flight_category,
     extract_visibility_str,
+    get_flight_category,
     parse_ceiling_layer,
     parse_weather_phenomena,
     parse_wind_from_metar,
@@ -20,7 +21,6 @@ from backend.data.weather_parsing import (
 from ui import config
 from ui.config import CATEGORY_COLORS
 from ui.modals.weather_briefing import _parse_metar_observation_time
-
 
 # Search radius around each waypoint for nearby airports
 WAYPOINT_SEARCH_RADIUS_NM = 30.0
@@ -73,7 +73,7 @@ class RouteWeatherScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
     ]
@@ -96,12 +96,12 @@ class RouteWeatherScreen(ModalScreen):
         self.route_string = flight_plan.get("route", "")
 
         # Will be populated asynchronously
-        self.waypoints: List[Waypoint] = []
-        self.route_airports: List[str] = []  # Airports along the route
-        self.waypoint_airports: Dict[
-            str, List[str]
+        self.waypoints: list[Waypoint] = []
+        self.route_airports: list[str] = []  # Airports along the route
+        self.waypoint_airports: dict[
+            str, list[str]
         ] = {}  # waypoint_id -> nearby airports
-        self.weather_data: Dict[str, Dict[str, Any]] = {}
+        self.weather_data: dict[str, dict[str, Any]] = {}
         self._pending_tasks: list = []
 
     def compose(self) -> ComposeResult:
@@ -148,7 +148,7 @@ class RouteWeatherScreen(ModalScreen):
 
         # Collect airports to fetch weather for
         # Start with departure and arrival
-        airports_to_fetch: Set[str] = set()
+        airports_to_fetch: set[str] = set()
 
         if self.departure:
             airports_to_fetch.add(self.departure)
@@ -261,7 +261,7 @@ class RouteWeatherScreen(ModalScreen):
 
         # Enroute section - show waypoints with their associated airports
         enroute_lines = []
-        shown_airports: Set[str] = set()  # Track airports already shown
+        shown_airports: set[str] = set()  # Track airports already shown
 
         for waypoint in self.waypoints:
             # Get airports associated with this waypoint
@@ -311,7 +311,7 @@ class RouteWeatherScreen(ModalScreen):
         data = self.weather_data.get(icao, {})
         return data.get("category", "UNK") != "UNK"
 
-    def _build_section(self, header: str, airports: List[str]) -> str:
+    def _build_section(self, header: str, airports: list[str]) -> str:
         """Build a section with header and airport cards (filters out UNK)"""
         lines = [f"[bold cyan]═══ {header} ═══[/bold cyan]"]
 
@@ -324,7 +324,7 @@ class RouteWeatherScreen(ModalScreen):
 
         return "\n".join(lines)
 
-    def _build_airport_card(self, icao: str, data: Dict[str, Any]) -> str:
+    def _build_airport_card(self, icao: str, data: dict[str, Any]) -> str:
         """Build a Rich markup card for one airport"""
         lines = []
 

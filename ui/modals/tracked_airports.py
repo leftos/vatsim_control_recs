@@ -1,10 +1,12 @@
 """Tracked Airports Management Modal Screen"""
 
-from textual.screen import ModalScreen
-from textual.widgets import Static, ListView, ListItem, Label, Button
-from textual.containers import Container, Horizontal
-from textual.binding import Binding
+from typing import ClassVar
+
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, Horizontal
+from textual.screen import ModalScreen
+from textual.widgets import Button, Label, ListItem, ListView, Static
 
 from .airport_tracking import AirportTrackingModal
 from .save_grouping import SaveGroupingModal
@@ -17,7 +19,7 @@ class TrackedAirportsModal(ModalScreen):
     TrackedAirportsModal {
         align: center middle;
     }
-    
+
     #tracked-container {
         width: 90;
         height: 80%;
@@ -25,41 +27,41 @@ class TrackedAirportsModal(ModalScreen):
         border: thick $primary;
         padding: 1 2;
     }
-    
+
     #tracked-title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
     }
-    
+
     #tracked-info {
         text-align: center;
         color: $text-muted;
         margin-bottom: 1;
     }
-    
+
     #tracked-list {
         height: 1fr;
         border: solid $primary;
         margin-bottom: 1;
     }
-    
+
     #tracked-buttons {
         height: auto;
         layout: horizontal;
         align: center middle;
     }
-    
+
     .tracked-button {
         margin: 0 1;
     }
-    
+
     #tracked-hint {
         text-align: center;
         color: $text-muted;
         margin-top: 1;
     }
-    
+
     #tracked-status {
         text-align: center;
         color: $success;
@@ -67,7 +69,7 @@ class TrackedAirportsModal(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("a", "add_airports", "Add Airports", priority=True),
         Binding("delete", "remove_selected", "Remove Selected", priority=True),

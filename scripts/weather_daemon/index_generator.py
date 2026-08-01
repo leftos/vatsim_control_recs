@@ -9,10 +9,10 @@ import json
 import math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from .config import DaemonConfig, ARTCC_NAMES
 from .artcc_boundaries import get_artcc_boundaries
+from .config import ARTCC_NAMES, DaemonConfig
 from .simaware_boundaries import get_all_grouping_boundaries
 
 # Facilities to display on the map
@@ -59,9 +59,9 @@ MARKER_COLORS = {
 
 
 def build_airport_markers(
-    artcc_groupings: Dict[str, List[Dict[str, Any]]],
-    unified_airport_data: Optional[Dict[str, Any]] = None,
-) -> List[Dict[str, Any]]:
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+    unified_airport_data: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """
     Build airport marker data from grouping weather points.
 
@@ -80,9 +80,9 @@ def build_airport_markers(
         return []
 
     # Collect all airport weather points from all groupings
-    all_airports: Dict[str, Dict[str, Any]] = {}  # icao -> weather data
+    all_airports: dict[str, dict[str, Any]] = {}  # icao -> weather data
 
-    for artcc, groupings in artcc_groupings.items():
+    for groupings in artcc_groupings.values():
         for g in groupings:
             # Try airport_weather_points first (has weather category)
             weather_points = g.get("airport_weather_points", [])
@@ -161,7 +161,7 @@ def build_airport_markers(
     return markers
 
 
-def compute_convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+def compute_convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
     """
     Compute the convex hull of a set of 2D points using Graham scan.
 
@@ -204,7 +204,7 @@ def compute_convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, 
 
 
 def point_in_polygon(
-    point: Tuple[float, float], polygon: List[Tuple[float, float]]
+    point: tuple[float, float], polygon: list[tuple[float, float]]
 ) -> bool:
     """
     Check if a point is inside a polygon using ray casting algorithm.
@@ -233,10 +233,10 @@ def point_in_polygon(
 
 
 def generate_weather_regions(
-    artcc_boundary: List[Tuple[float, float]],
-    airport_points: List[Dict],
+    artcc_boundary: list[tuple[float, float]],
+    airport_points: list[dict],
     grid_resolution: float = 0.25,  # degrees
-) -> List[Dict]:
+) -> list[dict]:
     """
     Generate Voronoi-style weather regions within an ARTCC boundary.
 
@@ -316,8 +316,8 @@ def generate_weather_regions(
 
 
 def add_buffer_to_polygon(
-    points: List[Tuple[float, float]], buffer_nm: float = 20
-) -> List[Tuple[float, float]]:
+    points: list[tuple[float, float]], buffer_nm: float = 20
+) -> list[tuple[float, float]]:
     """
     Add a buffer around a polygon by expanding it outward.
 
@@ -391,9 +391,9 @@ def add_buffer_to_polygon(
 
 def generate_index_page(
     config: DaemonConfig,
-    artcc_groupings: Dict[str, List[Dict[str, Any]]],
-    unified_airport_data: Optional[Dict[str, Any]] = None,
-) -> Optional[Path]:
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+    unified_airport_data: dict[str, Any] | None = None,
+) -> Path | None:
     """
     Generate the interactive index page with ARTCC map.
 
@@ -411,7 +411,7 @@ def generate_index_page(
     boundaries = get_artcc_boundaries(config.artcc_cache_dir)
 
     # Calculate overall category stats per ARTCC
-    artcc_stats: Dict[str, Dict[str, int]] = {}
+    artcc_stats: dict[str, dict[str, int]] = {}
     for artcc, groupings in artcc_groupings.items():
         artcc_stats[artcc] = {
             "LIFR": 0,
@@ -457,7 +457,7 @@ def generate_index_page(
     return index_path
 
 
-def get_artcc_color(stats: Dict[str, int]) -> str:
+def get_artcc_color(stats: dict[str, int]) -> str:
     """
     Determine ARTCC color based on worst conditions present.
 
@@ -475,15 +475,15 @@ def get_artcc_color(stats: Dict[str, int]) -> str:
 
 
 def generate_html(
-    boundaries: Dict[str, List[List[tuple]]],
-    artcc_groupings: Dict[str, List[Dict[str, Any]]],
-    artcc_stats: Dict[str, Dict[str, int]],
+    boundaries: dict[str, list[list[tuple]]],
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+    artcc_stats: dict[str, dict[str, int]],
     timestamp: str,
     tile_version: int = 0,
-    unified_airport_data: Optional[Dict[str, Any]] = None,
+    unified_airport_data: dict[str, Any] | None = None,
     use_tile_layer: bool = True,
-    simaware_cache_dir: Optional[Path] = None,
-    airport_markers: Optional[List[Dict[str, Any]]] = None,
+    simaware_cache_dir: Path | None = None,
+    airport_markers: list[dict[str, Any]] | None = None,
 ) -> str:
     """Generate the complete HTML content."""
 
@@ -539,7 +539,13 @@ def generate_html(
         for g in groupings:
             for point in g.get("airport_weather_points", []):
                 icao = point.get("icao")
-                if icao and icao not in seen_icaos and point.get("category") != "UNK" and point.get("lat") and point.get("lon"):
+                if (
+                    icao
+                    and icao not in seen_icaos
+                    and point.get("category") != "UNK"
+                    and point.get("lat")
+                    and point.get("lon")
+                ):
                     seen_icaos.add(icao)
                     # Get pretty name from unified airport data
                     airport_name = ""
@@ -547,19 +553,23 @@ def generate_html(
                         airport_name = unified_airport_data[icao].get("name", "")
                         if airport_name:
                             airport_name = airport_name.title()
-                    airports_list.append({
-                        "icao": icao,
-                        "name": airport_name,
-                        "lat": point.get("lat"),
-                        "lon": point.get("lon"),
-                        "category": point.get("category"),
-                        "color": MARKER_COLORS.get(point.get("category"), MARKER_COLORS["UNK"]),
-                        "visibility": point.get("visibility"),
-                        "ceiling": point.get("ceiling"),
-                        "wind": point.get("wind"),
-                        "phenomena": point.get("phenomena", []),
-                        "taf_changes": point.get("taf_changes", []),
-                    })
+                    airports_list.append(
+                        {
+                            "icao": icao,
+                            "name": airport_name,
+                            "lat": point.get("lat"),
+                            "lon": point.get("lon"),
+                            "category": point.get("category"),
+                            "color": MARKER_COLORS.get(
+                                point.get("category"), MARKER_COLORS["UNK"]
+                            ),
+                            "visibility": point.get("visibility"),
+                            "ceiling": point.get("ceiling"),
+                            "wind": point.get("wind"),
+                            "phenomena": point.get("phenomena", []),
+                            "taf_changes": point.get("taf_changes", []),
+                        }
+                    )
         if airports_list:
             artcc_airport_data[artcc] = airports_list
 
@@ -587,18 +597,16 @@ def generate_html(
     grouping_id = 0
 
     sorted_artccs = sorted(
-        [a for a in artcc_groupings.keys() if a != "custom"],
+        [a for a in artcc_groupings if a != "custom"],
         key=lambda x: ARTCC_NAMES.get(x, x),
     )
 
     # Collect all grouping names to fetch SimAware boundaries in batch
     all_grouping_names = []
     for artcc in sorted_artccs:
-        for g in artcc_groupings[artcc]:
-            all_grouping_names.append(g["name"])
+        all_grouping_names.extend(g["name"] for g in artcc_groupings[artcc])
     if "custom" in artcc_groupings:
-        for g in artcc_groupings["custom"]:
-            all_grouping_names.append(g["name"])
+        all_grouping_names.extend(g["name"] for g in artcc_groupings["custom"])
 
     # Fetch SimAware TRACON boundaries for all groupings (when cache dir is available)
     simaware_boundaries = {}
@@ -651,7 +659,11 @@ def generate_html(
                 # Include airport weather points for focus feature (filter out UNK)
                 airports_for_focus = []
                 for point in g.get("airport_weather_points", []):
-                    if point.get("category") != "UNK" and point.get("lat") and point.get("lon"):
+                    if (
+                        point.get("category") != "UNK"
+                        and point.get("lat")
+                        and point.get("lon")
+                    ):
                         icao = point.get("icao")
                         # Get pretty name from unified airport data
                         airport_name = ""
@@ -659,19 +671,23 @@ def generate_html(
                             airport_name = unified_airport_data[icao].get("name", "")
                             if airport_name:
                                 airport_name = airport_name.title()
-                        airports_for_focus.append({
-                            "icao": icao,
-                            "name": airport_name,
-                            "lat": point.get("lat"),
-                            "lon": point.get("lon"),
-                            "category": point.get("category"),
-                            "color": MARKER_COLORS.get(point.get("category"), MARKER_COLORS["UNK"]),
-                            "visibility": point.get("visibility"),
-                            "ceiling": point.get("ceiling"),
-                            "wind": point.get("wind"),
-                            "phenomena": point.get("phenomena", []),
-                            "taf_changes": point.get("taf_changes", []),
-                        })
+                        airports_for_focus.append(
+                            {
+                                "icao": icao,
+                                "name": airport_name,
+                                "lat": point.get("lat"),
+                                "lon": point.get("lon"),
+                                "category": point.get("category"),
+                                "color": MARKER_COLORS.get(
+                                    point.get("category"), MARKER_COLORS["UNK"]
+                                ),
+                                "visibility": point.get("visibility"),
+                                "ceiling": point.get("ceiling"),
+                                "wind": point.get("wind"),
+                                "phenomena": point.get("phenomena", []),
+                                "taf_changes": point.get("taf_changes", []),
+                            }
+                        )
                 grouping_polygons[str(grouping_id)] = {
                     "name": grouping_name,
                     "artcc": artcc,
@@ -683,7 +699,9 @@ def generate_html(
     # Add custom groupings at the end
     if "custom" in artcc_groupings:
         # Filter out groupings with no METARs, sort with International last
-        filtered_custom = [g for g in artcc_groupings["custom"] if grouping_has_metars(g)]
+        filtered_custom = [
+            g for g in artcc_groupings["custom"] if grouping_has_metars(g)
+        ]
         for g in sorted(filtered_custom, key=grouping_sort_key):
             grouping_name = g["name"]
 
@@ -712,7 +730,11 @@ def generate_html(
                 # Include airport weather points for focus feature (filter out UNK)
                 airports_for_focus = []
                 for point in g.get("airport_weather_points", []):
-                    if point.get("category") != "UNK" and point.get("lat") and point.get("lon"):
+                    if (
+                        point.get("category") != "UNK"
+                        and point.get("lat")
+                        and point.get("lon")
+                    ):
                         icao = point.get("icao")
                         # Get pretty name from unified airport data
                         airport_name = ""
@@ -720,19 +742,23 @@ def generate_html(
                             airport_name = unified_airport_data[icao].get("name", "")
                             if airport_name:
                                 airport_name = airport_name.title()
-                        airports_for_focus.append({
-                            "icao": icao,
-                            "name": airport_name,
-                            "lat": point.get("lat"),
-                            "lon": point.get("lon"),
-                            "category": point.get("category"),
-                            "color": MARKER_COLORS.get(point.get("category"), MARKER_COLORS["UNK"]),
-                            "visibility": point.get("visibility"),
-                            "ceiling": point.get("ceiling"),
-                            "wind": point.get("wind"),
-                            "phenomena": point.get("phenomena", []),
-                            "taf_changes": point.get("taf_changes", []),
-                        })
+                        airports_for_focus.append(
+                            {
+                                "icao": icao,
+                                "name": airport_name,
+                                "lat": point.get("lat"),
+                                "lon": point.get("lon"),
+                                "category": point.get("category"),
+                                "color": MARKER_COLORS.get(
+                                    point.get("category"), MARKER_COLORS["UNK"]
+                                ),
+                                "visibility": point.get("visibility"),
+                                "ceiling": point.get("ceiling"),
+                                "wind": point.get("wind"),
+                                "phenomena": point.get("phenomena", []),
+                                "taf_changes": point.get("taf_changes", []),
+                            }
+                        )
                 grouping_polygons[str(grouping_id)] = {
                     "name": grouping_name,
                     "artcc": None,  # No ARTCC for unmapped custom groupings
@@ -2400,18 +2426,16 @@ def generate_html(
 </html>"""
 
 
-def grouping_has_metars(grouping: Dict[str, Any]) -> bool:
+def grouping_has_metars(grouping: dict[str, Any]) -> bool:
     """Check if a grouping has any airports with METAR data."""
     categories = grouping.get("categories", {})
     # Sum category counts EXCLUDING "UNK" (unknown = no METAR data)
     # Only count LIFR, IFR, MVFR, VFR which indicate actual weather reports
-    metar_count = sum(
-        count for cat, count in categories.items() if cat != "UNK"
-    )
+    metar_count = sum(count for cat, count in categories.items() if cat != "UNK")
     return metar_count > 0
 
 
-def grouping_sort_key(grouping: Dict[str, Any]) -> Tuple[int, str]:
+def grouping_sort_key(grouping: dict[str, Any]) -> tuple[int, str]:
     """
     Sort key for groupings: International groupings sort last, then alphabetically.
 
@@ -2425,15 +2449,15 @@ def grouping_sort_key(grouping: Dict[str, Any]) -> Tuple[int, str]:
 
 
 def build_sidebar_html(
-    artcc_groupings: Dict[str, List[Dict[str, Any]]],
-    artcc_stats: Dict[str, Dict[str, int]],
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+    artcc_stats: dict[str, dict[str, int]],
 ) -> str:
     """Build the sidebar HTML with ARTCC sections and grouping links."""
     html_parts = []
 
     # Sort ARTCCs alphabetically, but put "custom" at the end
     sorted_artccs = sorted(
-        [a for a in artcc_groupings.keys() if a != "custom"],
+        [a for a in artcc_groupings if a != "custom"],
         key=lambda x: ARTCC_NAMES.get(x, x),
     )
 

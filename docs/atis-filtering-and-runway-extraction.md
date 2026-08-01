@@ -45,7 +45,7 @@ The `text_atis` from this source is already a single string. Cache duration: 60 
 Both sources are normalized to a common structure with a `source` field (`"vatsim"` or `"rw"`). The application **prefers VATSIM ATIS** and falls back to real-world D-ATIS only for airports that don't have a VATSIM ATIS active:
 
 ```python
-atis_data = get_atis_for_airports(vatsim_data, airports)          # Try VATSIM first
+atis_data = get_atis_for_airports(vatsim_data, airports)  # Try VATSIM first
 airports_without_vatsim_atis = [icao for icao in airports if icao not in atis_data]
 rw_atis_data = get_datis_for_airports(airports_without_vatsim_atis)  # Fall back to RW
 atis_data.update(rw_atis_data)
@@ -115,10 +115,10 @@ The parser extracts three things from the ATIS text:
 
 ```python
 RWY_NUM_PATTERN  # Matches: "17R", "17 R", "17R AND LEFT", "10L OR 10R"
-APPROACH_TYPES   # ILS, RNAV, VISUAL, VIS, VA, LOC, VOR, NDB, GPS, LDA, SDF, RNP
-RWY_PREFIX       # RWY, RWYS, RUNWAY, RUNWAYS
-LANDING_KW       # LANDING, LDG, LNDG, ARRIVING, ARR
-DEPARTING_KW     # DEPARTING, DEPARTURES, DEPTG, DEPG, DEP
+APPROACH_TYPES  # ILS, RNAV, VISUAL, VIS, VA, LOC, VOR, NDB, GPS, LDA, SDF, RNP
+RWY_PREFIX  # RWY, RWYS, RUNWAY, RUNWAYS
+LANDING_KW  # LANDING, LDG, LNDG, ARRIVING, ARR
+DEPARTING_KW  # DEPARTING, DEPARTURES, DEPTG, DEPG, DEP
 ```
 
 ### Detection Patterns (7 patterns)

@@ -9,19 +9,19 @@ Finds suitable diversion airports for a flight based on:
 
 import asyncio
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import ClassVar
 
 from rich.text import Text
-from textual.screen import ModalScreen
-from textual.widgets import Static, Checkbox
-from textual.containers import Container, Horizontal
-from textual.binding import Binding
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, Horizontal
+from textual.screen import ModalScreen
+from textual.widgets import Checkbox, Static
 
 from backend import (
-    find_suitable_diversions,
-    DiversionOption,
     DiversionFilters,
+    DiversionOption,
+    find_suitable_diversions,
     get_metar_batch,
     get_required_runway_length,
     haversine_distance_nm,
@@ -29,8 +29,8 @@ from backend import (
 from ui import config
 from ui.config import CATEGORY_COLORS
 from widgets.split_flap_datatable import SplitFlapDataTable
-from .metar_info import get_flight_category, _extract_flight_rules_weather
 
+from .metar_info import _extract_flight_rules_weather, get_flight_category
 
 # Constants for diversion search
 DEFAULT_SEARCH_RADIUS_NM = 100.0
@@ -99,7 +99,7 @@ class DiversionModal(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("r", "refresh", "Refresh", priority=True),
         Binding("1", "sort_position", "Sort by position", priority=True),
@@ -110,7 +110,7 @@ class DiversionModal(ModalScreen):
     def __init__(
         self,
         flight_data: dict,
-        vatsim_data: Optional[dict] = None,
+        vatsim_data: dict | None = None,
     ):
         """
         Initialize the diversion modal.
@@ -122,7 +122,7 @@ class DiversionModal(ModalScreen):
         super().__init__()
         self.flight_data = flight_data
         self.vatsim_data = vatsim_data
-        self._search_task: Optional[asyncio.Task] = None
+        self._search_task: asyncio.Task | None = None
         self._search_cancelled = False
 
         # Extract flight info
@@ -132,8 +132,8 @@ class DiversionModal(ModalScreen):
         self.longitude = flight_data.get("longitude") or 0.0
         self.aircraft_type = ""
         self.destination_icao = ""
-        self.destination_lat: Optional[float] = None
-        self.destination_lon: Optional[float] = None
+        self.destination_lat: float | None = None
+        self.destination_lon: float | None = None
         if flight_data.get("flight_plan"):
             self.aircraft_type = flight_data["flight_plan"].get("aircraft_short", "")
             self.destination_icao = flight_data["flight_plan"].get("arrival", "")
@@ -147,9 +147,9 @@ class DiversionModal(ModalScreen):
         )
 
         # Cache for search results
-        self._cached_diversions: List[DiversionOption] = []
-        self._weather_data: Dict[str, Tuple[str, str]] = {}
-        self._controller_data: Dict[str, List[str]] = {}
+        self._cached_diversions: list[DiversionOption] = []
+        self._weather_data: dict[str, tuple[str, str]] = {}
+        self._controller_data: dict[str, list[str]] = {}
         self._search_completed = False  # Track if initial search finished
         self._search_airport_count = 0  # Number of airports in database (for debug)
 
@@ -332,7 +332,7 @@ class DiversionModal(ModalScreen):
 
         # Progressive search: expand radius in steps to show results quickly
         search_radii = [25, 50, 75, 100]  # nm
-        all_diversions: List[DiversionOption] = []
+        all_diversions: list[DiversionOption] = []
         seen_icaos: set = set()
 
         # Capture current filters for the search
@@ -394,7 +394,7 @@ class DiversionModal(ModalScreen):
         await self._fetch_weather_for_diversions(all_diversions[:50])
 
     async def _fetch_weather_for_diversions(
-        self, diversions: List[DiversionOption]
+        self, diversions: list[DiversionOption]
     ) -> None:
         """Fetch weather data for diversion airports in batch"""
         if self._search_cancelled:
@@ -466,18 +466,26 @@ class DiversionModal(ModalScreen):
                 continue
 
             # Runway filter
-            if self.filters.require_runway_capability and required_runway:
-                if d.longest_runway_ft is None or d.longest_runway_ft < required_runway:
-                    continue
+            if (
+                self.filters.require_runway_capability
+                and required_runway
+                and (
+                    d.longest_runway_ft is None or d.longest_runway_ft < required_runway
+                )
+            ):
+                continue
 
             # Approaches filter
             if self.filters.require_approaches and not d.has_approaches:
                 continue
 
             # Weather filter
-            if self.filters.require_good_weather:
-                if d.weather_category and d.weather_category not in ("VFR", "MVFR"):
-                    continue
+            if (
+                self.filters.require_good_weather
+                and d.weather_category
+                and d.weather_category not in ("VFR", "MVFR")
+            ):
+                continue
 
             # Staffing filter
             if self.filters.require_staffed and not d.is_staffed:
@@ -540,10 +548,7 @@ class DiversionModal(ModalScreen):
             )
 
             # Format runway
-            if d.longest_runway_ft:
-                runway_str = f"{d.longest_runway_ft:,}ft"
-            else:
-                runway_str = "N/A"
+            runway_str = f"{d.longest_runway_ft:,}ft" if d.longest_runway_ft else "N/A"
 
             # Format approaches
             if d.has_approaches:

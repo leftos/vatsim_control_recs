@@ -2,7 +2,7 @@
 
 import json
 from collections import defaultdict
-from typing import Any, Dict, Optional
+from typing import Any
 
 from common import logger
 
@@ -13,7 +13,7 @@ class AirportDataManager:
     def __init__(
         self,
         airports_file_path: str,
-        unified_data: Optional[Dict[str, Dict[str, Any]]] = None,
+        unified_data: dict[str, dict[str, Any]] | None = None,
     ):
         """
         Initialize the data manager.
@@ -36,8 +36,8 @@ class AirportDataManager:
         self._build_location_mappings()
 
     def _convert_unified_data(
-        self, unified_data: Dict[str, Dict[str, Any]]
-    ) -> Dict[str, Dict[str, Any]]:
+        self, unified_data: dict[str, dict[str, Any]]
+    ) -> dict[str, dict[str, Any]]:
         """Convert unified data format to airports.json format for compatibility."""
         airports_data = {}
         for code, info in unified_data.items():
@@ -55,10 +55,10 @@ class AirportDataManager:
             }
         return airports_data
 
-    def _load_from_file(self) -> Dict[str, Dict[str, Any]]:
+    def _load_from_file(self) -> dict[str, dict[str, Any]]:
         """Load airport data from JSON file."""
         try:
-            with open(self.airports_file_path, "r", encoding="utf-8") as f:
+            with open(self.airports_file_path, encoding="utf-8") as f:
                 data = json.load(f)
                 logger.info(
                     f"Loaded {len(data)} airports from {self.airports_file_path}"
@@ -85,7 +85,7 @@ class AirportDataManager:
                 self.location_to_airports[base_location].append(icao)
                 self.icao_to_location[icao] = base_location
 
-    def _get_base_location(self, airport_details: Dict[str, Any]) -> str:
+    def _get_base_location(self, airport_details: dict[str, Any]) -> str:
         """
         Determine whether to use state or city as the base location name.
         Prefers state if the airport name starts with it, otherwise uses city.
@@ -99,7 +99,7 @@ class AirportDataManager:
             return state
         return city
 
-    def get_airport_details(self, icao: str) -> Optional[Dict[str, Any]]:
+    def get_airport_details(self, icao: str) -> dict[str, Any] | None:
         """Get details for a specific airport."""
         return self.airports_data.get(icao)
 
@@ -107,6 +107,6 @@ class AirportDataManager:
         """Get all airport ICAOs for a given location."""
         return self.location_to_airports.get(location, [])
 
-    def get_location_for_airport(self, icao: str) -> Optional[str]:
+    def get_location_for_airport(self, icao: str) -> str | None:
         """Get the base location for an airport."""
         return self.icao_to_location.get(icao)

@@ -1,7 +1,6 @@
 """Name processing utilities for airport disambiguation."""
 
 import re
-from typing import List, Optional, Set
 
 from .config import DisambiguatorConfig
 
@@ -13,13 +12,13 @@ class NameProcessor:
         """Initialize with configuration."""
         self.config = config
 
-    def _split_compound_word(self, word: str) -> List[str]:
+    def _split_compound_word(self, word: str) -> list[str]:
         """Split compound words on / and - delimiters."""
         if "/" in word or "-" in word:
             return [p for p in word.replace("-", "/").split("/") if p]
         return [word]
 
-    def _word_matches_location(self, word: str, location_words: Set[str]) -> bool:
+    def _word_matches_location(self, word: str, location_words: set[str]) -> bool:
         """Check if word or any compound part matches location words."""
         parts = self._split_compound_word(word)
         return any(part.lower() in location_words for part in parts)
@@ -30,13 +29,13 @@ class NameProcessor:
             name = name.replace(long, short)
         return name
 
-    def extract_location_words(self, location: str) -> Set[str]:
+    def extract_location_words(self, location: str) -> set[str]:
         """Extract and normalize location words for comparison."""
         return {word.lower() for word in location.split()}
 
     def extract_distinguishing_words(
         self, airport_name: str, location: str
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Extract distinguishing words from airport name by removing location words.
         Preserves original casing. For compound words (e.g., "RENO/STEAD"),
@@ -76,7 +75,7 @@ class NameProcessor:
 
         return distinguishing_parts
 
-    def find_first_high_priority_word(self, words: List[str]) -> Optional[str]:
+    def find_first_high_priority_word(self, words: list[str]) -> str | None:
         """
         Find the first high-priority word in the list.
         Checks both the word itself and parts of compound words.
@@ -105,7 +104,7 @@ class NameProcessor:
 
     def get_non_high_priority_prefix(
         self, airport_name: str, location: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get consecutive non-high-priority words from start of airport name.
         If 4+ words collected, return only the last one. If 3 or fewer, return all.
@@ -129,7 +128,7 @@ class NameProcessor:
         # If no non-high priority words found, return the first word
         return distinguishing_parts[0] if distinguishing_parts else None
 
-    def get_military_name(self, airport_name: str, location: str) -> Optional[str]:
+    def get_military_name(self, airport_name: str, location: str) -> str | None:
         """
         Get the military airport name.
         Returns the base name + military term (e.g., "Beale AFB", "North Island Navy").
@@ -200,9 +199,9 @@ class NameProcessor:
 
         # Add the military term at the end
         if military_phrase:
-            result = " ".join(name_parts + [military_phrase])
+            result = " ".join([*name_parts, military_phrase])
         else:
-            result = " ".join(name_parts + [military_term])
+            result = " ".join([*name_parts, military_term])
 
         return result if result else None
 

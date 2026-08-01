@@ -1,18 +1,20 @@
 """Historical Flight Statistics Modal Screen - View traffic patterns to/from airports"""
 
 import asyncio
-from textual.screen import ModalScreen
-from textual.widgets import Static, Input, DataTable
-from textual.containers import Container
-from textual.binding import Binding
+from typing import ClassVar
+
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container
+from textual.screen import ModalScreen
+from textual.widgets import DataTable, Input, Static
 
 from backend.data.statsim_api import (
-    fetch_flights_from_origin,
-    fetch_flights_to_destination,
     STATSIM_API_KEY,
     STATSIM_DEFAULT_DAYS_BACK,
     STATSIM_MAX_DAYS_PER_QUERY,
+    fetch_flights_from_origin,
+    fetch_flights_to_destination,
 )
 from common import logger as log
 from ui import config
@@ -76,7 +78,7 @@ class HistoricalStatsScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("enter", "search", "Search", priority=True),
         Binding("c", "copy_results", "Copy", priority=True),

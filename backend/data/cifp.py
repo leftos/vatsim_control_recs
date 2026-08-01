@@ -9,17 +9,15 @@ CIFP data is downloaded once per AIRAC cycle (28 days) and cached locally.
 
 import io
 import re
-import urllib.request
 import urllib.error
+import urllib.request
 import zipfile
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 from common.paths import get_cifp_cache_dir
-
 
 # AIRAC epoch: Cycle 2501 effective date
 # All AIRAC cycles can be calculated from this reference point
@@ -56,7 +54,7 @@ class CifpApproach:
     airport: str
     approach_id: str  # e.g., "H17LZ"
     approach_type: str  # e.g., "RNAV (GPS)", "ILS", "LOC"
-    runway: Optional[str]  # e.g., "17L", "35R"
+    runway: str | None  # e.g., "17L", "35R"
     fixes: list[CifpApproachFix] = field(default_factory=list)
 
     @property
@@ -118,7 +116,8 @@ def get_current_airac_cycle() -> tuple[str, date, date]:
         Tuple of (cycle_id, start_date, end_date)
         Example: ("2512", date(2025, 11, 27), date(2025, 12, 24))
     """
-    today = date.today()
+    # AIRAC cycles change on a UTC boundary, not the machine's local one
+    today = datetime.now(timezone.utc).date()
     days_since_epoch = (today - AIRAC_EPOCH).days
     cycle_number = days_since_epoch // CYCLE_DAYS  # 0-indexed from 2501
 
@@ -181,7 +180,7 @@ def get_cifp_cache_path() -> Path:
     return CIFP_CACHE_DIR / f"FAACIFP18-{cycle_id}"
 
 
-def ensure_cifp_data(quiet: bool = False) -> Optional[Path]:
+def ensure_cifp_data(quiet: bool = False) -> Path | None:
     """Download CIFP data if missing or outdated.
 
     Auto-downloads new CIFP data when a new AIRAC cycle begins.
@@ -339,7 +338,7 @@ APPROACH_TYPE_CODES = {
 }
 
 
-def _parse_runway_from_approach_id(approach_id: str) -> Optional[str]:
+def _parse_runway_from_approach_id(approach_id: str) -> str | None:
     """Extract runway from approach ID.
 
     Args:
@@ -375,7 +374,7 @@ def _parse_approach_type(approach_id: str) -> str:
     return APPROACH_TYPE_CODES.get(type_code, "UNKNOWN")
 
 
-def parse_approach_record(line: str) -> Optional[CifpApproachFix]:
+def parse_approach_record(line: str) -> CifpApproachFix | None:
     """Parse a single CIFP approach procedure record.
 
     ARINC 424 approach records have fixed column positions:
@@ -476,7 +475,7 @@ def get_approaches_for_airport(airport: str) -> dict[str, CifpApproach]:
     approaches: dict[str, CifpApproach] = {}
 
     try:
-        with open(cifp_path, "r", encoding="latin-1") as f:
+        with open(cifp_path, encoding="latin-1") as f:
             for line in f:
                 if not line.startswith(search_prefix):
                     continue
@@ -495,7 +494,7 @@ def get_approaches_for_airport(airport: str) -> dict[str, CifpApproach]:
                     )
 
                 approaches[fix.approach_id].fixes.append(fix)
-    except (OSError, IOError):
+    except OSError:
         return {}
 
     return approaches
@@ -514,7 +513,7 @@ def get_approach_list_for_airport(airport: str) -> list[str]:
         List of approach display names, e.g., ["ILS RWY 28R", "RNAV (GPS) Z RWY 28L"]
     """
     approaches = get_approaches_for_airport(airport)
-    return sorted(set(approach.display_name for approach in approaches.values()))
+    return sorted({approach.display_name for approach in approaches.values()})
 
 
 def has_instrument_approaches(airport: str) -> bool:
@@ -530,7 +529,7 @@ def has_instrument_approaches(airport: str) -> bool:
     return len(approaches) > 0
 
 
-def parse_dp_record(line: str) -> Optional[tuple[str, str, str, int]]:
+def parse_dp_record(line: str) -> tuple[str, str, str, int] | None:
     """Parse a single CIFP DP (departure procedure) record.
 
     ARINC 424 DP records (subsection D):
@@ -567,7 +566,7 @@ def parse_dp_record(line: str) -> Optional[tuple[str, str, str, int]]:
     return (dp_id, transition, fix_identifier, sequence)
 
 
-def parse_star_record(line: str) -> Optional[tuple[str, str, str, int]]:
+def parse_star_record(line: str) -> tuple[str, str, str, int] | None:
     """Parse a single CIFP STAR record.
 
     ARINC 424 STAR records (subsection E):
@@ -605,7 +604,7 @@ def parse_star_record(line: str) -> Optional[tuple[str, str, str, int]]:
 
 
 @lru_cache(maxsize=100)
-def get_dp_data(airport: str, dp_name: str) -> Optional[CifpDP]:
+def get_dp_data(airport: str, dp_name: str) -> CifpDP | None:
     """Get DP (departure procedure) common route waypoints from CIFP.
 
     Args:
@@ -636,7 +635,7 @@ def get_dp_data(airport: str, dp_name: str) -> Optional[CifpDP]:
     dp_records: dict[str, list[tuple[str, int]]] = {}
 
     try:
-        with open(cifp_path, "r", encoding="latin-1") as f:
+        with open(cifp_path, encoding="latin-1") as f:
             for line in f:
                 if not line.startswith(search_prefix):
                     continue
@@ -653,7 +652,7 @@ def get_dp_data(airport: str, dp_name: str) -> Optional[CifpDP]:
                 if transition not in dp_records:
                     dp_records[transition] = []
                 dp_records[transition].append((fix_id, sequence))
-    except (OSError, IOError):
+    except OSError:
         return None
 
     if not dp_records:
@@ -678,8 +677,7 @@ def get_dp_data(airport: str, dp_name: str) -> Optional[CifpDP]:
     # (enroute transitions = not "RW*", not "ALL", not "")
     if not all_waypoints:
         enroute_transitions = sorted(
-            t for t in dp_records.keys()
-            if t and t != "ALL" and not t.startswith("RW")
+            t for t in dp_records if t and t != "ALL" and not t.startswith("RW")
         )
         if enroute_transitions:
             first_trans = enroute_transitions[0]
@@ -691,7 +689,8 @@ def get_dp_data(airport: str, dp_name: str) -> Optional[CifpDP]:
 
     # Filter out runway/airport references and empty strings
     all_waypoints = [
-        w for w in all_waypoints
+        w
+        for w in all_waypoints
         if w and not w.startswith("RW") and not w.endswith(airport_code)
     ]
 
@@ -702,7 +701,7 @@ def get_dp_data(airport: str, dp_name: str) -> Optional[CifpDP]:
 
 
 @lru_cache(maxsize=100)
-def get_star_data(airport: str, star_name: str) -> Optional[CifpSTAR]:
+def get_star_data(airport: str, star_name: str) -> CifpSTAR | None:
     """Get STAR common route waypoints from CIFP.
 
     Args:
@@ -730,7 +729,7 @@ def get_star_data(airport: str, star_name: str) -> Optional[CifpSTAR]:
     star_records: dict[str, list[tuple[str, int]]] = {}
 
     try:
-        with open(cifp_path, "r", encoding="latin-1") as f:
+        with open(cifp_path, encoding="latin-1") as f:
             for line in f:
                 if not line.startswith(search_prefix):
                     continue
@@ -747,7 +746,7 @@ def get_star_data(airport: str, star_name: str) -> Optional[CifpSTAR]:
                 if transition not in star_records:
                     star_records[transition] = []
                 star_records[transition].append((fix_id, sequence))
-    except (OSError, IOError):
+    except OSError:
         return None
 
     if not star_records:
@@ -771,9 +770,7 @@ def get_star_data(airport: str, star_name: str) -> Optional[CifpSTAR]:
     # If no common route, use the first runway transition's waypoints
     # (STARs end at the runway, so runway transitions contain the main path)
     if not all_waypoints:
-        rw_transitions = sorted(
-            t for t in star_records.keys() if t.startswith("RW")
-        )
+        rw_transitions = sorted(t for t in star_records if t.startswith("RW"))
         if rw_transitions:
             first_rw = rw_transitions[0]
             sorted_fixes = sorted(star_records[first_rw], key=lambda x: x[1])
@@ -784,7 +781,8 @@ def get_star_data(airport: str, star_name: str) -> Optional[CifpSTAR]:
 
     # Filter out runway/airport references and empty strings
     all_waypoints = [
-        w for w in all_waypoints
+        w
+        for w in all_waypoints
         if w and not w.startswith("RW") and not w.endswith(airport_code)
     ]
 

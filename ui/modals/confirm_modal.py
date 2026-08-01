@@ -1,10 +1,12 @@
 """Simple confirmation modal screen."""
 
+from typing import ClassVar
+
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container
 from textual.screen import ModalScreen
 from textual.widgets import Static
-from textual.containers import Container
-from textual.binding import Binding
-from textual.app import ComposeResult
 
 
 class ConfirmModal(ModalScreen):
@@ -34,7 +36,7 @@ class ConfirmModal(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("y", "confirm", "Yes", priority=True),
         Binding("enter", "confirm", "Yes", priority=True),
         Binding("n", "cancel", "No", priority=True),

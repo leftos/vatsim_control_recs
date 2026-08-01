@@ -1,10 +1,12 @@
 """Wind Information Modal Screen"""
 
-from textual.screen import ModalScreen
-from textual.widgets import Static, Input
-from textual.containers import Container
-from textual.binding import Binding
+from typing import ClassVar
+
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container
+from textual.screen import ModalScreen
+from textual.widgets import Input, Static
 
 from backend import get_wind_info
 from backend.config import constants as backend_constants
@@ -18,7 +20,7 @@ class WindInfoScreen(ModalScreen):
     WindInfoScreen {
         align: center middle;
     }
-    
+
     #wind-container {
         width: 60;
         height: auto;
@@ -26,24 +28,24 @@ class WindInfoScreen(ModalScreen):
         border: thick $primary;
         padding: 1 2;
     }
-    
+
     #wind-title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
     }
-    
+
     #wind-input-container {
         height: auto;
         margin-bottom: 1;
     }
-    
+
     #wind-result {
         text-align: center;
         height: auto;
         margin-top: 1;
     }
-    
+
     #wind-hint {
         text-align: center;
         color: $text-muted;
@@ -51,7 +53,7 @@ class WindInfoScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("enter", "fetch_wind", "Fetch Wind", priority=True),
     ]

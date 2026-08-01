@@ -72,7 +72,7 @@ def build_heuristic_metar_candidates(airports_data: dict) -> set:
     print("Building heuristic METAR candidate list...")
 
     candidates = set()
-    for icao in airports_data.keys():
+    for icao in airports_data:
         # 4-letter codes with all letters are standard ICAO
         if len(icao) == 4 and icao.isalpha():
             candidates.add(icao)
@@ -115,7 +115,7 @@ def main():
         "airport_count": len(airports_data),
         "grid_cell_count": len(spatial_grid),
         "spatial_grid": spatial_grid,
-        "metar_stations": sorted(list(metar_stations)) if metar_stations else None,
+        "metar_stations": sorted(metar_stations) if metar_stations else None,
     }
 
     # Write cache file

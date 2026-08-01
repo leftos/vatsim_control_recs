@@ -4,7 +4,6 @@ import re
 import subprocess
 import sys
 from collections import OrderedDict
-from typing import List, Optional, Tuple
 
 import spacy
 
@@ -30,12 +29,12 @@ class EntityExtractor:
             try:
                 self._nlp = spacy.load("en_core_web_sm")
                 sys.stdout.flush()
-            except OSError:
-                if getattr(sys, 'frozen', False):
+            except OSError as e:
+                if getattr(sys, "frozen", False):
                     raise OSError(
                         "spaCy model 'en_core_web_sm' not found in bundled application. "
                         "The PyInstaller build may be missing the model data."
-                    )
+                    ) from e
                 # Model not found, download it
                 print("\n" + "=" * 80)
                 print("FIRST-TIME SETUP: Downloading spaCy Language Model")
@@ -65,7 +64,7 @@ class EntityExtractor:
 
     def extract_entities(
         self, airport_name: str, city: str = "", state: str = ""
-    ) -> Tuple[List[str], List[str]]:
+    ) -> tuple[list[str], list[str]]:
         """
         Extract person and location entities from airport name using spaCy NER.
 
@@ -137,7 +136,7 @@ class EntityExtractor:
         cleaned_words = [w for w in words if w not in self.config.GENERIC_DESCRIPTORS]
         return " ".join(cleaned_words)
 
-    def _extract_pattern_locations(self, clean_name: str) -> List[str]:
+    def _extract_pattern_locations(self, clean_name: str) -> list[str]:
         """Extract locations based on patterns like 'County', 'City', etc."""
         locations = []
         words = clean_name.split()
@@ -151,14 +150,14 @@ class EntityExtractor:
                     potential_location.insert(0, words[j])
                     j -= 1
                 if potential_location:
-                    location_name = " ".join(potential_location + [word])
+                    location_name = " ".join([*potential_location, word])
                     locations.append(location_name)
 
         return locations
 
     def get_first_occurring_entity(
-        self, airport_name: str, persons: List[str], locations: List[str]
-    ) -> Optional[str]:
+        self, airport_name: str, persons: list[str], locations: list[str]
+    ) -> str | None:
         """
         Determine which entity appears first in the airport name.
         Prioritizes the first complete entity found.
@@ -191,7 +190,7 @@ class EntityExtractor:
 
     def extract_distinguishing_entity(
         self, airport_name: str, city: str, state: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Extract the most relevant distinguishing entity using NER.
         Entities are truncated to a maximum of 3 words.
@@ -206,10 +205,7 @@ class EntityExtractor:
         if entity:
             words = re.split(r"[\s\-/]+", entity)
             words = [w for w in words if w]  # Remove empty strings
-            if len(words) > 3:
-                entity = " ".join(words[:3])
-            else:
-                # Always re-join with spaces to normalize separators
-                entity = " ".join(words)
+            # Always re-join with spaces to normalize separators
+            entity = " ".join(words[:3]) if len(words) > 3 else " ".join(words)
 
         return entity

@@ -1,7 +1,5 @@
 """Core disambiguation logic for generating unique airport names."""
 
-from typing import Dict, List
-
 from .config import DisambiguatorConfig
 from .entity_extractor import EntityExtractor
 from .name_processor import NameProcessor
@@ -22,7 +20,7 @@ class DisambiguationEngine:
         self.entity_extractor = entity_extractor
 
     def disambiguate_single_airport(
-        self, _icao: str, airport_details: Dict, location: str
+        self, _icao: str, airport_details: dict, location: str
     ) -> str:
         """
         Generate a pretty name for a single airport in a location.
@@ -63,8 +61,8 @@ class DisambiguationEngine:
         return location
 
     def disambiguate_multiple_airports(
-        self, icaos: List[str], airports_data: Dict, location: str
-    ) -> Dict[str, str]:
+        self, icaos: list[str], airports_data: dict, location: str
+    ) -> dict[str, str]:
         """
         Generate pretty names for multiple airports in the same location.
 
@@ -115,7 +113,7 @@ class DisambiguationEngine:
         return result
 
     def _disambiguate_non_location_start(
-        self, _icao: str, airport_details: Dict, location: str, shortened_name: str
+        self, _icao: str, airport_details: dict, location: str, shortened_name: str
     ) -> str:
         """Disambiguate an airport whose name doesn't start with the location."""
         full_name = airport_details.get("name", "")
@@ -161,8 +159,8 @@ class DisambiguationEngine:
             return location
 
     def _disambiguate_location_starts(
-        self, icaos: List[str], airport_names: Dict[str, str], location: str
-    ) -> Dict[str, str]:
+        self, icaos: list[str], airport_names: dict[str, str], location: str
+    ) -> dict[str, str]:
         """
         Disambiguate multiple airports that all start with the location name.
         Uses a progressive approach to find unique suffixes.
@@ -173,13 +171,13 @@ class DisambiguationEngine:
         location_words = self.name_processor.extract_location_words(location)
 
         # Pre-compute distinguishing words and their lowercase set for each airport
-        all_distinguishing_parts: Dict[str, List[str]] = {}
-        all_distinguishing_sets: Dict[str, set] = {}
+        all_distinguishing_parts: dict[str, list[str]] = {}
+        all_distinguishing_sets: dict[str, set] = {}
         for icao in icaos:
             name = airport_names[icao]
             parts = self.name_processor.extract_distinguishing_words(name, location)
             all_distinguishing_parts[icao] = parts
-            all_distinguishing_sets[icao] = set(w.lower() for w in parts)
+            all_distinguishing_sets[icao] = {w.lower() for w in parts}
 
         for icao in icaos:
             distinguishing_parts = all_distinguishing_parts[icao]
@@ -255,11 +253,11 @@ class DisambiguationEngine:
     def _try_combinations_with_priority(
         self,
         icao: str,
-        distinguishing_parts: List[str],
+        distinguishing_parts: list[str],
         location: str,
-        all_icaos: List[str],
-        airport_names: Dict[str, str],
-        resolved_names: Dict[str, str],
+        all_icaos: list[str],
+        airport_names: dict[str, str],
+        resolved_names: dict[str, str],
     ) -> bool:
         """Try progressively longer combinations that include high-priority words."""
         for num_words in range(2, len(distinguishing_parts) + 1):
@@ -287,11 +285,11 @@ class DisambiguationEngine:
     def _try_sequential_combinations(
         self,
         icao: str,
-        distinguishing_parts: List[str],
+        distinguishing_parts: list[str],
         location: str,
-        all_icaos: List[str],
-        airport_names: Dict[str, str],
-        resolved_names: Dict[str, str],
+        all_icaos: list[str],
+        airport_names: dict[str, str],
+        resolved_names: dict[str, str],
     ) -> bool:
         """Try sequential combinations without requiring high-priority words."""
         for i in range(1, len(distinguishing_parts) + 1):
@@ -308,9 +306,9 @@ class DisambiguationEngine:
         self,
         candidate_name: str,
         current_icao: str,
-        all_icaos: List[str],
+        all_icaos: list[str],
         location: str,
-        airport_names: Dict[str, str],
+        airport_names: dict[str, str],
     ) -> bool:
         """Check if a candidate name is unique among all airports in the group."""
         # Extract just the distinguishing part from the candidate
@@ -345,17 +343,17 @@ class DisambiguationEngine:
         self,
         candidate_name: str,
         current_icao: str,
-        all_icaos: List[str],
+        all_icaos: list[str],
         location_words: set,
-        all_distinguishing_sets: Dict[str, set],
+        all_distinguishing_sets: dict[str, set],
     ) -> bool:
         """Optimized uniqueness check using pre-computed data."""
         # Extract candidate words (excluding location)
-        candidate_words = set(
+        candidate_words = {
             word.lower()
             for word in candidate_name.split()
             if word.lower() not in location_words
-        )
+        }
 
         for other_icao in all_icaos:
             if current_icao == other_icao:
@@ -372,12 +370,12 @@ class DisambiguationEngine:
     def _try_combinations_with_priority_optimized(
         self,
         icao: str,
-        distinguishing_parts: List[str],
+        distinguishing_parts: list[str],
         location: str,
-        all_icaos: List[str],
+        all_icaos: list[str],
         location_words: set,
-        all_distinguishing_sets: Dict[str, set],
-        resolved_names: Dict[str, str],
+        all_distinguishing_sets: dict[str, set],
+        resolved_names: dict[str, str],
     ) -> bool:
         """Optimized version using pre-computed data."""
         for num_words in range(2, len(distinguishing_parts) + 1):
@@ -409,12 +407,12 @@ class DisambiguationEngine:
     def _try_sequential_combinations_optimized(
         self,
         icao: str,
-        distinguishing_parts: List[str],
+        distinguishing_parts: list[str],
         location: str,
-        all_icaos: List[str],
+        all_icaos: list[str],
         location_words: set,
-        all_distinguishing_sets: Dict[str, set],
-        resolved_names: Dict[str, str],
+        all_distinguishing_sets: dict[str, set],
+        resolved_names: dict[str, str],
     ) -> bool:
         """Optimized version using pre-computed data."""
         for i in range(1, len(distinguishing_parts) + 1):

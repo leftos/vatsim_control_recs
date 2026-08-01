@@ -7,23 +7,23 @@ circular imports between backend and ui packages.
 
 # Re-export everything from common.logger for backwards compatibility
 from common.logger import (
-    debug,
-    info,
-    warning,
-    error,
-    get_log_file_path,
     LOG_FILE,
     LOGS_DIR,
     cleanup_old_logs,
+    debug,
+    error,
+    get_log_file_path,
+    info,
+    warning,
 )
 
 __all__ = [
+    "LOGS_DIR",
+    "LOG_FILE",
+    "cleanup_old_logs",
     "debug",
-    "info",
-    "warning",
     "error",
     "get_log_file_path",
-    "LOG_FILE",
-    "LOGS_DIR",
-    "cleanup_old_logs",
+    "info",
+    "warning",
 ]

@@ -11,13 +11,12 @@ by processes that don't need file logging (e.g., the weather daemon).
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
 
 # Lazy-initialized paths (set on first use)
-_LOGS_DIR: Optional[str] = None
-_LOG_FILE: Optional[str] = None
+_LOGS_DIR: str | None = None
+_LOG_FILE: str | None = None
 _initialized = False
 
 # Configure logger (starts with NullHandler until file logging is set up)
@@ -40,8 +39,10 @@ def _get_log_file() -> str:
     """Get the current log file path."""
     global _LOG_FILE
     if _LOG_FILE is None:
+        # Local date, so the log file name matches the operator's calendar day
         _LOG_FILE = os.path.join(
-            _get_logs_dir(), f"debug_{datetime.now().strftime('%Y%m%d')}.log"
+            _get_logs_dir(),
+            f"debug_{datetime.now().astimezone().strftime('%Y%m%d')}.log",
         )
     return _LOG_FILE
 
@@ -100,18 +101,21 @@ def cleanup_old_logs(days_to_keep: int = 10) -> None:
         if not os.path.exists(logs_dir):
             return
 
-        cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+        # UTC on both sides so the comparison against st_mtime is well defined
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
         logs_path = Path(logs_dir)
 
         for log_file in logs_path.glob("debug_*.log"):
             try:
                 # Get file modification time
-                file_mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+                file_mtime = datetime.fromtimestamp(
+                    log_file.stat().st_mtime, tz=timezone.utc
+                )
                 if file_mtime < cutoff_date:
                     log_file.unlink()
-            except (OSError, IOError):
+            except OSError:
                 pass  # Silently skip files we can't delete
-    except (OSError, IOError):
+    except OSError:
         pass  # Silently handle errors during cleanup
 
 

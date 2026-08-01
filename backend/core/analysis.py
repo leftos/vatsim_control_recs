@@ -4,30 +4,29 @@ Main analysis module for VATSIM flights and controller staffing.
 
 import os
 from collections import defaultdict
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any
 
+from airport_disambiguator import AirportDisambiguator
 from backend.cache.manager import load_aircraft_approach_speeds
-from backend.data.loaders import load_unified_airport_data
-from backend.data.vatsim_api import download_vatsim_data, filter_flights_by_airports
-from backend.data.weather import (
-    get_wind_from_metar,
-    get_altimeter_setting,
-    get_weather_for_airports_bbox,
-)
+from backend.core.calculations import calculate_eta, format_eta_display
 from backend.core.controllers import get_staffed_positions
-from backend.core.calculations import format_eta_display, calculate_eta
-from backend.core.groupings import (
-    load_all_groupings,
-    resolve_grouping_recursively,
-    find_grouping_case_insensitive,
-)
 from backend.core.flights import (
     get_nearest_airport_if_on_ground,
     is_flight_flying_near_arrival,
 )
+from backend.core.groupings import (
+    find_grouping_case_insensitive,
+    load_all_groupings,
+    resolve_grouping_recursively,
+)
 from backend.core.models import AirportStats, GroupingStats
-from airport_disambiguator import AirportDisambiguator
-
+from backend.data.loaders import load_unified_airport_data
+from backend.data.vatsim_api import download_vatsim_data, filter_flights_by_airports
+from backend.data.weather import (
+    get_altimeter_setting,
+    get_weather_for_airports_bbox,
+    get_wind_from_metar,
+)
 
 # Module-level variables for data that needs to be accessible
 _script_dir = os.path.dirname(
@@ -36,8 +35,8 @@ _script_dir = os.path.dirname(
 
 
 def load_airport_data(
-    unified_data: Dict[str, Dict[str, Any]],
-) -> Dict[str, Dict[str, Any]]:
+    unified_data: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
     """
     Convert unified airport data to the format expected by the rest of the application.
 
@@ -60,19 +59,19 @@ def load_airport_data(
 
 def analyze_flights_data(
     max_eta_hours: float = 1.0,
-    airport_allowlist: Optional[List[str]] = None,
-    groupings_allowlist: Optional[List[str]] = None,
+    airport_allowlist: list[str] | None = None,
+    groupings_allowlist: list[str] | None = None,
     include_all_staffed: bool = True,
     hide_wind: bool = False,
     include_all_arriving: bool = False,
-    unified_airport_data: Optional[Dict[str, Dict[str, Any]]] = None,
-    disambiguator: Optional[AirportDisambiguator] = None,
-) -> Tuple[
-    Optional[List[AirportStats]],
-    Optional[List[GroupingStats]],
+    unified_airport_data: dict[str, dict[str, Any]] | None = None,
+    disambiguator: AirportDisambiguator | None = None,
+) -> tuple[
+    list[AirportStats] | None,
+    list[GroupingStats] | None,
     int,
-    Dict[str, Dict[str, Any]],
-    Optional[AirportDisambiguator],
+    dict[str, dict[str, Any]],
+    AirportDisambiguator | None,
 ]:
     """
     Main function to analyze VATSIM flights and controller staffing - returns data structures.
@@ -100,7 +99,9 @@ def analyze_flights_data(
         print("Loading airport database...")
         unified_airport_data = load_unified_airport_data(
             apt_base_path=os.path.join(_script_dir, "data", "raw", "APT_BASE.csv"),
-            airports_json_path=os.path.join(_script_dir, "data", "raw", "airports.json"),
+            airports_json_path=os.path.join(
+                _script_dir, "data", "raw", "airports.json"
+            ),
             iata_icao_path=os.path.join(_script_dir, "data", "raw", "iata-icao.csv"),
         )
         if unified_airport_data is None:
@@ -390,7 +391,7 @@ def analyze_flights_data(
     # Process custom groupings data
     grouped_data = []
     if display_custom_groupings:
-        for group_name, _group_airports in display_custom_groupings.items():
+        for group_name in display_custom_groupings:
             # Resolve the grouping to actual airports (handles nested groupings)
             resolved_airports = resolve_grouping_recursively(
                 group_name, all_custom_groupings
@@ -417,9 +418,11 @@ def analyze_flights_data(
             )
 
             for ap_icao in resolved_airports:
-                if ap_icao in earliest_arrival_eta:
-                    if earliest_arrival_eta[ap_icao] < group_earliest_eta:
-                        group_earliest_eta = earliest_arrival_eta[ap_icao]
+                if (
+                    ap_icao in earliest_arrival_eta
+                    and earliest_arrival_eta[ap_icao] < group_earliest_eta
+                ):
+                    group_earliest_eta = earliest_arrival_eta[ap_icao]
 
             group_eta_display = format_eta_display(
                 group_earliest_eta, group_arrivals_in_flight, group_arrivals_on_ground

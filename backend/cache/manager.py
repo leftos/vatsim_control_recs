@@ -13,12 +13,11 @@ import json
 import os
 import threading
 from datetime import datetime, timezone
-from typing import Dict, Optional
 
 from cachetools import LRUCache
 
-from common import logger as debug_logger
 from backend.config.constants import PERSISTENT_CACHE_TTL
+from common import logger as debug_logger
 from common.paths import get_user_cache_dir, get_weather_cache_file
 
 # Cache size limits
@@ -54,10 +53,10 @@ _TAF_BLACKLIST: LRUCache = LRUCache(
 )  # Keys are ICAOs, values are True
 
 # Cache for aircraft approach speeds
-_AIRCRAFT_APPROACH_SPEEDS: Optional[Dict[str, int]] = None
+_AIRCRAFT_APPROACH_SPEEDS: dict[str, int] | None = None
 
 # Cache for ARTCC groupings (loaded once on startup)
-_ARTCC_GROUPINGS: Optional[Dict[str, list]] = None
+_ARTCC_GROUPINGS: dict[str, list] | None = None
 
 
 def get_wind_cache_lock() -> threading.Lock:
@@ -105,26 +104,26 @@ def get_taf_cache() -> tuple[LRUCache, LRUCache]:
     return _TAF_DATA_CACHE, _TAF_BLACKLIST
 
 
-def get_aircraft_speeds_cache() -> Optional[Dict[str, int]]:
+def get_aircraft_speeds_cache() -> dict[str, int] | None:
     """Get aircraft approach speeds cache (thread-safe read)."""
     with _AIRCRAFT_SPEEDS_LOCK:
         return _AIRCRAFT_APPROACH_SPEEDS
 
 
-def set_aircraft_speeds_cache(speeds: Dict[str, int]) -> None:
+def set_aircraft_speeds_cache(speeds: dict[str, int]) -> None:
     """Set aircraft approach speeds cache (thread-safe write)."""
     global _AIRCRAFT_APPROACH_SPEEDS
     with _AIRCRAFT_SPEEDS_LOCK:
         _AIRCRAFT_APPROACH_SPEEDS = speeds
 
 
-def get_artcc_groupings_cache() -> Optional[Dict[str, list]]:
+def get_artcc_groupings_cache() -> dict[str, list] | None:
     """Get ARTCC groupings cache (thread-safe read)."""
     with _ARTCC_GROUPINGS_LOCK:
         return _ARTCC_GROUPINGS
 
 
-def set_artcc_groupings_cache(groupings: Dict[str, list]) -> None:
+def set_artcc_groupings_cache(groupings: dict[str, list]) -> None:
     """Set ARTCC groupings cache (thread-safe write)."""
     global _ARTCC_GROUPINGS
     with _ARTCC_GROUPINGS_LOCK:
@@ -175,7 +174,7 @@ def clear_all_caches() -> None:
         _ARTCC_GROUPINGS = None
 
 
-def load_aircraft_approach_speeds(filename: str) -> Dict[str, int]:
+def load_aircraft_approach_speeds(filename: str) -> dict[str, int]:
     """
     Load aircraft approach speeds from CSV file.
     Returns a dictionary mapping ICAO aircraft codes to approach speeds (in knots).
@@ -198,7 +197,7 @@ def load_aircraft_approach_speeds(filename: str) -> Dict[str, int]:
 
     approach_speeds = {}
     try:
-        with open(filename, "r", encoding="utf-8-sig") as f:
+        with open(filename, encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 icao_code = row.get("ICAO_Code", "").strip()
@@ -236,11 +235,11 @@ _WEATHER_CACHE_FILE = str(get_weather_cache_file())
 
 def _ensure_cache_dir() -> None:
     """Ensure the cache directory exists."""
-    if not os.path.exists(_PERSISTENT_CACHE_DIR):
-        try:
-            os.makedirs(_PERSISTENT_CACHE_DIR)
-        except OSError:
-            pass  # Directory may have been created by another thread
+    try:
+        # exist_ok covers the race where another thread creates it first
+        os.makedirs(_PERSISTENT_CACHE_DIR, exist_ok=True)
+    except OSError as e:
+        debug_logger.warning(f"Could not create cache directory: {e}")
 
 
 def save_weather_cache() -> None:
@@ -309,7 +308,7 @@ def load_weather_cache() -> tuple[int, int]:
     now = datetime.now(timezone.utc)
 
     try:
-        with open(_WEATHER_CACHE_FILE, "r", encoding="utf-8") as f:
+        with open(_WEATHER_CACHE_FILE, encoding="utf-8") as f:
             cache_data = json.load(f)
 
         # Load METAR cache

@@ -3,11 +3,12 @@ UI Configuration and Constants
 Contains flap character sets, data classes, and module-level instances
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Callable, Literal
+from typing import Any, Literal
 
 # Flight category colors for Rich markup (VFR/MVFR/IFR/LIFR)
-CATEGORY_COLORS: Dict[str, str] = {
+CATEGORY_COLORS: dict[str, str] = {
     "LIFR": "magenta",
     "IFR": "red",
     "MVFR": "#5599ff",
@@ -27,9 +28,9 @@ WIND_FLAP_CHARS = "0123456789GKT "  # For wind data: numbers for direction/speed
 ALTIMETER_FLAP_CHARS = "0123456789AQ "  # For altimeter: A/Q prefix, digits
 
 # Module-level instances for the UI - initialized when data is first loaded
-UNIFIED_AIRPORT_DATA: Optional[Dict[str, Dict[str, Any]]] = None
-DISAMBIGUATOR: Optional[Any] = None
-AIRCRAFT_APPROACH_SPEEDS: Optional[Dict[str, Any]] = None
+UNIFIED_AIRPORT_DATA: dict[str, dict[str, Any]] | None = None
+DISAMBIGUATOR: Any | None = None
+AIRCRAFT_APPROACH_SPEEDS: dict[str, Any] | None = None
 
 
 @dataclass
@@ -37,7 +38,7 @@ class ColumnConfig:
     """Configuration for a single table column"""
 
     name: str
-    flap_chars: Optional[str] = None
+    flap_chars: str | None = None
     content_align: Literal["left", "center", "right"] = "left"
     update_width: bool = False
 
@@ -47,4 +48,4 @@ class TableConfig:
     """Configuration for a complete table"""
 
     columns: list[ColumnConfig]
-    sort_function: Optional[Callable] = None
+    sort_function: Callable | None = None

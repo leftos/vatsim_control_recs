@@ -7,11 +7,9 @@ cannot be parsed or the aircraft cannot be located on the route.
 
 import math
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple
 
 from backend.core.calculations import haversine_distance_nm
 from backend.data.navaids import Waypoint, parse_route_string
-
 
 # Earth radius in nautical miles (must match haversine_distance_nm)
 _R_NM = 3440.065
@@ -26,10 +24,10 @@ def get_route_remaining_distance(
     aircraft_lon: float,
     dest_lat: float,
     dest_lon: float,
-    airports: Optional[Dict[str, Tuple[float, float]]] = None,
-    departure: Optional[str] = None,
-    arrival: Optional[str] = None,
-) -> Optional[float]:
+    airports: dict[str, tuple[float, float]] | None = None,
+    departure: str | None = None,
+    arrival: str | None = None,
+) -> float | None:
     """Calculate remaining route distance from current position to destination.
 
     Args:
@@ -57,9 +55,9 @@ def get_route_remaining_distance(
 @lru_cache(maxsize=512)
 def _get_parsed_route(
     route_string: str,
-    departure: Optional[str] = None,
-    arrival: Optional[str] = None,
-) -> Tuple[Waypoint, ...]:
+    departure: str | None = None,
+    arrival: str | None = None,
+) -> tuple[Waypoint, ...]:
     """Parse and cache a route string into waypoints.
 
     Returns a tuple (hashable for lru_cache) instead of list.
@@ -67,19 +65,17 @@ def _get_parsed_route(
     and would defeat caching. Airport lookups in parse_route_string
     are a secondary resolution path.
     """
-    waypoints = parse_route_string(
-        route_string, departure=departure, arrival=arrival
-    )
+    waypoints = parse_route_string(route_string, departure=departure, arrival=arrival)
     return tuple(waypoints)
 
 
 def _calculate_route_remaining_distance(
-    waypoints: Tuple[Waypoint, ...],
+    waypoints: tuple[Waypoint, ...],
     aircraft_lat: float,
     aircraft_lon: float,
     dest_lat: float,
     dest_lon: float,
-) -> Optional[float]:
+) -> float | None:
     """Calculate remaining distance along route from aircraft to destination.
 
     Algorithm:
@@ -88,7 +84,7 @@ def _calculate_route_remaining_distance(
     3. Sum distances from aircraft through remaining waypoints to destination
     """
     # Build coordinate list
-    coords: List[Tuple[float, float]] = [
+    coords: list[tuple[float, float]] = [
         (wp.latitude, wp.longitude) for wp in waypoints
     ]
 
@@ -114,18 +110,20 @@ def _calculate_route_remaining_distance(
 
     for j in range(seg_idx + 1, len(coords) - 1):
         total_remaining += haversine_distance_nm(
-            coords[j][0], coords[j][1],
-            coords[j + 1][0], coords[j + 1][1],
+            coords[j][0],
+            coords[j][1],
+            coords[j + 1][0],
+            coords[j + 1][1],
         )
 
     return total_remaining
 
 
 def _find_current_segment(
-    coords: List[Tuple[float, float]],
+    coords: list[tuple[float, float]],
     aircraft_lat: float,
     aircraft_lon: float,
-) -> Tuple[int, float]:
+) -> tuple[int, float]:
     """Find which route segment the aircraft is currently on.
 
     Returns:
@@ -149,18 +147,23 @@ def _find_current_segment(
             continue
 
         cross_track, along_track = _cross_track_along_track(
-            aircraft_lat, aircraft_lon,
-            seg_start[0], seg_start[1],
-            seg_end[0], seg_end[1],
+            aircraft_lat,
+            aircraft_lon,
+            seg_start[0],
+            seg_start[1],
+            seg_end[0],
+            seg_end[1],
         )
 
         # Check if projection falls within the segment (with tolerance)
         tolerance = max(20.0, segment_length * 0.15)
-        if -tolerance <= along_track <= segment_length + tolerance:
-            if cross_track < best_cross_track:
-                best_cross_track = cross_track
-                best_segment_idx = i
-                best_remaining = max(0.0, segment_length - along_track)
+        if (
+            -tolerance <= along_track <= segment_length + tolerance
+            and cross_track < best_cross_track
+        ):
+            best_cross_track = cross_track
+            best_segment_idx = i
+            best_remaining = max(0.0, segment_length - along_track)
 
     if best_cross_track > _MAX_CROSS_TRACK_NM:
         return (-1, 0.0)
@@ -175,7 +178,7 @@ def _cross_track_along_track(
     seg_start_lon: float,
     seg_end_lat: float,
     seg_end_lon: float,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Calculate cross-track and along-track distances on a sphere.
 
     Args:
@@ -218,9 +221,7 @@ def _cross_track_along_track(
     )
 
     # Cross-track angular distance
-    cross_track_rad = math.asin(
-        math.sin(d_sp) * math.sin(theta_sp - theta_se)
-    )
+    cross_track_rad = math.asin(math.sin(d_sp) * math.sin(theta_sp - theta_se))
 
     # Along-track angular distance
     cos_cross = math.cos(cross_track_rad)

@@ -5,7 +5,7 @@ VATSIM API client for fetching flight and controller data.
 import json
 import threading
 import time
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 import requests
 
@@ -13,14 +13,14 @@ from backend.config.constants import VATSIM_DATA_URL
 from common import logger as debug_logger
 
 # Cache for VATSIM data to avoid redundant API calls within refresh window
-_VATSIM_DATA_CACHE: Optional[Dict[str, Any]] = None
+_VATSIM_DATA_CACHE: dict[str, Any] | None = None
 _VATSIM_DATA_CACHE_TIME: float = 0
 _VATSIM_DATA_CACHE_LOCK = threading.Lock()
 VATSIM_CACHE_DURATION = 15  # seconds - matches typical refresh interval
 
 # Cache for member stats (longer duration since stats don't change frequently)
-_MEMBER_STATS_CACHE: Dict[int, Dict[str, Any]] = {}
-_MEMBER_STATS_CACHE_TIME: Dict[int, float] = {}
+_MEMBER_STATS_CACHE: dict[int, dict[str, Any]] = {}
+_MEMBER_STATS_CACHE_TIME: dict[int, float] = {}
 _MEMBER_STATS_CACHE_LOCK = threading.Lock()
 MEMBER_STATS_CACHE_DURATION = 300  # 5 minutes - stats don't change frequently
 VATSIM_API_BASE_URL = "https://api.vatsim.net/v2"
@@ -28,7 +28,7 @@ VATSIM_API_BASE_URL = "https://api.vatsim.net/v2"
 
 def download_vatsim_data(
     timeout: int = 10, max_retries: int = 3
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Download VATSIM data from the API with retry logic and caching.
 
@@ -55,7 +55,7 @@ def download_vatsim_data(
                 return _VATSIM_DATA_CACHE
 
     # Cache miss or expired - fetch fresh data
-    last_exception: Optional[Exception] = None
+    last_exception: Exception | None = None
 
     for attempt in range(max_retries):
         try:
@@ -103,7 +103,7 @@ def download_vatsim_data(
     return None
 
 
-def get_member_stats(cid: int, timeout: int = 5) -> Optional[Dict[str, Any]]:
+def get_member_stats(cid: int, timeout: int = 5) -> dict[str, Any] | None:
     """
     Fetch member statistics from the VATSIM API.
 
@@ -151,10 +151,10 @@ def get_member_stats(cid: int, timeout: int = 5) -> Optional[Dict[str, Any]]:
 
 
 def filter_flights_by_airports(
-    data: Dict[str, Any],
-    airports: Dict[str, Dict[str, Any]],
-    airport_allowlist: Optional[List[str]] = None,
-) -> List[Dict[str, Any]]:
+    data: dict[str, Any],
+    airports: dict[str, dict[str, Any]],
+    airport_allowlist: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """
     Filter flights by departure and arrival airports.
 
@@ -243,8 +243,8 @@ def filter_flights_by_airports(
 
 
 def get_atis_for_airports(
-    vatsim_data: Dict[str, Any], airports: List[str]
-) -> Dict[str, List[Dict[str, Any]]]:
+    vatsim_data: dict[str, Any], airports: list[str]
+) -> dict[str, list[dict[str, Any]]]:
     """
     Extract ATIS information for specified airports from VATSIM data.
 
@@ -284,7 +284,7 @@ def get_atis_for_airports(
             ...
         }
     """
-    result: Dict[str, List[Dict[str, Any]]] = {}
+    result: dict[str, list[dict[str, Any]]] = {}
 
     if not vatsim_data or not airports:
         return result
@@ -299,10 +299,10 @@ def get_atis_for_airports(
             parts = callsign.split("_ATIS")[0]  # e.g., "KMIA_D" or "KMIA"
 
             # Check for departure/arrival suffix
-            if parts.endswith("_D") or parts.endswith("_DEP"):
+            if parts.endswith(("_D", "_DEP")):
                 icao = parts.rsplit("_", 1)[0]
                 atis_type = "departure"
-            elif parts.endswith("_A") or parts.endswith("_ARR"):
+            elif parts.endswith(("_A", "_ARR")):
                 icao = parts.rsplit("_", 1)[0]
                 atis_type = "arrival"
             else:

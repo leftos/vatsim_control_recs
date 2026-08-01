@@ -7,19 +7,18 @@ a bounding box-based approach using aviationweather.gov's bbox parameter.
 
 import json
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from .artcc_boundaries import get_artcc_boundaries
 
 
 def get_artcc_bbox(
     artcc_code: str, cache_dir: Path
-) -> Optional[Tuple[float, float, float, float]]:
+) -> tuple[float, float, float, float] | None:
     """
     Calculate bounding box for an ARTCC from its polygon boundaries.
 
@@ -46,7 +45,7 @@ def get_artcc_bbox(
     return (min_lat, min_lon, max_lat, max_lon)
 
 
-def fetch_metar_single(icao: str) -> Tuple[str, str, float]:
+def fetch_metar_single(icao: str) -> tuple[str, str, float]:
     """
     Fetch METAR for a single airport (current approach).
 
@@ -69,7 +68,7 @@ def fetch_metar_single(icao: str) -> Tuple[str, str, float]:
         return (icao, "", elapsed)
 
 
-def fetch_taf_single(icao: str) -> Tuple[str, str, float]:
+def fetch_taf_single(icao: str) -> tuple[str, str, float]:
     """
     Fetch TAF for a single airport (current approach).
 
@@ -93,8 +92,8 @@ def fetch_taf_single(icao: str) -> Tuple[str, str, float]:
 
 
 def fetch_weather_per_airport(
-    airports: List[str], max_workers: int = 10
-) -> Tuple[Dict[str, str], Dict[str, str], float]:
+    airports: list[str], max_workers: int = 10
+) -> tuple[dict[str, str], dict[str, str], float]:
     """
     Fetch METAR and TAF for airports using per-airport requests (current approach).
 
@@ -127,8 +126,8 @@ def fetch_weather_per_airport(
 
 
 def fetch_metar_bbox(
-    bbox: Tuple[float, float, float, float], include_taf: bool = True
-) -> Tuple[Dict[str, str], Dict[str, str], float, int]:
+    bbox: tuple[float, float, float, float], include_taf: bool = True
+) -> tuple[dict[str, str], dict[str, str], float, int]:
     """
     Fetch METAR (and optionally TAF) using bounding box query.
 
@@ -180,8 +179,8 @@ def fetch_metar_bbox(
 
 
 def fetch_weather_bbox(
-    bbox: Tuple[float, float, float, float], target_airports: List[str]
-) -> Tuple[Dict[str, str], Dict[str, str], float]:
+    bbox: tuple[float, float, float, float], target_airports: list[str]
+) -> tuple[dict[str, str], dict[str, str], float]:
     """
     Fetch METAR and TAF using bounding box, then filter to target airports.
 
@@ -191,7 +190,7 @@ def fetch_weather_bbox(
     metars_all, tafs_all, elapsed, _ = fetch_metar_bbox(bbox, include_taf=True)
 
     # Filter to only target airports
-    target_set = set(a.upper() for a in target_airports)
+    target_set = {a.upper() for a in target_airports}
     metars = {k: v for k, v in metars_all.items() if k.upper() in target_set}
     tafs = {k: v for k, v in tafs_all.items() if k.upper() in target_set}
 
@@ -216,7 +215,7 @@ def run_benchmark(artcc: str = "ZOA"):
         print(f"Error: No preset file found for {artcc}")
         return
 
-    with open(preset_file, "r") as f:
+    with open(preset_file) as f:
         groupings = json.load(f)
 
     # Get all unique airports
@@ -273,7 +272,7 @@ def run_benchmark(artcc: str = "ZOA"):
     print(f"  Total TAFs in bbox: {len(tafs_raw)}")
 
     # Filter to target airports
-    target_set = set(a.upper() for a in airports_list)
+    target_set = {a.upper() for a in airports_list}
     metars_2 = {k: v for k, v in metars_raw.items() if k.upper() in target_set}
     tafs_2 = {k: v for k, v in tafs_raw.items() if k.upper() in target_set}
 

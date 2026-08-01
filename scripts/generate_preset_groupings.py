@@ -18,7 +18,7 @@ import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -64,7 +64,7 @@ COUNTRY_NAMES = {
 }
 
 
-def fetch_artcc_data(artcc: str) -> Optional[Dict[str, Any]]:
+def fetch_artcc_data(artcc: str) -> dict[str, Any] | None:
     """Fetch ARTCC data from vNAS API."""
     try:
         url = f"{VNAS_API_BASE}/{artcc}"
@@ -77,7 +77,7 @@ def fetch_artcc_data(artcc: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_all_artccs() -> List[str]:
+def get_all_artccs() -> list[str]:
     """Get list of all ARTCCs from vNAS API."""
     try:
         req = urllib.request.Request(VNAS_API_BASE)
@@ -107,9 +107,7 @@ def is_airport_code(code: str) -> bool:
     if code in EXCLUDED_FACILITY_IDS:
         return False
     # 3-letter codes starting with Z are usually ARTCCs/FIRs
-    if len(code) == 3 and code.startswith("Z"):
-        return False
-    return True
+    return not (len(code) == 3 and code.startswith("Z"))
 
 
 def clean_area_name(area_name: str, facility_id: str) -> str:
@@ -149,7 +147,7 @@ def clean_area_name(area_name: str, facility_id: str) -> str:
     return name.strip()
 
 
-def extract_position_prefix(callsign: str) -> Optional[str]:
+def extract_position_prefix(callsign: str) -> str | None:
     """
     Extract the position prefix from a callsign.
 
@@ -168,7 +166,7 @@ def extract_position_prefix(callsign: str) -> Optional[str]:
     return None
 
 
-def extract_position_suffix(callsign: str) -> Optional[str]:
+def extract_position_suffix(callsign: str) -> str | None:
     """
     Extract the position suffix from a callsign.
 
@@ -186,8 +184,8 @@ def extract_position_suffix(callsign: str) -> Optional[str]:
 
 
 def get_area_position_info(
-    facility: Dict[str, Any], area_id: str
-) -> Tuple[Set[str], Set[str]]:
+    facility: dict[str, Any], area_id: str
+) -> tuple[set[str], set[str]]:
     """
     Get position prefixes and suffixes for an area.
 
@@ -196,8 +194,8 @@ def get_area_position_info(
     Returns:
         Tuple of (prefixes, suffixes) sets
     """
-    prefixes: Set[str] = set()
-    suffixes: Set[str] = set()
+    prefixes: set[str] = set()
+    suffixes: set[str] = set()
 
     positions = facility.get("positions", [])
     for pos in positions:
@@ -217,7 +215,7 @@ def get_area_position_info(
 
 
 def extract_areas_from_facility(
-    facility: Dict[str, Any], facility_id: str, groupings: Dict[str, Dict[str, Any]]
+    facility: dict[str, Any], facility_id: str, groupings: dict[str, dict[str, Any]]
 ) -> None:
     """
     Extract sector areas from starsConfiguration.areas.
@@ -271,7 +269,7 @@ def extract_areas_from_facility(
 
 
 def extract_airports_from_facility(
-    facility: Dict[str, Any], collected: Set[str]
+    facility: dict[str, Any], collected: set[str]
 ) -> None:
     """Recursively extract airport IDs from a facility and its children."""
     facility_id = facility.get("id", "")
@@ -285,7 +283,7 @@ def extract_airports_from_facility(
 
 
 def process_facility_hierarchy(
-    facility: Dict[str, Any], groupings: Dict[str, Dict[str, Any]], depth: int = 0
+    facility: dict[str, Any], groupings: dict[str, dict[str, Any]], depth: int = 0
 ) -> None:
     """
     Process facility hierarchy to extract groupings.
@@ -303,7 +301,7 @@ def process_facility_hierarchy(
 
     # For facilities with children, create a combined grouping
     if children:
-        airports: Set[str] = set()
+        airports: set[str] = set()
         for child in children:
             extract_airports_from_facility(child, airports)
 
@@ -345,7 +343,7 @@ def process_facility_hierarchy(
 
 
 def add_international_airports(
-    facility: Dict[str, Any], groupings: Dict[str, Dict[str, Any]]
+    facility: dict[str, Any], groupings: dict[str, dict[str, Any]]
 ) -> int:
     """Add international airports from nonNasFacilityIds."""
     non_nas = facility.get("nonNasFacilityIds", [])
@@ -357,7 +355,7 @@ def add_international_airports(
         return 0
 
     # Group by country prefix
-    by_country: Dict[str, List[str]] = {}
+    by_country: dict[str, list[str]] = {}
 
     for code in intl_airports:
         prefix = code[:2]
@@ -382,10 +380,10 @@ def add_international_airports(
 
 
 def generate_artcc_groupings(
-    artcc: str, data: Dict[str, Any]
-) -> Dict[str, Dict[str, Any]]:
+    artcc: str, data: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
     """Generate groupings for an ARTCC from vNAS data."""
-    groupings: Dict[str, Dict[str, Any]] = {}
+    groupings: dict[str, dict[str, Any]] = {}
 
     facility = data.get("facility", {})
 
@@ -412,7 +410,7 @@ def main():
 
     # Fetch all ARTCC data in parallel
     print("\nFetching ARTCC data...")
-    artcc_data: Dict[str, Dict[str, Any]] = {}
+    artcc_data: dict[str, dict[str, Any]] = {}
 
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(fetch_artcc_data, artcc): artcc for artcc in artccs}

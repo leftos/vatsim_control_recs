@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -80,7 +80,7 @@ def get_tile_bounds(x: int, y: int, zoom: int) -> TileBounds:
 
 
 def points_in_polygon(
-    lats: np.ndarray, lons: np.ndarray, polygon: List[Tuple[float, float]]
+    lats: np.ndarray, lons: np.ndarray, polygon: list[tuple[float, float]]
 ) -> np.ndarray:
     """Vectorized point-in-polygon test using ray casting."""
     n = len(polygon)
@@ -110,12 +110,12 @@ class WeatherTileGenerator:
 
     def __init__(
         self,
-        artcc_boundaries: Dict[str, List[List[Tuple[float, float]]]],
-        airport_weather: Dict[str, Dict[str, Any]],
+        artcc_boundaries: dict[str, list[list[tuple[float, float]]]],
+        airport_weather: dict[str, dict[str, Any]],
         output_dir: Path,
-        conus_artccs: Set[str],
+        conus_artccs: set[str],
         max_distance_nm: float = 60.0,
-        zoom_levels: Tuple[int, ...] = (4, 5, 6, 7, 8, 9, 10),
+        zoom_levels: tuple[int, ...] = (4, 5, 6, 7, 8, 9, 10),
     ):
         """Initialize the tile generator with KD-tree for efficient lookups."""
         self.output_dir = output_dir
@@ -125,7 +125,7 @@ class WeatherTileGenerator:
         self.max_distance_nm = max_distance_nm
 
         # Build combined list of all CONUS boundary polygons
-        self.all_boundaries: List[List[Tuple[float, float]]] = []
+        self.all_boundaries: list[list[tuple[float, float]]] = []
         for artcc, polys in artcc_boundaries.items():
             if artcc in conus_artccs:
                 self.all_boundaries.extend(polys)
@@ -140,7 +140,7 @@ class WeatherTileGenerator:
         raw_coords = []
         categories = []
 
-        for icao, data in airport_weather.items():
+        for data in airport_weather.values():
             cat = data.get("category")
             if cat in valid_categories:
                 lat, lon = data["lat"], data["lon"]
@@ -154,14 +154,12 @@ class WeatherTileGenerator:
             self.airport_coords = np.array([], dtype=np.float32)
             self.airport_categories = np.array([], dtype=np.int8)
 
-        logger.info(
-            f"WeatherTileGenerator initialized with {len(raw_coords)} airports"
-        )
+        logger.info(f"WeatherTileGenerator initialized with {len(raw_coords)} airports")
 
     def _calculate_bounds(
         self,
-        artcc_boundaries: Dict[str, List[List[Tuple[float, float]]]],
-        conus_artccs: Set[str],
+        artcc_boundaries: dict[str, list[list[tuple[float, float]]]],
+        conus_artccs: set[str],
     ) -> TileBounds:
         """Calculate the bounding box of all CONUS ARTCCs."""
         all_lats, all_lons = [], []
@@ -184,7 +182,7 @@ class WeatherTileGenerator:
             west=min(all_lons),
         )
 
-    def _get_tile_range(self, zoom: int) -> Tuple[int, int, int, int]:
+    def _get_tile_range(self, zoom: int) -> tuple[int, int, int, int]:
         """Get the range of tiles that cover CONUS at a given zoom level."""
         return (
             lon_to_tile_x(self.bounds.west, zoom),
@@ -193,7 +191,7 @@ class WeatherTileGenerator:
             lat_to_tile_y(self.bounds.south, zoom),
         )
 
-    def _generate_tile(self, tile_x: int, tile_y: int, zoom: int) -> Optional[bytes]:
+    def _generate_tile(self, tile_x: int, tile_y: int, zoom: int) -> bytes | None:
         """
         Generate a single tile using per-pixel cosine-corrected distance calculations.
 
@@ -285,7 +283,7 @@ class WeatherTileGenerator:
         img.save(buffer, "PNG", optimize=True)
         return buffer.getvalue()
 
-    def generate_all(self, max_workers: int = 2) -> Dict[int, int]:
+    def generate_all(self, max_workers: int = 2) -> dict[int, int]:
         """
         Generate tiles for all zoom levels.
 
@@ -301,9 +299,11 @@ class WeatherTileGenerator:
         all_tiles = []
         for zoom in self.zoom_levels:
             min_x, max_x, min_y, max_y = self._get_tile_range(zoom)
-            for x in range(min_x, max_x + 1):
-                for y in range(min_y, max_y + 1):
-                    all_tiles.append((x, y, zoom))
+            all_tiles.extend(
+                (x, y, zoom)
+                for x in range(min_x, max_x + 1)
+                for y in range(min_y, max_y + 1)
+            )
 
         total_potential = len(all_tiles)
         print(
@@ -313,7 +313,7 @@ class WeatherTileGenerator:
             f"Processing {total_potential} potential tiles with {max_workers} workers"
         )
 
-        results: Dict[int, int] = {z: 0 for z in self.zoom_levels}
+        results: dict[int, int] = dict.fromkeys(self.zoom_levels, 0)
         generated = 0
 
         def process_tile(tile_info):
@@ -352,13 +352,13 @@ class WeatherTileGenerator:
 
 
 def generate_weather_tiles(
-    artcc_boundaries: Dict[str, List[List[Tuple[float, float]]]],
-    airport_weather: Dict[str, Dict[str, Any]],
+    artcc_boundaries: dict[str, list[list[tuple[float, float]]]],
+    airport_weather: dict[str, dict[str, Any]],
     output_dir: Path,
-    conus_artccs: Set[str],
-    zoom_levels: Tuple[int, ...] = (4, 5, 6, 7, 8, 9, 10),
+    conus_artccs: set[str],
+    zoom_levels: tuple[int, ...] = (4, 5, 6, 7, 8, 9, 10),
     max_workers: int = 2,
-) -> Dict[int, int]:
+) -> dict[int, int]:
     """
     Generate weather overlay tiles.
 

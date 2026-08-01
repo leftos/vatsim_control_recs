@@ -16,7 +16,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -26,7 +26,7 @@ REPO_URL = "https://github.com/vatsimnetwork/simaware-tracon-project.git"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "simaware_boundaries"
 
 
-def parse_geojson_coordinates(feature: dict) -> Optional[List[List[float]]]:
+def parse_geojson_coordinates(feature: dict) -> list[list[float]] | None:
     """
     Extract polygon coordinates from a GeoJSON feature.
 
@@ -44,30 +44,25 @@ def parse_geojson_coordinates(feature: dict) -> Optional[List[List[float]]]:
     if geom_type == "Polygon":
         if coordinates and len(coordinates) > 0:
             ring = coordinates[0]
-            for coord in ring:
-                if len(coord) >= 2:
-                    # GeoJSON uses [lon, lat], convert to [lat, lon]
-                    points.append([coord[1], coord[0]])
+            # GeoJSON uses [lon, lat], convert to [lat, lon]
+            points.extend([coord[1], coord[0]] for coord in ring if len(coord) >= 2)
 
-    elif geom_type == "MultiPolygon":
-        if coordinates and len(coordinates) > 0:
-            polygon = coordinates[0]
-            if polygon and len(polygon) > 0:
-                ring = polygon[0]
-                for coord in ring:
-                    if len(coord) >= 2:
-                        points.append([coord[1], coord[0]])
+    elif geom_type == "MultiPolygon" and coordinates and len(coordinates) > 0:
+        polygon = coordinates[0]
+        if polygon and len(polygon) > 0:
+            ring = polygon[0]
+            points.extend([coord[1], coord[0]] for coord in ring if len(coord) >= 2)
 
     return points if len(points) >= 3 else None
 
 
-def process_facility_dir(facility_dir: Path) -> Dict[str, Any]:
+def process_facility_dir(facility_dir: Path) -> dict[str, Any]:
     """Process all boundary files in a facility directory."""
-    boundaries: Dict[str, Any] = {}
+    boundaries: dict[str, Any] = {}
 
     for json_file in sorted(facility_dir.glob("*.json")):
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
+            with open(json_file, encoding="utf-8") as f:
                 feature = json.load(f)
 
             coords = parse_geojson_coordinates(feature)

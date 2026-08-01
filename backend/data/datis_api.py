@@ -8,17 +8,19 @@ import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
 from common import logger as debug_logger
 
 # Cache for D-ATIS data
-_DATIS_CACHE: Dict[str, List[Dict[str, Any]]] = {}
-_DATIS_CACHE_TIME: Dict[str, float] = {}
+_DATIS_CACHE: dict[str, list[dict[str, Any]]] = {}
+_DATIS_CACHE_TIME: dict[str, float] = {}
 _DATIS_CACHE_LOCK = threading.Lock()
-DATIS_CACHE_DURATION = 60  # 60 seconds - D-ATIS updates less frequently than VATSIM ATIS
+DATIS_CACHE_DURATION = (
+    60  # 60 seconds - D-ATIS updates less frequently than VATSIM ATIS
+)
 
 # API configuration
 DATIS_API_BASE_URL = "https://atis.info/api"
@@ -27,7 +29,7 @@ DATIS_API_TIMEOUT = 10  # seconds
 
 def get_datis_for_airport(
     icao: str, timeout: int = DATIS_API_TIMEOUT
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Fetch real-world D-ATIS for a single airport from atis.info.
 
@@ -120,10 +122,10 @@ def get_datis_for_airport(
 
 
 def get_datis_for_airports(
-    airports: List[str],
+    airports: list[str],
     timeout: int = DATIS_API_TIMEOUT,
     max_workers: int = 10,
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> dict[str, list[dict[str, Any]]]:
     """
     Fetch real-world D-ATIS for multiple airports in parallel.
 
@@ -164,13 +166,11 @@ def get_datis_for_airports(
     if not airports:
         return {}
 
-    result: Dict[str, List[Dict[str, Any]]] = {}
+    result: dict[str, list[dict[str, Any]]] = {}
 
     # Filter to US airports only (D-ATIS is FAA service)
     # K-prefix for continental US, P for Pacific (Hawaii, etc.)
-    us_airports = [
-        icao for icao in airports if icao.startswith("K") or icao.startswith("P")
-    ]
+    us_airports = [icao for icao in airports if icao.startswith(("K", "P"))]
 
     if not us_airports:
         return result

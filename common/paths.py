@@ -19,7 +19,7 @@ APP_NAME = "VATSIMControlRecs"
 
 # Project root directory (where main.py lives) - for read-only data
 # When frozen by PyInstaller (--onedir), sys._MEIPASS points to the bundle directory
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     _PROJECT_ROOT = Path(sys._MEIPASS).resolve()
 else:
     _PROJECT_ROOT = Path(__file__).parent.parent.resolve()
@@ -186,7 +186,7 @@ def load_merged_groupings() -> dict:
     project_file = get_project_groupings_file()
     if project_file.exists():
         try:
-            with open(project_file, "r", encoding="utf-8") as f:
+            with open(project_file, encoding="utf-8") as f:
                 merged = json.load(f)
         except (json.JSONDecodeError, OSError):
             pass
@@ -195,7 +195,7 @@ def load_merged_groupings() -> dict:
     user_file = get_custom_groupings_file()
     if user_file.exists():
         try:
-            with open(user_file, "r", encoding="utf-8") as f:
+            with open(user_file, encoding="utf-8") as f:
                 user_groupings = json.load(f)
                 merged.update(user_groupings)
         except (json.JSONDecodeError, OSError):

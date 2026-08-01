@@ -6,28 +6,30 @@ import json
 import re
 import threading
 import time
-import urllib.request
 import urllib.error
+import urllib.request
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple, Optional, Any, Callable
+from typing import Any
 
 from backend.cache.manager import (
-    get_wind_cache,
     get_metar_cache,
-    get_taf_cache,
-    get_wind_cache_lock,
     get_metar_cache_lock,
+    get_taf_cache,
     get_taf_cache_lock,
+    get_wind_cache,
+    get_wind_cache_lock,
 )
-from backend.config.constants import WIND_CACHE_DURATION, METAR_CACHE_DURATION
-from backend.core.calculations import haversine_distance_nm, calculate_bearing
+from backend.config.constants import METAR_CACHE_DURATION, WIND_CACHE_DURATION
+from backend.core.calculations import calculate_bearing, haversine_distance_nm
+from common import logger as debug_logger
 
 # Rate limiting state
 _rate_limit_lock = threading.Lock()
 _rate_limit_backoff = 0.0  # Current backoff delay in seconds
 _rate_limit_errors = 0  # Consecutive rate limit errors
-_rate_limit_last_error_time: Optional[datetime] = None
+_rate_limit_last_error_time: datetime | None = None
 
 # Rate limiting configuration
 RATE_LIMIT_INITIAL_BACKOFF = 1.0  # Initial backoff delay in seconds
@@ -113,7 +115,7 @@ def _wait_for_backoff() -> None:
         time.sleep(backoff)
 
 
-def _parse_wind_from_observation(properties: dict) -> Tuple[bool, str]:
+def _parse_wind_from_observation(properties: dict) -> tuple[bool, str]:
     """
     Parse wind data from a single observation.
 
@@ -253,7 +255,7 @@ def get_wind_info_minute(airport_icao: str) -> str:
         return ""
 
 
-def _fetch_metar_from_aviationweather(airport_icao: str) -> Optional[str]:
+def _fetch_metar_from_aviationweather(airport_icao: str) -> str | None:
     """
     Fetch METAR from aviationweather.gov API.
 
@@ -280,7 +282,7 @@ def _fetch_metar_from_aviationweather(airport_icao: str) -> Optional[str]:
             # Empty response (e.g., HTTP 204) - return empty to trigger fallback
             return ""
 
-        if metar_text.startswith("No METAR") or metar_text.startswith("Error"):
+        if metar_text.startswith(("No METAR", "Error")):
             # Explicit error - return None to indicate blacklist
             return None
 
@@ -291,7 +293,6 @@ def _fetch_metar_from_aviationweather(airport_icao: str) -> Optional[str]:
             return None  # Station doesn't exist - blacklist
         if _check_rate_limit_error(e.code):
             backoff = _record_rate_limit_error()
-            from common import logger as debug_logger
 
             debug_logger.debug(
                 f"Rate limit detected (HTTP {e.code}) for METAR {airport_icao}, backoff: {backoff:.1f}s"
@@ -303,7 +304,7 @@ def _fetch_metar_from_aviationweather(airport_icao: str) -> Optional[str]:
         return ""  # Other errors - try fallback
 
 
-def _fetch_metar_from_vatsim(airport_icao: str) -> Optional[str]:
+def _fetch_metar_from_vatsim(airport_icao: str) -> str | None:
     """
     Fetch METAR from VATSIM METAR API (fallback).
 
@@ -451,7 +452,7 @@ def get_taf(airport_icao: str) -> str:
             # Empty response (e.g., HTTP 204 No Content) - temporary, don't blacklist
             return ""
 
-        if taf_text.startswith("No TAF") or taf_text.startswith("Error"):
+        if taf_text.startswith(("No TAF", "Error")):
             # Explicit error message - station likely doesn't report TAF, blacklist it
             with taf_lock:
                 taf_blacklist[airport_icao] = True
@@ -472,7 +473,6 @@ def get_taf(airport_icao: str) -> str:
             return ""
         if _check_rate_limit_error(e.code):
             backoff = _record_rate_limit_error()
-            from common import logger as debug_logger
 
             debug_logger.debug(
                 f"Rate limit detected (HTTP {e.code}) for TAF {airport_icao}, backoff: {backoff:.1f}s"
@@ -643,8 +643,8 @@ def get_wind_info(airport_icao: str, source: str = "metar") -> str:
 
 
 def get_wind_info_batch(
-    airport_icaos: List[str], source: str = "metar", max_workers: int = 10
-) -> Dict[str, str]:
+    airport_icaos: list[str], source: str = "metar", max_workers: int = 10
+) -> dict[str, str]:
     """
     Fetch wind information for multiple airports in parallel.
 
@@ -682,10 +682,10 @@ def get_wind_info_batch(
 
 
 def get_metar_batch(
-    airport_icaos: List[str],
+    airport_icaos: list[str],
     max_workers: int = 10,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
-) -> Dict[str, str]:
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> dict[str, str]:
     """
     Fetch METAR data for multiple airports in parallel.
 
@@ -734,10 +734,10 @@ def get_metar_batch(
 
 
 def get_taf_batch(
-    airport_icaos: List[str],
+    airport_icaos: list[str],
     max_workers: int = 10,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
-) -> Dict[str, str]:
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> dict[str, str]:
     """
     Fetch TAF data for multiple airports in parallel.
 
@@ -785,8 +785,8 @@ def get_taf_batch(
 
 
 def fetch_weather_bbox(
-    bbox: Tuple[float, float, float, float], include_taf: bool = True, timeout: int = 30
-) -> Tuple[Dict[str, str], Dict[str, str]]:
+    bbox: tuple[float, float, float, float], include_taf: bool = True, timeout: int = 30
+) -> tuple[dict[str, str], dict[str, str]]:
     """
     Fetch METAR and TAF data for all stations within a bounding box.
 
@@ -804,8 +804,8 @@ def fetch_weather_bbox(
     min_lat, min_lon, max_lat, max_lon = bbox
     bbox_str = f"{min_lat},{min_lon},{max_lat},{max_lon}"
 
-    metars: Dict[str, str] = {}
-    tafs: Dict[str, str] = {}
+    metars: dict[str, str] = {}
+    tafs: dict[str, str] = {}
 
     try:
         # Wait for backoff if rate limiting is active
@@ -847,11 +847,11 @@ def fetch_weather_bbox(
 
 
 def get_weather_batch_bbox(
-    artcc_bboxes: Dict[str, Tuple[float, float, float, float]],
-    target_airports: Optional[List[str]] = None,
+    artcc_bboxes: dict[str, tuple[float, float, float, float]],
+    target_airports: list[str] | None = None,
     max_workers: int = 5,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
-) -> Tuple[Dict[str, str], Dict[str, str]]:
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> tuple[dict[str, str], dict[str, str]]:
     """
     Fetch METAR and TAF data for multiple ARTCCs using bounding box queries.
 
@@ -868,8 +868,8 @@ def get_weather_batch_bbox(
     Returns:
         Tuple of (metars_dict, tafs_dict) where keys are ICAO codes
     """
-    all_metars: Dict[str, str] = {}
-    all_tafs: Dict[str, str] = {}
+    all_metars: dict[str, str] = {}
+    all_tafs: dict[str, str] = {}
 
     if not artcc_bboxes:
         return (all_metars, all_tafs)
@@ -889,8 +889,9 @@ def get_weather_batch_bbox(
                 metars, tafs = future.result()
                 all_metars.update(metars)
                 all_tafs.update(tafs)
-            except Exception:
-                pass  # Individual ARTCC failure doesn't stop others
+            except Exception as e:
+                # Individual ARTCC failure doesn't stop others
+                debug_logger.warning(f"ARTCC weather fetch failed: {e}")
 
             completed += 1
             if progress_callback:
@@ -898,14 +899,14 @@ def get_weather_batch_bbox(
 
     # Filter to target airports if specified
     if target_airports is not None:
-        target_set = set(a.upper() for a in target_airports)
+        target_set = {a.upper() for a in target_airports}
         all_metars = {k: v for k, v in all_metars.items() if k.upper() in target_set}
         all_tafs = {k: v for k, v in all_tafs.items() if k.upper() in target_set}
 
     return (all_metars, all_tafs)
 
 
-def parse_altimeter_from_metar(metar: str) -> Optional[str]:
+def parse_altimeter_from_metar(metar: str) -> str | None:
     """
     Extract altimeter setting from METAR.
 
@@ -930,7 +931,7 @@ def parse_altimeter_from_metar(metar: str) -> Optional[str]:
     return None
 
 
-def get_altimeter_setting(airport_icao: str) -> Optional[str]:
+def get_altimeter_setting(airport_icao: str) -> str | None:
     """
     Get altimeter setting for an airport from its METAR.
     Uses cached parsed altimeter if available to avoid redundant parsing.
@@ -971,8 +972,8 @@ def get_altimeter_setting(airport_icao: str) -> Optional[str]:
 
 
 # Global cache for spatial index of airports with METAR
-_METAR_AIRPORT_SPATIAL_INDEX: Optional[Dict[str, Any]] = None
-_METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP: Optional[datetime] = None
+_METAR_AIRPORT_SPATIAL_INDEX: dict[str, Any] | None = None
+_METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP: datetime | None = None
 _METAR_SPATIAL_INDEX_DURATION = 300  # 5 minutes cache
 _METAR_SPATIAL_INDEX_LOCK = (
     threading.Lock()
@@ -980,7 +981,7 @@ _METAR_SPATIAL_INDEX_LOCK = (
 
 # Position-based result cache for find_nearest_airport_with_metar
 # Key: (rounded_lat, rounded_lon) tuple, Value: {'result': tuple or None, 'timestamp': datetime}
-_NEAREST_METAR_RESULT_CACHE: Dict[Tuple[float, float], Dict[str, Any]] = {}
+_NEAREST_METAR_RESULT_CACHE: dict[tuple[float, float], dict[str, Any]] = {}
 _NEAREST_METAR_RESULT_CACHE_DURATION = (
     60  # 1 minute cache (matches METAR cache duration)
 )
@@ -988,12 +989,12 @@ _NEAREST_METAR_RESULT_CACHE_LOCK = threading.Lock()
 _NEAREST_METAR_POSITION_GRID_SIZE = 0.1  # ~6nm grid for position rounding
 
 # Persisted spatial cache (loaded from disk once at startup)
-_PERSISTED_SPATIAL_CACHE: Optional[Dict[str, Any]] = None
+_PERSISTED_SPATIAL_CACHE: dict[str, Any] | None = None
 _PERSISTED_SPATIAL_CACHE_LOADED = False
-_KNOWN_METAR_STATIONS: Optional[set] = None  # Whitelist of airports known to have METAR
+_KNOWN_METAR_STATIONS: set | None = None  # Whitelist of airports known to have METAR
 
 
-def _load_persisted_spatial_cache() -> Optional[Dict[str, Any]]:
+def _load_persisted_spatial_cache() -> dict[str, Any] | None:
     """
     Load persisted spatial cache from disk if available.
 
@@ -1026,7 +1027,7 @@ def _load_persisted_spatial_cache() -> Optional[Dict[str, Any]]:
         if not os.path.exists(cache_file):
             return None
 
-        with open(cache_file, "r", encoding="utf-8") as f:
+        with open(cache_file, encoding="utf-8") as f:
             cache_data = json.load(f)
 
         # Validate version
@@ -1047,8 +1048,8 @@ def _load_persisted_spatial_cache() -> Optional[Dict[str, Any]]:
 
 
 def _build_metar_airport_spatial_index(
-    airports_data: Dict[str, Dict[str, Any]],
-) -> Dict[str, Any]:
+    airports_data: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     """
     Build a spatial index of airports that have METAR data for efficient nearest-airport lookups.
 
@@ -1146,10 +1147,10 @@ def _build_metar_airport_spatial_index(
 def find_airports_near_position(
     latitude: float,
     longitude: float,
-    airports_data: Dict[str, Dict[str, Any]],
+    airports_data: dict[str, dict[str, Any]],
     radius_nm: float = 50.0,
     max_results: int = 5,
-) -> List[str]:
+) -> list[str]:
     """
     Find airports near a given position for METAR precaching.
 
@@ -1203,10 +1204,9 @@ def find_airports_near_position(
     lon_cell = int(longitude)
 
     # Search current cell and adjacent cells (3x3 grid)
-    search_cells = []
-    for dlat in [-1, 0, 1]:
-        for dlon in [-1, 0, 1]:
-            search_cells.append((lat_cell + dlat, lon_cell + dlon))
+    search_cells = [
+        (lat_cell + dlat, lon_cell + dlon) for dlat in [-1, 0, 1] for dlon in [-1, 0, 1]
+    ]
 
     # Find airports within radius
     candidates = []
@@ -1231,11 +1231,11 @@ def find_airports_near_position(
 def find_nearest_airport_with_metar(
     latitude: float,
     longitude: float,
-    airports_data: Dict[str, Dict[str, Any]],
+    airports_data: dict[str, dict[str, Any]],
     max_distance_nm: float = 100.0,
-    aircraft_heading: Optional[float] = None,
-    aircraft_groundspeed: Optional[float] = None,
-) -> Optional[Tuple[str, str, float]]:
+    aircraft_heading: float | None = None,
+    aircraft_groundspeed: float | None = None,
+) -> tuple[str, str, float] | None:
     """
     Find the nearest airport with METAR data to given coordinates.
 
@@ -1428,7 +1428,7 @@ def clear_weather_caches() -> None:
         # Don't clear blacklist - those are permanent 404s
 
 
-def get_rate_limit_status() -> Dict[str, Any]:
+def get_rate_limit_status() -> dict[str, Any]:
     """
     Get current rate limiting status for monitoring/logging.
 
@@ -1479,11 +1479,11 @@ BBOX_PADDING_DEGREES = 0.5
 
 
 def calculate_airport_bboxes(
-    airport_icaos: List[str],
-    airports_data: Dict[str, Dict[str, Any]],
+    airport_icaos: list[str],
+    airports_data: dict[str, dict[str, Any]],
     max_size_degrees: float = MAX_BBOX_SIZE_DEGREES,
     padding_degrees: float = BBOX_PADDING_DEGREES,
-) -> Dict[str, Tuple[float, float, float, float]]:
+) -> dict[str, tuple[float, float, float, float]]:
     """
     Calculate bounding boxes for a set of airports, splitting if needed.
 
@@ -1544,7 +1544,7 @@ def calculate_airport_bboxes(
     cell_lon_size = lon_span / lon_cells if lon_cells > 0 else lon_span
 
     # Group airports into grid cells
-    grid_cells: Dict[Tuple[int, int], List[Dict]] = {}
+    grid_cells: dict[tuple[int, int], list[dict]] = {}
     for airport in airport_coords:
         # Calculate which cell this airport belongs to
         lat_idx = (
@@ -1565,7 +1565,7 @@ def calculate_airport_bboxes(
 
     # Create bboxes for each non-empty cell
     bboxes = {}
-    for idx, (cell_key, cell_airports) in enumerate(grid_cells.items()):
+    for idx, cell_airports in enumerate(grid_cells.values()):
         cell_min_lat = min(a["lat"] for a in cell_airports)
         cell_max_lat = max(a["lat"] for a in cell_airports)
         cell_min_lon = min(a["lon"] for a in cell_airports)
@@ -1583,11 +1583,11 @@ def calculate_airport_bboxes(
 
 
 def get_weather_for_airports_bbox(
-    airport_icaos: List[str],
-    airports_data: Dict[str, Dict[str, Any]],
+    airport_icaos: list[str],
+    airports_data: dict[str, dict[str, Any]],
     max_workers: int = 5,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
-) -> Dict[str, str]:
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> dict[str, str]:
     """
     Fetch METAR data for airports using bbox queries.
 
@@ -1614,9 +1614,9 @@ def get_weather_for_airports_bbox(
         return {}
 
     # Convert to set for filtering
-    target_set = set(a.upper() for a in airport_icaos)
+    target_set = {a.upper() for a in airport_icaos}
 
-    all_metars: Dict[str, str] = {}
+    all_metars: dict[str, str] = {}
     total = len(bboxes)
     completed = 0
 
@@ -1631,11 +1631,16 @@ def get_weather_for_airports_bbox(
             try:
                 metars, _tafs = future.result()
                 # Filter to target airports
-                for icao, metar in metars.items():
-                    if icao.upper() in target_set:
-                        all_metars[icao] = metar
-            except Exception:
-                pass  # Individual bbox failure doesn't stop others
+                all_metars.update(
+                    {
+                        icao: metar
+                        for icao, metar in metars.items()
+                        if icao.upper() in target_set
+                    }
+                )
+            except Exception as e:
+                # Individual bbox failure doesn't stop others
+                debug_logger.warning(f"Bbox weather fetch failed: {e}")
 
             completed += 1
             if progress_callback:
@@ -1667,15 +1672,15 @@ def get_weather_for_airports_bbox(
 
 
 def get_weather_smart(
-    airports: List[str],
-    airport_coords: Dict[str, Tuple[float, float]],
+    airports: list[str],
+    airport_coords: dict[str, tuple[float, float]],
     include_taf: bool = True,
     cluster_radius_nm: float = 300.0,
     min_airports_for_bbox: int = 5,
     max_bbox_area_per_airport: float = 50000.0,
     max_workers: int = 10,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
-) -> Tuple[Dict[str, str], Dict[str, str]]:
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> tuple[dict[str, str], dict[str, str]]:
     """
     Intelligently fetch weather data using a hybrid bbox/individual approach.
 
@@ -1704,7 +1709,7 @@ def get_weather_smart(
     airports_without_coords = [a for a in airports if a not in airport_coords]
 
     # Cluster airports geographically using simple greedy clustering
-    clusters: List[List[str]] = []
+    clusters: list[list[str]] = []
     unclustered = set(airports_with_coords)
 
     while unclustered:
@@ -1726,8 +1731,8 @@ def get_weather_smart(
         clusters.append(cluster)
 
     # Decide bbox vs individual for each cluster
-    bbox_clusters: List[Tuple[Tuple[float, float, float, float], List[str]]] = []
-    individual_airports: List[str] = list(airports_without_coords)
+    bbox_clusters: list[tuple[tuple[float, float, float, float], list[str]]] = []
+    individual_airports: list[str] = list(airports_without_coords)
 
     for cluster in clusters:
         if len(cluster) < min_airports_for_bbox:
@@ -1761,10 +1766,10 @@ def get_weather_smart(
             bbox_clusters.append((bbox, cluster))
 
     # Track airports that need fallback fetching after bbox failures
-    fallback_airports: List[str] = []
+    fallback_airports: list[str] = []
 
-    all_metars: Dict[str, str] = {}
-    all_tafs: Dict[str, str] = {}
+    all_metars: dict[str, str] = {}
+    all_tafs: dict[str, str] = {}
 
     # Progress tracking: count airports processed, not work units
     total_airports = len(airports)
@@ -1776,9 +1781,14 @@ def get_weather_smart(
 
     # Fetch bbox clusters in parallel
     if bbox_clusters:
-        with ThreadPoolExecutor(max_workers=min(max_workers, len(bbox_clusters))) as executor:
+        with ThreadPoolExecutor(
+            max_workers=min(max_workers, len(bbox_clusters))
+        ) as executor:
             future_to_cluster = {
-                executor.submit(fetch_weather_bbox, bbox, include_taf): (bbox, airports_in_cluster)
+                executor.submit(fetch_weather_bbox, bbox, include_taf): (
+                    bbox,
+                    airports_in_cluster,
+                )
                 for bbox, airports_in_cluster in bbox_clusters
             }
 
@@ -1787,13 +1797,21 @@ def get_weather_smart(
                 try:
                     metars, tafs = future.result()
                     # Filter to only the airports we want from this bbox
-                    cluster_set = set(a.upper() for a in airports_in_cluster)
-                    for icao, metar in metars.items():
-                        if icao.upper() in cluster_set:
-                            all_metars[icao] = metar
-                    for icao, taf in tafs.items():
-                        if icao.upper() in cluster_set:
-                            all_tafs[icao] = taf
+                    cluster_set = {a.upper() for a in airports_in_cluster}
+                    all_metars.update(
+                        {
+                            icao: metar
+                            for icao, metar in metars.items()
+                            if icao.upper() in cluster_set
+                        }
+                    )
+                    all_tafs.update(
+                        {
+                            icao: taf
+                            for icao, taf in tafs.items()
+                            if icao.upper() in cluster_set
+                        }
+                    )
                     # Update progress for airports in this cluster
                     airports_processed += len(airports_in_cluster)
                     update_progress()
@@ -1818,8 +1836,8 @@ def get_weather_smart(
                     metar = future.result()
                     if metar:
                         all_metars[icao] = metar
-                except Exception:
-                    pass
+                except Exception as e:
+                    debug_logger.debug(f"METAR fetch failed for {icao}: {e}")
 
                 airports_processed += 1
                 update_progress()
@@ -1837,11 +1855,13 @@ def get_weather_smart(
                         taf = future.result()
                         if taf:
                             all_tafs[icao] = taf
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        debug_logger.debug(f"TAF fetch failed for {icao}: {e}")
 
     # Ensure all requested airports have an entry
     result_metars = {icao: all_metars.get(icao, "") for icao in airports}
-    result_tafs = {icao: all_tafs.get(icao, "") for icao in airports} if include_taf else {}
+    result_tafs = (
+        {icao: all_tafs.get(icao, "") for icao in airports} if include_taf else {}
+    )
 
     return (result_metars, result_tafs)

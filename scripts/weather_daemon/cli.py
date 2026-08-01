@@ -11,20 +11,19 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Set
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from scripts.weather_daemon.config import DaemonConfig
-from scripts.weather_daemon.generator import generate, acquire_lock
+from scripts.weather_daemon.generator import acquire_lock, generate
 
 # Valid stages for --stages argument
 VALID_STAGES = {"weather", "briefings", "tiles", "index"}
 ALL_STAGES = VALID_STAGES.copy()
 
 
-def parse_stages(stages_str: str) -> Set[str]:
+def parse_stages(stages_str: str) -> set[str]:
     """Parse comma-separated stages string into a set of valid stages."""
     stages = {s.strip().lower() for s in stages_str.split(",")}
     invalid = stages - VALID_STAGES
@@ -40,7 +39,9 @@ def setup_logging(log_dir: Path, verbose: bool = False) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Create log filename with date
-    log_file = log_dir / f"weather_daemon_{datetime.now().strftime('%Y%m%d')}.log"
+    log_file = (
+        log_dir / f"weather_daemon_{datetime.now().astimezone().strftime('%Y%m%d')}.log"
+    )
 
     # Configure root logger for weather_daemon
     logger = logging.getLogger("weather_daemon")
@@ -244,7 +245,7 @@ Examples:
 
         if args.verbose:
             print("\nGenerated files:")
-            for path, name in generated_files.items():
+            for path in generated_files:
                 print(f"  {path}")
 
         if generated_files:

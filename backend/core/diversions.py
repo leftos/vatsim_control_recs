@@ -6,13 +6,13 @@ weather conditions, and ATC staffing.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from backend.core.calculations import calculate_bearing, bearing_to_compass
-from backend.core.spatial import get_airport_spatial_index
 from backend.core.aircraft_performance import get_required_runway_length
-from backend.data.runways import get_longest_runway, get_runway_summary
+from backend.core.calculations import bearing_to_compass, calculate_bearing
+from backend.core.spatial import get_airport_spatial_index
 from backend.data.cifp import get_approach_list_for_airport
+from backend.data.runways import get_longest_runway, get_runway_summary
 
 
 @dataclass
@@ -34,13 +34,13 @@ class DiversionOption:
     distance_nm: float
     bearing_deg: float
     bearing_compass: str  # e.g., "NE", "SW"
-    longest_runway_ft: Optional[int]
-    runway_summary: Optional[str]  # e.g., "10000ft (28L/10R)"
-    approaches: List[str]  # e.g., ["ILS RWY 28R", "RNAV (GPS) Z RWY 28L"]
+    longest_runway_ft: int | None
+    runway_summary: str | None  # e.g., "10000ft (28L/10R)"
+    approaches: list[str]  # e.g., ["ILS RWY 28R", "RNAV (GPS) Z RWY 28L"]
     has_approaches: bool
-    weather_category: Optional[str] = None  # VFR/MVFR/IFR/LIFR
-    weather_details: Optional[str] = None  # e.g., "10SM BKN050"
-    staffed_positions: List[str] = field(default_factory=list)  # e.g., ["TWR", "APP"]
+    weather_category: str | None = None  # VFR/MVFR/IFR/LIFR
+    weather_details: str | None = None  # e.g., "10SM BKN050"
+    staffed_positions: list[str] = field(default_factory=list)  # e.g., ["TWR", "APP"]
     is_staffed: bool = False
 
     @property
@@ -57,10 +57,10 @@ class DiversionOption:
 def find_nearby_airports(
     lat: float,
     lon: float,
-    airports_data: Dict[str, Dict[str, Any]],
+    airports_data: dict[str, dict[str, Any]],
     radius_nm: float = 100.0,
     max_results: int = 500,
-) -> List[Tuple[str, float, float]]:
+) -> list[tuple[str, float, float]]:
     """Find airports within a given radius.
 
     Args:
@@ -93,13 +93,13 @@ def find_suitable_diversions(
     lat: float,
     lon: float,
     aircraft_type: str,
-    airports_data: Dict[str, Dict[str, Any]],
+    airports_data: dict[str, dict[str, Any]],
     radius_nm: float = 100.0,
-    filters: Optional[DiversionFilters] = None,
-    weather_data: Optional[Dict[str, Tuple[str, str]]] = None,
-    controller_data: Optional[Dict[str, List[str]]] = None,
+    filters: DiversionFilters | None = None,
+    weather_data: dict[str, tuple[str, str]] | None = None,
+    controller_data: dict[str, list[str]] | None = None,
     max_results: int = 50,
-) -> List[DiversionOption]:
+) -> list[DiversionOption]:
     """Find airports suitable for diversion.
 
     Args:
@@ -127,7 +127,7 @@ def find_suitable_diversions(
     # Find nearby airports
     nearby = find_nearby_airports(lat, lon, airports_data, radius_nm, max_results=500)
 
-    diversions: List[DiversionOption] = []
+    diversions: list[DiversionOption] = []
 
     for icao, distance, bearing in nearby:
         airport_data = airports_data.get(icao, {})
@@ -138,9 +138,12 @@ def find_suitable_diversions(
         runway_summary = get_runway_summary(icao)
 
         # Check runway capability filter
-        if filters.require_runway_capability and required_runway:
-            if longest_runway is None or longest_runway < required_runway:
-                continue
+        if (
+            filters.require_runway_capability
+            and required_runway
+            and (longest_runway is None or longest_runway < required_runway)
+        ):
+            continue
 
         # Get approach information
         approaches = get_approach_list_for_airport(icao)
@@ -157,12 +160,15 @@ def find_suitable_diversions(
             weather_category, weather_details = weather_data[icao]
 
         # Check weather filter
-        if filters.require_good_weather and weather_category:
-            if weather_category not in ("VFR", "MVFR"):
-                continue
+        if (
+            filters.require_good_weather
+            and weather_category
+            and weather_category not in ("VFR", "MVFR")
+        ):
+            continue
 
         # Get controller information
-        staffed_positions: List[str] = []
+        staffed_positions: list[str] = []
         is_staffed = False
         if controller_data and icao in controller_data:
             staffed_positions = controller_data[icao]

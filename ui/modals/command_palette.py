@@ -1,12 +1,13 @@
 """Command Palette Modal Screen - Searchable command list"""
 
-from textual.screen import ModalScreen
-from textual.widgets import Static, Input, OptionList
-from textual.widgets.option_list import Option
-from textual.containers import Container
-from textual.binding import Binding
-from textual.app import ComposeResult
+from typing import ClassVar
 
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container
+from textual.screen import ModalScreen
+from textual.widgets import Input, OptionList, Static
+from textual.widgets.option_list import Option
 
 # List of all available commands
 COMMANDS = [
@@ -86,7 +87,7 @@ class CommandPaletteScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
     ]
 

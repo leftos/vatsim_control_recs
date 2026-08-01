@@ -4,12 +4,14 @@ Split-Flap DataTable Widget for Textual
 A reusable DataTable widget with split-flap animation effects
 """
 
-from typing import Any, Optional, Literal, Callable
-from textual.widgets import DataTable
-from textual.widgets._data_table import RowKey, ColumnKey
-from rich.text import Text
-import sys
 import os
+import sys
+from collections.abc import Callable
+from typing import Any, Literal
+
+from rich.text import Text
+from textual.widgets import DataTable
+from textual.widgets._data_table import ColumnKey, RowKey
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -189,7 +191,7 @@ class SplitFlapDataTable(DataTable):
         stagger_delay: int = 1,
         enable_animations: bool = True,
         zebra_stripes: bool = True,
-        on_select: Optional[Callable[[], None]] = None,
+        on_select: Callable[[], None] | None = None,
         **kwargs,
     ):
         """
@@ -289,7 +291,7 @@ class SplitFlapDataTable(DataTable):
         self,
         label: Any,
         *,
-        flap_chars: Optional[str] = None,
+        flap_chars: str | None = None,
         content_align: Literal["left", "center", "right"] = "left",
         **kwargs,
     ) -> ColumnKey:
@@ -356,7 +358,9 @@ class SplitFlapDataTable(DataTable):
             # Update cells with animation from empty to new content
             self._rebuild_cache()
             col_keys = self._cached_col_keys
-            for col_idx, (cell_value, col_key) in enumerate(zip(cells, col_keys)):
+            for col_idx, (cell_value, col_key) in enumerate(
+                zip(cells, col_keys, strict=False)
+            ):
                 if col_idx < len(col_keys):
                     # Animate from current (empty) to new value
                     self.update_cell_animated(
@@ -471,7 +475,7 @@ class SplitFlapDataTable(DataTable):
         col_keys = self._cached_col_keys
         widths: dict[int, int] = {}
 
-        for col_idx, col_key in enumerate(col_keys):
+        for col_idx in range(len(col_keys)):
             cell_key = (row_idx, col_idx)
             if cell_key in self.animated_cells:
                 # Get current value length (without trailing spaces for accurate width)

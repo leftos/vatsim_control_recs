@@ -5,7 +5,7 @@ Airport groupings management (custom groupings, preset groupings, and ARTCC-base
 import json
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Set
+from typing import Any
 
 from backend.cache.manager import get_artcc_groupings_cache, set_artcc_groupings_cache
 from common.paths import get_user_favorites_file, load_merged_groupings
@@ -14,7 +14,7 @@ from common.paths import get_user_favorites_file, load_merged_groupings
 PRESET_GROUPINGS_DIR = Path(__file__).parent.parent.parent / "data" / "preset_groupings"
 
 
-def load_user_favorites() -> Dict[str, List[str]]:
+def load_user_favorites() -> dict[str, list[str]]:
     """Load user-saved favorites from the favorites file.
 
     Supports both old format (value is a list) and enriched format
@@ -29,10 +29,10 @@ def load_user_favorites() -> Dict[str, List[str]]:
         return {}
 
     try:
-        with open(favorites_file, "r", encoding="utf-8") as f:
+        with open(favorites_file, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
-            result: Dict[str, List[str]] = {}
+            result: dict[str, list[str]] = {}
             for k, v in data.items():
                 if isinstance(v, list):
                     result[k] = v
@@ -47,7 +47,7 @@ def load_user_favorites() -> Dict[str, List[str]]:
     return {}
 
 
-def load_favorite_filters(name: str) -> Dict[str, str]:
+def load_favorite_filters(name: str) -> dict[str, str]:
     """Load per-airport dep/arr filters for a named favorite.
 
     Args:
@@ -62,7 +62,7 @@ def load_favorite_filters(name: str) -> Dict[str, str]:
         return {}
 
     try:
-        with open(favorites_file, "r", encoding="utf-8") as f:
+        with open(favorites_file, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
             entry = data.get(name)
@@ -70,7 +70,8 @@ def load_favorite_filters(name: str) -> Dict[str, str]:
                 filters = entry["filters"]
                 if isinstance(filters, dict):
                     return {
-                        k: v for k, v in filters.items()
+                        k: v
+                        for k, v in filters.items()
                         if isinstance(k, str) and v in ("dep", "arr")
                     }
     except (json.JSONDecodeError, OSError):
@@ -79,7 +80,7 @@ def load_favorite_filters(name: str) -> Dict[str, str]:
     return {}
 
 
-def get_user_favorite_names() -> Set[str]:
+def get_user_favorite_names() -> set[str]:
     """Return the set of user-saved favorite grouping names.
 
     Returns:
@@ -89,8 +90,8 @@ def get_user_favorite_names() -> Set[str]:
 
 
 def find_grouping_case_insensitive(
-    name: str, all_groupings: Dict[str, List[str]]
-) -> Optional[str]:
+    name: str, all_groupings: dict[str, list[str]]
+) -> str | None:
     """
     Find a grouping name case-insensitively.
 
@@ -116,9 +117,9 @@ def find_grouping_case_insensitive(
 
 def resolve_grouping_recursively(
     grouping_name: str,
-    all_groupings: Dict[str, List[str]],
-    visited: Optional[Set[str]] = None,
-) -> Set[str]:
+    all_groupings: dict[str, list[str]],
+    visited: set[str] | None = None,
+) -> set[str]:
     """
     Recursively resolve a grouping name to its individual airports.
     Handles nested groupings by looking up grouping names and resolving them.
@@ -145,7 +146,7 @@ def resolve_grouping_recursively(
     if grouping_name not in all_groupings:
         return set()
 
-    airports: Set[str] = set()
+    airports: set[str] = set()
     items = all_groupings[grouping_name]
 
     for item in items:
@@ -161,8 +162,8 @@ def resolve_grouping_recursively(
 
 
 def load_artcc_groupings(
-    unified_data: Dict[str, Dict[str, Any]],
-) -> Dict[str, List[str]]:
+    unified_data: dict[str, dict[str, Any]],
+) -> dict[str, list[str]]:
     """
     Load ARTCC groupings from unified airport data.
     Creates groupings like "ZOA All", "ZMP All", etc. containing all airports under each ARTCC.
@@ -203,8 +204,8 @@ def load_artcc_groupings(
 
 
 def load_custom_groupings(
-    filename: Optional[str] = None,
-) -> Optional[Dict[str, List[str]]]:
+    filename: str | None = None,
+) -> dict[str, list[str]] | None:
     """
     Load custom airport groupings from JSON file(s).
 
@@ -232,7 +233,7 @@ def load_custom_groupings(
         )
         return None
 
-    validated: Dict[str, List[str]] = {}
+    validated: dict[str, list[str]] = {}
     for key, value in data.items():
         if not isinstance(key, str):
             logger.warning(f"Skipping non-string grouping key: {key}")
@@ -253,7 +254,7 @@ def load_custom_groupings(
     return validated
 
 
-def load_preset_groupings() -> Dict[str, List[str]]:
+def load_preset_groupings() -> dict[str, list[str]]:
     """
     Load all preset groupings from the preset_groupings directory.
     Each JSON file in the directory represents one ARTCC's groupings.
@@ -268,14 +269,14 @@ def load_preset_groupings() -> Dict[str, List[str]]:
     """
     from common import logger
 
-    all_preset_groupings: Dict[str, List[str]] = {}
+    all_preset_groupings: dict[str, list[str]] = {}
 
     if not PRESET_GROUPINGS_DIR.exists():
         return all_preset_groupings
 
     for json_file in PRESET_GROUPINGS_DIR.glob("*.json"):
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
+            with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             if not isinstance(data, dict):
@@ -291,10 +292,13 @@ def load_preset_groupings() -> Dict[str, List[str]]:
                 if isinstance(value, list):
                     # Old format: value is list of airports
                     airports = [str(v) for v in value]
-                elif isinstance(value, dict) and "airports" in value:
+                elif (
+                    isinstance(value, dict)
+                    and "airports" in value
+                    and isinstance(value["airports"], list)
+                ):
                     # New format: value is dict with 'airports' key
-                    if isinstance(value["airports"], list):
-                        airports = [str(v) for v in value["airports"]]
+                    airports = [str(v) for v in value["airports"]]
 
                 # Filter out single-airport groupings
                 if airports and len(airports) > 1:
@@ -313,9 +317,9 @@ def load_preset_groupings() -> Dict[str, List[str]]:
 
 
 def load_all_groupings(
-    custom_groupings_filename: Optional[str] = None,
-    unified_data: Optional[Dict[str, Dict[str, Any]]] = None,
-) -> Dict[str, List[str]]:
+    custom_groupings_filename: str | None = None,
+    unified_data: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, list[str]]:
     """
     Load and merge all groupings sources in order of precedence:
     1. ARTCC groupings (lowest priority - from unified airport data)

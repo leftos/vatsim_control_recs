@@ -3,9 +3,9 @@ Flight analysis and tracking for VATSIM aircraft.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, Tuple, cast
+from typing import Any, cast
 
-from backend.core.calculations import haversine_distance_nm, calculate_eta
+from backend.core.calculations import calculate_eta, haversine_distance_nm
 from backend.core.spatial import get_airport_spatial_index
 
 
@@ -23,7 +23,7 @@ class DepartureInfo:
 
     callsign: str
     destination: AirportInfo
-    departure: Optional[AirportInfo] = (
+    departure: AirportInfo | None = (
         None  # For groupings: which airport they're departing from
     )
 
@@ -36,17 +36,17 @@ class ArrivalInfo:
     origin: AirportInfo
     eta_display: str
     eta_local_time: str
-    arrival: Optional[AirportInfo] = (
+    arrival: AirportInfo | None = (
         None  # For groupings: which airport they're arriving at
     )
 
 
 def get_nearest_airport_if_on_ground(
-    flight: Dict[str, Any],
-    airports: Dict[str, Dict[str, Any]],
+    flight: dict[str, Any],
+    airports: dict[str, dict[str, Any]],
     max_distance_nm: float = 6,
     max_groundspeed: float = 40,
-) -> Optional[str]:
+) -> str | None:
     """
     Determine if a flight is on the ground at an airport.
     Based on distance from airport and groundspeed.
@@ -76,7 +76,7 @@ def get_nearest_airport_if_on_ground(
     spatial_index = get_airport_spatial_index(airports)
 
     # Filter to only airports in our tracked set
-    def filter_tracked(airport: Dict[str, Any]) -> bool:
+    def filter_tracked(airport: dict[str, Any]) -> bool:
         return airport["icao"] in airports
 
     return spatial_index.find_nearest(
@@ -88,8 +88,8 @@ def get_nearest_airport_if_on_ground(
 
 
 def is_flight_flying_near_arrival(
-    flight: Dict[str, Any],
-    airports: Dict[str, Dict[str, Any]],
+    flight: dict[str, Any],
+    airports: dict[str, dict[str, Any]],
     max_eta_hours: float = 1.0,
     min_groundspeed: float = 40,
 ) -> bool:
@@ -148,8 +148,8 @@ def is_flight_flying_near_arrival(
 
 
 def find_nearest_airport(
-    flight: Dict[str, Any], airports: Dict[str, Dict[str, Any]]
-) -> Optional[str]:
+    flight: dict[str, Any], airports: dict[str, dict[str, Any]]
+) -> str | None:
     """
     Find the nearest airport to a flight's current position.
 
@@ -172,7 +172,7 @@ def find_nearest_airport(
     spatial_index = get_airport_spatial_index(airports)
 
     # Filter to only airports in our tracked set
-    def filter_tracked(airport: Dict[str, Any]) -> bool:
+    def filter_tracked(airport: dict[str, Any]) -> bool:
         return airport["icao"] in airports
 
     return spatial_index.find_nearest(flight_lat, flight_lon, filter_fn=filter_tracked)
@@ -182,11 +182,11 @@ def get_airport_flight_details(
     airport_icao_or_list,
     max_eta_hours: float = 1.0,
     disambiguator=None,
-    all_airports_data: Optional[Dict[str, Dict[str, Any]]] = None,
-    aircraft_approach_speeds: Optional[Dict[str, int]] = None,
-    vatsim_data: Optional[Dict[str, Any]] = None,
-    airport_filters: Optional[Dict[str, str]] = None,
-) -> Tuple[List[DepartureInfo], List[ArrivalInfo]]:
+    all_airports_data: dict[str, dict[str, Any]] | None = None,
+    aircraft_approach_speeds: dict[str, int] | None = None,
+    vatsim_data: dict[str, Any] | None = None,
+    airport_filters: dict[str, str] | None = None,
+) -> tuple[list[DepartureInfo], list[ArrivalInfo]]:
     """
     Get detailed flight information for a specific airport or list of airports.
     Returns separate lists for departures and arrivals with structured data.
@@ -278,7 +278,9 @@ def get_airport_flight_details(
 
         # Check if this is a departure (on ground at departure airport)
         if departure and departure in airport_icao_list:
-            if nearest_airport_if_on_ground == departure and _should_show(departure, "dep"):
+            if nearest_airport_if_on_ground == departure and _should_show(
+                departure, "dep"
+            ):
                 # Flight is on ground at one of our airports, preparing to depart
                 if is_local_flight:
                     # Local flight - show LOCAL for name and ---- for ICAO
@@ -335,39 +337,41 @@ def get_airport_flight_details(
                     )
         # Also handle flights with only arrival filed, on ground at one of our airports
         # But NOT if they're already at the arrival airport (those are arrivals, not departures)
-        elif not departure and arrival and nearest_airport_if_on_ground:
-            if (
-                nearest_airport_if_on_ground in airport_icao_list
-                and nearest_airport_if_on_ground != arrival
-                and _should_show(nearest_airport_if_on_ground, "dep")
-            ):
-                # Flight is on ground at one of our airports (not the arrival) with only arrival in flight plan
-                destination = arrival
-                pretty_destination = (
-                    disambiguator.get_pretty_name(destination)
-                    if disambiguator
-                    else destination
-                )
+        elif (
+            not departure
+            and arrival
+            and nearest_airport_if_on_ground
+            and nearest_airport_if_on_ground in airport_icao_list
+            and nearest_airport_if_on_ground != arrival
+            and _should_show(nearest_airport_if_on_ground, "dep")
+        ):
+            # Flight is on ground at one of our airports (not the arrival) with only arrival in flight plan
+            destination = arrival
+            pretty_destination = (
+                disambiguator.get_pretty_name(destination)
+                if disambiguator
+                else destination
+            )
 
-                # Use nearest_airport as departure airport
-                pretty_departure_airport = (
-                    disambiguator.get_pretty_name(nearest_airport_if_on_ground)
-                    if disambiguator
-                    else nearest_airport_if_on_ground
-                )
+            # Use nearest_airport as departure airport
+            pretty_departure_airport = (
+                disambiguator.get_pretty_name(nearest_airport_if_on_ground)
+                if disambiguator
+                else nearest_airport_if_on_ground
+            )
 
-                departures_list.append(
-                    DepartureInfo(
-                        callsign=callsign,
-                        destination=AirportInfo(
-                            pretty_name=pretty_destination, icao_code=destination
-                        ),
-                        departure=AirportInfo(
-                            pretty_name=pretty_departure_airport,
-                            icao_code=nearest_airport_if_on_ground,
-                        ),
-                    )
+            departures_list.append(
+                DepartureInfo(
+                    callsign=callsign,
+                    destination=AirportInfo(
+                        pretty_name=pretty_destination, icao_code=destination
+                    ),
+                    departure=AirportInfo(
+                        pretty_name=pretty_departure_airport,
+                        icao_code=nearest_airport_if_on_ground,
+                    ),
                 )
+            )
 
         # Check if this is an arrival (either on ground at arrival or flying nearby)
         if arrival and arrival in airport_icao_list and _should_show(arrival, "arr"):
@@ -527,24 +531,29 @@ def get_airport_flight_details(
                     )
 
         # Handle flights on ground without flight plans
-        if not departure and not arrival and nearest_airport_if_on_ground:
-            if nearest_airport_if_on_ground in airport_icao_list and _should_show(nearest_airport_if_on_ground, "dep"):
-                # Count as departure with unknown destination
-                pretty_departure_airport = (
-                    disambiguator.get_pretty_name(nearest_airport_if_on_ground)
-                    if disambiguator
-                    else nearest_airport_if_on_ground
+        if (
+            not departure
+            and not arrival
+            and nearest_airport_if_on_ground
+            and nearest_airport_if_on_ground in airport_icao_list
+            and _should_show(nearest_airport_if_on_ground, "dep")
+        ):
+            # Count as departure with unknown destination
+            pretty_departure_airport = (
+                disambiguator.get_pretty_name(nearest_airport_if_on_ground)
+                if disambiguator
+                else nearest_airport_if_on_ground
+            )
+            departures_list.append(
+                DepartureInfo(
+                    callsign=callsign,
+                    destination=AirportInfo(pretty_name="----", icao_code="----"),
+                    departure=AirportInfo(
+                        pretty_name=pretty_departure_airport,
+                        icao_code=nearest_airport_if_on_ground,
+                    ),
                 )
-                departures_list.append(
-                    DepartureInfo(
-                        callsign=callsign,
-                        destination=AirportInfo(pretty_name="----", icao_code="----"),
-                        departure=AirportInfo(
-                            pretty_name=pretty_departure_airport,
-                            icao_code=nearest_airport_if_on_ground,
-                        ),
-                    )
-                )
+            )
 
     debug_logger.debug(
         f"[BACKEND] Final counts - departures: {len(departures_list)}, arrivals: {len(arrivals_list)}"

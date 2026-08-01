@@ -25,9 +25,9 @@ from .disambiguator import AirportDisambiguator
 
 # Public API - maintain backwards compatibility
 __all__ = [
+    "DEFAULT_CONFIG",
     "AirportDisambiguator",
     "DisambiguatorConfig",
-    "DEFAULT_CONFIG",
 ]
 
 __version__ = "2.0.0"

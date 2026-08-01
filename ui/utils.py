@@ -4,6 +4,7 @@ Contains helper functions for sorting, logging, and data processing
 """
 
 from backend.core.flights import ArrivalInfo
+
 from . import debug_logger
 
 

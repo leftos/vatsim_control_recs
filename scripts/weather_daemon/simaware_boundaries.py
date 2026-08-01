@@ -13,7 +13,7 @@ Source: https://github.com/vatsimnetwork/simaware-tracon-project
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # Default directories
 SIMAWARE_BOUNDARIES_DIR = (
@@ -32,8 +32,8 @@ SUB_FACILITY_MAP = {
 
 
 def load_preset_grouping_data(
-    preset_dir: Optional[Path] = None,
-) -> Dict[str, Dict[str, Any]]:
+    preset_dir: Path | None = None,
+) -> dict[str, dict[str, Any]]:
     """
     Load all preset groupings with full metadata (including position_prefixes).
 
@@ -49,14 +49,14 @@ def load_preset_grouping_data(
     if preset_dir is None:
         preset_dir = PRESET_GROUPINGS_DIR
 
-    all_data: Dict[str, Dict[str, Any]] = {}
+    all_data: dict[str, dict[str, Any]] = {}
 
     if not preset_dir.exists():
         return all_data
 
     for json_file in preset_dir.glob("*.json"):
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
+            with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             if not isinstance(data, dict):
@@ -86,15 +86,15 @@ def load_preset_grouping_data(
                     if len(airports) > 1 or facility_id:
                         all_data[key] = grouping_data
 
-        except Exception:
-            pass
+        except (OSError, ValueError) as e:
+            print(f"  Warning: skipping unreadable grouping file {json_file.name}: {e}")
 
     return all_data
 
 
 def load_simaware_boundaries(
-    boundaries_dir: Optional[Path] = None,
-) -> Dict[str, Dict[str, Any]]:
+    boundaries_dir: Path | None = None,
+) -> dict[str, dict[str, Any]]:
     """
     Load all SimAware boundary data from local files.
 
@@ -104,27 +104,25 @@ def load_simaware_boundaries(
     if boundaries_dir is None:
         boundaries_dir = SIMAWARE_BOUNDARIES_DIR
 
-    all_boundaries: Dict[str, Dict[str, Any]] = {}
+    all_boundaries: dict[str, dict[str, Any]] = {}
 
     if not boundaries_dir.exists():
         return all_boundaries
 
     for json_file in boundaries_dir.glob("*.json"):
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
+            with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             facility = json_file.stem
             all_boundaries[facility] = data
-        except Exception:
-            pass
+        except (OSError, ValueError) as e:
+            print(f"  Warning: skipping unreadable boundary file {json_file.name}: {e}")
 
     return all_boundaries
 
 
-def resolve_simaware_folder(
-    facility_id: str, available_facilities: set
-) -> Optional[str]:
+def resolve_simaware_folder(facility_id: str, available_facilities: set) -> str | None:
     """
     Resolve a facility ID to a SimAware folder name.
 
@@ -146,10 +144,10 @@ def resolve_simaware_folder(
 
 def find_boundary_for_prefix(
     prefix: str,
-    suffix: Optional[str],
+    suffix: str | None,
     simaware_folder: str,
-    boundaries_data: Dict[str, Dict[str, Any]],
-) -> Optional[List[List[float]]]:
+    boundaries_data: dict[str, dict[str, Any]],
+) -> list[list[float]] | None:
     """
     Find the best boundary for a position prefix and suffix.
 
@@ -190,9 +188,9 @@ def find_boundary_for_prefix(
 
 def map_grouping_to_boundaries(
     grouping_name: str,
-    grouping_data: Optional[Dict[str, Any]],
-    boundaries_data: Dict[str, Dict[str, Any]],
-) -> List[List[List[float]]]:
+    grouping_data: dict[str, Any] | None,
+    boundaries_data: dict[str, dict[str, Any]],
+) -> list[list[list[float]]]:
     """
     Map a grouping to one or more SimAware boundary polygons.
 
@@ -247,7 +245,7 @@ def map_grouping_to_boundaries(
 
     # Find boundaries for each position prefix
     # Collect ALL matching boundaries (e.g., NCT C with OAK and MOD prefixes)
-    polygons: List[List[List[float]]] = []
+    polygons: list[list[list[float]]] = []
     seen_coords: set = set()  # Avoid duplicates
 
     for prefix in position_prefixes:
@@ -268,8 +266,8 @@ def map_grouping_to_boundaries(
 
 def expand_plus_pattern(
     grouping_name: str,
-    all_grouping_data: Dict[str, Dict[str, Any]],
-) -> List[str]:
+    all_grouping_data: dict[str, dict[str, Any]],
+) -> list[str]:
     """
     Expand a grouping name with '+' pattern into component groupings.
 
@@ -327,7 +325,7 @@ def expand_plus_pattern(
     return [grouping_name]
 
 
-def polygon_min_distance(poly1: List[List[float]], poly2: List[List[float]]) -> float:
+def polygon_min_distance(poly1: list[list[float]], poly2: list[list[float]]) -> float:
     """
     Calculate the minimum distance between any two points of two polygons.
 
@@ -349,7 +347,7 @@ def polygon_min_distance(poly1: List[List[float]], poly2: List[List[float]]) -> 
     return min_dist
 
 
-def convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+def convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
     """
     Compute the convex hull of a set of points.
 
@@ -390,7 +388,7 @@ def convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
 
 def generate_circle_polygon(
     lat: float, lon: float, radius_nm: float = 5, num_points: int = 32
-) -> List[Tuple[float, float]]:
+) -> list[tuple[float, float]]:
     """
     Generate a circle polygon around a point.
 
@@ -425,9 +423,9 @@ def generate_circle_polygon(
 
 
 def combine_polygons(
-    polygons: List[List[List[float]]],
+    polygons: list[list[list[float]]],
     neighbor_threshold: float = 0.05,  # ~3nm at mid-latitudes
-) -> List[List[Tuple[float, float]]]:
+) -> list[list[tuple[float, float]]]:
     """
     Combine multiple polygons into groups based on proximity.
 
@@ -496,15 +494,13 @@ def combine_polygons(
 
 
 def get_all_grouping_boundaries(
-    grouping_names: List[str],
-    cache_dir: Optional[Path] = None,  # Kept for API compatibility, not used
-    preset_dir: Optional[Path] = None,
-    boundaries_dir: Optional[Path] = None,
+    grouping_names: list[str],
+    cache_dir: Path | None = None,  # Kept for API compatibility, not used
+    preset_dir: Path | None = None,
+    boundaries_dir: Path | None = None,
     max_workers: int = 8,  # Kept for API compatibility, not used
-    unified_airport_data: Optional[
-        Dict[str, Any]
-    ] = None,  # For Tower circle generation
-) -> Dict[str, List[List[Tuple[float, float]]]]:
+    unified_airport_data: dict[str, Any] | None = None,  # For Tower circle generation
+) -> dict[str, list[list[tuple[float, float]]]]:
     """
     Get boundaries for multiple groupings from pre-downloaded SimAware data.
 
@@ -535,7 +531,7 @@ def get_all_grouping_boundaries(
         return {}
 
     # Map each grouping to its boundary polygons
-    boundaries: Dict[str, List[List[Tuple[float, float]]]] = {}
+    boundaries: dict[str, list[list[tuple[float, float]]]] = {}
 
     for name in grouping_names:
         # Check if this is a Tower grouping - use circle polygon

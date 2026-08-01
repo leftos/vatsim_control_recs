@@ -9,16 +9,14 @@ data is older than a configurable threshold.
 
 import csv
 import threading
-import urllib.request
 import urllib.error
+import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import lru_cache
-from typing import Optional
 
 from common.paths import get_runways_cache_path, get_runways_metadata_path
-
 
 # OurAirports runway data URL
 RUNWAYS_URL = "https://davidmegginson.github.io/ourairports-data/runways.csv"
@@ -33,7 +31,7 @@ RUNWAYS_METADATA_PATH = get_runways_metadata_path()
 
 # Thread-safe in-memory cache
 _RUNWAY_DATA_LOCK = threading.Lock()
-_RUNWAY_DATA: Optional[dict[str, list["RunwayInfo"]]] = None
+_RUNWAY_DATA: dict[str, list["RunwayInfo"]] | None = None
 
 
 @dataclass
@@ -73,11 +71,16 @@ def _needs_update() -> bool:
         return True
 
     try:
-        with open(RUNWAYS_METADATA_PATH, "r") as f:
+        with open(RUNWAYS_METADATA_PATH) as f:
             last_update_str = f.read().strip()
             last_update = datetime.fromisoformat(last_update_str)
-            return datetime.now() - last_update > timedelta(days=UPDATE_INTERVAL_DAYS)
-    except (ValueError, OSError):
+            # Files written before timestamps carried an offset are local time
+            if last_update.tzinfo is None:
+                last_update = last_update.astimezone()
+            return datetime.now().astimezone() - last_update > timedelta(
+                days=UPDATE_INTERVAL_DAYS
+            )
+    except (ValueError, OSError, TypeError):
         return True
 
 
@@ -86,7 +89,7 @@ def _save_metadata() -> None:
     try:
         RUNWAYS_METADATA_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(RUNWAYS_METADATA_PATH, "w") as f:
-            f.write(datetime.now().isoformat())
+            f.write(datetime.now().astimezone().isoformat())
     except OSError:
         pass
 
@@ -178,7 +181,7 @@ def load_runway_data() -> dict[str, list[RunwayInfo]]:
     runways: dict[str, list[RunwayInfo]] = defaultdict(list)
 
     try:
-        with open(RUNWAYS_CACHE_PATH, "r", encoding="utf-8") as f:
+        with open(RUNWAYS_CACHE_PATH, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 try:
@@ -247,7 +250,7 @@ def get_runways(airport_icao: str) -> list[RunwayInfo]:
 
 
 @lru_cache(maxsize=1000)
-def get_longest_runway(airport_icao: str, open_only: bool = True) -> Optional[int]:
+def get_longest_runway(airport_icao: str, open_only: bool = True) -> int | None:
     """Get the longest runway length at an airport.
 
     Args:
@@ -270,7 +273,7 @@ def get_longest_runway(airport_icao: str, open_only: bool = True) -> Optional[in
     return max(r.length_ft for r in runways)
 
 
-def get_runway_summary(airport_icao: str) -> Optional[str]:
+def get_runway_summary(airport_icao: str) -> str | None:
     """Get a brief summary of runways at an airport.
 
     Args:

@@ -1,22 +1,24 @@
 """VFR Alternatives Modal Screen - Find nearby airports with VFR/MVFR conditions"""
 
 import asyncio
-from textual.screen import ModalScreen
-from textual.widgets import Static, Input
-from textual.containers import Container
-from textual.binding import Binding
+from typing import ClassVar
+
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container
+from textual.screen import ModalScreen
+from textual.widgets import Input, Static
 
 from backend import (
-    get_metar,
-    find_airports_near_position,
-    haversine_distance_nm,
-    calculate_bearing,
     bearing_to_compass,
+    calculate_bearing,
+    find_airports_near_position,
+    get_metar,
+    haversine_distance_nm,
 )
 from ui import config
-from .metar_info import get_flight_category, _extract_flight_rules_weather
 
+from .metar_info import _extract_flight_rules_weather, get_flight_category
 
 # Constants for alternate airport search
 MAX_ALTERNATE_SEARCH_RADIUS_NM = 100.0
@@ -65,7 +67,7 @@ class VfrAlternativesScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("enter", "find_alternatives", "Find Alternatives", priority=True),
     ]

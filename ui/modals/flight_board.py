@@ -1,44 +1,43 @@
 """Flight Board Modal Screen"""
 
 import asyncio
-from typing import Dict, List, Optional, Tuple
+from typing import ClassVar
 
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.widgets.data_table import RowDoesNotExist
-from textual.containers import Container, Vertical, Horizontal, VerticalScroll
-from textual.binding import Binding
-from textual.app import ComposeResult
 
 from backend import (
-    get_wind_info,
+    find_airports_near_position,
     get_altimeter_setting,
     get_metar_batch,
-    find_airports_near_position,
-)
-from backend.core.flights import get_airport_flight_details
-from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
-from backend.data.datis_api import get_datis_for_airports
-from backend.data.atis_filter import (
-    parse_approach_info,
-    parse_runway_assignments,
-    format_runway_summary,
+    get_wind_info,
 )
 from backend.config import constants as backend_constants
-from ui.modals.metar_info import get_flight_category
-from ui.modals.notification_manager import NotificationManager
-
-from widgets.split_flap_datatable import SplitFlapDataTable
+from backend.core.flights import get_airport_flight_details
+from backend.data.atis_filter import (
+    format_runway_summary,
+    parse_approach_info,
+)
+from backend.data.datis_api import get_datis_for_airports
+from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
 from ui import config
 from ui.config import CATEGORY_COLORS
-from ui.tables import (
-    TableManager,
-    DEPARTURES_TABLE_CONFIG,
-    ARRIVALS_TABLE_CONFIG,
-    GROUPING_DEPARTURES_TABLE_CONFIG,
-    GROUPING_ARRIVALS_TABLE_CONFIG,
-)
+from ui.debug_logger import debug
 from ui.modals.flight_info import FlightInfoScreen
+from ui.modals.metar_info import get_flight_category
+from ui.modals.notification_manager import NotificationManager
+from ui.tables import (
+    ARRIVALS_TABLE_CONFIG,
+    DEPARTURES_TABLE_CONFIG,
+    GROUPING_ARRIVALS_TABLE_CONFIG,
+    GROUPING_DEPARTURES_TABLE_CONFIG,
+    TableManager,
+)
+from widgets.split_flap_datatable import SplitFlapDataTable
 
 
 class FlightBoardScreen(ModalScreen):
@@ -51,14 +50,14 @@ class FlightBoardScreen(ModalScreen):
     FlightBoardScreen {
         align: center middle;
     }
-    
+
     #board-container {
         width: 100%;
         height: 100%;
         background: $surface;
         border: none;
     }
-    
+
     #board-header {
         height: 3;
         background: $boost;
@@ -67,24 +66,24 @@ class FlightBoardScreen(ModalScreen):
         text-align: center;
         border-bottom: solid $primary;
     }
-    
+
     #board-tables {
         height: 1fr;
         layout: horizontal;
     }
-    
+
     .board-section {
         height: 100%;
     }
-    
+
     #departures-section {
         width: 40%;
     }
-    
+
     #arrivals-section {
         width: 60%;
     }
-    
+
     .section-title {
         height: 1;
         background: $panel;
@@ -93,7 +92,7 @@ class FlightBoardScreen(ModalScreen):
         color: $text;
         text-style: bold;
     }
-    
+
     .board-table {
         height: 1fr;
         width: 100%;
@@ -145,7 +144,7 @@ class FlightBoardScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close_board", "Close", priority=True),
         Binding("q", "close_board", "Close"),
         Binding("ctrl+n", "test_notifications", "Test Notifications", show=False),
@@ -162,7 +161,7 @@ class FlightBoardScreen(ModalScreen):
         refresh_interval: int = 15,
         disambiguator=None,
         enable_animations: bool = True,
-        airport_filters: Optional[Dict[str, str]] = None,
+        airport_filters: dict[str, str] | None = None,
     ):
         super().__init__()
         self.title = title
@@ -183,16 +182,16 @@ class FlightBoardScreen(ModalScreen):
         self.vatsim_data = None  # Store VATSIM data for flight info lookup
         self._cache_refresh_timer = None  # Timer for periodic cache refresh
         # Weather and runway change tracking
-        self._previous_weather: Dict[str, str] = {}  # ICAO -> flight category
-        self._previous_runways: Dict[
-            str, Tuple[frozenset, frozenset]
+        self._previous_weather: dict[str, str] = {}  # ICAO -> flight category
+        self._previous_runways: dict[
+            str, tuple[frozenset, frozenset]
         ] = {}  # ICAO -> (landing, departing)
-        self._previous_approaches: Dict[
-            str, Dict[str, frozenset]
+        self._previous_approaches: dict[
+            str, dict[str, frozenset]
         ] = {}  # ICAO -> {runway: frozenset of approach types}
         self._weather_check_timer = None  # Timer for weather/runway change checks
         # Notification manager (initialized in on_mount)
-        self._notification_manager: Optional[NotificationManager] = None
+        self._notification_manager: NotificationManager | None = None
 
     def compose(self) -> ComposeResult:
         # Use a placeholder title initially - will be updated async after data loads
@@ -234,7 +233,9 @@ class FlightBoardScreen(ModalScreen):
     async def on_mount(self) -> None:
         """Load and display flight data when the screen is mounted"""
         # Initialize notification manager
-        self._notification_manager = NotificationManager(self, container_id="notification-scroll")
+        self._notification_manager = NotificationManager(
+            self, container_id="notification-scroll"
+        )
 
         await self.load_flight_data()
         # Note: Full data refresh is triggered by parent app, not independent timer
@@ -437,9 +438,9 @@ class FlightBoardScreen(ModalScreen):
         try:
             header = self.query_one("#board-header", Static)
             header.update(window_title)
-        except Exception:
+        except Exception as e:
             # Widget not yet mounted, will be set in compose
-            pass
+            debug(f"Could not update board header yet: {e}")
 
     async def _update_window_title_async(self) -> None:
         """Async version of window title update - runs network calls in background."""
@@ -486,8 +487,8 @@ class FlightBoardScreen(ModalScreen):
         try:
             header = self.query_one("#board-header", Static)
             header.update(window_title)
-        except Exception:
-            pass
+        except Exception as e:
+            debug(f"Could not apply board header title: {e}")
 
     def populate_tables(self) -> None:
         """Populate the departure and arrivals tables with separate ICAO and NAME columns."""
@@ -581,8 +582,8 @@ class FlightBoardScreen(ModalScreen):
             board_tables.remove_class("loading")
             loading_indicator = self.query_one("#loading-indicator", Static)
             loading_indicator.add_class("hidden")
-        except Exception:
-            pass
+        except Exception as e:
+            debug(f"Could not hide flight board loading indicator: {e}")
 
     def action_close_board(self) -> None:
         """Close the modal, but dismiss notification first if visible."""
@@ -594,9 +595,9 @@ class FlightBoardScreen(ModalScreen):
         # Reset the flight board open flag and reference in the parent app
         app = self.app
         if hasattr(app, "flight_board_open"):
-            setattr(app, "flight_board_open", False)
+            app.flight_board_open = False
         if hasattr(app, "active_flight_board"):
-            setattr(app, "active_flight_board", None)
+            app.active_flight_board = None
 
         self.dismiss()
 
@@ -818,7 +819,8 @@ class FlightBoardScreen(ModalScreen):
             new_landing = frozenset(combined_landing)
             new_departing = frozenset(combined_departing)
             new_approaches = {
-                rwy: frozenset(approaches) for rwy, approaches in combined_approaches.items()
+                rwy: frozenset(approaches)
+                for rwy, approaches in combined_approaches.items()
             }
 
             old_runways = self._previous_runways.get(icao)

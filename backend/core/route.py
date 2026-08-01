@@ -4,12 +4,12 @@ Route utilities for sampling points along flight paths.
 
 import math
 import re
-from typing import List, Tuple, Dict, Any, Optional
+from typing import Any
 
 from backend.core.calculations import haversine_distance_nm
 
 
-def parse_route_waypoints(route_string: str) -> List[str]:
+def parse_route_waypoints(route_string: str) -> list[str]:
     """
     Parse a flight plan route string to extract waypoint/fix identifiers.
 
@@ -58,7 +58,7 @@ def parse_route_waypoints(route_string: str) -> List[str]:
 
 def interpolate_great_circle(
     lat1: float, lon1: float, lat2: float, lon2: float, fraction: float
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Interpolate a point along the great circle path between two points.
 
@@ -114,7 +114,7 @@ def sample_route_points(
     interval_nm: float = 150.0,
     min_points: int = 0,
     max_points: int = 10,
-) -> List[Tuple[float, float, float]]:
+) -> list[tuple[float, float, float]]:
     """
     Sample points along the great circle route at regular intervals.
 
@@ -154,11 +154,11 @@ def sample_route_points(
 
 
 def find_enroute_airports(
-    sample_points: List[Tuple[float, float, float]],
-    airports_data: Dict[str, Dict[str, Any]],
+    sample_points: list[tuple[float, float, float]],
+    airports_data: dict[str, dict[str, Any]],
     search_radius_nm: float = 100.0,
     prefer_metar: bool = True,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Find airports near each sample point along the route.
 
@@ -246,8 +246,8 @@ def find_enroute_airports(
 
 
 def determine_runway_from_wind(
-    wind_str: str, runways: List[Dict[str, Any]]
-) -> Optional[str]:
+    wind_str: str, runways: list[dict[str, Any]]
+) -> str | None:
     """
     Determine the most likely runway based on wind direction.
 

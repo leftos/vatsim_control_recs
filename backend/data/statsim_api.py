@@ -6,9 +6,10 @@ VATSIM flight data, useful for analyzing traffic patterns between airports.
 """
 
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Optional, Set, Callable
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import requests
 
@@ -72,7 +73,7 @@ def fetch_flights_from_origin(
     days_back: int = STATSIM_MAX_DAYS_PER_QUERY,
     days_offset: int = 0,
     timeout: int = STATSIM_API_TIMEOUT,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Fetch all flights departing from a given airport in a date range.
 
@@ -129,7 +130,7 @@ def fetch_flights_to_destination(
     days_back: int = STATSIM_MAX_DAYS_PER_QUERY,
     days_offset: int = 0,
     timeout: int = STATSIM_API_TIMEOUT,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Fetch all flights arriving at a given airport in a date range.
 
@@ -182,13 +183,12 @@ def fetch_flights_to_destination(
 
 
 def get_historical_stats_for_airports(
-    query_airports: List[str],
-    tracked_airports: Set[str],
+    query_airports: list[str],
+    tracked_airports: set[str],
     days_back: int = STATSIM_DEFAULT_DAYS_BACK,
-    progress_callback: Optional[
-        Callable[[int, int, Dict[str, Dict[str, int]]], None]
-    ] = None,
-) -> Dict[str, Dict[str, int]]:
+    progress_callback: Callable[[int, int, dict[str, dict[str, int]]], None]
+    | None = None,
+) -> dict[str, dict[str, int]]:
     """
     Get historical flight statistics between query airports and tracked airports.
 
@@ -211,7 +211,7 @@ def get_historical_stats_for_airports(
         }
     """
     # Results aggregated per tracked airport
-    results: Dict[str, Dict[str, int]] = {}
+    results: dict[str, dict[str, int]] = {}
 
     # Total queries = 2 per query airport (origin + destination)
     total_queries = len(query_airports) * 2
@@ -269,14 +269,13 @@ def get_historical_stats_for_airports(
 
 
 def get_historical_stats_concurrent(
-    query_airports: List[str],
-    tracked_airports: Set[str],
+    query_airports: list[str],
+    tracked_airports: set[str],
     days_back: int = STATSIM_DEFAULT_DAYS_BACK,
     max_workers: int = 4,
-    progress_callback: Optional[
-        Callable[[int, int, Dict[str, Dict[str, int]]], None]
-    ] = None,
-) -> Dict[str, Dict[str, int]]:
+    progress_callback: Callable[[int, int, dict[str, dict[str, int]]], None]
+    | None = None,
+) -> dict[str, dict[str, int]]:
     """
     Get historical flight statistics using concurrent API calls for better performance.
 
@@ -293,7 +292,7 @@ def get_historical_stats_concurrent(
         Dictionary mapping tracked airport ICAOs to stats
     """
     # Results aggregated per tracked airport
-    results: Dict[str, Dict[str, int]] = {}
+    results: dict[str, dict[str, int]] = {}
 
     # Normalize tracked airports to uppercase
     tracked_upper = {icao.upper() for icao in tracked_airports}

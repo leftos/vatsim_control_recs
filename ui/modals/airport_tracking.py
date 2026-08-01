@@ -1,10 +1,12 @@
 """Airport Tracking Modal Screen"""
 
-from textual.screen import ModalScreen
-from textual.widgets import Static, Input
-from textual.containers import Container
-from textual.binding import Binding
+from typing import ClassVar
+
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container
+from textual.screen import ModalScreen
+from textual.widgets import Input, Static
 
 
 class AirportTrackingModal(ModalScreen):
@@ -14,7 +16,7 @@ class AirportTrackingModal(ModalScreen):
     AirportTrackingModal {
         align: center middle;
     }
-    
+
     #tracking-container {
         width: 80;
         height: auto;
@@ -22,25 +24,25 @@ class AirportTrackingModal(ModalScreen):
         border: thick $primary;
         padding: 1 2;
     }
-    
+
     #tracking-title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
     }
-    
+
     #tracking-input-container {
         height: auto;
         margin-bottom: 1;
     }
-    
+
     #tracking-result {
         text-align: left;
         height: auto;
         margin-top: 1;
         color: $text-muted;
     }
-    
+
     #tracking-hint {
         text-align: center;
         color: $text-muted;
@@ -48,7 +50,7 @@ class AirportTrackingModal(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("enter", "apply_tracking", "Apply", priority=True),
     ]

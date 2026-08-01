@@ -7,20 +7,20 @@ the UI weather briefing modal and the weather daemon HTML generator.
 
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from backend.data.weather_parsing import (
     CATEGORY_PRIORITY,
     get_flight_category,
-    parse_visibility_sm,
     parse_ceiling_feet,
     parse_ceiling_layer,
+    parse_visibility_sm,
     parse_weather_phenomena,
     parse_wind_from_metar,
 )
 
 
-def parse_taf_forecast_details(conditions: str) -> Dict[str, Any]:
+def parse_taf_forecast_details(conditions: str) -> dict[str, Any]:
     """
     Parse detailed forecast conditions from a TAF segment.
 
@@ -48,11 +48,11 @@ def parse_taf_forecast_details(conditions: str) -> Dict[str, Any]:
 
 
 def calculate_trend(
-    current_vis: Optional[float],
-    current_ceil: Optional[int],
+    current_vis: float | None,
+    current_ceil: int | None,
     current_cat: str,
-    forecast_vis: Optional[float],
-    forecast_ceil: Optional[int],
+    forecast_vis: float | None,
+    forecast_ceil: int | None,
     forecast_cat: str,
 ) -> str:
     """
@@ -114,13 +114,21 @@ def calculate_trend(
         ):
             return "worsening"
 
-    if current_vis is not None and forecast_vis is not None:
-        if forecast_vis > current_vis + 2 and forecast_vis > thresholds["vis"]:
-            return "improving"
+    if (
+        current_vis is not None
+        and forecast_vis is not None
+        and forecast_vis > current_vis + 2
+        and forecast_vis > thresholds["vis"]
+    ):
+        return "improving"
 
-    if current_ceil is not None and forecast_ceil is not None:
-        if forecast_ceil > current_ceil + 1000 and forecast_ceil > thresholds["ceil"]:
-            return "improving"
+    if (
+        current_ceil is not None
+        and forecast_ceil is not None
+        and forecast_ceil > current_ceil + 1000
+        and forecast_ceil > thresholds["ceil"]
+    ):
+        return "improving"
 
     return "stable"
 
@@ -128,9 +136,9 @@ def calculate_trend(
 def parse_taf_changes(
     taf: str,
     current_category: str,
-    current_vis: Optional[float] = None,
-    current_ceil: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+    current_vis: float | None = None,
+    current_ceil: int | None = None,
+) -> list[dict[str, Any]]:
     """
     Parse TAF to find forecast weather changes with detailed conditions.
 
@@ -153,29 +161,29 @@ def parse_taf_changes(
 
     # Parse FM groups: FM251800 ...conditions...
     fm_pattern = r"FM(\d{6})\s+([^\n]+?)(?=\s+FM|\s+TEMPO|\s+BECMG|\s+PROB|$)"
-    for match in re.finditer(fm_pattern, taf, re.DOTALL):
-        all_groups.append(
-            {
-                "pos": match.start(),
-                "type": "FM",
-                "time_str": match.group(1),
-                "conditions": match.group(2),
-                "updates_baseline": True,
-            }
-        )
+    all_groups.extend(
+        {
+            "pos": match.start(),
+            "type": "FM",
+            "time_str": match.group(1),
+            "conditions": match.group(2),
+            "updates_baseline": True,
+        }
+        for match in re.finditer(fm_pattern, taf, re.DOTALL)
+    )
 
     # Parse TEMPO/BECMG groups
     tempo_becmg_pattern = r"(TEMPO|BECMG)\s+(\d{4})/(\d{4})\s+([^\n]+?)(?=\s+TEMPO|\s+BECMG|\s+FM|\s+PROB|$)"
-    for match in re.finditer(tempo_becmg_pattern, taf, re.DOTALL):
-        all_groups.append(
-            {
-                "pos": match.start(),
-                "type": match.group(1),
-                "time_str": f"{match.group(2)}/{match.group(3)}",
-                "conditions": match.group(4),
-                "updates_baseline": False,
-            }
-        )
+    all_groups.extend(
+        {
+            "pos": match.start(),
+            "type": match.group(1),
+            "time_str": f"{match.group(2)}/{match.group(3)}",
+            "conditions": match.group(4),
+            "updates_baseline": False,
+        }
+        for match in re.finditer(tempo_becmg_pattern, taf, re.DOTALL)
+    )
 
     # Sort by position in document (chronological order in TAF)
     all_groups.sort(key=lambda x: x["pos"])

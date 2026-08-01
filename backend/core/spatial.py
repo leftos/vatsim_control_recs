@@ -6,11 +6,11 @@ nearest neighbor lookups instead of O(n) linear scans.
 """
 
 import threading
-from typing import Dict, Any, List, Optional, Tuple, Callable
+from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any, Optional
 
 from backend.core.calculations import haversine_distance_nm
-
 
 # Default grid cell size in degrees (approximately 60nm at equator)
 DEFAULT_CELL_SIZE = 1.0
@@ -18,7 +18,7 @@ DEFAULT_CELL_SIZE = 1.0
 # Cache for spatial index - keyed by dataset size to handle different airport sets
 _AIRPORT_SPATIAL_INDEX: Optional["SpatialIndex"] = None
 _AIRPORT_SPATIAL_INDEX_LOCK = threading.Lock()
-_AIRPORT_SPATIAL_INDEX_TIMESTAMP: Optional[datetime] = None
+_AIRPORT_SPATIAL_INDEX_TIMESTAMP: datetime | None = None
 _AIRPORT_SPATIAL_INDEX_SIZE: int = 0  # Track size of dataset used to build index
 _SPATIAL_INDEX_TTL_SECONDS = 300  # Rebuild every 5 minutes
 
@@ -40,10 +40,10 @@ class SpatialIndex:
             cell_size: Size of grid cells in degrees (default: 1.0)
         """
         self.cell_size = cell_size
-        self.grid: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
-        self.airports: List[Dict[str, Any]] = []
+        self.grid: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        self.airports: list[dict[str, Any]] = []
 
-    def build(self, airports_data: Dict[str, Dict[str, Any]]) -> None:
+    def build(self, airports_data: dict[str, dict[str, Any]]) -> None:
         """
         Build the spatial index from airport data.
 
@@ -69,26 +69,26 @@ class SpatialIndex:
                 self.grid[cell_key] = []
             self.grid[cell_key].append(airport)
 
-    def _get_cell_key(self, lat: float, lon: float) -> Tuple[int, int]:
+    def _get_cell_key(self, lat: float, lon: float) -> tuple[int, int]:
         """Get the grid cell key for a given coordinate."""
         return (int(lat / self.cell_size), int(lon / self.cell_size))
 
-    def _get_neighboring_cells(self, lat: float, lon: float) -> List[Tuple[int, int]]:
+    def _get_neighboring_cells(self, lat: float, lon: float) -> list[tuple[int, int]]:
         """Get all cell keys in the 3x3 neighborhood around the target cell."""
         center = self._get_cell_key(lat, lon)
-        cells = []
-        for dlat in [-1, 0, 1]:
-            for dlon in [-1, 0, 1]:
-                cells.append((center[0] + dlat, center[1] + dlon))
-        return cells
+        return [
+            (center[0] + dlat, center[1] + dlon)
+            for dlat in [-1, 0, 1]
+            for dlon in [-1, 0, 1]
+        ]
 
     def find_nearest(
         self,
         lat: float,
         lon: float,
-        max_distance_nm: Optional[float] = None,
-        filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None,
-    ) -> Optional[str]:
+        max_distance_nm: float | None = None,
+        filter_fn: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> str | None:
         """
         Find the nearest airport to the given coordinates.
 
@@ -131,10 +131,11 @@ class SpatialIndex:
                 # Skip airports with invalid coordinates
                 continue
 
-            if distance < min_distance:
-                if max_distance_nm is None or distance <= max_distance_nm:
-                    min_distance = distance
-                    nearest_icao = airport["icao"]
+            if distance < min_distance and (
+                max_distance_nm is None or distance <= max_distance_nm
+            ):
+                min_distance = distance
+                nearest_icao = airport["icao"]
 
         return nearest_icao
 
@@ -143,8 +144,8 @@ class SpatialIndex:
         lat: float,
         lon: float,
         max_distance_nm: float,
-        filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None,
-    ) -> List[Tuple[str, float]]:
+        filter_fn: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> list[tuple[str, float]]:
         """
         Find all airports within a given distance.
 
@@ -201,7 +202,7 @@ class SpatialIndex:
         return results
 
 
-def get_airport_spatial_index(airports_data: Dict[str, Dict[str, Any]]) -> SpatialIndex:
+def get_airport_spatial_index(airports_data: dict[str, dict[str, Any]]) -> SpatialIndex:
     """
     Get or build the cached airport spatial index.
 

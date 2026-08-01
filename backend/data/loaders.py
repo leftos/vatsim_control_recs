@@ -11,14 +11,14 @@ Conflict resolution: Prefer US/USA airports, otherwise first encountered
 
 import csv
 import json
-from typing import Dict, Any
+from typing import Any
 
 from common import logger as debug_logger
 
 
 def load_unified_airport_data(
     apt_base_path: str, airports_json_path: str, iata_icao_path: str
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """
     Load and merge airport data from all three sources.
 
@@ -47,7 +47,7 @@ def load_unified_airport_data(
 
     # Step 1: Load iata-icao.csv (lowest priority - base coordinates)
     try:
-        with open(iata_icao_path, "r", encoding="utf-8") as f:
+        with open(iata_icao_path, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 icao = row.get("icao", "").strip()
@@ -82,7 +82,7 @@ def load_unified_airport_data(
 
     # Step 2: Load airports.json (medium priority - additional details)
     try:
-        with open(airports_json_path, "r", encoding="utf-8") as f:
+        with open(airports_json_path, encoding="utf-8") as f:
             airports_json_data = json.load(f)
 
             for code, details in airports_json_data.items():
@@ -152,7 +152,7 @@ def load_unified_airport_data(
     duplicate_codes = {}  # Track duplicate codes for conflict resolution
 
     try:
-        with open(apt_base_path, "r", encoding="utf-8") as f:
+        with open(apt_base_path, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 icao_id = row.get("ICAO_ID", "").strip()

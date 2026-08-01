@@ -3,14 +3,14 @@ Controller staffing analysis for VATSIM airports.
 """
 
 from collections import defaultdict
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from backend.config.constants import CONTROL_POSITION_ORDER
 
 
 def _get_valid_icao_from_callsign(
-    icao_candidate: str, airports_data: Dict[str, Dict[str, Any]]
-) -> Optional[str]:
+    icao_candidate: str, airports_data: dict[str, dict[str, Any]]
+) -> str | None:
     """
     Attempts to resolve an ICAO candidate from a callsign, considering implied 'K' for US airports.
 
@@ -57,10 +57,10 @@ def _get_valid_icao_from_callsign(
 
 
 def get_staffed_positions(
-    data: Dict[str, Any],
-    airports_data: Dict[str, Dict[str, Any]],
+    data: dict[str, Any],
+    airports_data: dict[str, dict[str, Any]],
     excluded_frequency: str = "199.998",
-) -> Dict[str, List[str]]:
+) -> dict[str, list[str]]:
     """
     Extracts staffed positions at each airport from VATSIM data.
     Excludes positions with a specific frequency.

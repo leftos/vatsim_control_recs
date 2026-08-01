@@ -1,12 +1,15 @@
 """Flight Lookup Modal Screen"""
 
-from textual.screen import ModalScreen
-from textual.widgets import Static, Input
-from textual.containers import Container
-from textual.binding import Binding
+from typing import ClassVar
+
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container
+from textual.screen import ModalScreen
+from textual.widgets import Input, Static
 
 from backend.data.vatsim_api import download_vatsim_data
+
 from .flight_info import FlightInfoScreen
 
 
@@ -17,7 +20,7 @@ class FlightLookupScreen(ModalScreen):
     FlightLookupScreen {
         align: center middle;
     }
-    
+
     #flight-lookup-container {
         width: 60;
         height: auto;
@@ -25,25 +28,25 @@ class FlightLookupScreen(ModalScreen):
         border: thick $primary;
         padding: 1 2;
     }
-    
+
     #flight-lookup-title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
     }
-    
+
     #flight-lookup-input-container {
         height: auto;
         margin-bottom: 1;
     }
-    
+
     #flight-lookup-result {
         text-align: center;
         height: auto;
         margin-top: 1;
         color: $error;
     }
-    
+
     #flight-lookup-hint {
         text-align: center;
         color: $text-muted;
@@ -51,7 +54,7 @@ class FlightLookupScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("enter", "lookup_flight", "Lookup Flight", priority=True),
     ]

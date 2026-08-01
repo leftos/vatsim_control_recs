@@ -6,14 +6,14 @@ ATIS text filtering and parsing.
 """
 
 import re
-from typing import Any, Dict, Set, Tuple
+from typing import Any
 
 from backend.data.weather_parsing import (
-    VISIBILITY_REMOVAL_PATTERNS,
-    WIND_REMOVAL_PATTERNS,
+    ALTIMETER_REMOVAL_PATTERNS,
     CLOUD_REMOVAL_PATTERNS,
     TEMP_DEWPOINT_REMOVAL_PATTERNS,
-    ALTIMETER_REMOVAL_PATTERNS,
+    VISIBILITY_REMOVAL_PATTERNS,
+    WIND_REMOVAL_PATTERNS,
 )
 
 # =============================================================================
@@ -22,9 +22,7 @@ from backend.data.weather_parsing import (
 
 # Runway number pattern with spoken direction forms
 # Matches: "17R", "17L", "17 R", "17R AND LEFT", "17R AND 17L", "17R, 17L AND CENTER", "10L OR 10R"
-RWY_NUM_PATTERN = (
-    r"\d{1,2}\s*(?:[LRC](?![A-Za-z]))?(?:\s*(?:AND|OR|&|,|/)\s*(?:\d{1,2}\s*(?:[LRC](?![A-Za-z]))?|LEFT|RIGHT|CENTER))*"
-)
+RWY_NUM_PATTERN = r"\d{1,2}\s*(?:[LRC](?![A-Za-z]))?(?:\s*(?:AND|OR|&|,|/)\s*(?:\d{1,2}\s*(?:[LRC](?![A-Za-z]))?|LEFT|RIGHT|CENTER))*"
 
 # Approach type keywords
 APPROACH_TYPES = r"ILS|RNAV|VISUAL|VIS|VA|LOC|VOR|NDB|GPS|LDA|SDF|RNP"
@@ -194,7 +192,9 @@ def filter_atis_text(atis_text: str) -> str:
             # Only filter the METAR portion
             filtered_metar = metar_portion
             for pattern in METAR_REMOVAL_PATTERNS:
-                filtered_metar = re.sub(pattern, " ", filtered_metar, flags=re.IGNORECASE)
+                filtered_metar = re.sub(
+                    pattern, " ", filtered_metar, flags=re.IGNORECASE
+                )
 
             # Clean up the filtered METAR portion
             filtered_metar = re.sub(r"\s+", " ", filtered_metar).strip()
@@ -238,7 +238,7 @@ def filter_atis_text(atis_text: str) -> str:
     return filtered
 
 
-def _extract_runway_numbers(text: str) -> Set[str]:
+def _extract_runway_numbers(text: str) -> set[str]:
     """
     Extract runway numbers from a text fragment.
 
@@ -276,7 +276,7 @@ def _extract_runway_numbers(text: str) -> Set[str]:
     return runways
 
 
-def parse_approach_info(atis_text: str) -> Dict[str, Any]:
+def parse_approach_info(atis_text: str) -> dict[str, Any]:
     """
     Parse ATIS text to extract active runway assignments AND approach types.
 
@@ -293,13 +293,13 @@ def parse_approach_info(atis_text: str) -> Dict[str, Any]:
     if not atis_text:
         return {"landing": set(), "departing": set(), "approaches": {}}
 
-    landing: Set[str] = set()
-    departing: Set[str] = set()
-    approaches: Dict[str, Set[str]] = {}  # runway -> set of approach types
+    landing: set[str] = set()
+    departing: set[str] = set()
+    approaches: dict[str, set[str]] = {}  # runway -> set of approach types
     text = atis_text.upper()
 
     # Helper to add approach type for runways
-    def add_approaches(runways: Set[str], approach_type: str):
+    def add_approaches(runways: set[str], approach_type: str):
         for rwy in runways:
             if rwy not in approaches:
                 approaches[rwy] = set()
@@ -442,7 +442,7 @@ def parse_approach_info(atis_text: str) -> Dict[str, Any]:
     return {"landing": landing, "departing": departing, "approaches": approaches}
 
 
-def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
+def parse_runway_assignments(atis_text: str) -> dict[str, set[str]]:
     """
     Parse ATIS text to extract active runway assignments.
 
@@ -458,7 +458,7 @@ def parse_runway_assignments(atis_text: str) -> Dict[str, Set[str]]:
     return {"landing": result["landing"], "departing": result["departing"]}
 
 
-def format_runway_summary(assignments: Dict[str, Set[str]]) -> str:
+def format_runway_summary(assignments: dict[str, set[str]]) -> str:
     """
     Format runway assignments as a compact summary string.
 
@@ -475,7 +475,7 @@ def format_runway_summary(assignments: Dict[str, Set[str]]) -> str:
         return ""
 
     # Sort runways for consistent display (handle malformed runway strings gracefully)
-    def runway_sort_key(x: str) -> Tuple[int, str]:
+    def runway_sort_key(x: str) -> tuple[int, str]:
         match = re.match(r"\d+", x)
         return (int(match.group()) if match else 99, x)
 

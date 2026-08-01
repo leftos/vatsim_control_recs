@@ -5,7 +5,7 @@ Used by both the UI weather briefing modal and the weather daemon generator.
 """
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # Category priority for trend comparison (lower = worse conditions)
 CATEGORY_PRIORITY = {"LIFR": 0, "IFR": 1, "MVFR": 2, "VFR": 3}
@@ -151,10 +151,7 @@ ALTIMETER_REMOVAL_PATTERNS = [
 
 def _matches_any_pattern(token: str, patterns: list) -> bool:
     """Check if a token matches any pattern in the list."""
-    for pattern in patterns:
-        if re.match(pattern, token):
-            return True
-    return False
+    return any(re.match(pattern, token) for pattern in patterns)
 
 
 def is_visibility_token(token: str) -> bool:
@@ -220,12 +217,10 @@ def is_non_weather_token(token: str) -> bool:
     if is_temp_dewpoint_token(token):
         return True
     # Altimeter
-    if is_altimeter_token(token):
-        return True
-    return False
+    return bool(is_altimeter_token(token))
 
 
-def get_airport_size_priority(airport_info: Dict[str, Any]) -> int:
+def get_airport_size_priority(airport_info: dict[str, Any]) -> int:
     """Get airport size priority for sorting (lower = more significant).
 
     Uses FAR 139 certification as primary indicator, falls back to tower type.
@@ -246,7 +241,7 @@ def get_airport_size_priority(airport_info: Dict[str, Any]) -> int:
     return TOWER_TYPE_PRIORITY.get(tower_type, 9)
 
 
-def parse_visibility_sm(metar: str) -> Optional[float]:
+def parse_visibility_sm(metar: str) -> float | None:
     """
     Parse visibility in statute miles from METAR.
 
@@ -313,7 +308,7 @@ def parse_visibility_sm(metar: str) -> Optional[float]:
     return None
 
 
-def parse_ceiling_feet(metar: str) -> Optional[int]:
+def parse_ceiling_feet(metar: str) -> int | None:
     """
     Parse ceiling (lowest BKN or OVC layer) from METAR.
 
@@ -346,7 +341,7 @@ def parse_ceiling_feet(metar: str) -> Optional[int]:
     return lowest_ceiling
 
 
-def parse_ceiling_layer(metar: str) -> Optional[str]:
+def parse_ceiling_layer(metar: str) -> str | None:
     """
     Parse ceiling layer from METAR and return in METAR format.
 
@@ -378,7 +373,7 @@ def parse_ceiling_layer(metar: str) -> Optional[str]:
     return lowest_layer
 
 
-def extract_visibility_str(metar: str) -> Optional[str]:
+def extract_visibility_str(metar: str) -> str | None:
     """
     Extract the visibility string verbatim from METAR.
 
@@ -416,7 +411,7 @@ def extract_visibility_str(metar: str) -> Optional[str]:
     return None
 
 
-def extract_flight_rules_weather(metar: str) -> Tuple[Optional[str], Optional[str]]:
+def extract_flight_rules_weather(metar: str) -> tuple[str | None, str | None]:
     """
     Extract visibility and ceiling strings relevant to flight rules from METAR.
 
@@ -430,7 +425,7 @@ def extract_flight_rules_weather(metar: str) -> Tuple[Optional[str], Optional[st
     return (extract_visibility_str(metar), parse_ceiling_layer(metar))
 
 
-def parse_wind_from_metar(metar: str) -> Optional[str]:
+def parse_wind_from_metar(metar: str) -> str | None:
     """
     Extract wind string from METAR.
 
@@ -450,7 +445,7 @@ def parse_wind_from_metar(metar: str) -> Optional[str]:
     return None
 
 
-def parse_metar_obs_time(metar: str) -> Optional[str]:
+def parse_metar_obs_time(metar: str) -> str | None:
     """
     Extract observation time from METAR in DDHHMM format.
 
@@ -519,7 +514,7 @@ def format_obs_time_display(obs_time: str) -> str:
     return f"{obs_time[2:]}Z"
 
 
-def _parse_single_weather(code: str) -> List[str]:
+def _parse_single_weather(code: str) -> list[str]:
     """
     Parse a single weather code into human-readable format.
 
@@ -580,7 +575,7 @@ def _parse_single_weather(code: str) -> List[str]:
     return results
 
 
-def parse_weather_phenomena(metar: str) -> List[str]:
+def parse_weather_phenomena(metar: str) -> list[str]:
     """
     Parse weather phenomena from METAR string.
 

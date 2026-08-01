@@ -4,7 +4,7 @@ import csv
 import os
 import sys
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .config import DEFAULT_CONFIG, DisambiguatorConfig
 from .data_manager import AirportDataManager
@@ -25,9 +25,9 @@ class AirportDisambiguator:
         self,
         airports_file_path: str,
         lazy_load: bool = True,
-        unified_data: Optional[Dict[str, Dict[str, Any]]] = None,
-        config: Optional[DisambiguatorConfig] = None,
-        names_csv_path: Optional[str] = None,
+        unified_data: dict[str, dict[str, Any]] | None = None,
+        config: DisambiguatorConfig | None = None,
+        names_csv_path: str | None = None,
     ):
         """
         Initialize the airport disambiguator.
@@ -75,7 +75,7 @@ class AirportDisambiguator:
             return
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     icao = row.get("icao", "").strip()

@@ -6,40 +6,42 @@ import re
 import tempfile
 import webbrowser
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional
+from typing import Any, ClassVar
+
 from rich.console import Console
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
-from textual.containers import Container, VerticalScroll
-from textual.binding import Binding
-from textual.app import ComposeResult
 
 from backend import get_metar_batch, get_taf_batch, get_weather_smart
-from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
-from backend.data.datis_api import get_datis_for_airports
-from backend.data.atis_filter import filter_atis_text, colorize_atis_text
 from backend.briefing import (
     AreaClusterer,
-    count_area_categories,
     build_area_summary,
-    parse_wind_from_metar,
-    parse_taf_changes,
+    count_area_categories,
     format_taf_relative_time,
+    parse_taf_changes,
+    parse_wind_from_metar,
 )
+from backend.data.atis_filter import colorize_atis_text, filter_atis_text
+from backend.data.datis_api import get_datis_for_airports
+from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
 from backend.data.weather_parsing import (
-    get_flight_category,
     extract_visibility_str,
+    get_flight_category,
+    is_speci_metar,
+    parse_ceiling_feet,
     parse_ceiling_layer,
     parse_visibility_sm,
-    parse_ceiling_feet,
     parse_weather_phenomena,
-    is_speci_metar,
 )
 from ui import config
 from ui.config import CATEGORY_COLORS
+from ui.debug_logger import debug
 
 
-def _parse_metar_observation_time(metar: str) -> Optional[tuple]:
+def _parse_metar_observation_time(metar: str) -> tuple | None:
     """
     Parse observation time from METAR string.
 
@@ -139,7 +141,7 @@ class WeatherBriefingScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
         Binding("p", "print", "Print"),
@@ -148,8 +150,8 @@ class WeatherBriefingScreen(ModalScreen):
     def __init__(
         self,
         grouping_name: str,
-        airports: List[str],
-        primary_airports: Optional[List[str]] = None,
+        airports: list[str],
+        primary_airports: list[str] | None = None,
         is_flight_route: bool = False,
     ):
         """
@@ -166,7 +168,7 @@ class WeatherBriefingScreen(ModalScreen):
         self.airports = airports
         self.primary_airports = primary_airports or []
         self.is_flight_route = is_flight_route
-        self.weather_data: Dict[str, Dict[str, Any]] = {}
+        self.weather_data: dict[str, dict[str, Any]] = {}
         self._pending_tasks: list = []
 
     def compose(self) -> ComposeResult:
@@ -197,8 +199,8 @@ class WeatherBriefingScreen(ModalScreen):
         try:
             summary_widget = self.query_one("#briefing-summary", Static)
             summary_widget.update(f"[dim]{message}[/dim]")
-        except Exception:
-            pass  # Widget may not be ready yet
+        except Exception as e:
+            debug(f"Could not update briefing progress, widget not ready: {e}")
 
     async def _fetch_all_weather_async(self) -> None:
         """Fetch all weather data in parallel"""
@@ -211,8 +213,8 @@ class WeatherBriefingScreen(ModalScreen):
                 content_widget.update(f"[red]Error fetching weather: {e}[/red]")
                 summary_widget = self.query_one("#briefing-summary", Static)
                 summary_widget.update("[red]Error[/red]")
-            except Exception:
-                pass
+            except Exception as widget_error:
+                debug(f"Could not display weather fetch error: {widget_error}")
             raise  # Re-raise to log the error
 
     async def _fetch_all_weather_async_inner(self) -> None:
@@ -364,7 +366,7 @@ class WeatherBriefingScreen(ModalScreen):
         # Update display
         self._update_display()
 
-    def _create_area_groups(self) -> List[Dict[str, Any]]:
+    def _create_area_groups(self) -> list[dict[str, Any]]:
         """Create area-based groupings using shared AreaClusterer."""
         if not config.UNIFIED_AIRPORT_DATA:
             return []
@@ -475,7 +477,7 @@ class WeatherBriefingScreen(ModalScreen):
         )
 
     def _build_airport_card(
-        self, icao: str, data: Dict[str, Any], is_primary: bool = False
+        self, icao: str, data: dict[str, Any], is_primary: bool = False
     ) -> str:
         """Build a Rich markup card for one airport"""
         lines = []

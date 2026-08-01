@@ -6,11 +6,10 @@ Caches data locally per AIRAC cycle (28 days).
 """
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 # VATSIM vNAS ARTCC boundaries GeoJSON
 VNAS_BOUNDARIES_URL = "https://data-api.vnas.vatsim.net/Files/ArtccBoundaries.geojson"
@@ -22,7 +21,8 @@ AIRAC_CYCLE_DAYS = 28
 
 def get_current_airac_date() -> date:
     """Get the effective date of the current AIRAC cycle."""
-    today = date.today()
+    # AIRAC cycles change on a UTC boundary, not the server's local one
+    today = datetime.now(timezone.utc).date()
     days_since_epoch = (today - AIRAC_EPOCH).days
     cycles_since_epoch = days_since_epoch // AIRAC_CYCLE_DAYS
     return AIRAC_EPOCH + timedelta(days=cycles_since_epoch * AIRAC_CYCLE_DAYS)
@@ -30,7 +30,7 @@ def get_current_airac_date() -> date:
 
 def download_artcc_boundaries(
     cache_dir: Path,
-) -> Optional[Dict[str, List[List[Tuple[float, float]]]]]:
+) -> dict[str, list[list[tuple[float, float]]]] | None:
     """
     Download and parse ARTCC boundary data from VATSIM vNAS API.
 
@@ -48,15 +48,15 @@ def download_artcc_boundaries(
     current_airac = get_current_airac_date()
     if cache_file.exists():
         try:
-            with open(cache_file, "r") as f:
+            with open(cache_file) as f:
                 cached_data = json.load(f)
             # Check if cache is from current AIRAC cycle
             cached_airac = cached_data.get("_airac_date", "")
             if cached_airac == current_airac.isoformat():
                 return cached_data.get("boundaries", {})
             # Cache is stale (old AIRAC cycle), will re-download
-        except Exception:
-            pass  # Re-download if cache is corrupt
+        except (OSError, ValueError) as e:
+            print(f"  Warning: ARTCC boundary cache unreadable, re-downloading: {e}")
 
     print("  Downloading ARTCC boundaries from vNAS API...")
 
@@ -74,7 +74,7 @@ def download_artcc_boundaries(
         return None
 
     # Parse GeoJSON features into boundary polygons
-    boundaries: Dict[str, List[List[Tuple[float, float]]]] = {}
+    boundaries: dict[str, list[list[tuple[float, float]]]] = {}
 
     features = geojson.get("features", [])
     for feature in features:
@@ -132,7 +132,7 @@ def download_artcc_boundaries(
     return boundaries
 
 
-def get_embedded_boundaries() -> Dict[str, List[List[Tuple[float, float]]]]:
+def get_embedded_boundaries() -> dict[str, list[list[tuple[float, float]]]]:
     """
     Return embedded ARTCC boundary approximations.
 
@@ -272,8 +272,8 @@ def get_embedded_boundaries() -> Dict[str, List[List[Tuple[float, float]]]]:
 
 
 def get_artcc_center(
-    boundaries: List[List[Tuple[float, float]]],
-) -> Tuple[float, float]:
+    boundaries: list[list[tuple[float, float]]],
+) -> tuple[float, float]:
     """Calculate the center point of ARTCC boundaries."""
     all_points = []
     for polygon in boundaries:
@@ -287,7 +287,7 @@ def get_artcc_center(
     return (avg_lat, avg_lon)
 
 
-def get_artcc_boundaries(cache_dir: Path) -> Dict[str, List[List[Tuple[float, float]]]]:
+def get_artcc_boundaries(cache_dir: Path) -> dict[str, list[list[tuple[float, float]]]]:
     """
     Get ARTCC boundaries, downloading from vNAS API if needed.
 

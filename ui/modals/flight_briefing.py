@@ -5,36 +5,38 @@ import os
 import tempfile
 import webbrowser
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import Any, ClassVar
+
 from rich.console import Console
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
-from textual.containers import Container, VerticalScroll
-from textual.binding import Binding
-from textual.app import ComposeResult
 
 from backend import get_metar_batch, get_taf_batch
-from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
-from backend.data.datis_api import get_datis_for_airports
-from backend.core.calculations import haversine_distance_nm
-from backend.core.route import (
-    sample_route_points,
-    find_enroute_airports,
-    parse_route_waypoints,
-    format_ete,
-)
 from backend.briefing import (
     parse_taf_changes,
     parse_wind_from_metar,
 )
+from backend.core.calculations import haversine_distance_nm
+from backend.core.route import (
+    find_enroute_airports,
+    format_ete,
+    parse_route_waypoints,
+    sample_route_points,
+)
+from backend.data.datis_api import get_datis_for_airports
+from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
 from backend.data.weather_parsing import (
     get_flight_category,
-    parse_visibility_sm,
     parse_ceiling_feet,
     parse_ceiling_layer,
+    parse_visibility_sm,
 )
 from ui import config
 from ui.config import CATEGORY_COLORS
+from ui.debug_logger import debug
 
 
 class FlightWeatherBriefingScreen(ModalScreen):
@@ -88,7 +90,7 @@ class FlightWeatherBriefingScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
         Binding("p", "print", "Print"),
@@ -99,10 +101,10 @@ class FlightWeatherBriefingScreen(ModalScreen):
         callsign: str,
         departure: str,
         arrival: str,
-        alternate: Optional[str] = None,
-        route: Optional[str] = None,
-        cruise_altitude: Optional[int] = None,
-        groundspeed: Optional[int] = None,
+        alternate: str | None = None,
+        route: str | None = None,
+        cruise_altitude: int | None = None,
+        groundspeed: int | None = None,
     ):
         """
         Initialize the flight weather briefing.
@@ -125,9 +127,9 @@ class FlightWeatherBriefingScreen(ModalScreen):
         self.cruise_altitude = cruise_altitude
         self.groundspeed = groundspeed or 450  # Default cruise speed
 
-        self.weather_data: Dict[str, Dict[str, Any]] = {}
-        self.enroute_points: List[Dict[str, Any]] = []
-        self.route_waypoints: List[str] = []
+        self.weather_data: dict[str, dict[str, Any]] = {}
+        self.enroute_points: list[dict[str, Any]] = []
+        self.route_waypoints: list[str] = []
         self.total_distance: float = 0.0
         self._pending_tasks: list = []
 
@@ -277,8 +279,8 @@ class FlightWeatherBriefingScreen(ModalScreen):
         try:
             widget = self.query_one("#flight-briefing-content", Static)
             widget.update(content)
-        except Exception:
-            pass
+        except Exception as e:
+            debug(f"Could not update flight briefing content: {e}")
 
     def _generate_synopsis(self) -> str:
         """Generate a synopsis of weather conditions along the route."""
@@ -299,9 +301,9 @@ class FlightWeatherBriefingScreen(ModalScreen):
         ]
         worst_enroute = "VFR"
         for cat in enroute_cats:
-            if cat in ["LIFR", "IFR"] and worst_enroute in ["VFR", "MVFR"]:
-                worst_enroute = cat
-            elif cat == "MVFR" and worst_enroute == "VFR":
+            if (cat in ["LIFR", "IFR"] and worst_enroute in ["VFR", "MVFR"]) or (
+                cat == "MVFR" and worst_enroute == "VFR"
+            ):
                 worst_enroute = cat
 
         # Build synopsis
@@ -343,8 +345,8 @@ class FlightWeatherBriefingScreen(ModalScreen):
     def _format_airport_line(
         self,
         icao: str,
-        data: Dict[str, Any],
-        distance_nm: Optional[float] = None,
+        data: dict[str, Any],
+        distance_nm: float | None = None,
         label: str = "",
         show_ete: bool = True,
     ) -> str:
@@ -367,8 +369,8 @@ class FlightWeatherBriefingScreen(ModalScreen):
         return line
 
     def _format_weather_block(
-        self, icao: str, data: Dict[str, Any], indent: str = "    "
-    ) -> List[str]:
+        self, icao: str, data: dict[str, Any], indent: str = "    "
+    ) -> list[str]:
         """Format the weather details for an airport."""
         lines = []
 
@@ -458,7 +460,7 @@ class FlightWeatherBriefingScreen(ModalScreen):
                 )
                 wp_idx = 0
 
-                for i, point in enumerate(self.enroute_points):
+                for _i, point in enumerate(self.enroute_points):
                     # Show some waypoints before this weather point
                     for _ in range(waypoints_per_segment):
                         if wp_idx < num_waypoints:
@@ -489,8 +491,9 @@ class FlightWeatherBriefingScreen(ModalScreen):
                     wp_idx += 1
             else:
                 # No weather points, just show waypoints
-                for wp in self.route_waypoints:
-                    sections.append(f"    [dim]  · {wp}[/dim]")
+                sections.extend(
+                    f"    [dim]  · {wp}[/dim]" for wp in self.route_waypoints
+                )
 
         # Arrival
         sections.append("\n[bold cyan]━━━ ARRIVAL ━━━[/bold cyan]")

@@ -4,21 +4,23 @@ Contains TableManager class and table configuration builders
 """
 
 import asyncio
-from typing import Any, List, Optional
-from widgets.split_flap_datatable import SplitFlapDataTable, NUMERIC_FLAP_CHARS
+from typing import Any
+
 from backend.core.models import AirportStats, GroupingStats
+from widgets.split_flap_datatable import NUMERIC_FLAP_CHARS, SplitFlapDataTable
+
 from .config import (
-    ColumnConfig,
-    TableConfig,
+    ALTIMETER_FLAP_CHARS,
+    CALLSIGN_FLAP_CHARS,
     ETA_FLAP_CHARS,
     ICAO_FLAP_CHARS,
-    CALLSIGN_FLAP_CHARS,
     POSITION_FLAP_CHARS,
     WIND_FLAP_CHARS,
-    ALTIMETER_FLAP_CHARS,
+    ColumnConfig,
+    TableConfig,
 )
-from .utils import eta_sort_key, airport_grouping_sort_key
 from .debug_logger import debug
+from .utils import airport_grouping_sort_key, eta_sort_key
 
 
 class TableManager:
@@ -80,10 +82,12 @@ class TableManager:
             still_animating = False
             for col_idx in range(len(self.table.columns)):
                 cell_key = (row_idx, col_idx)
-                if cell_key in self.table.animated_cells:
-                    if self.table.animated_cells[cell_key].animating:
-                        still_animating = True
-                        break
+                if (
+                    cell_key in self.table.animated_cells
+                    and self.table.animated_cells[cell_key].animating
+                ):
+                    still_animating = True
+                    break
 
             if not still_animating:
                 debug(
@@ -107,9 +111,7 @@ class TableManager:
 
                 # Clean up animated cells for this row
                 cells_to_remove = [
-                    (r, c)
-                    for (r, c) in self.table.animated_cells.keys()
-                    if r == row_idx
+                    (r, c) for (r, c) in self.table.animated_cells if r == row_idx
                 ]
                 for cell_key in cells_to_remove:
                     del self.table.animated_cells[cell_key]
@@ -135,7 +137,7 @@ class TableManager:
                     content_align=col_config.content_align,
                 )
 
-    def populate(self, data: List[Any], progressive: bool = False) -> None:
+    def populate(self, data: list[Any], progressive: bool = False) -> None:
         """
         Populate table with data, applying sorting and animations.
 
@@ -173,7 +175,7 @@ class TableManager:
                 self._update_efficiently_async(data, column_keys, sorted_data=data)
             )
 
-    def _add_rows_to_table(self, data: List[Any], column_keys: list) -> None:
+    def _add_rows_to_table(self, data: list[Any], column_keys: list) -> None:
         """Add rows to table with animations"""
         # Signal start of bulk update for optimized staggering
         self.table.begin_bulk_update()
@@ -189,7 +191,7 @@ class TableManager:
         # Signal end of bulk update to start animations
         self.table.end_bulk_update()
 
-    async def _populate_progressive(self, data: List[Any], column_keys: list) -> None:
+    async def _populate_progressive(self, data: list[Any], column_keys: list) -> None:
         """Populate table progressively in chunks for better perceived performance"""
         total_rows = len(data)
         chunk_size = self.progressive_load_chunk_size
@@ -234,9 +236,9 @@ class TableManager:
 
     async def _update_efficiently_async(
         self,
-        new_data: List[Any],
+        new_data: list[Any],
         column_keys: list,
-        sorted_data: Optional[List[Any]] = None,
+        sorted_data: list[Any] | None = None,
     ) -> None:
         """Async wrapper that waits for pending removals before updating"""
         # CRITICAL: Wait for any pending row removals to complete before proceeding
@@ -254,7 +256,7 @@ class TableManager:
         # Now proceed with the synchronous update
         self._update_efficiently(data_to_use, column_keys)
 
-    def _update_efficiently(self, new_data: List[Any], column_keys: list) -> None:
+    def _update_efficiently(self, new_data: list[Any], column_keys: list) -> None:
         """Efficiently update table by modifying existing rows and adding/removing as needed"""
         current_row_count = len(self.row_keys)
         new_row_count = len(new_data)

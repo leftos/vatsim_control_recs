@@ -3,8 +3,8 @@ Calculation utilities for distance and ETA computations.
 """
 
 import math
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 
 def haversine_distance_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -82,10 +82,10 @@ def format_eta_display(
 
 
 def calculate_eta(
-    flight: Dict[str, Any],
-    airports_data: Dict[str, Dict[str, Any]],
-    aircraft_approach_speeds: Optional[Dict[str, int]] = None,
-) -> Tuple[str, str, float]:
+    flight: dict[str, Any],
+    airports_data: dict[str, dict[str, Any]],
+    aircraft_approach_speeds: dict[str, int] | None = None,
+) -> tuple[str, str, float]:
     """
     Calculate ETA for a flight and return display strings.
     Uses a multi-phase calculation: current groundspeed above 10,000ft,
@@ -158,7 +158,9 @@ def calculate_eta(
         else:
             # Aircraft is above 10k; estimate below-10k segment from glide path
             if airport_elevation < 10000:
-                descent_below_10k = (10000 - airport_elevation) / 1000 * DESCENT_GRADIENT
+                descent_below_10k = (
+                    (10000 - airport_elevation) / 1000 * DESCENT_GRADIENT
+                )
                 below_10k_distance = min(descent_below_10k, distance)
             else:
                 below_10k_distance = 0
@@ -190,9 +192,13 @@ def calculate_eta(
                     # Three-phase: above 10k at groundspeed, below 10k at clamped speed,
                     # final approach at approach speed
                     # Final approach is closest to the airport (within the below-10k zone)
-                    below_10k_cruise = max(0, below_10k_distance - final_approach_distance)
+                    below_10k_cruise = max(
+                        0, below_10k_distance - final_approach_distance
+                    )
                     # If approach extends above 10k (high-elevation airports), reduce above_10k
-                    approach_above_10k = max(0, final_approach_distance - below_10k_distance)
+                    approach_above_10k = max(
+                        0, final_approach_distance - below_10k_distance
+                    )
                     above_10k_cruise = max(0, above_10k_distance - approach_above_10k)
 
                     eta_hours = 0

@@ -3,31 +3,32 @@
 import asyncio
 import re
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Any, ClassVar
+
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
-from textual.containers import Container, VerticalScroll
-from textual.binding import Binding
-from textual.app import ComposeResult
+
 from backend import (
-    find_nearest_airport_with_metar,
+    bearing_to_compass,
+    calculate_bearing,
+    calculate_eta,
     find_airports_near_position,
+    find_nearest_airport_with_metar,
     get_metar,
     haversine_distance_nm,
-    calculate_bearing,
-    bearing_to_compass,
-    calculate_eta,
 )
 from backend.core.flights import get_nearest_airport_if_on_ground
-from backend.data.navaids import get_max_mea_for_route, MeaViolation
+from backend.data.navaids import MeaViolation, get_max_mea_for_route
 from backend.data.vatsim_api import download_vatsim_data, get_member_stats
 from ui import config
 from ui.debug_logger import debug
-from ui.modals.metar_info import get_flight_category, _extract_flight_rules_weather
-
+from ui.modals.metar_info import _extract_flight_rules_weather, get_flight_category
 
 # Cache for VFR alternate results: {origin_icao: {'result': [...], 'timestamp': datetime}}
-_VFR_ALTERNATES_CACHE: Dict[str, Dict[str, Any]] = {}
+_VFR_ALTERNATES_CACHE: dict[str, dict[str, Any]] = {}
 _VFR_ALTERNATES_CACHE_DURATION = 60  # 60 seconds (matches METAR cache)
 
 
@@ -84,7 +85,7 @@ class FlightInfoScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("q", "close", "Close"),
         Binding("c", "copy_route", "Copy Route", priority=True),
@@ -249,8 +250,8 @@ class FlightInfoScreen(ModalScreen):
                     self.alternates_searched = True
         except asyncio.CancelledError:
             return
-        except Exception:
-            pass  # Keep existing data on error
+        except Exception as e:
+            debug(f"Flight info refresh failed, keeping existing data: {e}")
         finally:
             self._refresh_in_progress = False
             self._update_display()
@@ -269,8 +270,8 @@ class FlightInfoScreen(ModalScreen):
             for pilot in pilots:
                 if pilot.get("callsign") == self.callsign:
                     return pilot
-        except Exception:
-            pass
+        except Exception as e:
+            debug(f"Could not fetch fresh pilot data for {self.callsign}: {e}")
 
         return None
 
@@ -288,24 +289,25 @@ class FlightInfoScreen(ModalScreen):
             self._update_title()
         except asyncio.CancelledError:
             return
-        except Exception:
-            pass  # Silently fail - stats are optional
+        except Exception as e:
+            # Stats are optional, so a failure here must not break the screen
+            debug(f"Member stats unavailable for CID {self.cid}: {e}")
 
     def _update_title(self) -> None:
         """Update the title widget with member stats."""
         try:
             title_widget = self.query_one("#flight-info-title", Static)
             title_widget.update(self._format_title())
-        except Exception:
-            pass  # Widget may not be mounted
+        except Exception as e:
+            debug(f"Could not update flight info title, widget not mounted: {e}")
 
     def _update_display(self) -> None:
         """Update the flight info display."""
         try:
             content_widget = self.query_one("#flight-info-content", Static)
             content_widget.update(self._format_flight_info())
-        except Exception:
-            pass  # Widget may not be mounted
+        except Exception as e:
+            debug(f"Could not update flight info content, widget not mounted: {e}")
 
     def _is_vfr_flight(self) -> bool:
         """Check if this is a VFR flight."""
@@ -380,8 +382,8 @@ class FlightInfoScreen(ModalScreen):
                 category, color = get_flight_category(metar)
                 visibility_str, ceiling_str = _extract_flight_rules_weather(metar)
                 return (category, color, visibility_str, ceiling_str)
-        except Exception:
-            pass
+        except Exception as e:
+            debug(f"Could not derive flight category for {icao}: {e}")
         return None
 
     # Constants for alternate airport search
@@ -649,8 +651,7 @@ class FlightInfoScreen(ModalScreen):
                 lines.append("[bold]ROUTE[/bold]")
                 # Wrap long routes to fit in the modal
                 route_lines = self._wrap_text(route, 82)
-                for route_line in route_lines:
-                    lines.append(f"  {route_line}")
+                lines.extend(f"  {route_line}" for route_line in route_lines)
                 lines.append("")
 
             # MEA warning - show if IFR flight's altitude is below required MEA
@@ -672,10 +673,10 @@ class FlightInfoScreen(ModalScreen):
                         # Show segments that exceed filed altitude (limit to 3, highest first)
                         exceeding = [v for v in violations if v.mea > filed_alt]
                         exceeding.sort(key=lambda v: v.mea, reverse=True)
-                        for v in exceeding[:3]:
-                            lines.append(
-                                f"  [dim]{v.airway} ({v.segment_start}→{v.segment_end}) requires {v.mea:,}[/dim]"
-                            )
+                        lines.extend(
+                            f"  [dim]{v.airway} ({v.segment_start}→{v.segment_end}) requires {v.mea:,}[/dim]"
+                            for v in exceeding[:3]
+                        )
                         lines.append("")
             elif self.mea_loading:
                 lines.append("[dim]Checking MEA requirements...[/dim]")
@@ -775,8 +776,7 @@ class FlightInfoScreen(ModalScreen):
                 lines.append("[bold]REMARKS[/bold]")
                 remarks_lines = self._wrap_text(remarks, 82)
                 # Limit to first 5 lines of remarks to avoid overflow
-                for remarks_line in remarks_lines[:5]:
-                    lines.append(f"  {remarks_line}")
+                lines.extend(f"  {remarks_line}" for remarks_line in remarks_lines[:5])
                 if len(remarks_lines) > 5:
                     lines.append(f"  ... ({len(remarks_lines) - 5} more lines)")
                 lines.append("")
@@ -786,21 +786,18 @@ class FlightInfoScreen(ModalScreen):
             lines.append("")  # Nearest airport if on ground
 
             groundspeed = self.flight_data.get("groundspeed", 0)
-            if groundspeed <= 40:  # On ground or nearly stopped
-                # Get nearest airport info
-                if config.UNIFIED_AIRPORT_DATA:
-                    nearest_airport = get_nearest_airport_if_on_ground(
-                        self.flight_data, config.UNIFIED_AIRPORT_DATA
+            # Get nearest airport info when on ground or nearly stopped
+            if groundspeed <= 40 and config.UNIFIED_AIRPORT_DATA:
+                nearest_airport = get_nearest_airport_if_on_ground(
+                    self.flight_data, config.UNIFIED_AIRPORT_DATA
+                )
+                if nearest_airport:
+                    airport_data = config.UNIFIED_AIRPORT_DATA.get(nearest_airport, {})
+                    airport_name = airport_data.get("city", "Unknown")
+                    lines.append(
+                        f"[bold]On Ground at [/bold]{nearest_airport} - {airport_name}"
                     )
-                    if nearest_airport:
-                        airport_data = config.UNIFIED_AIRPORT_DATA.get(
-                            nearest_airport, {}
-                        )
-                        airport_name = airport_data.get("city", "Unknown")
-                        lines.append(
-                            f"[bold]On Ground at [/bold]{nearest_airport} - {airport_name}"
-                        )
-                        lines.append("")
+                    lines.append("")
 
             # Altimeter section
             if self.altimeter_loading:
@@ -917,7 +914,7 @@ class FlightInfoScreen(ModalScreen):
             "flight_plan": flight_plan,
         }
 
-        eta_display, eta_local_time, eta_hours = calculate_eta(
+        eta_display, eta_local_time, _eta_hours = calculate_eta(
             flight_for_eta, config.UNIFIED_AIRPORT_DATA, config.AIRCRAFT_APPROACH_SPEEDS
         )
 

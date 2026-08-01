@@ -8,39 +8,41 @@ import os
 import sys
 import threading
 from datetime import datetime, timezone
-from typing import List, Any, Tuple, Optional
+from typing import Any, ClassVar
+
 from textual.app import App, ComposeResult
-from textual.widgets import DataTable, TabbedContent, TabPane, Footer, Input, Static
 from textual.binding import Binding
 from textual.containers import Container
 from textual.events import Key
+from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
 from backend import analyze_flights_data
 from backend.core.groupings import load_all_groupings
-
 from widgets.split_flap_datatable import SplitFlapDataTable
-from .terminal_driver import get_textual_driver_class
+
+from .debug_logger import debug
+from .modals import (
+    CommandPaletteScreen,
+    DiversionModal,
+    FlightBoardScreen,
+    FlightInfoScreen,
+    FlightLookupScreen,
+    FlightWeatherBriefingScreen,
+    GoToScreen,
+    HelpScreen,
+    HistoricalStatsScreen,
+    MetarInfoScreen,
+    TrackedAirportsModal,
+    VfrAlternativesScreen,
+    WeatherBriefingScreen,
+    WindInfoScreen,
+)
 from .tables import (
     TableManager,
     create_airports_table_config,
     create_groupings_table_config,
 )
-from .modals import (
-    WindInfoScreen,
-    MetarInfoScreen,
-    FlightBoardScreen,
-    TrackedAirportsModal,
-    FlightLookupScreen,
-    GoToScreen,
-    VfrAlternativesScreen,
-    HistoricalStatsScreen,
-    HelpScreen,
-    CommandPaletteScreen,
-    FlightInfoScreen,
-    DiversionModal,
-    WeatherBriefingScreen,
-    FlightWeatherBriefingScreen,
-)
+from .terminal_driver import get_textual_driver_class
 
 
 def set_terminal_title(title: str) -> None:
@@ -54,7 +56,7 @@ def set_terminal_title(title: str) -> None:
     try:
         sys.stderr.write(f"\033]0;{title}\007")
         sys.stderr.flush()
-    except (OSError, IOError, AttributeError):
+    except (OSError, AttributeError):
         pass  # Terminal may not support escape sequences
 
     # Method 2: Write directly to the terminal file descriptor
@@ -65,14 +67,14 @@ def set_terminal_title(title: str) -> None:
             os.write(sys.stdout.fileno(), f"\033]0;{title}\007".encode())
         else:
             os.write(1, f"\033]0;{title}\007".encode())
-    except (OSError, IOError, AttributeError, ValueError):
+    except (OSError, AttributeError, ValueError):
         pass  # Terminal may not support escape sequences or stdout may be redirected
 
     # Method 3: Try the ST terminator instead of BEL
     try:
         sys.stdout.write(f"\033]2;{title}\033\\")
         sys.stdout.flush()
-    except (OSError, IOError, AttributeError):
+    except (OSError, AttributeError):
         pass  # Terminal may not support escape sequences
 
 
@@ -86,55 +88,55 @@ class VATSIMControlApp(App):
         color: $text;
         layout: horizontal;
     }
-    
+
     .header-title {
         width: 1fr;
         content-align: center middle;
         text-align: center;
     }
-    
+
     .header-clocks {
         width: auto;
         content-align: right middle;
         padding-right: 2;
     }
-    
+
     #tabs {
         height: 1fr;
     }
-    
+
     TabbedContent {
         height: 100%;
     }
-    
+
     TabbedContent > ContentSwitcher {
         height: 1fr;
     }
-    
+
     DataTable {
         height: 100%;
         width: 100%;
     }
-    
+
     TabPane {
         height: 100%;
     }
-    
+
     #search-container {
         height: auto;
         display: none;
         padding: 1;
         background: $surface;
     }
-    
+
     #search-container.visible {
         display: block;
     }
-    
+
     #search-input {
         width: 100%;
     }
-    
+
     #status-bar {
         height: 1;
         background: $surface;
@@ -143,7 +145,7 @@ class VATSIMControlApp(App):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         # Visible in footer (compact labels)
         Binding("ctrl+z", "quit", "Quit", priority=True),
         Binding("ctrl+r", "refresh", "Refresh", priority=True),
@@ -182,11 +184,11 @@ class VATSIMControlApp(App):
     ):
         super().__init__(driver_class=get_textual_driver_class())
         self.title = "VATSIM Control Recommendations"
-        self.original_airport_data: List[Any] = (
+        self.original_airport_data: list[Any] = (
             list(airport_data) if airport_data else []
         )
-        self.airport_data: List[Any] = list(airport_data) if airport_data else []
-        self.groupings_data: List[Any] = list(groupings_data) if groupings_data else []
+        self.airport_data: list[Any] = list(airport_data) if airport_data else []
+        self.groupings_data: list[Any] = list(groupings_data) if groupings_data else []
         self.total_flights = total_flights
         self.args = args
         self.airport_allowlist = (
@@ -218,10 +220,10 @@ class VATSIMControlApp(App):
         self.airports_manager = None
         self.groupings_manager = None
         # Cached data for Go To modal (warmed up on mount, kept fresh)
-        self.cached_pilots: List[dict] = []
+        self.cached_pilots: list[dict] = []
         self.cached_groupings: dict = {}
         # Pre-built results list for Go To modal (list of (type, identifier, data) tuples)
-        self.cached_goto_results: List[Tuple[str, str, Any]] = []
+        self.cached_goto_results: list[tuple[str, str, Any]] = []
         self.goto_cache_ready = False
 
     def compose(self) -> ComposeResult:
@@ -268,7 +270,7 @@ class VATSIMControlApp(App):
                 driver.write("\033]0;VATSIM Control Recommendations\007")
             else:
                 set_terminal_title("VATSIM Control Recommendations")
-        except (AttributeError, OSError, IOError):
+        except (AttributeError, OSError):
             # Fallback to other methods if driver is unavailable or write fails
             set_terminal_title("VATSIM Control Recommendations")
 
@@ -291,6 +293,7 @@ class VATSIMControlApp(App):
     async def _warm_up_goto_cache(self) -> None:
         """Warm up caches for Go To modal so it opens quickly."""
         from backend.data.vatsim_api import download_vatsim_data
+
         from . import config
 
         loop = asyncio.get_event_loop()
@@ -316,7 +319,7 @@ class VATSIMControlApp(App):
         """Build the Go To results list (runs in thread executor)."""
         from . import config
 
-        results: List[Tuple[str, str, Any]] = []
+        results: list[tuple[str, str, Any]] = []
         tracked_airports = list(self.airport_allowlist or [])
 
         # Pre-warm disambiguator for all tracked airports at once (batch is more efficient)
@@ -331,8 +334,9 @@ class VATSIMControlApp(App):
             results.append(("airport", icao, pretty_name))
 
         # Add all available groupings
-        for name in sorted(self.cached_groupings.keys()):
-            results.append(("grouping", name, None))
+        results.extend(
+            ("grouping", name, None) for name in sorted(self.cached_groupings)
+        )
 
         # Add flights (sorted by callsign)
         for pilot in sorted(self.cached_pilots, key=lambda p: p.get("callsign", "")):
@@ -398,9 +402,9 @@ class VATSIMControlApp(App):
         """Disable actions that shouldn't fire when a modal is open."""
         from textual.screen import ModalScreen
 
-        if action == "show_historical_stats" and isinstance(self.screen, ModalScreen):
-            return False
-        return True
+        return not (
+            action == "show_historical_stats" and isinstance(self.screen, ModalScreen)
+        )
 
     async def action_quit(self) -> None:
         """Quit the application."""
@@ -454,12 +458,12 @@ class VATSIMControlApp(App):
         try:
             clocks = self.query_one(".header-clocks", Static)
             current_utc = datetime.now(timezone.utc)
-            current_local = datetime.now()
+            current_local = datetime.now().astimezone()
             clocks.update(
                 f"Local {current_local.strftime('%H:%M:%S')} | UTC {current_utc.strftime('%H:%M:%S')}"
             )
-        except Exception:
-            pass
+        except Exception as e:
+            debug(f"Could not update header clocks: {e}")
 
         # Update status bar with time since last refresh
         self.update_status_bar()
@@ -718,8 +722,8 @@ class VATSIMControlApp(App):
                 status_bar = self.query_one("#status-bar", Static)
                 refresh_status = "PAUSED - " if self.refresh_paused else ""
                 status_bar.update(f"{refresh_status}Failed to refresh data from VATSIM")
-            except Exception:
-                pass
+            except Exception as e:
+                debug(f"Could not update status bar after failed refresh: {e}")
 
     def action_toggle_search(self) -> None:
         """Toggle the search box visibility."""
@@ -770,7 +774,7 @@ class VATSIMControlApp(App):
 
     def on_tabbed_content_tab_activated(
         self, event: TabbedContent.TabActivated
-    ) -> None:  # noqa: ARG002
+    ) -> None:
         """Handle tab changes."""
         self.record_user_activity(f"tab_change:{event.tab.id}")
 
@@ -778,7 +782,6 @@ class VATSIMControlApp(App):
         """Handle row navigation in tables."""
         # Don't record activity for automatic row highlights (e.g., on app init)
         # Only key presses (handled by on_key) will record user activity
-        pass
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes."""
@@ -861,8 +864,8 @@ class VATSIMControlApp(App):
                 try:
                     # Get the grouping name from the backend data, but account for table sorting
                     # The table sorts by airport_grouping_sort_key, so we need to sort our data the same way
-                    from .utils import airport_grouping_sort_key
                     from . import config
+                    from .utils import airport_grouping_sort_key
 
                     # Sort groupings_data the same way the table does
                     sorted_groupings = sorted(
@@ -927,9 +930,8 @@ class VATSIMControlApp(App):
                         )
                         self.active_flight_board = flight_board
                         self.push_screen(flight_board)
-                except Exception:
-                    # Silently fail if there's an issue
-                    pass
+                except Exception as e:
+                    debug(f"Could not open flight board for selected row: {e}")
 
     def action_show_wind_lookup(self) -> None:
         """Show the wind information lookup modal"""
@@ -969,8 +971,8 @@ class VATSIMControlApp(App):
                         airport_text = str(row_data[0])
                         # Extract ICAO (first 4 characters before space)
                         icao = airport_text.split()[0].strip()
-                except Exception:
-                    pass
+                except Exception as e:
+                    debug(f"Could not read selected diversion airport: {e}")
                 break
 
             # FlightInfoScreen: Use departure (on ground at departure) or arrival (in flight/landed)
@@ -1031,8 +1033,8 @@ class VATSIMControlApp(App):
                                 focused_table.cursor_row
                             )
                             icao = str(row_data[1]).strip()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            debug(f"Could not read ICAO from grouping row: {e}")
                     else:
                         # For single airport, the board airport is the departure/arrival airport
                         icao = str(screen.airport_icao_or_list)
@@ -1159,8 +1161,9 @@ class VATSIMControlApp(App):
 
     def _open_airport_weather_briefing(self, airports: list) -> None:
         """Open weather briefing for airport(s), with 30nm radius for single airport."""
-        from . import config
         from backend import find_airports_near_position
+
+        from . import config
 
         if len(airports) == 1:
             # Single airport - find nearby airports within 30nm
@@ -1204,7 +1207,7 @@ class VATSIMControlApp(App):
         )
         self.push_screen(briefing_screen)
 
-    def _parse_altitude(self, altitude_str: str) -> Optional[int]:
+    def _parse_altitude(self, altitude_str: str) -> int | None:
         """Parse altitude string to feet."""
         if not altitude_str:
             return None
@@ -1225,10 +1228,10 @@ class VATSIMControlApp(App):
         callsign: str,
         departure: str,
         arrival: str,
-        alternate: Optional[str] = None,
-        route: Optional[str] = None,
-        cruise_altitude: Optional[int] = None,
-        groundspeed: Optional[int] = None,
+        alternate: str | None = None,
+        route: str | None = None,
+        cruise_altitude: int | None = None,
+        groundspeed: int | None = None,
     ) -> None:
         """Open full flight weather briefing with enroute weather."""
         briefing_screen = FlightWeatherBriefingScreen(

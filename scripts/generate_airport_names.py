@@ -20,8 +20,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.insert(0, project_root)
 
-from backend.data.loaders import load_unified_airport_data
 from airport_disambiguator import AirportDisambiguator
+from backend.data.loaders import load_unified_airport_data
 
 
 def title_case_name(name: str) -> str:
@@ -38,7 +38,7 @@ def load_existing_csv(path: str) -> dict[str, str]:
         return {}
 
     existing = {}
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             icao = row.get("icao", "").strip()
@@ -80,9 +80,7 @@ def main():
 
     # Run disambiguator on all airports
     print("Running disambiguator (this takes ~60s)...")
-    sys.stdout = io.TextIOWrapper(
-        sys.stdout.buffer, encoding="utf-8", errors="replace"
-    )
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     disambiguator = AirportDisambiguator(
         os.path.join(raw_dir, "airports.json"),
         lazy_load=False,

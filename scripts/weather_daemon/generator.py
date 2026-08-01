@@ -11,11 +11,12 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Set, Tuple
+from typing import Any
 
 from rich.console import Console
 
@@ -75,7 +76,7 @@ def _check_stale_lock(lock_file: Path) -> bool:
             return False  # Process is alive, lock is valid
 
         # Process is not running - check file age as safety measure
-        file_age = datetime.now().timestamp() - lock_file.stat().st_mtime
+        file_age = datetime.now(timezone.utc).timestamp() - lock_file.stat().st_mtime
         if file_age < LOCK_STALE_TIMEOUT:
             # File is recent, maybe process just started - be conservative
             logger.debug(
@@ -120,7 +121,9 @@ if sys.platform == "win32":
         acquired = False
 
         try:
-            lock_fd = open(lock_file, "w")
+            # The handle must outlive this block: it holds the lock until the
+            # caller releases it, so a context manager would free it too early
+            lock_fd = open(lock_file, "w")  # noqa: SIM115
             try:
                 msvcrt.locking(lock_fd.fileno(), msvcrt.LK_NBLCK, 1)
                 acquired = True
@@ -129,7 +132,7 @@ if sys.platform == "win32":
                 lock_fd.write(f"{datetime.now(timezone.utc).isoformat()}\n")
                 lock_fd.flush()
                 logger.debug(f"Acquired lock: {lock_file}")
-            except (IOError, OSError):
+            except OSError:
                 # Lock is held by another process
                 logger.info(f"Lock already held by another process: {lock_file}")
                 acquired = False
@@ -143,7 +146,7 @@ if sys.platform == "win32":
                         lock_fd.seek(0)
                         msvcrt.locking(lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
                         logger.debug(f"Released lock: {lock_file}")
-                    except (IOError, OSError):
+                    except OSError:
                         pass
                 lock_fd.close()
 else:
@@ -181,7 +184,9 @@ else:
         acquired = False
 
         try:
-            lock_fd = open(lock_file, "w")
+            # The handle must outlive this block: it holds the lock until the
+            # caller releases it, so a context manager would free it too early
+            lock_fd = open(lock_file, "w")  # noqa: SIM115
             try:
                 fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 acquired = True
@@ -190,7 +195,7 @@ else:
                 lock_fd.write(f"{datetime.now(timezone.utc).isoformat()}\n")
                 lock_fd.flush()
                 logger.debug(f"Acquired lock: {lock_file}")
-            except (IOError, OSError):
+            except OSError:
                 # Lock is held by another process
                 logger.info(f"Lock already held by another process: {lock_file}")
                 acquired = False
@@ -203,12 +208,12 @@ else:
                     try:
                         fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
                         logger.debug(f"Released lock: {lock_file}")
-                    except (IOError, OSError):
+                    except OSError:
                         pass
                 lock_fd.close()
 
 
-def compute_weather_hash(metars: Dict[str, str], tafs: Dict[str, str]) -> str:
+def compute_weather_hash(metars: dict[str, str], tafs: dict[str, str]) -> str:
     """
     Compute a hash of weather data to detect changes.
 
@@ -229,7 +234,7 @@ def compute_weather_hash(metars: Dict[str, str], tafs: Dict[str, str]) -> str:
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
 
 
-def load_weather_hash(cache_dir: Path) -> Optional[str]:
+def load_weather_hash(cache_dir: Path) -> str | None:
     """Load the previously saved weather hash."""
     hash_file = cache_dir / "weather_hash.txt"
     if hash_file.exists():
@@ -251,7 +256,7 @@ def save_weather_hash(cache_dir: Path, weather_hash: str) -> None:
 
 
 def _save_weather_cache(
-    cache_dir: Path, metars: Dict, tafs: Dict, atis_data: Dict
+    cache_dir: Path, metars: dict, tafs: dict, atis_data: dict
 ) -> None:
     """Save weather data to cache for later use with --use-cached."""
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -273,8 +278,8 @@ def _save_weather_cache(
 
 
 def _load_weather_cache(
-    cache_dir: Path, max_age_seconds: Optional[int] = None
-) -> Optional[Tuple[Dict, Dict, Dict, str]]:
+    cache_dir: Path, max_age_seconds: int | None = None
+) -> tuple[dict, dict, dict, str] | None:
     """Load weather data from cache.
 
     Args:
@@ -290,7 +295,7 @@ def _load_weather_cache(
         return None
 
     try:
-        with open(cache_file, "r", encoding="utf-8") as f:
+        with open(cache_file, encoding="utf-8") as f:
             cache_data = json.load(f)
 
         timestamp_str = cache_data.get("timestamp", "")
@@ -340,7 +345,7 @@ class ProgressTracker:
         self.last_logged_pct = -log_interval_pct  # Ensure first update logs
         self.start_time = datetime.now(timezone.utc)
 
-    def update(self, completed: Optional[int] = None, increment: int = 1) -> None:
+    def update(self, completed: int | None = None, increment: int = 1) -> None:
         """Update progress and print/log if at interval."""
         if completed is not None:
             self.completed = completed
@@ -389,52 +394,55 @@ class ProgressTracker:
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from airport_disambiguator import AirportDisambiguator  # noqa: E402
 from backend import (  # noqa: E402
-    get_metar_batch,
-    get_taf_batch,
-    get_rate_limit_status,
     fetch_weather_bbox,
+    get_metar_batch,
+    get_rate_limit_status,
+    get_taf_batch,
     load_all_groupings,
     load_unified_airport_data,
 )
 from backend.briefing import (  # noqa: E402
     AreaClusterer,
-    count_area_categories,
     build_area_summary,
-    parse_wind_from_metar,
-    parse_taf_changes,
+    count_area_categories,
     format_taf_relative_time,
+    parse_taf_changes,
+    parse_wind_from_metar,
 )
-from .artcc_boundaries import get_artcc_boundaries  # noqa: E402
-from .tile_generator import generate_weather_tiles  # noqa: E402
 from backend.core.groupings import (  # noqa: E402
     load_custom_groupings,
     resolve_grouping_recursively,
 )
-from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports  # noqa: E402
+from backend.data.atis_filter import colorize_atis_text, filter_atis_text  # noqa: E402
 from backend.data.datis_api import get_datis_for_airports  # noqa: E402
-from backend.data.atis_filter import filter_atis_text, colorize_atis_text  # noqa: E402
-from airport_disambiguator import AirportDisambiguator  # noqa: E402
-
-from .config import DaemonConfig, CATEGORY_COLORS, ARTCC_NAMES  # noqa: E402
+from backend.data.vatsim_api import (  # noqa: E402
+    download_vatsim_data,
+    get_atis_for_airports,
+)
 
 # Import METAR parsing functions
 from backend.data.weather_parsing import (  # noqa: E402
-    get_flight_category,
     extract_visibility_str,
-    parse_ceiling_layer,
-    parse_visibility_sm,
-    parse_ceiling_feet,
-    parse_weather_phenomena,
-    parse_metar_obs_time,
     format_obs_time_display,
+    get_flight_category,
     is_speci_metar,
+    parse_ceiling_feet,
+    parse_ceiling_layer,
+    parse_metar_obs_time,
+    parse_visibility_sm,
+    parse_weather_phenomena,
 )
+
+from .artcc_boundaries import get_artcc_boundaries  # noqa: E402
+from .config import ARTCC_NAMES, CATEGORY_COLORS, DaemonConfig  # noqa: E402
+from .tile_generator import generate_weather_tiles  # noqa: E402
 
 
 def get_artcc_bboxes(
-    artcc_codes: Set[str], cache_dir: Path, padding_degrees: float = 0.5
-) -> Dict[str, Tuple[float, float, float, float]]:
+    artcc_codes: set[str], cache_dir: Path, padding_degrees: float = 0.5
+) -> dict[str, tuple[float, float, float, float]]:
     """
     Calculate bounding boxes for ARTCCs from their polygon boundaries.
 
@@ -487,21 +495,21 @@ class WeatherBriefingGenerator:
     def __init__(
         self,
         grouping_name: str,
-        airports: List[str],
-        unified_airport_data: Dict[str, Dict],
+        airports: list[str],
+        unified_airport_data: dict[str, dict],
         disambiguator: AirportDisambiguator,
     ):
         self.grouping_name = grouping_name
         self.airports = airports
         self.unified_airport_data = unified_airport_data
         self.disambiguator = disambiguator
-        self.weather_data: Dict[str, Dict[str, Any]] = {}
+        self.weather_data: dict[str, dict[str, Any]] = {}
 
     def fetch_weather_data(
         self,
-        metars: Dict[str, str],
-        tafs: Dict[str, str],
-        atis_data: Dict[str, Dict],
+        metars: dict[str, str],
+        tafs: dict[str, str],
+        atis_data: dict[str, dict],
     ) -> None:
         """Build weather data structure from pre-fetched data."""
         for icao in self.airports:
@@ -534,7 +542,7 @@ class WeatherBriefingGenerator:
                 "is_speci": is_speci_metar(metar) if metar else False,
             }
 
-    def _get_airport_coords(self, icao: str) -> Optional[Tuple[float, float]]:
+    def _get_airport_coords(self, icao: str) -> tuple[float, float] | None:
         """Get airport coordinates."""
         airport_info = self.unified_airport_data.get(icao, {})
         lat = airport_info.get("latitude")
@@ -543,7 +551,7 @@ class WeatherBriefingGenerator:
             return (lat, lon)
         return None
 
-    def _create_area_groups(self) -> List[Dict[str, Any]]:
+    def _create_area_groups(self) -> list[dict[str, Any]]:
         """Create area-based groupings using shared AreaClusterer."""
         clusterer = AreaClusterer(
             weather_data=self.weather_data,
@@ -552,7 +560,7 @@ class WeatherBriefingGenerator:
         )
         return clusterer.create_area_groups()
 
-    def _get_common_obs_time(self) -> Tuple[Optional[str], Set[str]]:
+    def _get_common_obs_time(self) -> tuple[str | None, set[str]]:
         """
         Find the most common METAR observation time and airports with different times.
 
@@ -566,7 +574,7 @@ class WeatherBriefingGenerator:
 
         # Count observation times (just HHMM, ignoring day)
         time_counts: Counter = Counter()
-        airport_times: Dict[str, str] = {}
+        airport_times: dict[str, str] = {}
 
         for icao, data in self.weather_data.items():
             obs_time = data.get("obs_time")
@@ -606,7 +614,7 @@ class WeatherBriefingGenerator:
 
         return (most_common_hhmm, different_airports)
 
-    def _get_latest_obs_time(self) -> Optional[str]:
+    def _get_latest_obs_time(self) -> str | None:
         """
         Find the latest (most recent) METAR observation time across all airports.
 
@@ -620,10 +628,10 @@ class WeatherBriefingGenerator:
         current_hour = now.hour
         current_minute = now.minute
 
-        latest_time: Optional[str] = None
-        latest_minutes_ago: Optional[int] = None
+        latest_time: str | None = None
+        latest_minutes_ago: int | None = None
 
-        for icao, data in self.weather_data.items():
+        for data in self.weather_data.values():
             obs_time = data.get("obs_time")
             if obs_time and len(obs_time) == 6:
                 # Parse DDHHMM format
@@ -636,11 +644,7 @@ class WeatherBriefingGenerator:
                 day_diff = current_day - obs_day
                 if day_diff < 0:
                     # Month rollover (e.g., current day 1, obs day 31)
-                    day_diff = (
-                        1
-                        if day_diff == -30 or day_diff == -29 or day_diff == -28
-                        else 1
-                    )
+                    day_diff = 1
 
                 minutes_ago = (
                     day_diff * 24 * 60
@@ -659,7 +663,7 @@ class WeatherBriefingGenerator:
         return latest_time
 
     def _build_airport_card(
-        self, icao: str, data: Dict[str, Any], show_obs_time: bool = False
+        self, icao: str, data: dict[str, Any], show_obs_time: bool = False
     ) -> str:
         """Build a Rich markup card for one airport.
 
@@ -845,7 +849,9 @@ class WeatherBriefingGenerator:
                 # Add source indicator for RW D-ATIS
                 source_label = "[#ffaa00](RW)[/#ffaa00] " if atis_source == "rw" else ""
                 display_text = colorize_atis_text(filtered_text, atis_code)
-                lines.append(f"  [#aaaaaa]{source_label}{type_label}{display_text}[/#aaaaaa]")
+                lines.append(
+                    f"  [#aaaaaa]{source_label}{type_label}{display_text}[/#aaaaaa]"
+                )
 
         return "\n".join(lines)
 
@@ -920,12 +926,13 @@ class WeatherBriefingGenerator:
 
         # Show airports without METAR data
         missing_airports = [
-            icao for icao in self.airports
+            icao
+            for icao in self.airports
             if not self.weather_data.get(icao, {}).get("metar")
         ]
         if missing_airports:
             console.print(
-                f"[bold #cc6666]━━━ AIRPORTS WITHOUT METAR DATA ━━━[/bold #cc6666]"
+                "[bold #cc6666]━━━ AIRPORTS WITHOUT METAR DATA ━━━[/bold #cc6666]"
             )
             console.print(
                 f"[#aaaaaa]The following {len(missing_airports)} airport(s) are in this grouping but have no METAR available from aviationweather.gov:[/#aaaaaa]"
@@ -956,7 +963,7 @@ body { margin: 20px; background: #1a1a1a; color: #e0e0e0; max-width: 100%; }
 
         return html_content
 
-    def get_category_summary(self) -> Dict[str, int]:
+    def get_category_summary(self) -> dict[str, int]:
         """Get category counts for this briefing."""
         counts = {"LIFR": 0, "IFR": 0, "MVFR": 0, "VFR": 0, "UNK": 0}
         for data in self.weather_data.values():
@@ -964,7 +971,7 @@ body { margin: 20px; background: #1a1a1a; color: #e0e0e0; max-width: 100%; }
             counts[cat] = counts.get(cat, 0) + 1
         return counts
 
-    def get_airport_weather_points(self) -> List[Dict[str, Any]]:
+    def get_airport_weather_points(self) -> list[dict[str, Any]]:
         """
         Get per-airport weather data with coordinates for map visualization.
 
@@ -1024,13 +1031,13 @@ body { margin: 20px; background: #1a1a1a; color: #e0e0e0; max-width: 100%; }
 
 def _generate_artcc_wide_briefings(
     config: DaemonConfig,
-    groupings_to_process: Dict[str, Tuple[List[str], str]],
-    metars: Dict[str, str],
-    tafs: Dict[str, str],
-    atis_data: Dict[str, Any],
-    unified_airport_data: Dict[str, Any],
+    groupings_to_process: dict[str, tuple[list[str], str]],
+    metars: dict[str, str],
+    tafs: dict[str, str],
+    atis_data: dict[str, Any],
+    unified_airport_data: dict[str, Any],
     disambiguator: Any,
-    generated_files: Dict[str, str],
+    generated_files: dict[str, str],
 ) -> None:
     """
     Generate ARTCC-wide briefings containing all airports for each ARTCC.
@@ -1040,8 +1047,8 @@ def _generate_artcc_wide_briefings(
     """
 
     # Collect all unique airports per ARTCC
-    artcc_all_airports: Dict[str, Set[str]] = {}
-    for grouping_name, (airports, artcc) in groupings_to_process.items():
+    artcc_all_airports: dict[str, set[str]] = {}
+    for airports, artcc in groupings_to_process.values():
         if artcc != "custom":
             if artcc not in artcc_all_airports:
                 artcc_all_airports[artcc] = set()
@@ -1079,7 +1086,7 @@ def _generate_artcc_wide_briefings(
         logger.debug(f"Generated ARTCC briefing: {output_path}")
 
 
-def generate(config: DaemonConfig) -> Dict[str, str]:
+def generate(config: DaemonConfig) -> dict[str, str]:
     """
     Generate weather briefings based on config settings.
 
@@ -1129,8 +1136,8 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
     )
 
     # Determine which groupings to process
-    groupings_to_process: Dict[
-        str, Tuple[List[str], str]
+    groupings_to_process: dict[
+        str, tuple[list[str], str]
     ] = {}  # name -> (airports, artcc)
 
     # Map preset groupings to their ARTCC
@@ -1141,7 +1148,7 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
                 continue
 
             try:
-                with open(json_file, "r") as f:
+                with open(json_file) as f:
                     artcc_groupings = json.load(f)
 
                 for grouping_name, grouping_data in artcc_groupings.items():
@@ -1178,9 +1185,9 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
     print(f"  Found {len(groupings_to_process)} groupings to process")
 
     # Collect all unique airports and determine which ARTCCs are involved
-    all_airports: Set[str] = set()
-    artccs_involved: Set[str] = set()
-    custom_airports: Set[str] = set()  # Airports in custom groupings (no ARTCC bbox)
+    all_airports: set[str] = set()
+    artccs_involved: set[str] = set()
+    custom_airports: set[str] = set()  # Airports in custom groupings (no ARTCC bbox)
 
     for airports, artcc in groupings_to_process.values():
         all_airports.update(airports)
@@ -1193,9 +1200,9 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
     airports_list = list(all_airports)
 
     # Determine whether to fetch fresh weather or use cached
-    metars: Dict[str, str] = {}
-    tafs: Dict[str, str] = {}
-    atis_data: Dict[str, Any] = {}
+    metars: dict[str, str] = {}
+    tafs: dict[str, str] = {}
+    atis_data: dict[str, Any] = {}
 
     if config.fetch_fresh_weather:
         # Check if we have fresh cached weather data (within TTL)
@@ -1286,9 +1293,7 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
                 return True
             if airport_info.get("far139"):
                 return True
-            if airport_info.get("iata"):
-                return True
-            return False
+            return bool(airport_info.get("iata"))
 
         missing_airports = [a for a in airports_list if a not in metars]
         fetchable_airports = [a for a in missing_airports if likely_has_metar(a)]
@@ -1337,7 +1342,9 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
         atis_data = (
             get_atis_for_airports(vatsim_data, airports_list) if vatsim_data else {}
         )
-        vatsim_atis_count = len([a for a in atis_data.values() if a]) if atis_data else 0
+        vatsim_atis_count = (
+            len([a for a in atis_data.values() if a]) if atis_data else 0
+        )
         print(f"    Found {vatsim_atis_count} airports with VATSIM ATIS")
         logger.info(f"Found {vatsim_atis_count} airports with active VATSIM ATIS")
 
@@ -1404,11 +1411,11 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
     # Create output directories
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
-    generated_files: Dict[str, str] = {}
-    artcc_groupings_map: Dict[str, List[Dict]] = {}  # artcc -> list of grouping info
+    generated_files: dict[str, str] = {}
+    artcc_groupings_map: dict[str, list[dict]] = {}  # artcc -> list of grouping info
 
     # Helper to get airport's ARTCC from unified data
-    def get_airport_artcc(icao: str) -> Optional[str]:
+    def get_airport_artcc(icao: str) -> str | None:
         airport_info = unified_airport_data.get(icao, {})
         # Field is 'artcc' in unified airport data
         artcc_code = airport_info.get("artcc", "")
@@ -1417,7 +1424,7 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
         return None
 
     # Helper to get airport coordinates
-    def get_airport_coords(icao: str) -> Optional[Tuple[float, float]]:
+    def get_airport_coords(icao: str) -> tuple[float, float] | None:
         airport_info = unified_airport_data.get(icao, {})
         lat = airport_info.get("latitude")
         lon = airport_info.get("longitude")
@@ -1426,7 +1433,7 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
         return None
 
     # Helper to infer ARTCCs for a grouping from its airports
-    def infer_artccs_for_grouping(airports: List[str]) -> Set[str]:
+    def infer_artccs_for_grouping(airports: list[str]) -> set[str]:
         artccs = set()
         for icao in airports:
             artcc_code = get_airport_artcc(icao)
@@ -1541,7 +1548,7 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
 
         # Collect weather data for ALL airports with METARs (not just grouping airports)
         # This uses all weather fetched via bbox, giving fuller tile coverage
-        all_airport_weather: Dict[str, Dict] = {}
+        all_airport_weather: dict[str, dict] = {}
         for icao, metar in metars.items():
             if not metar:
                 continue
@@ -1635,12 +1642,12 @@ def generate(config: DaemonConfig) -> Dict[str, str]:
 
 
 # Legacy aliases for backwards compatibility
-def generate_all_briefings(config: DaemonConfig) -> Dict[str, str]:
+def generate_all_briefings(config: DaemonConfig) -> dict[str, str]:
     """Legacy alias for generate(). Use generate() instead."""
     return generate(config)
 
 
-def generate_index_only(config: DaemonConfig) -> Dict[str, str]:
+def generate_index_only(config: DaemonConfig) -> dict[str, str]:
     """Legacy: Generate only the index page. Use generate() with config.generate_index=True instead."""
     config.fetch_fresh_weather = False
     config.generate_briefings = False
@@ -1649,7 +1656,7 @@ def generate_index_only(config: DaemonConfig) -> Dict[str, str]:
     return generate(config)
 
 
-def generate_with_cached_weather(config: DaemonConfig) -> Dict[str, str]:
+def generate_with_cached_weather(config: DaemonConfig) -> dict[str, str]:
     """Legacy: Use cached weather. Use generate() with config.fetch_fresh_weather=False instead."""
     config.fetch_fresh_weather = False
     return generate(config)

@@ -4,7 +4,6 @@ Weather Daemon Configuration
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 
 @dataclass
@@ -18,16 +17,16 @@ class DaemonConfig:
 
     # Path to custom groupings JSON file
     custom_groupings_path: Path = field(
-        default_factory=lambda: Path(__file__).parent.parent.parent
-        / "data"
-        / "custom_groupings.json"
+        default_factory=lambda: (
+            Path(__file__).parent.parent.parent / "data" / "custom_groupings.json"
+        )
     )
 
     # Path to preset groupings directory
     preset_groupings_dir: Path = field(
-        default_factory=lambda: Path(__file__).parent.parent.parent
-        / "data"
-        / "preset_groupings"
+        default_factory=lambda: (
+            Path(__file__).parent.parent.parent / "data" / "preset_groupings"
+        )
     )
 
     # Path to data files
@@ -36,7 +35,7 @@ class DaemonConfig:
     )
 
     # ARTCCs to include (None = all)
-    artcc_filter: Optional[List[str]] = None
+    artcc_filter: list[str] | None = None
 
     # Maximum concurrent weather API requests
     max_workers: int = 20
@@ -53,16 +52,16 @@ class DaemonConfig:
 
     # ARTCC boundary cache directory
     artcc_cache_dir: Path = field(
-        default_factory=lambda: Path(__file__).parent.parent.parent
-        / "cache"
-        / "artcc_boundaries"
+        default_factory=lambda: (
+            Path(__file__).parent.parent.parent / "cache" / "artcc_boundaries"
+        )
     )
 
     # Weather cache directory (for --use-cached mode)
     weather_cache_dir: Path = field(
-        default_factory=lambda: Path(__file__).parent.parent.parent
-        / "cache"
-        / "weather"
+        default_factory=lambda: (
+            Path(__file__).parent.parent.parent / "cache" / "weather"
+        )
     )
 
     # Fetch fresh weather data (False = use cached)
@@ -83,7 +82,7 @@ class DaemonConfig:
 
     # Server timezone for display (e.g., 'America/Los_Angeles')
     # If None, uses UTC
-    display_timezone: Optional[str] = None
+    display_timezone: str | None = None
 
     # Skip regeneration if weather data hasn't changed since last run
     # Uses a hash of METAR/TAF data to detect changes
@@ -92,7 +91,11 @@ class DaemonConfig:
     # Lock file path (prevents concurrent runs)
     # NOTE: Must NOT be in /tmp when using systemd with PrivateTmp=true,
     # as the service sees a different /tmp than SSH commands
-    lock_file: Path = field(default_factory=lambda: Path("/opt/vatsim-weather-daemon/cache/weather-daemon.lock"))
+    lock_file: Path = field(
+        default_factory=lambda: Path(
+            "/opt/vatsim-weather-daemon/cache/weather-daemon.lock"
+        )
+    )
 
     def __post_init__(self):
         """Ensure paths are Path objects and create directories."""

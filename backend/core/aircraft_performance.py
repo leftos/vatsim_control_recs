@@ -11,14 +11,12 @@ import csv
 import os
 import threading
 from functools import lru_cache
-from typing import Dict, Optional
 
 from common import logger as debug_logger
 
-
 # ADG (Airplane Design Group) to minimum runway length mapping (in feet)
 # These are conservative estimates based on typical aircraft in each group
-ADG_RUNWAY_REQUIREMENTS: Dict[str, int] = {
+ADG_RUNWAY_REQUIREMENTS: dict[str, int] = {
     "I": 3000,  # Small single-engine (C172, PA28)
     "II": 4500,  # Small twin, light business jets (C500, BE20)
     "III": 6000,  # Regional jets, narrow-body (CRJ, B737, A320)
@@ -28,7 +26,7 @@ ADG_RUNWAY_REQUIREMENTS: Dict[str, int] = {
 }
 
 # Aircraft class fallback mapping (if ADG not available)
-CLASS_RUNWAY_REQUIREMENTS: Dict[str, int] = {
+CLASS_RUNWAY_REQUIREMENTS: dict[str, int] = {
     "Light": 3000,
     "Medium": 5500,
     "Large": 6500,
@@ -38,14 +36,14 @@ CLASS_RUNWAY_REQUIREMENTS: Dict[str, int] = {
 
 # Thread-safe cache for aircraft ADG data
 _ADG_DATA_LOCK = threading.Lock()
-_AIRCRAFT_ADG_DATA: Optional[Dict[str, str]] = None
-_AIRCRAFT_CLASS_DATA: Optional[Dict[str, str]] = None
+_AIRCRAFT_ADG_DATA: dict[str, str] | None = None
+_AIRCRAFT_CLASS_DATA: dict[str, str] | None = None
 
 # Default runway requirement for unknown aircraft
 DEFAULT_RUNWAY_REQUIREMENT = 6000
 
 
-def _load_aircraft_data(filename: str) -> tuple[Dict[str, str], Dict[str, str]]:
+def _load_aircraft_data(filename: str) -> tuple[dict[str, str], dict[str, str]]:
     """Load aircraft ADG and class data from CSV file.
 
     Args:
@@ -60,11 +58,11 @@ def _load_aircraft_data(filename: str) -> tuple[Dict[str, str], Dict[str, str]]:
         if _AIRCRAFT_ADG_DATA is not None and _AIRCRAFT_CLASS_DATA is not None:
             return _AIRCRAFT_ADG_DATA, _AIRCRAFT_CLASS_DATA
 
-        adg_data: Dict[str, str] = {}
-        class_data: Dict[str, str] = {}
+        adg_data: dict[str, str] = {}
+        class_data: dict[str, str] = {}
 
         try:
-            with open(filename, "r", encoding="utf-8-sig") as f:
+            with open(filename, encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     icao_code = row.get("ICAO_Code", "").strip()
@@ -136,7 +134,7 @@ def get_required_runway_length(aircraft_type: str) -> int:
     return DEFAULT_RUNWAY_REQUIREMENT
 
 
-def get_adg_for_aircraft(aircraft_type: str) -> Optional[str]:
+def get_adg_for_aircraft(aircraft_type: str) -> str | None:
     """Get the ADG classification for an aircraft type.
 
     Args:

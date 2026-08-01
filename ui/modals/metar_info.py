@@ -3,29 +3,29 @@
 import asyncio
 import re
 from datetime import datetime, timezone
-from typing import Optional
-from textual.screen import ModalScreen
-from textual.widgets import Static, Input
-from textual.containers import Container, VerticalScroll
-from textual.binding import Binding
+from typing import ClassVar
+
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, VerticalScroll
+from textual.screen import ModalScreen
+from textual.widgets import Input, Static
 
 from backend import get_metar, get_taf
-from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
+from backend.data.atis_filter import colorize_atis_text, filter_atis_text
 from backend.data.datis_api import get_datis_for_airport
-from backend.data.atis_filter import filter_atis_text, colorize_atis_text
+from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
 from backend.data.weather_parsing import (
+    extract_flight_rules_weather,
+    extract_visibility_str,
     get_flight_category,
-    parse_visibility_sm,
+    is_speci_metar,
     parse_ceiling_feet,
     parse_ceiling_layer,
-    extract_visibility_str,
-    extract_flight_rules_weather,
-    is_speci_metar,
+    parse_visibility_sm,
 )
 from ui import config
 from ui.config import CATEGORY_COLORS
-
 
 # Backward-compatible aliases for any external imports (deprecated)
 _parse_visibility_sm = parse_visibility_sm
@@ -82,7 +82,7 @@ class MetarInfoScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close", "Close", priority=True),
         Binding("enter", "fetch_metar", "Fetch METAR", priority=True),
     ]
@@ -103,6 +103,14 @@ class MetarInfoScreen(ModalScreen):
         self._autofill_clear_available = (
             initial_icao is not None
         )  # First backspace clears autofilled input
+        self._pending_tasks: list = []  # Track pending async tasks
+
+    def on_unmount(self) -> None:
+        """Cancel pending tasks when modal is dismissed."""
+        for task in self._pending_tasks:
+            if not task.done():
+                task.cancel()
+        self._pending_tasks.clear()
 
     def compose(self) -> ComposeResult:
         with Container(id="metar-container"):
@@ -142,7 +150,7 @@ class MetarInfoScreen(ModalScreen):
 
     def _parse_taf_time(
         self, time_str: str, current_month: int, current_year: int
-    ) -> Optional[datetime]:
+    ) -> datetime | None:
         """
         Parse TAF time string to datetime object.
 
@@ -204,7 +212,7 @@ class MetarInfoScreen(ModalScreen):
             return None
 
     def _format_relative_time(
-        self, target_time: Optional[datetime], current_time: datetime
+        self, target_time: datetime | None, current_time: datetime
     ) -> str:
         """
         Format a relative time duration (e.g., "in 2h", "1h ago").
@@ -428,8 +436,9 @@ class MetarInfoScreen(ModalScreen):
             f"[bold]{pretty_name} ({icao})[/bold]\n\n[dim]Loading METAR & TAF...[/dim]"
         )
 
-        # Fetch asynchronously
-        asyncio.create_task(self._fetch_metar_async(icao, pretty_name))
+        # Fetch asynchronously, keeping a reference so the task is not collected
+        task = asyncio.create_task(self._fetch_metar_async(icao, pretty_name))
+        self._pending_tasks.append(task)
 
     async def _fetch_metar_async(self, icao: str, pretty_name: str) -> None:
         """Fetch ATIS, METAR and TAF asynchronously"""
@@ -450,7 +459,7 @@ class MetarInfoScreen(ModalScreen):
         result_lines = []
 
         # Airport title first with flight category on same line
-        category: Optional[str] = None
+        category: str | None = None
         if metar:
             category = get_flight_category(metar)
             color = CATEGORY_COLORS.get(category, "white")
@@ -493,10 +502,14 @@ class MetarInfoScreen(ModalScreen):
                     elif atis_type == "arrival":
                         type_label = "[cyan]ARR:[/cyan] "
                     # Add source indicator
-                    source_label = "[#ffaa00](RW)[/#ffaa00] " if atis_source == "rw" else ""
+                    source_label = (
+                        "[#ffaa00](RW)[/#ffaa00] " if atis_source == "rw" else ""
+                    )
                     # Colorize ATIS: letter in cyan, approaches/runways in yellow
                     colorized_text = colorize_atis_text(filtered_text, atis_code)
-                    result_lines.append(f"[dim]{source_label}{type_label}{colorized_text}[/dim]")
+                    result_lines.append(
+                        f"[dim]{source_label}{type_label}{colorized_text}[/dim]"
+                    )
             result_lines.append("")
 
         # METAR with highlighted flight category components

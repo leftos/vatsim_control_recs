@@ -1,0 +1,57 @@
+# Ruff configuration - https://docs.astral.sh/ruff/
+#
+# The floor is Python 3.10: the bootstrap in main.py recommends 3.10+, and the
+# `X | None` annotations this config enforces need it.
+target-version = "py310"
+
+# Matches the existing formatting of the codebase. Long string literals are not
+# wrapped by the formatter, so E501 is disabled below rather than fought.
+line-length = 88
+
+# No extend-exclude: ruff's defaults already skip .venv, build and dist, and a
+# bare name here matches every path component, so "data" would silently hide
+# backend/data/ as well as the top-level data files.
+
+[lint]
+select = [
+    "F",    # pyflakes
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "PIE",  # flake8-pie
+    "PERF", # perflint
+    "DTZ",  # flake8-datetimez
+    "RUF",  # ruff-specific
+    "S110", # try-except-pass, which hides failures
+]
+
+ignore = [
+    # The formatter owns line breaking; the remaining violations are long string
+    # literals such as argparse help text, which it cannot split.
+    "E501",
+    # Every occurrence guards one iteration so a single bad file or row is
+    # skipped rather than aborting the batch. Hoisting the try out of the loop
+    # would change that behaviour, which is the only fix the rule offers.
+    "PERF203",
+]
+
+# BLE001 (blind except) is deliberately not selected. A TUI that stays up when a
+# weather or VATSIM request misbehaves needs broad handlers, and the rule only
+# accepts a logger built by a local logging.getLogger() call - it cannot see
+# through common.logger or ui.debug_logger. Satisfying it would mean bypassing
+# those wrappers in every handler. S110 above still catches the real problem,
+# which is swallowing an exception without recording it.
+
+[lint.per-file-ignores]
+# The bootstrap runs before dependencies are guaranteed to exist, so its imports
+# are deliberately deferred and its failures deliberately broad.
+"main.py" = ["E402"]
+# Standalone script: project imports have to follow the sys.path setup above them.
+"scripts/generate_airport_names.py" = ["E402"]
+
+[format]
+docstring-code-format = true

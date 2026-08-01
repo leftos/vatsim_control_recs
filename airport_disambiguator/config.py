@@ -1,7 +1,6 @@
 """Configuration and constants for airport disambiguation."""
 
 from dataclasses import dataclass, field
-from typing import Dict, FrozenSet
 
 
 @dataclass(frozen=True)
@@ -12,15 +11,15 @@ class DisambiguatorConfig:
     MAX_NAME_LENGTH: int = 25
 
     # Multi-word phrases that should always be included (check these first)
-    ALWAYS_INCLUDE_PHRASES: FrozenSet[str] = frozenset({"Coast Guard"})
+    ALWAYS_INCLUDE_PHRASES: frozenset[str] = frozenset({"Coast Guard"})
 
     # Words that should always be included in the airport name (military terms)
-    ALWAYS_INCLUDE_WORDS: FrozenSet[str] = frozenset(
+    ALWAYS_INCLUDE_WORDS: frozenset[str] = frozenset(
         {"AFB", "Navy", "Naval", "Army", "Marine", "Marines"}
     )
 
     # Base high-priority descriptor words
-    BASE_HIGH_PRIORITY_WORDS: FrozenSet[str] = frozenset(
+    BASE_HIGH_PRIORITY_WORDS: frozenset[str] = frozenset(
         {
             "AFB",
             "International",
@@ -50,7 +49,7 @@ class DisambiguatorConfig:
     )
 
     # Shortening replacements - both keys and values will be considered high-priority
-    SHORTENING_REPLACEMENTS: Dict[str, str] = field(
+    SHORTENING_REPLACEMENTS: dict[str, str] = field(
         default_factory=lambda: {
             "International": "Intl",
             "Intercontinental": "Intercont",
@@ -70,7 +69,7 @@ class DisambiguatorConfig:
     )
 
     # Generic airport descriptors that shouldn't be part of entities
-    GENERIC_DESCRIPTORS: FrozenSet[str] = frozenset(
+    GENERIC_DESCRIPTORS: frozenset[str] = frozenset(
         {
             "International",
             "Regional",
@@ -84,7 +83,7 @@ class DisambiguatorConfig:
     )
 
     # Generic words to skip in military name formatting
-    GENERIC_WORDS_FOR_MILITARY: FrozenSet[str] = frozenset(
+    GENERIC_WORDS_FOR_MILITARY: frozenset[str] = frozenset(
         {
             "air",
             "apt",
@@ -106,17 +105,17 @@ class DisambiguatorConfig:
     )
 
     # Location pattern keywords
-    LOCATION_PATTERNS: FrozenSet[str] = frozenset(
+    LOCATION_PATTERNS: frozenset[str] = frozenset(
         {"County", "City", "Township", "Parish", "Borough"}
     )
 
     # Airport name suffixes to remove for better NER
-    NAME_SUFFIXES: FrozenSet[str] = frozenset(
+    NAME_SUFFIXES: frozenset[str] = frozenset(
         {"Airport", "Field", "Airfield", "Airpark", "Station"}
     )
 
     # Built dynamically in __post_init__
-    HIGH_PRIORITY_WORDS: FrozenSet[str] = field(default_factory=frozenset, init=False)
+    HIGH_PRIORITY_WORDS: frozenset[str] = field(default_factory=frozenset, init=False)
 
     def __post_init__(self):
         """Build the complete HIGH_PRIORITY_WORDS set."""
