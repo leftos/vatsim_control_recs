@@ -39,6 +39,17 @@ from ui.tables import (
 )
 from widgets.split_flap_datatable import SplitFlapDataTable
 
+# Rotation order for the board's direction view. A board opened with mixed
+# per-airport filters prepends "custom" so the saved configuration stays reachable.
+DIRECTION_CYCLE = ("dep", "arr", "both")
+
+DIRECTION_LABELS = {
+    "custom": "CUSTOM FILTER",
+    "dep": "DEPARTURES ONLY",
+    "arr": "ARRIVALS ONLY",
+    "both": "DEP + ARR",
+}
+
 
 class FlightBoardScreen(ModalScreen):
     """Modal screen showing departure and arrivals board for an airport or grouping"""
@@ -147,6 +158,7 @@ class FlightBoardScreen(ModalScreen):
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "close_board", "Close", priority=True),
         Binding("q", "close_board", "Close"),
+        Binding("f", "cycle_direction", "Dep/Arr/Both"),
         Binding("ctrl+n", "test_notifications", "Test Notifications", show=False),
     ]
 
@@ -168,7 +180,12 @@ class FlightBoardScreen(ModalScreen):
         self.airport_icao_or_list = airport_icao_or_list
         self.max_eta_hours = max_eta_hours
         self.disambiguator = disambiguator
-        self.airport_filters = airport_filters
+        # Filters as saved by the caller. The F key overrides them for this board
+        # only; the underlying favorite is never rewritten.
+        self._base_filters = airport_filters
+        self._direction_modes = self._build_direction_modes()
+        self._direction_index = 0
+        self.airport_filters = self._filters_for_mode(self._direction_modes[0])
         self.departures_data = []
         self.arrivals_data = []
         self.refresh_interval = refresh_interval
@@ -193,6 +210,93 @@ class FlightBoardScreen(ModalScreen):
         # Notification manager (initialized in on_mount)
         self._notification_manager: NotificationManager | None = None
 
+    def _airport_icaos(self) -> list[str]:
+        """The board's airports, whether it was opened on one airport or a grouping."""
+        if isinstance(self.airport_icao_or_list, str):
+            return [self.airport_icao_or_list]
+        return list(self.airport_icao_or_list)
+
+    def _classify_base_filters(self) -> str:
+        """Reduce the saved filters to a single direction mode, or "custom" if mixed."""
+        if not self._base_filters:
+            return "both"
+        modes = {self._base_filters.get(icao) for icao in self._airport_icaos()}
+        if modes == {"dep"}:
+            return "dep"
+        if modes == {"arr"}:
+            return "arr"
+        if modes == {None}:
+            return "both"
+        return "custom"
+
+    def _build_direction_modes(self) -> list[str]:
+        """Order the rotation so it starts on the mode the board was opened with."""
+        base_mode = self._classify_base_filters()
+        if base_mode == "custom":
+            return ["custom", *DIRECTION_CYCLE]
+        start = DIRECTION_CYCLE.index(base_mode)
+        return [*DIRECTION_CYCLE[start:], *DIRECTION_CYCLE[:start]]
+
+    def _current_direction_mode(self) -> str:
+        return self._direction_modes[self._direction_index]
+
+    def _filters_for_mode(self, mode: str) -> dict[str, str] | None:
+        """Per-airport filters the backend should apply for a direction mode."""
+        if mode == "custom":
+            return self._base_filters
+        if mode == "both":
+            return None
+        return dict.fromkeys(self._airport_icaos(), mode)
+
+    def _visible_sections(self) -> tuple[bool, bool]:
+        """Whether the departures and arrivals panels can hold anything right now."""
+        filters = self.airport_filters
+        if not filters:
+            return True, True
+        icaos = self._airport_icaos()
+        return (
+            any(filters.get(icao) != "arr" for icao in icaos),
+            any(filters.get(icao) != "dep" for icao in icaos),
+        )
+
+    def _header_text(self, window_title: str) -> str:
+        """Title plus a mode suffix, so a hidden panel never looks like missing data."""
+        mode = self._current_direction_mode()
+        if mode == "both":
+            return window_title
+        return f"{window_title}  ·  {DIRECTION_LABELS[mode]}"
+
+    def _apply_direction_view(self) -> None:
+        """Show only the panels the current filters can fill, and resize them to fit."""
+        show_departures, show_arrivals = self._visible_sections()
+        both_visible = show_departures and show_arrivals
+
+        departures_section = self.query_one("#departures-section", Vertical)
+        arrivals_section = self.query_one("#arrivals-section", Vertical)
+        departures_section.display = show_departures
+        arrivals_section.display = show_arrivals
+        departures_section.styles.width = "40%" if both_visible else "100%"
+        arrivals_section.styles.width = "60%" if both_visible else "100%"
+
+        # Notifications are right-aligned against the arrivals panel, so the spacer
+        # that reserves the departures width is wrong once a panel is hidden.
+        spacer = self.query_one("#notification-spacer", Static)
+        notification_scroll = self.query_one("#notification-scroll", VerticalScroll)
+        spacer.display = both_visible
+        notification_scroll.styles.width = "60%" if both_visible else "100%"
+
+        if not both_visible:
+            visible_table = "#arrivals-table" if show_arrivals else "#departures-table"
+            self.query_one(visible_table, SplitFlapDataTable).focus()
+
+    def action_cycle_direction(self) -> None:
+        """Rotate the board between departures only, arrivals only and both."""
+        self._direction_index = (self._direction_index + 1) % len(self._direction_modes)
+        self.airport_filters = self._filters_for_mode(self._current_direction_mode())
+        self._apply_direction_view()
+        self._apply_window_title(self.window_title)
+        self.refresh_flight_data()
+
     def compose(self) -> ComposeResult:
         # Use a placeholder title initially - will be updated async after data loads
         if isinstance(self.airport_icao_or_list, str):
@@ -202,7 +306,7 @@ class FlightBoardScreen(ModalScreen):
         self.window_title = initial_title
 
         with Container(id="board-container"):
-            yield Static(self.window_title, id="board-header")
+            yield Static(self._header_text(self.window_title), id="board-header")
             with Horizontal(id="board-tables", classes="loading"):
                 yield Static("Loading flight data...", id="loading-indicator")
                 with Vertical(classes="board-section", id="departures-section"):
@@ -236,6 +340,10 @@ class FlightBoardScreen(ModalScreen):
         self._notification_manager = NotificationManager(
             self, container_id="notification-scroll"
         )
+
+        # Lay the panels out before the first fetch so the loading state already
+        # reflects the board's filters.
+        self._apply_direction_view()
 
         await self.load_flight_data()
         # Note: Full data refresh is triggered by parent app, not independent timer
@@ -486,7 +594,7 @@ class FlightBoardScreen(ModalScreen):
 
         try:
             header = self.query_one("#board-header", Static)
-            header.update(window_title)
+            header.update(self._header_text(window_title))
         except Exception as e:
             debug(f"Could not apply board header title: {e}")
 
@@ -640,18 +748,18 @@ class FlightBoardScreen(ModalScreen):
         departures_table = self.query_one("#departures-table", SplitFlapDataTable)
         arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
 
-        # Get the focused table
+        # Get the focused table, ignoring a panel the direction mode has hidden -
+        # its cursor row is left over from before the mode changed.
+        show_departures, show_arrivals = self._visible_sections()
         focused_table = None
-        if departures_table.has_focus:
+        if show_departures and departures_table.has_focus:
             focused_table = departures_table
-        elif arrivals_table.has_focus:
+        elif show_arrivals and arrivals_table.has_focus:
             focused_table = arrivals_table
-        else:
-            # If neither has focus, try to use whichever has a cursor
-            if departures_table.cursor_row >= 0:
-                focused_table = departures_table
-            elif arrivals_table.cursor_row >= 0:
-                focused_table = arrivals_table
+        elif show_departures and departures_table.cursor_row >= 0:
+            focused_table = departures_table
+        elif show_arrivals and arrivals_table.cursor_row >= 0:
+            focused_table = arrivals_table
 
         if not focused_table or focused_table.cursor_row < 0:
             return

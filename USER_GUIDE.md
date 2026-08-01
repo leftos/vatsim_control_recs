@@ -303,8 +303,11 @@ Each flight displays:
 | Shortcut | Action |
 |----------|--------|
 | `Enter` | Open detailed flight information |
+| `F` | Cycle direction: departures only / arrivals only / both |
 | `Escape` or `Q` | Close flight board |
 | Double-click | Open flight information |
+
+**Direction Filtering:** `F` rotates the board between departures only, arrivals only, and both. The unused column is hidden and the remaining one expands to the full width, and the header shows the active mode. If the board was opened from a favorite with per-airport dep/arr filters, that saved configuration is the first stop in the rotation, so you can always cycle back to it. Cycling only changes the current view — the favorite itself is not modified.
 
 For grouping flight boards, weather and runway change notifications appear as flashing toasts when conditions change at member airports.
 

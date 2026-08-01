@@ -377,6 +377,7 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 | Shortcut | Action |
 |----------|--------|
 | `Enter` | Open flight info for selected flight |
+| `F` | Cycle direction (dep only / arr only / both) |
 | `Escape` / `Q` | Close flight board |
 | Double-click | Open flight info |
 
