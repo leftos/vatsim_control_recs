@@ -11,6 +11,10 @@ import re
 import subprocess
 import sys
 
+# Marks a run that was restarted after the bootstrap installed something, so the
+# install is attempted at most once per invocation
+BOOTSTRAP_RETRY_ENV = "VATSIM_BOOTSTRAP_RETRIED"
+
 
 def show_help_and_exit():
     """Show help message and exit immediately without any setup."""
@@ -177,6 +181,53 @@ def parse_requirements(requirements_path: str) -> list[str]:
     return packages
 
 
+def find_unimportable(packages: list[str]) -> list[tuple[str, str]]:
+    """Return (package name, import error) for every package that fails to import.
+
+    Args:
+        packages: Distribution names as they appear in requirements.txt.
+
+    Returns:
+        One entry per package that could not be imported, in input order.
+    """
+    # Mapping for packages where pip name differs from import name
+    import_name_map: dict[str, str] = {
+        "Pillow": "PIL",
+    }
+
+    failures: list[tuple[str, str]] = []
+    for package in packages:
+        import_name = import_name_map.get(package, package)
+        try:
+            importlib.import_module(import_name)
+        except ImportError as e:
+            failures.append((package, str(e)))
+    return failures
+
+
+def report_broken_environment(failures: list[tuple[str, str]]) -> None:
+    """Print an actionable message for packages that are installed but unusable."""
+    print("\nError: these packages are installed but still fail to import:")
+    for package, error in failures:
+        print(f"  {package}: {error}")
+    print("\nThe virtual environment is inconsistent: something these packages")
+    print("depend on is missing. Delete the .venv directory and re-run this")
+    print("script to rebuild the environment from scratch.")
+
+
+def restart_after_install():
+    """Re-execute this script in a fresh interpreter, then exit.
+
+    A failed import leaves partially initialized modules behind, so packages
+    installed during this run cannot be imported reliably in the same process.
+    The child is marked so it installs at most once and cannot loop.
+    """
+    env = os.environ.copy()
+    env[BOOTSTRAP_RETRY_ENV] = "1"
+    result = subprocess.call([sys.executable] + sys.argv, env=env)
+    sys.exit(result)
+
+
 def ensure_requirements_installed():
     """Check if requirements are installed, and install them if not."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -186,25 +237,17 @@ def ensure_requirements_installed():
         print("Error: requirements.txt not found")
         return False
 
-    # Mapping for packages where pip name differs from import name
-    import_name_map: dict[str, str] = {
-        "Pillow": "PIL",
-    }
-
-    # Parse requirements and check each package
-    packages = parse_requirements(requirements_path)
-    missing = []
-    for package in packages:
-        import_name = import_name_map.get(package, package)
-        try:
-            importlib.import_module(import_name)
-        except ImportError:
-            missing.append(package)
-
-    if not missing:
+    failures = find_unimportable(parse_requirements(requirements_path))
+    if not failures:
         return True
 
+    # A restarted run has already installed once, so installing again cannot help
+    if os.environ.get(BOOTSTRAP_RETRY_ENV):
+        report_broken_environment(failures)
+        return False
+
     # Requirements not installed, try to install them
+    missing = [package for package, _ in failures]
     print(f"Missing dependencies: {', '.join(missing)}")
     print("Installing required dependencies...")
     try:
@@ -219,8 +262,6 @@ def ensure_requirements_installed():
                 requirements_path,
             ]
         )
-        print("Dependencies installed successfully.")
-        return True
     except subprocess.CalledProcessError:
         print("\nError: Failed to install dependencies automatically.")
         print("\nThis often happens because spaCy requires native code compilation.")
@@ -234,19 +275,23 @@ def ensure_requirements_installed():
         print("   https://visualstudio.microsoft.com/visual-cpp-build-tools/")
         return False
 
+    print("Dependencies installed successfully.")
+    restart_after_install()
+
 
 def ensure_spacy_model_installed():
     """Check if the spaCy language model is installed, and download if not."""
     try:
         import spacy
+    except ImportError as e:
+        report_broken_environment([("spacy", str(e))])
+        return False
 
-        try:
-            spacy.load("en_core_web_sm")
-            return True
-        except OSError:
-            pass
-    except ImportError:
-        return False  # spacy not installed, will be handled by ensure_requirements_installed
+    try:
+        spacy.load("en_core_web_sm")
+        return True
+    except OSError:
+        pass
 
     # Model not installed, try to download it
     print("Downloading spaCy language model (en_core_web_sm)...")
