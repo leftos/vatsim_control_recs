@@ -2,6 +2,7 @@ name: Build & Release
 
 on:
   push:
+    paths-ignore: ["**.md"]
     branches: [main]
   workflow_dispatch:
 
