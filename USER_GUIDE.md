@@ -627,7 +627,7 @@ When creating or editing a favorite, press `F` on a selected airport to cycle it
 - Departures only (`[D>]` indicator)
 - Arrivals only (`[<A]` indicator)
 
-Favorites are stored in `data/favorites.json`.
+Favorites are stored in `favorites.json` in your user data folder: `%LOCALAPPDATA%\VATSIMControlRecs` on Windows, `~/Library/Application Support/VATSIMControlRecs` on macOS, `~/.local/share/VATSIMControlRecs` on Linux.
 
 ---
 

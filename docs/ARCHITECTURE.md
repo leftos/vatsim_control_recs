@@ -30,18 +30,26 @@ A terminal app (Textual) that analyzes live VATSIM flight data and shows control
 - **`backend/cache/`** (`manager.py`): owns the wind, METAR and TAF caches, the aircraft-speeds and ARTCC-grouping caches, and the weather cache save/load. References `backend/config` and `common.paths`.
 - **`backend/config/`** (`constants.py`): owns cache TTLs and the global `WIND_SOURCE`, which `main.py` sets from `--wind-source`. References nothing.
 - **`airport_disambiguator/`**: owns ICAO-to-display-name resolution (`disambiguator.py` public API, `disambiguation_engine.py`, `entity_extractor.py`, `name_processor.py`, `data_manager.py`); checks `data/airport_names.csv` first, then falls back to spaCy. References `backend/data`; never `ui`.
-- **`ui/`**: owns the `VATSIMControlApp` (`app.py`), table config and management (`tables.py`, `config.py`) and the screens in `ui/modals/`. References `backend`, `widgets`, `common`.
+- **`ui/`**: owns the `VATSIMControlApp` (`app.py`, which refreshes on a `set_interval` timer, 15 seconds by default via `--refresh-interval`), table config and management (`tables.py`, `config.py`) and the screens in `ui/modals/`. `tables.py` loads rows in chunks when `--progressive-load` is set (`--progressive-chunk-size` rows at a time; the argument help says automatic for 50 or more airports). References `backend`, `widgets`, `common`.
 - **`widgets/`** (`split_flap_datatable.py`): owns the animated DataTable. References `ui.debug_logger` only.
 - **`common/`**: owns path resolution (`paths.py`) and logging (`logger.py`). References only itself.
 - **`scripts/`**: owns the generators for `data/` files and `scripts/weather_daemon/` (staged `weather`, `briefings`, `tiles`, `index` generation, systemd unit and timer, nginx config, PowerShell deployment scripts). References `backend` and `airport_disambiguator`; nothing references `scripts`.
+
+## Data flow
+
+1. `main.py` bootstraps the venv, parses arguments (`build_arg_parser`), loads the unified airport data with `load_unified_airport_data` only when countries or groupings must be expanded, expands them to the tracked airport list (`resolve_airport_allowlist`), then calls `analyze_flights_data()` and hands the result to the app.
+2. `analyze_flights_data()` in `backend/core/analysis.py` loads the unified airport data itself if `main.py` did not pass it (`data/raw/APT_BASE.csv`, `data/raw/airports.json`, `data/raw/iata-icao.csv`), downloads VATSIM data (`download_vatsim_data`), extracts staffed positions, filters flights to the tracked airports and splits them into departures and arrivals by ground position and ETA.
+3. It fetches weather for the airports it will display in one bbox call (`get_weather_for_airports_bbox`), which fills the METAR cache; wind (`get_wind_from_metar`, skipped under `--hide-wind`) and altimeter (`get_altimeter_setting`) are then read back from that cache. Display names come from one `get_pretty_names_batch` call on the disambiguator. It returns `AirportStats` and `GroupingStats` lists, sorted.
+4. `ui/app.py` fills the DataTables from those lists and repeats the analysis on the refresh timer; groupings are expanded to airports for tracking at startup but stay as groupings in the Groupings tab.
+5. Modal screens fetch their own data on demand through `backend` (for example `get_metar_batch` and `get_taf_batch`, run in an executor) and pre-fill the airport from the selected table row, the open flight board or the open flight info screen.
 
 ## Integration Footguns
 
 - **Add or rename a keyboard shortcut** → the binding in `ui/app.py` `BINDINGS`, the `COMMANDS` list in `ui/modals/command_palette.py`, the text in `ui/modals/help_modal.py`, and the shortcut tables in `README.md`, `USER_GUIDE.md` and `CLAUDE.md` are separate copies; nothing enforces agreement.
 - **Change grouping resolution** → `resolve_grouping_recursively()` in `backend/core/groupings.py` is used by `main.py`, `backend/core/analysis.py`, `ui/modals/goto_modal.py` and `scripts/weather_daemon/generator.py`; `ui/app.py` (line 890) still carries its own nested copy, so a cycle-detection or priority change must be made there too.
-- **Add a grouping source** → priority is ARTCC auto-groupings, `data/preset_groupings/`, `data/custom_groupings.json`, then `data/favorites.json` (highest); loading spans `common/paths.py` (`load_merged_groupings`, `get_user_favorites_file`) and `backend/core/groupings.py`.
+- **Add a grouping source** → priority is ARTCC auto-groupings, `data/preset_groupings/`, `data/custom_groupings.json`, then the user's `favorites.json` in the user data directory (highest, `get_user_data_dir()`); loading spans `common/paths.py` (`load_merged_groupings`, `get_user_favorites_file`) and `backend/core/groupings.py`; favorites (multi-airport selections with per-airport departure/arrival filters) are written by `ui/modals/goto_modal.py` and `ui/modals/save_grouping.py`.
 - **Change wind source handling** → `WIND_SOURCE` in `backend/config/constants.py` is a module global mutated by `main.py`, and read by `ui/modals/wind_info.py`, `ui/modals/flight_board.py` and `backend/data/weather.py`; import the module, never the value.
-- **Add a table column** → `ui/tables.py` builds `TableConfig` from `ui/config.py` `ColumnConfig`, and the animated cells need a flap character set in `ui/config.py`.
+- **Add a table column** → `ui/tables.py` builds `TableConfig` from `ui/config.py` `ColumnConfig`, and the animated cells need a flap character set in `ui/config.py` (`ETA_FLAP_CHARS`, `ICAO_FLAP_CHARS`); `widgets/split_flap_datatable.py` `AnimatedCell` holds the per-cell animation state.
 - **Change a shared data file** (`data/airport_names.csv`, `data/aircraft_data.csv`, `data/airport_spatial_cache.json`, `data/preset_groupings/`, `data/simaware_boundaries/`) → the file is generated by a script in `scripts/`; regenerating overwrites unless the script preserves edits (`generate_airport_names.py` does).
 - **Change the `backend` package surface** → `scripts/weather_daemon/generator.py` imports through `backend/__init__.py` and `backend.briefing`, and runs on a Linux server without the TUI, so keep `ui` imports out of the modules it uses.
 - **Lint and formatting** → `ruff.toml` and `.pre-commit-config.yaml` (run with `prek run`) gate commits; there is no test job in `.github/workflows/build-release.yml`.
@@ -53,5 +61,5 @@ None: the repository has no test directory or test runner. Behavior is checked b
 ## Deep docs
 
 - [`atis-filtering-and-runway-extraction.md`](atis-filtering-and-runway-extraction.md): VATSIM and D-ATIS sources, METAR stripping and runway extraction.
-- [`../CLAUDE.md`](../CLAUDE.md): setup, command-line options, data files, modal screens, keyboard shortcuts and the weather daemon workflow.
+- [`../CLAUDE.md`](../CLAUDE.md): setup, command-line options, conventions, data files, keyboard shortcuts and the weather daemon workflow.
 - [`../USER_GUIDE.md`](../USER_GUIDE.md): end-user guide to the app.
