@@ -80,6 +80,8 @@ python main.py --help                   # All available options
 
 ## Architecture
 
+The architecture entry point is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): Task Index, layers, integration footguns, test locations and the deep docs.
+
 ### Module Structure
 
 The codebase is organized into distinct layers:
