@@ -21,3 +21,12 @@ repos:
         args: [--fix=lf]
         exclude: '\.(bat|cmd)$'
       - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: agent-mail-guard
+        name: agent-mail lease guard
+        entry: pwsh -NoProfile -File C:/Users/lefto/.claude/tools/agent-mail/guard-check.ps1
+        language: system
+        pass_filenames: true
+        stages: [pre-commit]
