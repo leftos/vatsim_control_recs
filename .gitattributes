@@ -1,5 +1,7 @@
-# Auto detect text files and normalize line endings to LF in the repository
-* text=auto
+# LF everywhere; Windows batch files keep CRLF.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
 
 # Explicitly declare text files you want to always be normalized and converted to LF
 *.py text eol=lf
