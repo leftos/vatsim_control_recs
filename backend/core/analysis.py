@@ -3,9 +3,10 @@ Main analysis module for VATSIM flights and controller staffing.
 """
 
 import os
+import threading
 from collections import defaultdict
-from collections.abc import Iterable
-from datetime import datetime, timezone
+from collections.abc import Callable, Iterable
+from datetime import datetime
 from typing import Any
 
 from airport_disambiguator import AirportDisambiguator
@@ -25,6 +26,7 @@ from backend.core.models import AirportStats, GroupingStats
 from backend.data.loaders import load_unified_airport_data
 from backend.data.vatsim_api import download_vatsim_data, filter_flights_by_airports
 from backend.data.weather import (
+    cached_wind_altimeter,
     get_altimeter_setting,
     get_weather_for_airports_bbox,
     get_wind_from_metar,
@@ -80,12 +82,82 @@ def filter_airports_by_allowlist(
     return {icao: data for icao, data in all_airports_data.items() if icao in allowed}
 
 
+def _read_wind_altimeter(
+    icao: str, *, hide_wind: bool, as_of: datetime
+) -> tuple[str, str]:
+    """An airport's (wind, altimeter) display text, "" where unknown; wind stays "" under hide_wind."""
+    wind = "" if hide_wind else get_wind_from_metar(icao, as_of=as_of) or ""
+    altimeter = get_altimeter_setting(icao, as_of=as_of) or ""
+    return wind, altimeter
+
+
+def fetch_weather_for_airports(
+    airports: list[str],
+    airports_data: dict[str, dict[str, Any]],
+    *,
+    hide_wind: bool,
+    as_of: datetime,
+    on_box: Callable[[dict[str, tuple[str, str]]], None],
+    stop: threading.Event,
+) -> None:
+    """
+    Fetch the airports' weather box by box, handing each box's WIND/ALT to on_box.
+
+    Boxes still fresh in the METAR cache are delivered first, before any request,
+    then each fetched box as it returns, with only the airports the caches can
+    answer without a fetch: an airport the box returned, and one a box below the
+    400-entry cap omitted (delivered as ("", "")). Every other airport (its box
+    failed, a capped box omitted it, or no box held it) gets the per-station
+    fallback once every box is done, and is delivered only when that finds a
+    value, so the caller keeps what it showed before.
+
+    Args:
+        airports: ICAO codes to fetch weather for
+        airports_data: Airport data keyed by ICAO with ``latitude``/``longitude``
+        hide_wind: Skip the wind reads and deliver wind as ""
+        as_of: The one freshness time for the box decision and every read
+        on_box: Called on this thread with {icao: (wind, altimeter)} per delivery
+        stop: Once set, no queued box is requested, nothing more is delivered and
+            the per-station fallback is skipped
+    """
+    if not airports:
+        return
+    delivered: set[str] = set()
+
+    def deliver_box(members: set[str], ok: bool) -> None:
+        if not ok:
+            return
+        values = {}
+        for icao in sorted(members):
+            cached = cached_wind_altimeter(icao, as_of=as_of)
+            if cached is not None:
+                values[icao] = ("", cached[1]) if hide_wind else cached
+        delivered.update(values)
+        if values:
+            on_box(values)
+
+    get_weather_for_airports_bbox(
+        airports, airports_data, as_of=as_of, on_box=deliver_box, stop=stop
+    )
+    if stop.is_set():
+        return
+
+    fallback = {}
+    for icao in airports:
+        if icao.upper() in delivered:
+            continue
+        values = _read_wind_altimeter(icao, hide_wind=hide_wind, as_of=as_of)
+        if any(values):
+            fallback[icao] = values
+    if fallback:
+        on_box(fallback)
+
+
 def analyze_flights_data(
     max_eta_hours: float = 1.0,
     airport_allowlist: list[str] | None = None,
     groupings_allowlist: list[str] | None = None,
     include_all_staffed: bool = True,
-    hide_wind: bool = False,
     include_all_arriving: bool = False,
     unified_airport_data: dict[str, dict[str, Any]] | None = None,
     disambiguator: AirportDisambiguator | None = None,
@@ -104,14 +176,14 @@ def analyze_flights_data(
         airport_allowlist: Optional list of airport ICAOs to include (already expanded from groupings)
         groupings_allowlist: Optional list of custom grouping names to display (for display purposes only)
         include_all_staffed: Whether to include airports with zero planes if staffed (default: True)
-        hide_wind: Whether to hide the wind column from the main view (default: False)
         include_all_arriving: Whether to include airports with any arrivals filed, regardless of max_eta_hours (default: False)
         unified_airport_data: Optional pre-loaded unified airport data
         disambiguator: Optional pre-created disambiguator instance
 
     Returns:
         Tuple of (airport_data, grouped_data, total_flights, unified_airport_data, disambiguator):
-        - airport_data: List of AirportStats objects with airport statistics
+        - airport_data: List of AirportStats objects with airport statistics; wind and
+          altimeter are "" (fetch_weather_for_airports fills them in)
         - grouped_data: List of GroupingStats objects with grouping statistics
         - total_flights: Total number of flights analyzed
         - unified_airport_data: The unified airport data (for reuse by caller)
@@ -334,33 +406,7 @@ def analyze_flights_data(
                 }
             )
 
-    # Fetch weather data using bbox API (more efficient than per-airport fetching)
-    # This populates the METAR cache so wind and altimeter can be retrieved from cache
     airports_to_fetch = [apt["icao"] for apt in airports_to_display]
-    weather_as_of = datetime.now(timezone.utc)
-    if airports_to_fetch:
-        print(
-            f"Fetching weather data for {len(airports_to_fetch)} active airports using bbox API..."
-        )
-        # Use bbox-based fetching which populates the METAR cache
-        get_weather_for_airports_bbox(
-            airports_to_fetch, all_airports_data, as_of=weather_as_of
-        )
-
-    # Get wind info from cache (populated by bbox fetch above)
-    # Skip if hide_wind is enabled
-    wind_info_batch = {}
-    if airports_to_fetch and not hide_wind:
-        for icao in airports_to_fetch:
-            wind_info_batch[icao] = get_wind_from_metar(icao, as_of=weather_as_of)
-
-    # Get altimeter settings from cache (populated by bbox fetch above)
-    altimeter_batch = {}
-    if airports_to_fetch:
-        for icao in airports_to_fetch:
-            result = get_altimeter_setting(icao, as_of=weather_as_of)
-            altimeter_batch[icao] = result if result else ""
-
     if airports_to_fetch:
         print(f"Processing airport names for {len(airports_to_fetch)} airports...")
     # Batch fetch full names (no length limit) for airports that will be displayed (processes locations efficiently)
@@ -383,17 +429,13 @@ def analyze_flights_data(
 
         # Get the pretty name from batch results (with fallback to ICAO)
         pretty_name = pretty_names_batch.get(airport) or airport
-        # Get wind information from batch results (only if not hidden)
-        wind_info = wind_info_batch.get(airport) or "" if not hide_wind else ""
-        # Get altimeter from batch results
-        altimeter_info = altimeter_batch.get(airport) or ""
 
-        # Create AirportStats object
+        # Create AirportStats object; the weather pass fills WIND/ALT in later
         stats = AirportStats(
             icao=airport,
             name=pretty_name,
-            wind=wind_info,
-            altimeter=altimeter_info,
+            wind="",
+            altimeter="",
             total=total_flights,
             departures=departing,
             arrivals=arriving,

@@ -11,11 +11,6 @@ The refresh's cost structure and how to measure it are in [performance.md](../pe
 
 Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is the command; the human check is a run with `--countries US` and an unfiltered run, measured as performance.md's "Measuring" section gives.
 
-- [ ] A refresh's table update waits for its slowest weather box (18–20 s per slow box in the re-measure, `backend/core/analysis.py:349-358`).
-
-  Settled (owner, lane B of the [refresh mock](https://claude.ai/artifact/NswGm7DKtQdjXRBZifXVo5)): the traffic columns update as soon as traffic is ready; each region's WIND and ALT keep their previous values until that region's box returns, and an airport new this refresh shows them blank until then. No dimming or pending marker. It builds on the in-place table refresh (`ui/app.py` `_apply_refresh_data`, `ui/tables.py`).
-
-  Settled (owner): lands on `main`. A failed box (timeout, 429) keeps its airports' previous WIND/ALT; an airport a successful box omits goes blank. Fresh (cached) boxes are delivered by the weather pass's first callback, just after the traffic update. Startup is two-stage too: the first paint shows traffic with blank WIND/ALT, then fills them in. The second VATSIM download and the Go To rebuild stay before the table update.
 - [ ] `tests/test_table_refresh.py::test_shrinking_table_fades_then_removes_tail_rows` failed once in a heavy-slot full suite ("assert 12 == 25, the tail rows go only after their fade") and passed in isolation and on later full runs: a load-sensitive timing wait in a Pilot test (`ui/tables.py` fade). Make it wait on the fade's completion, not elapsed time.
 
 ## Next up

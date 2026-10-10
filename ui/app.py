@@ -7,7 +7,10 @@ import asyncio
 import os
 import sys
 import threading
+import traceback
+from collections.abc import Callable
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any, ClassVar
 
 from textual.app import App, ComposeResult
@@ -18,6 +21,7 @@ from textual.events import Key
 from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
 from backend import analyze_flights_data
+from backend.core.analysis import fetch_weather_for_airports
 from backend.core.groupings import (
     get_user_favorite_names,
     load_all_groupings,
@@ -82,6 +86,52 @@ def set_terminal_title(title: str) -> None:
         sys.stdout.flush()
     except (OSError, AttributeError):
         pass  # Terminal may not support escape sequences
+
+
+async def _run_in_daemon_thread(func: Callable[[], None], name: str) -> None:
+    """Run ``func`` on a new daemon thread and wait for it without blocking the loop.
+
+    A daemon thread is not joined when the event loop shuts down, so quitting
+    does not wait for it to finish.
+    """
+    loop = asyncio.get_running_loop()
+    done: asyncio.Future[None] = loop.create_future()
+
+    def finish(exc: BaseException | None) -> None:
+        if done.cancelled():
+            return
+        if exc is None:
+            done.set_result(None)
+        else:
+            done.set_exception(exc)
+
+    def run() -> None:
+        outcome: BaseException | None = None
+        try:
+            func()
+        # Handed to the awaiting coroutine, which raises it
+        except BaseException as exc:
+            outcome = exc
+        try:
+            loop.call_soon_threadsafe(finish, outcome)
+        except RuntimeError:
+            debug(f"The event loop closed before the {name} thread finished")
+            if outcome is not None:
+                trace = "".join(traceback.format_exception(outcome))
+                error(f"The {name} thread failed: {outcome!r}\n{trace}")
+
+    threading.Thread(target=run, name=name, daemon=True).start()
+    await done
+
+
+def _log_weather_patch_failure(update: asyncio.Task) -> None:
+    """Done-callback of a weather patch's table update: log its failure, ignore a cancel."""
+    if update.cancelled():
+        return
+    try:
+        update.result()
+    except Exception as exc:
+        error(f"Weather patch failed: {exc}", exc_info=True)
 
 
 class VATSIMControlApp(App):
@@ -210,6 +260,11 @@ class VATSIMControlApp(App):
         # Only one refresh runs at a time; a request during a run queues one follow-up
         self.refresh_in_progress = False
         self.refresh_pending = False
+        # One weather pass at a time; a refresh landing during a pass asks for one more
+        self._weather_pass_running = False
+        self._weather_rerun = False
+        # Set when the app shuts down: a pass then requests no queued box and patches nothing
+        self._weather_stop = threading.Event()
         # The auto-refresh interval is measured from the last start, so a failed
         # analysis retries on the interval rather than on the very next tick
         self.last_refresh_started_at = self.last_refresh_time
@@ -289,6 +344,8 @@ class VATSIMControlApp(App):
 
         self.populate_tables()
         self.update_status_bar()
+        # The startup data carries no weather; fill WIND/ALT in box by box
+        self._request_weather_pass()
         # Start auto-refresh timer - check every second
         self.refresh_timer = self.set_interval(1, self.auto_refresh_callback)
         # Start UTC clock and status bar update timer (update every 0.2 seconds)
@@ -429,6 +486,10 @@ class VATSIMControlApp(App):
         """Quit the application."""
         self.exit()
 
+    def on_unmount(self) -> None:
+        """Stop a running weather pass from starting queued box requests while the app shuts down."""
+        self._weather_stop.set()
+
     def auto_refresh_callback(self) -> None:
         """Callback for auto-refresh timer (called every second)."""
         # Never start a refresh while one is already running
@@ -550,17 +611,19 @@ class VATSIMControlApp(App):
 
         # Run the blocking call in a thread pool to avoid blocking the UI
         loop = asyncio.get_event_loop()
+        # Traffic only: the weather pass fills WIND/ALT in after the tables update
         result = await loop.run_in_executor(
             None,
-            analyze_flights_data,
-            self.args.max_eta_hours if self.args else 1.0,
-            self.airport_allowlist,  # Use stored airport_allowlist (includes country expansions)
-            self.args.groupings if self.args else None,
-            self.include_all_staffed,
-            self.hide_wind,
-            self.include_all_arriving,
-            config.UNIFIED_AIRPORT_DATA,  # Pass existing instance or None
-            config.DISAMBIGUATOR,  # Pass existing instance or None
+            partial(
+                analyze_flights_data,
+                self.args.max_eta_hours if self.args else 1.0,
+                self.airport_allowlist,  # Use stored airport_allowlist (includes country expansions)
+                self.args.groupings if self.args else None,
+                self.include_all_staffed,
+                self.include_all_arriving,
+                config.UNIFIED_AIRPORT_DATA,  # Pass existing instance or None
+                config.DISAMBIGUATOR,  # Pass existing instance or None
+            ),
         )
 
         # Update module-level instances from the result
@@ -708,6 +771,7 @@ class VATSIMControlApp(App):
                 debug(f"Could not update status bar after failed refresh: {e}")
             return
 
+        self._carry_weather_forward(airport_data)
         self._disable_activity_watching()  # Temporarily disable user activity tracking
         try:
             self.original_airport_data = list(airport_data)
@@ -734,9 +798,105 @@ class VATSIMControlApp(App):
             # "Last refresh" counts from the landing, not the start of the analysis
             self.last_refresh_time = datetime.now(timezone.utc)
             self.update_status_bar()
+            self._request_weather_pass()
         finally:
             # Also when the update fails or a table rebuild cancels it
             self._enable_activity_watching()
+
+    def _carry_weather_forward(self, airport_data: list[Any]) -> None:
+        """Give each airport the WIND/ALT the last refresh showed for it; a new one keeps ""."""
+        previous = {row.icao: row for row in self.original_airport_data}
+        for row in airport_data:
+            old = previous.get(row.icao)
+            if old is not None:
+                row.wind = old.wind
+                row.altimeter = old.altimeter
+
+    def _request_weather_pass(self) -> None:
+        """Start a weather pass, or have the running one followed by exactly one more."""
+        if self._weather_pass_running:
+            self._weather_rerun = True
+            return
+        self._weather_pass_running = True
+        self.run_worker(self._weather_pass_worker(), exclusive=False)
+
+    async def _weather_pass_worker(self) -> None:
+        """Run weather passes back to back until no refresh asked for another."""
+        try:
+            while True:
+                self._weather_rerun = False
+                try:
+                    await self._run_weather_pass()
+                except Exception as exc:
+                    # A failed pass keeps the shown WIND/ALT and must not stop later passes
+                    error(f"Weather pass failed: {exc}", exc_info=True)
+                if not self._weather_rerun:
+                    return
+        finally:
+            self._weather_pass_running = False
+
+    async def _run_weather_pass(self) -> None:
+        """Fetch WIND/ALT for the airports shown now, patching the table as each box returns."""
+        from . import config
+
+        airports = [row.icao for row in self.original_airport_data]
+        coordinates = config.UNIFIED_AIRPORT_DATA
+        if not airports or not coordinates:
+            return
+        loop = asyncio.get_running_loop()
+
+        def on_box(values: dict[str, tuple[str, str]]) -> None:
+            # Runs on the pass thread: hand the values to the loop without waiting
+            try:
+                loop.call_soon_threadsafe(self._apply_weather_batch, values)
+            except RuntimeError:
+                debug("The event loop closed during a weather pass; dropping a box")
+
+        await _run_in_daemon_thread(
+            partial(
+                fetch_weather_for_airports,
+                airports,
+                coordinates,
+                hide_wind=self.hide_wind,
+                as_of=datetime.now(timezone.utc),
+                on_box=on_box,
+                stop=self._weather_stop,
+            ),
+            "weather-pass",
+        )
+
+    def _apply_weather_batch(self, values: dict[str, tuple[str, str]]) -> None:
+        """Set one box's WIND/ALT on the current airports by ICAO and update the changed cells.
+
+        Runs as a bare loop callback, so it logs its own failures; a box that
+        returns after the app has shut down is dropped.
+        """
+        if self._weather_stop.is_set():
+            debug("A weather box returned after the app shut down; dropping it")
+            return
+        try:
+            if self._set_weather_values(values) and self.airports_manager is not None:
+                update = self.airports_manager.populate(self.airport_data)
+                if update is not None:
+                    update.add_done_callback(_log_weather_patch_failure)
+        except Exception as exc:
+            error(f"Weather patch failed: {exc}", exc_info=True)
+
+    def _set_weather_values(self, values: dict[str, tuple[str, str]]) -> bool:
+        """Set WIND/ALT on the current airports by ICAO; whether any value changed."""
+        changed = False
+        for row in self.original_airport_data:
+            value = values.get(row.icao)
+            if value is None:
+                continue
+            wind, altimeter = value
+            if self.hide_wind:
+                wind = row.wind
+            if (row.wind, row.altimeter) != (wind, altimeter):
+                row.wind = wind
+                row.altimeter = altimeter
+                changed = True
+        return changed
 
     def _reapply_search_filter(self, search_text: str) -> None:
         """Filter the airports by search text: ICAO, name or staffed positions contain it."""

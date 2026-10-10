@@ -206,6 +206,8 @@ Shows all tracked airports with columns:
 - **Altim**: Current altimeter setting (inches Hg)
 - **Positions**: Staffed ATC positions
 
+The first screen shows traffic with Wind and Altim blank; they fill in region by region within a few seconds. On each refresh the traffic columns update first, and Wind and Altim keep their previous values until fresh weather arrives for that airport.
+
 When `--include-all-arriving` is used, the Arr column shows `arr/arr_all` format when the counts differ (e.g., `3/  7` means 3 within the ETA window, 7 total filed). The Total column behaves similarly.
 
 #### Custom Groupings Tab

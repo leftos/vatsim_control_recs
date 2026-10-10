@@ -273,11 +273,10 @@ def main():
         airport_allowlist=airport_allowlist or None,
         groupings_allowlist=args.groupings,  # Still used for display purposes only
         include_all_staffed=args.include_all_staffed,
-        hide_wind=args.hide_wind,
         include_all_arriving=args.include_all_arriving,
         unified_airport_data=ui_config.UNIFIED_AIRPORT_DATA,
         disambiguator=ui_config.DISAMBIGUATOR,
-    )
+    )  # traffic only: the app's weather pass fills WIND/ALT in after the first paint
 
     if airport_data is None:
         print("Failed to download VATSIM data")

@@ -1092,6 +1092,36 @@ def get_altimeter_setting(
     return parse_altimeter_from_metar(metar)
 
 
+def cached_wind_altimeter(
+    airport_icao: str, *, as_of: datetime | None = None
+) -> tuple[str, str] | None:
+    """
+    The airport's (wind, altimeter) when the caches can answer without a fetch.
+
+    Answers exactly what get_wind_from_metar and get_altimeter_setting would answer
+    from the caches: a usable METAR entry's parsed values, or ("", "") for a
+    blacklisted airport or a fresh "no METAR" negative. Never fetches.
+
+    This function is thread-safe.
+
+    Args:
+        airport_icao: The ICAO code of the airport
+        as_of: Judge cache freshness as of this moment instead of now
+
+    Returns:
+        (wind, altimeter), "" where the METAR has none, or None when only a fetch
+        could answer
+    """
+    now = _resolve_now(as_of)
+    with get_metar_cache_lock():
+        entry = _usable_entry(airport_icao, now)
+        if entry is not None:
+            return entry.get("wind") or "", entry.get("altimeter") or ""
+        if _cached_metar(airport_icao, now) == "":
+            return "", ""
+    return None
+
+
 # Global cache for spatial index of airports with METAR
 _METAR_AIRPORT_SPATIAL_INDEX: dict[str, Any] | None = None
 _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP: datetime | None = None
@@ -1711,6 +1741,8 @@ def get_weather_for_airports_bbox(
     progress_callback: Callable[[int, int], None] | None = None,
     *,
     as_of: datetime | None = None,
+    on_box: Callable[[set[str], bool], None] | None = None,
+    stop: threading.Event | None = None,
 ) -> dict[str, str]:
     """
     Fetch METAR data for airports using bbox queries.
@@ -1731,6 +1763,14 @@ def get_weather_for_airports_bbox(
         progress_callback: Optional callback(completed, total) called as requested bboxes complete
         as_of: Judge cache freshness as of this moment (the refresh's box decision)
             instead of now; also used for the returned METARs
+        on_box: Optional callback(members, ok) with the upper-cased ICAOs of the
+            requested airports in a box once their METARs are readable from the cache.
+            The members of every box skipped as fresh come first, in one call, before
+            any request; each fetched box follows as soon as its result is stored, with
+            ``ok`` False when its request failed. Runs on the calling thread.
+        stop: Optional signal to give up: once set, box requests not yet started
+            are never made and no further box is stored or reported. Requests
+            already in flight may still finish.
 
     Returns:
         Dictionary mapping ICAO codes to METAR strings (empty string if unavailable)
@@ -1750,16 +1790,30 @@ def get_weather_for_airports_bbox(
     }
     decision_time = _resolve_now(as_of)
     to_fetch = _bboxes_needing_fetch(bboxes, members, decision_time)
-    results = _fetch_bboxes(to_fetch, max_workers, progress_callback)
+    if on_box is not None:
+        fresh = {
+            icao
+            for bbox_id in bboxes.keys() - to_fetch.keys()
+            for icao in members[bbox_id]
+        }
+        if fresh:
+            on_box(fresh, True)
 
-    # Populate the METAR cache so subsequent calls to get_wind_from_metar/get_altimeter_setting
-    # can use the cached data without additional API calls
+    # Populate the METAR cache box by box, so get_wind_from_metar/get_altimeter_setting
+    # can read a box's airports without additional API calls as soon as it is stored
     target_set = {a.upper() for a in airport_icaos}
-    current_time = datetime.now(timezone.utc)
-    with get_metar_cache_lock():
-        for bbox_id, fetch in results:
-            _store_bbox_result(fetch, members[bbox_id], target_set, current_time)
 
+    def store(bbox_id: str, fetch: BboxFetchResult) -> None:
+        with get_metar_cache_lock():
+            _store_bbox_result(
+                fetch, members[bbox_id], target_set, datetime.now(timezone.utc)
+            )
+        if on_box is not None:
+            on_box(members[bbox_id], fetch.succeeded)
+
+    _fetch_bboxes(to_fetch, max_workers, progress_callback, store, stop)
+
+    with get_metar_cache_lock():
         # Answer each airport as of the decision time: a box skipped as fresh and a
         # stale entry under a fresh negative both keep their cached METAR.
         return {
@@ -1809,35 +1863,53 @@ def _bboxes_needing_fetch(
         }
 
 
+def _fetch_bbox_unless_stopped(
+    bbox: tuple[float, float, float, float], stop: threading.Event | None
+) -> BboxFetchResult:
+    """A bbox request, skipped as failed when ``stop`` was set while it waited in the queue."""
+    if stop is not None and stop.is_set():
+        return _FAILED_BBOX_FETCH
+    return _fetch_weather_bbox_result(bbox, False, 30)
+
+
 def _fetch_bboxes(
     bboxes: dict[str, tuple[float, float, float, float]],
     max_workers: int,
     progress_callback: Callable[[int, int], None] | None,
-) -> list[tuple[str, BboxFetchResult]]:
-    """Fetch the bboxes' METARs in parallel, returning (bbox_id, result) per completed request."""
-    if not bboxes:
-        return []
+    on_result: Callable[[str, BboxFetchResult], None],
+    stop: threading.Event | None,
+) -> None:
+    """Fetch the bboxes' METARs in parallel, handing each (bbox_id, result) to on_result as it completes.
 
-    results: list[tuple[str, BboxFetchResult]] = []
+    on_result runs on the calling thread; a request that raised is handed over as failed.
+    Once ``stop`` is set, queued requests are cancelled or skipped and nothing more is handed over.
+    """
+    if not bboxes:
+        return
+
     total = len(bboxes)
     completed = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_bbox = {
-            executor.submit(_fetch_weather_bbox_result, bbox, False, 30): bbox_id
+            executor.submit(_fetch_bbox_unless_stopped, bbox, stop): bbox_id
             for bbox_id, bbox in bboxes.items()
         }
 
         for future in as_completed(future_to_bbox):
+            if stop is not None and stop.is_set():
+                executor.shutdown(wait=False, cancel_futures=True)
+                return
             try:
-                results.append((future_to_bbox[future], future.result()))
+                fetch = future.result()
             except Exception as e:
                 # Individual bbox failure doesn't stop others
                 debug_logger.warning(f"Bbox weather fetch failed: {e}")
+                fetch = _FAILED_BBOX_FETCH
+            on_result(future_to_bbox[future], fetch)
 
             completed += 1
             if progress_callback:
                 progress_callback(completed, total)
-    return results
 
 
 def _store_bbox_result(
