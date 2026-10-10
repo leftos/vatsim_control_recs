@@ -1,5 +1,5 @@
 # Plan
-<!-- plan-doc-hygiene: 2026-10-10 d84f1fc -->
+<!-- plan-doc-hygiene: 2026-10-10 7e1d80a -->
 
 The repo's single plan index. Every task is a checkbox here; detail goes into a linked subplan beside this file. A finished item's line is deleted in the commit that lands it.
 
@@ -40,9 +40,9 @@ Order (from the map of this wave): R3 removes the edit mode R4's wording would r
 Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `backend/core/`. Review: `code-review` with an aviation read of each verdict. Verification: each item first reproduces on fixture or live data; a confirmed defect gets a red test before its fix.
 
 - [ ] `parse_route_string` treats only names longer than 5 characters as SIDs or STARs (`backend/data/navaids.py`: `_is_route_endpoint`, which the airway-run look-ahead `_airway_run_ahead` shares, and the main loop's "Expand SID/STAR names" branch, a second copy of the regex), skipping 247 of 1,967 SIDs and 71 of 1,750 STARs on cycle 2610 (MKK5, TURN8, DPK3); every short id is 3-4 letters plus one digit. Map: `.tmp/map-short-procs.md` (16 of the test data's flights expand a real procedure, 0 MEA results change, HAL70's route distance becomes accepted).
-- [ ] Research X-Plane's navdata as a worldwide source for route idents (owner's idea): `backend/data/navaids.py` resolves fixes, navaids and airways from FAA NASR only, so `is_us_airport` (`backend/core/calculations.py`) keeps every route with a non-US end out of ETA, and non-US routes cannot be parsed for route weather or checks. Find out, from primary sources: the license of the current X-Plane default navdata (`earth_fix.dat`, `earth_nav.dat`, `earth_awy.dat`, the per-airport CIFP files) versus the older openly licensed community data, whether the app may download or ship it, where it is published, how often it updates against the 28-day AIRAC cycle, and its format (the CIFP files are ARINC 424, which `backend/data/cifp.py` already parses). Then a design question for the owner: merge rule with NASR (a US ident keeps its NASR position) and whether the `is_us_airport` gate goes.
 
   Settled (owner): one helper decides "procedure name" for the main loop, `_is_route_endpoint` and `_airway_run_ahead`: `_PROCEDURE_RE` and longer than 5 characters, or `^[A-Z]{3,4}\d$` and not a fix, navaid or airport ident (0 collisions with NASR's 70,129 fixes); a short name whose lookup finds no procedure falls through to the normal lookup. Lands on main (owner: no feature branch).
+- [ ] Research X-Plane's navdata as a worldwide source for route idents (owner's idea): `backend/data/navaids.py` resolves fixes, navaids and airways from FAA NASR only, so `is_us_airport` (`backend/core/calculations.py`) keeps every route with a non-US end out of ETA, and non-US routes cannot be parsed for route weather or checks. Find out, from primary sources: the license of the current X-Plane default navdata (`earth_fix.dat`, `earth_nav.dat`, `earth_awy.dat`, the per-airport CIFP files) versus the older openly licensed community data, whether the app may download or ship it, where it is published, how often it updates against the 28-day AIRAC cycle, and its format (the CIFP files are ARINC 424, which `backend/data/cifp.py` already parses). Then a design question for the owner: merge rule with NASR (a US ident keeps its NASR position) and whether the `is_us_airport` gate goes.
 
 ## Backlog
 
@@ -52,5 +52,6 @@ Items that share no files. Review: `code-review`. Verification: `uv run --group 
 
 - [ ] Investigate display names that fall back to the ICAO code ("ETIK - Etik" in the VFR finder) and two UK weather-briefing areas both named "LONDON AREA". Not yet confirmed.
 - [ ] Docs drift found by the debuggers: Test locations miss `test_allowlist_filter.py`, `test_disambiguator_csv_names.py`, `test_spatial_find_nearest.py`; the root `README.md` Go To key table lacks the → and ← rows (`CLAUDE.md` has them).
+- [ ] Re-read `docs/performance.md` against the 6 commits on its 10 named files since beb750c (newest `backend/data/weather.py`, d0bb731's first-fit box packing); found by the doc-drift scan.
 - [ ] Burn down the `C901` ratchet: `ruff.toml` `[lint.per-file-ignores]` lists 45 files (102 functions) that predate the max-complexity 8 rule. Split a file's functions under 8 and take it off the list; `uvx ruff@0.16.1 check --select C901 <file>` with the entry removed lists them. Biggest: `backend/data/weather.py` and `backend/data/navaids.py` (6 each).
 - [ ] Raise ruff's `target-version` from `py310` (`ruff.toml:6`) to `py313` to match `requires-python` in `pyproject.toml`, and land the UP-rule rewrites it triggers as their own commit.
