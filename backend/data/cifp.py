@@ -93,7 +93,7 @@ class CifpDP:
     """A departure procedure (SID) with waypoints."""
 
     identifier: str  # e.g., "CNDEL5"
-    waypoints: list[str]  # All waypoints in the common route
+    waypoints: list[str]  # Common route fixes, or the tail runway transitions share
 
 
 @dataclass
@@ -673,6 +673,61 @@ def _gather_records(
     return records
 
 
+def _sequenced_fixes(records: list[tuple[str, int]]) -> list[str]:
+    """A transition's fix identifiers in sequence order, duplicates removed.
+
+    Args:
+        records: The transition's (fix, sequence) records
+
+    Returns:
+        The non-empty fix identifiers, in sequence order
+    """
+    fixes: list[str] = []
+    seen: set[str] = set()
+    for fix, _ in sorted(records, key=lambda pair: pair[1]):
+        if fix and fix not in seen:
+            fixes.append(fix)
+            seen.add(fix)
+    return fixes
+
+
+def _shared_runway_tail(
+    dp_records: dict[str, list[tuple[str, int]]],
+) -> list[str]:
+    """The longest run of fixes every runway transition ends with.
+
+    A SID with no common route and no enroute transition is coded as runway
+    transitions only. The fixes those transitions share are flown off every
+    runway, so they are the part of the SID known without the departure runway.
+
+    Args:
+        dp_records: A procedure's (fix, sequence) records by transition
+
+    Returns:
+        The shared tail's fixes in sequence order; empty when the procedure has
+        no runway transition or the transitions end at different fixes
+    """
+    transitions = [
+        _sequenced_fixes(records)
+        for transition, records in dp_records.items()
+        if transition.startswith("RW")
+    ]
+    if not transitions:
+        return []
+
+    shared_tail = transitions[0]
+    for fixes in transitions[1:]:
+        common = 0
+        while (
+            common < len(shared_tail)
+            and common < len(fixes)
+            and shared_tail[-1 - common] == fixes[-1 - common]
+        ):
+            common += 1
+        shared_tail = shared_tail[len(shared_tail) - common :]
+    return shared_tail
+
+
 # The customer areas that carry the P/T-ident records the lookups answer from:
 # SCANP is Alaska's, SPACP Hawaii's and the Pacific territories', SLAMP Puerto
 # Rico's and the US Virgin Islands'. The Canadian records that share SCANP keep
@@ -788,14 +843,18 @@ def _ensure_index() -> bool:
 
 
 def get_dp_data(airport: str, dp_name: str) -> CifpDP | None:
-    """Get DP (departure procedure) common route waypoints from CIFP.
+    """Get DP (departure procedure) waypoints from CIFP.
+
+    The waypoints are the common route's when the procedure carries one, else
+    the first enroute transition's, else the tail every runway transition
+    shares.
 
     Args:
         airport: Airport code (e.g., "OAK", "KOAK")
         dp_name: DP name (e.g., "CNDEL5")
 
     Returns:
-        CifpDP with common route waypoints, or None if not found
+        CifpDP with the procedure's waypoints, or None if not found
     """
     if not _ensure_index():
         return None
@@ -839,6 +898,11 @@ def get_dp_data(airport: str, dp_name: str) -> CifpDP | None:
                 if fix and fix not in seen_waypoints:
                     all_waypoints.append(fix)
                     seen_waypoints.add(fix)
+
+    # A procedure coded with runway transitions only has no common route: every
+    # aircraft flies the fixes all its runway transitions share
+    if not all_waypoints:
+        all_waypoints = _shared_runway_tail(dp_records)
 
     # Filter out runway/airport references and empty strings
     all_waypoints = [

@@ -28,14 +28,18 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **CIFP**: Coded Instrument Flight Procedures, the FAA file the SID, STAR and approach lookups read (`backend/data/cifp.py`).
 - **clean empty / negative cache**: a cached "no METAR" answer for an airport, kept 60 seconds and stored only when both METAR sources (aviationweather.gov and metar.vatsim.net) answered with no report; failures are never cached.
 - **collapsed row**: in Go To's pick several, the one row "▸ N airports (→ to expand)" that stands for a picked grouping's members until `→` expands them.
+- **common route**: the part of a SID or STAR every transition flies, coded in CIFP with transition `ALL` or blank.
 - **CONUS**: the contiguous United States; a CONUS-sized weather box hits the API's 400-entry cap.
 - **D-ATIS**: digital ATIS, the airport information text fetched from VATSIM and real-world sources.
+- **enroute transition**: the leg of a SID or STAR that joins the common route to an enroute fix or airway; `get_dp_data` uses the first one when a SID has no common route.
 - **GIL**: Python's global interpreter lock; CPU-bound Python on a worker thread starves the UI thread (see `performance.md`).
 - **MEA**: minimum enroute altitude; the flight info screen warns when an IFR flight is below it on a segment of its filed route, comparing each segment with the level in force at its airway's entry, else the filed altitude.
 - **my groupings** (★ grouping): a grouping the user saved in `favorites.json`; the code calls it a favorite.
 - **NASR**: the FAA's National Airspace System Resources data, the source of navaids and fixes for route parsing (`backend/data/navaids.py`).
 - **ratchet**: the `C901` complexity ignores per file in `ruff.toml`; a file's entry is removed when its over-limit functions are split, so the list only shrinks.
+- **runway transition**: the leg of a SID from one runway to where the routes join, coded in CIFP with a transition name starting `RW`.
 - **SCANP / SPACP / SLAMP / SUSAP**: CIFP customer areas; SUSAP is the continental US (K idents), SCANP is Alaska's, SPACP Hawaii's and the Pacific territories', SLAMP Puerto Rico's and the US Virgin Islands'.
+- **shared runway-transition tail**: the longest run of fixes every runway transition of a SID ends with; `get_dp_data` returns it for a SID with no common route and no enroute transition, since it is flown whichever runway is used.
 - **SID / STAR**: standard instrument departure and standard terminal arrival routes, looked up from CIFP when parsing a filed route for the ETA.
 - **skip key**: the weather daemon's weather hash and code version joined by `:` (`compute_skip_key`); when it matches the stored key, the tile stage is skipped.
 - **split-flap**: the animated airport-board style of the tables, where cells flip through a character set to the new value (`widgets/split_flap_datatable.py`).

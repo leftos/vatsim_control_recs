@@ -1085,8 +1085,9 @@ def parse_route_string(
     """Parse a filed route string into waypoints with coordinates.
 
     Expands airways (V, J, T, Q routes) into their constituent fixes.
-    Expands SID/STAR procedure names into their common route waypoints
-    when departure/arrival airport context is provided.
+    Expands SID/STAR procedure names into their common route waypoints, or a
+    SID's shared runway-transition tail, when departure/arrival airport context
+    is provided.
 
     Args:
         route: Filed route string (e.g., "SUNOL V27 BSR")
