@@ -221,6 +221,8 @@ class VATSIMControlApp(App):
         self.groupings_manager = None
         # Cached data for Go To modal (warmed up on mount, kept fresh)
         self.cached_pilots: list[dict] = []
+        # Latest full VATSIM feed, read by the diversion finder for online controllers
+        self.vatsim_data: dict | None = None
         self.cached_groupings: dict = {}
         # Pre-built results list for Go To modal (list of (type, identifier, data) tuples)
         self.cached_goto_results: list[tuple[str, str, Any]] = []
@@ -310,6 +312,7 @@ class VATSIMControlApp(App):
         # Load pilots data (network call)
         vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
         if vatsim_data:
+            self.vatsim_data = vatsim_data
             self.cached_pilots = vatsim_data.get("pilots", [])
 
         # Pre-build the Go To results list in executor (includes disambiguator warmup)
@@ -627,6 +630,7 @@ class VATSIMControlApp(App):
         loop = asyncio.get_event_loop()
         vatsim_data = await loop.run_in_executor(None, download_vatsim_data)
         if vatsim_data:
+            self.vatsim_data = vatsim_data
             self.cached_pilots = vatsim_data.get("pilots", [])
             # Rebuild Go To results in background to keep cache warm
             await loop.run_in_executor(None, self._build_goto_results)
