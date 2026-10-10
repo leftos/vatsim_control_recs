@@ -6,6 +6,34 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+# ICAO prefixes of the airports the FAA NASR dataset covers: the US, its
+# territories, and the Pacific and Caribbean areas it administers. A route with
+# an end outside this set is not resolved against NASR, where a foreign ident
+# would land on its US namesake.
+_US_ICAO_PREFIXES = ("K", "PA", "PH", "PG", "PW", "PM", "TJ", "TI", "NS")
+
+# A route distance is accepted only below both bounds: at most twice the
+# remaining great circle, and at most 100 nm longer than it.
+_MAX_ROUTE_RATIO = 2.0
+_MAX_ROUTE_EXCESS_NM = 100.0
+
+
+def is_us_airport(ident: str | None) -> bool:
+    """
+    Report whether an ICAO ident names an airport inside NASR's coverage.
+
+    Args:
+        ident: An ICAO airport code, or None when the flight plan lacks one
+
+    Returns:
+        True when the stripped, upper-cased ident is 4 characters long and
+        starts with a US prefix (K, PA, PH, PG, PW, PM, TJ, TI or NS)
+    """
+    if not ident:
+        return False
+    code = ident.strip().upper()
+    return len(code) == 4 and code.startswith(_US_ICAO_PREFIXES)
+
 
 def haversine_distance_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
@@ -81,6 +109,61 @@ def format_eta_display(
         return f"{hours}h{minutes:02d}m"
 
 
+def _route_or_great_circle(
+    flight_plan: dict[str, Any] | None,
+    lat: float,
+    lon: float,
+    arrival_airport: dict[str, Any],
+    great_circle_nm: float,
+) -> float:
+    """
+    Return the remaining distance to fly, route-based only where plausible.
+
+    The filed route is resolved against FAA NASR data, which covers only the US
+    and its territories: a route with an end outside that coverage would resolve
+    a foreign ident to its US namesake, so those keep the great circle. A US
+    route distance is accepted only when it is at least the great circle and
+    within both bounds (_MAX_ROUTE_RATIO and _MAX_ROUTE_EXCESS_NM).
+
+    Args:
+        flight_plan: Flight plan with at least route, departure and arrival
+        lat: Aircraft current latitude
+        lon: Aircraft current longitude
+        arrival_airport: Arrival airport data with latitude and longitude
+        great_circle_nm: Remaining great circle distance (aircraft to arrival)
+
+    Returns:
+        Remaining distance in nautical miles
+    """
+    if not flight_plan or not flight_plan.get("route"):
+        return great_circle_nm
+    if not (
+        is_us_airport(flight_plan.get("departure"))
+        and is_us_airport(flight_plan.get("arrival"))
+    ):
+        return great_circle_nm
+
+    from backend.core.route_distance import get_route_remaining_distance
+
+    route_distance = get_route_remaining_distance(
+        flight_plan["route"],
+        lat,
+        lon,
+        arrival_airport["latitude"],
+        arrival_airport["longitude"],
+        departure=flight_plan.get("departure"),
+        arrival=flight_plan.get("arrival"),
+    )
+    if route_distance is None or route_distance < great_circle_nm:
+        return great_circle_nm
+    if (
+        route_distance > _MAX_ROUTE_RATIO * great_circle_nm
+        and route_distance - great_circle_nm > _MAX_ROUTE_EXCESS_NM
+    ):
+        return great_circle_nm
+    return route_distance
+
+
 def calculate_eta(
     flight: dict[str, Any],
     airports_data: dict[str, dict[str, Any]],
@@ -112,23 +195,14 @@ def calculate_eta(
             arrival_airport["longitude"],
         )
 
-        # Attempt route-based distance calculation for more accurate ETA
-        flight_plan = flight.get("flight_plan")
-        if flight_plan and flight_plan.get("route"):
-            from backend.core.route_distance import get_route_remaining_distance
-
-            route_distance = get_route_remaining_distance(
-                flight_plan["route"],
-                flight["latitude"],
-                flight["longitude"],
-                arrival_airport["latitude"],
-                arrival_airport["longitude"],
-                departure=flight_plan.get("departure"),
-                arrival=flight_plan.get("arrival"),
-            )
-            # Use route distance if valid (must be >= straight-line to be plausible)
-            if route_distance is not None and route_distance >= lateral_distance:
-                lateral_distance = route_distance
+        # Prefer the filed route distance where it can be trusted
+        lateral_distance = _route_or_great_circle(
+            flight.get("flight_plan"),
+            flight["latitude"],
+            flight["longitude"],
+            arrival_airport,
+            lateral_distance,
+        )
 
         # Account for altitude: aircraft need distance to descend
         # Using the 3:1 rule: 3nm per 1000ft of altitude to lose

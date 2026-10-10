@@ -36,6 +36,7 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **MEA**: minimum enroute altitude; the flight info screen warns when an IFR flight is below it on a segment of its filed route, comparing each segment with the level in force at its airway's entry, else the filed altitude.
 - **my groupings** (★ grouping): a grouping the user saved in `favorites.json`; the code calls it a favorite.
 - **NASR**: the FAA's National Airspace System Resources data, the source of navaids and fixes for route parsing (`backend/data/navaids.py`).
+- **NASR coverage**: the US and its territories, the airports `is_us_airport` accepts by ICAO prefix; route idents are resolved only against NASR, so a route with an end outside it uses the great circle for ETA.
 - **ratchet**: the `C901` complexity ignores per file in `ruff.toml`; a file's entry is removed when its over-limit functions are split, so the list only shrinks.
 - **runway transition**: the leg of a SID from one runway to where the routes join, coded in CIFP with a transition name starting `RW`.
 - **SCANP / SPACP / SLAMP / SUSAP**: CIFP customer areas; SUSAP is the continental US (K idents), SCANP is Alaska's, SPACP Hawaii's and the Pacific territories', SLAMP Puerto Rico's and the US Virgin Islands'.
