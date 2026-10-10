@@ -44,10 +44,10 @@ def record(
 
 
 # One airport per record block, as the real file has them: KOAK (SID, STAR,
-# approach), KOAJ, KSFO (SID, STAR, approach), a SCANP Alaska line, a SUSAP
-# line with a non-K ident, and a line too short to parse. The KOAK SID carries
-# the variant digit the real file writes past the 6-character id field, which
-# is why its raw text reads "CNDEL54".
+# approach), KOAJ, KSFO (SID, STAR, approach), KDEN (SID), KMCI (STAR), a SCANP
+# Alaska line, a SUSAP line with a non-K ident, and a line too short to parse.
+# The KOAK SID carries the variant digit the real file writes past the
+# 6-character id field, which is why its raw text reads "CNDEL54".
 FIXTURE_LINES = [
     record("KOAK", "D", "CNDEL5", "ALL", 10, "SUNOL", route_type="4"),
     record("KOAK", "D", "CNDEL5", "ALL", 20, "TRACY", route_type="4"),
@@ -61,6 +61,16 @@ FIXTURE_LINES = [
     record("KSFO", "D", "SIDBE5", "ALL", 10, "SIDBE"),
     record("KSFO", "E", "BDEGA3", "RW01L", 10, "BDEGA"),
     record("KSFO", "F", "I28R", "", 10, "FAF28"),
+    # A navaid named like its airport: the KDEN VOR's ident is "DEN", while the
+    # airport's own ident "KDEN" and a runway reference appear as fixes in the
+    # same common route, so the waypoint filter meets all three.
+    record("KDEN", "D", "PLAIN2", "ALL", 10, "DEN"),
+    record("KDEN", "D", "PLAIN2", "ALL", 20, "PLAIN"),
+    record("KDEN", "D", "PLAIN2", "ALL", 30, "KDEN"),
+    record("KDEN", "D", "PLAIN2", "ALL", 40, "RW16R"),
+    record("KMCI", "E", "JHAWK5", "ALL", 10, "MCI"),
+    record("KMCI", "E", "JHAWK5", "ALL", 20, "KMCI"),
+    record("KMCI", "E", "JHAWK5", "ALL", 30, "RW01L"),
     record("PAFA", "D", "PADDR", "ALL", 10, "PAFA", area="SCANP"),
     record("05C", "E", "PROC1", "RW01", 10, "FIX01", region="K5"),
     "SUSAP KOAKK2DCNDEL5",
@@ -201,9 +211,10 @@ def test_lookups_read_the_file_once(
     assert open_calls == [str(cifp_file)]
 
 
-def test_airport_cifp_cannot_hold_never_opens_the_file(
-    monkeypatch: pytest.MonkeyPatch,
+def test_airport_missing_from_the_index_never_opens_the_file(
+    cifp_file: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """An airport the index has no records for answers without a file read."""
     assert cifp.get_dp_data("KOAK", "CNDEL5") is not None
 
     open_calls = _count_opens(monkeypatch)
@@ -285,6 +296,26 @@ def test_star_without_a_common_route_uses_its_runway_transitions(
     assert star.waypoints == ["SCAG"]
 
 
+def test_dp_keeps_navaid_named_like_its_airport(cifp_file: Path) -> None:
+    """KDEN PLAIN2 flies its DEN VOR, which the old suffix filter dropped."""
+    dp = cifp.get_dp_data("KDEN", "PLAIN2")
+
+    assert dp is not None
+    assert dp.waypoints == ["DEN", "PLAIN"]
+    assert "KDEN" not in dp.waypoints
+    assert not any(w.startswith("RW") for w in dp.waypoints)
+
+
+def test_star_keeps_navaid_named_like_its_airport(cifp_file: Path) -> None:
+    """KMCI JHAWK5 flies its MCI VOR, which the old suffix filter dropped."""
+    star = cifp.get_star_data("KMCI", "JHAWK5")
+
+    assert star is not None
+    assert star.waypoints == ["MCI"]
+    assert "KMCI" not in star.waypoints
+    assert not any(w.startswith("RW") for w in star.waypoints)
+
+
 def test_parsed_route_cache_holds_a_full_refresh() -> None:
     """The route cache is sized for a refresh's ~950 distinct routes."""
     assert route_distance._get_parsed_route.cache_info().maxsize == 4096
@@ -342,7 +373,11 @@ def test_conus_lookups_unchanged(cifp_file: Path) -> None:
 
 
 def _reference_dp_data(path: Path, airport: str, dp_name: str) -> cifp.CifpDP | None:
-    """Copy of the per-lookup file scan get_dp_data used before the index."""
+    """Copy of the per-lookup file scan get_dp_data used before the index.
+
+    The waypoint filter at the end is the current one: a fix equal to the
+    airport's own ident is dropped, a fix merely ending with its code is kept.
+    """
     airport = airport.upper()
     if airport.startswith("K") and len(airport) == 4:
         airport_code = airport[1:]
@@ -400,10 +435,13 @@ def _reference_dp_data(path: Path, airport: str, dp_name: str) -> cifp.CifpDP | 
                     all_waypoints.append(fix)
                     seen_waypoints.add(fix)
 
+    airport_ident = (
+        airport_code
+        if len(airport_code) == 4 and airport_code[0] in ("P", "T")
+        else f"K{airport_code}"
+    )
     all_waypoints = [
-        w
-        for w in all_waypoints
-        if w and not w.startswith("RW") and not w.endswith(airport_code)
+        w for w in all_waypoints if w and not w.startswith("RW") and w != airport_ident
     ]
 
     if not all_waypoints:
@@ -415,7 +453,11 @@ def _reference_dp_data(path: Path, airport: str, dp_name: str) -> cifp.CifpDP | 
 def _reference_star_data(
     path: Path, airport: str, star_name: str
 ) -> cifp.CifpSTAR | None:
-    """Copy of the per-lookup file scan get_star_data used before the index."""
+    """Copy of the per-lookup file scan get_star_data used before the index.
+
+    The waypoint filter at the end is the current one: a fix equal to the
+    airport's own ident is dropped, a fix merely ending with its code is kept.
+    """
     airport = airport.upper()
     if airport.startswith("K") and len(airport) == 4:
         airport_code = airport[1:]
@@ -469,10 +511,13 @@ def _reference_star_data(
                     all_waypoints.append(fix)
                     seen_waypoints.add(fix)
 
+    airport_ident = (
+        airport_code
+        if len(airport_code) == 4 and airport_code[0] in ("P", "T")
+        else f"K{airport_code}"
+    )
     all_waypoints = [
-        w
-        for w in all_waypoints
-        if w and not w.startswith("RW") and not w.endswith(airport_code)
+        w for w in all_waypoints if w and not w.startswith("RW") and w != airport_ident
     ]
 
     if not all_waypoints:

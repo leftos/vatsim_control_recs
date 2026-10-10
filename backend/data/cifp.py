@@ -904,11 +904,12 @@ def get_dp_data(airport: str, dp_name: str) -> CifpDP | None:
     if not all_waypoints:
         all_waypoints = _shared_runway_tail(dp_records)
 
-    # Filter out runway/airport references and empty strings
+    # A fix that names the airport itself (e.g. "KDEN") or one of its runways
+    # is not a waypoint; a fix merely named like the airport, such as KDEN's
+    # "DEN" VOR, is. Empty strings are dropped too.
+    airport_ident = _lookup_ident(airport_code)
     all_waypoints = [
-        w
-        for w in all_waypoints
-        if w and not w.startswith("RW") and not w.endswith(airport_code)
+        w for w in all_waypoints if w and not w.startswith("RW") and w != airport_ident
     ]
 
     if not all_waypoints:
@@ -968,11 +969,12 @@ def get_star_data(airport: str, star_name: str) -> CifpSTAR | None:
                     all_waypoints.append(fix)
                     seen_waypoints.add(fix)
 
-    # Filter out runway/airport references and empty strings
+    # A fix that names the airport itself (e.g. "KMCI") or one of its runways
+    # is not a waypoint; a fix merely named like the airport, such as KMCI's
+    # "MCI" VOR, is. Empty strings are dropped too.
+    airport_ident = _lookup_ident(airport_code)
     all_waypoints = [
-        w
-        for w in all_waypoints
-        if w and not w.startswith("RW") and not w.endswith(airport_code)
+        w for w in all_waypoints if w and not w.startswith("RW") and w != airport_ident
     ]
 
     if not all_waypoints:
