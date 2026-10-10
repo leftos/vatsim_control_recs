@@ -7,6 +7,7 @@ Route Weather, Help, Command Palette)
 
 from .airport_tracking import AirportTrackingModal
 from .command_palette import CommandPaletteScreen
+from .confirm_modal import Choice, ChoiceModal
 from .diversion_modal import DiversionModal
 from .flight_board import FlightBoardScreen
 from .flight_briefing import FlightWeatherBriefingScreen
@@ -25,6 +26,8 @@ from .wind_info import WindInfoScreen
 
 __all__ = [
     "AirportTrackingModal",
+    "Choice",
+    "ChoiceModal",
     "CommandPaletteScreen",
     "DiversionModal",
     "FlightBoardScreen",

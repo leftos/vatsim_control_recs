@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 from collections import defaultdict
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -605,8 +606,8 @@ def save_user_grouping(
     grouping: UserGrouping,
     *,
     overwrite: bool,
-    preset_names: set[str],
-    airport_idents: set[str],
+    preset_names: AbstractSet[str],
+    airport_idents: AbstractSet[str],
 ) -> None:
     """Write one user grouping to the favorites file.
 
@@ -666,8 +667,8 @@ def rename_user_grouping(
     new_grouping: UserGrouping,
     *,
     overwrite: bool,
-    preset_names: set[str],
-    airport_idents: set[str],
+    preset_names: AbstractSet[str],
+    airport_idents: AbstractSet[str],
 ) -> None:
     """Rename one user grouping and save its new contents in a single write.
 
