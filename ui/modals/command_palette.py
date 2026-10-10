@@ -11,7 +11,6 @@ from textual.widgets.option_list import Option
 
 # List of all available commands
 COMMANDS = [
-    {"name": "Refresh Data", "shortcut": "Ctrl+R", "action": "refresh"},
     {
         "name": "Pause/Resume Auto-refresh",
         "shortcut": "Ctrl+P",

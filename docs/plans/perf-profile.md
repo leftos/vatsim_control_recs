@@ -137,7 +137,7 @@ Peak RSS stayed between 275 and 306 MB in every run with a single refresh in fli
 
 ## Ranked fix proposals
 
-1. **Don't start a refresh while one is running.** In `auto_refresh_callback`, skip the tick while `refresh_worker` is still running, and stop `action_refresh` from cancelling an analysis already under way (fold a manual Ctrl+R into the running one).
+1. **Don't start a refresh while one is running.** In `auto_refresh_callback`, skip the tick while `refresh_worker` is still running, and stop `action_refresh` from cancelling an analysis already under way (the owner removed Ctrl+R instead of folding it into the running one).
    - Expected gain: S2 and S3 tables update at all, today 0 of 11 and 0 of 19 timer refreshes land. Concurrent analyses drop from 19 to 1, peak RSS from 505 MB to the 290 MB baseline, and quitting no longer waits on abandoned threads.
    - Size S. Files: `ui/app.py` (`auto_refresh_callback`, `action_refresh`, `refresh_worker`).
    - Risk: when an analysis outlasts the interval, the real refresh period becomes the analysis time. The status bar's "Last refresh" should then count from the last completed refresh, not the last start.

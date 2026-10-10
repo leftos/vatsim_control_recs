@@ -144,7 +144,7 @@ uv run main.py --airports KSFO --groupings "SoCal" --include-all-staffed
 | `--countries CODE [CODE ...]` | (none) | Track all airports in specified countries (e.g., `US`, `DE`, `CA`) |
 | `--groupings NAME [NAME ...]` | (all) | Track airports from custom or preset groupings |
 | `--max-eta-hours HOURS` | 1.0 | Maximum ETA in hours for arrival filter (flights further out are excluded) |
-| `--refresh-interval SECS` | 15 | Auto-refresh interval in seconds |
+| `--refresh-interval SECS` | 15 | Minimum seconds between refresh starts; a refresh never starts while one is running, so a slow analysis lengthens the period |
 | `--include-all-staffed` | false | Include airports with zero traffic if they have ATC online |
 | `--include-all-arriving` | false | Include airports with any filed arrivals, regardless of ETA |
 | `--disable-animations` | false | Disable split-flap animations for instant updates |
@@ -217,7 +217,7 @@ Shows configured airport groupings with aggregated statistics.
 
 The bottom bar shows:
 - **Refresh status**: Active, Paused, or Auto-paused (idle)
-- **Time since last refresh**: Countdown to next refresh
+- **Time since last refresh**: Seconds since the last refresh that landed, with " · Refreshing…" added while one runs (for example `Last refresh: 47s ago · Refreshing…`)
 - **Tracking counts**: Number of airports and groupings being tracked
 
 ### Table Sorting
@@ -241,7 +241,6 @@ When viewing weather information, airports are color-coded by flight category:
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Z` | Quit the application |
-| `Ctrl+R` | Refresh data immediately |
 | `Ctrl+P` | Pause/Resume auto-refresh |
 | `Tab` | Switch between tabs |
 | `Up/Down` | Navigate table rows |
@@ -790,7 +789,7 @@ If the app reports that the spaCy model `en_core_web_sm` is missing, run `uv syn
 
 1. Check internet connectivity
 2. VATSIM API may be temporarily unavailable
-3. Try manual refresh with `Ctrl+R`
+3. Check that auto-refresh is not paused (`Ctrl+P` toggles it), then wait for the next refresh
 4. Check debug logs in `debug_logs/` directory
 
 ### Slow Performance

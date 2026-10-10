@@ -216,7 +216,6 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Z` | Quit |
-| `Ctrl+R` | Refresh data |
 | `Ctrl+P` | Pause/Resume auto-refresh |
 | `Ctrl+F` | Search/filter airports (airports tab only) |
 | `Ctrl+G` / `Ctrl+L` | Go To (unified navigation) |

@@ -11,7 +11,6 @@ from textual.widgets import Static
 LEFT_COLUMN = """\
 [bold]General[/bold]
  Ctrl+Z   Quit
- Ctrl+R   Refresh data
  Ctrl+P   Pause/Resume
 
 [bold]Navigation[/bold]

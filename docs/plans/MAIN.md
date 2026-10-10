@@ -11,10 +11,7 @@ Performance fixes from [perf-profile.md](./perf-profile.md) (measured hotspots, 
 
 Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is the command; the human check is a run with `--countries US` showing refreshes land every interval, re-measured as the profile did.
 
-- [ ] Never start a refresh while one is running, and never cancel one under way: with the US filter or no filter every 15 s tick cancels the running analysis and starts another, so no refresh ever lands and cancelled analyses pile up (`ui/app.py:416-438`, `exclusive=True` at `:609`). Perf fix 1.
-
-  Settled (owner): the Ctrl+R binding is removed entirely (`ui/app.py:151`, with its help, command-palette and docs entries), so only the timer and the app's own triggers refresh. The status bar's "Last refresh" counts from the last refresh that landed and adds "· Refreshing…" while one runs.
-- [ ] A 0.25 s timer raised `NoMatches '#status-bar'` at shutdown after a US auto-refresh run (`ui/app.py:472`, `:486`).
+- [ ] Re-measure with fixes 1-6 landed: a `--countries US` run and an unfiltered run under the profile's method (refreshes landing per interval, CPU per refresh, UI stalls, peak RSS), record the new figures beside the old in [perf-profile.md](./perf-profile.md), then promote its lasting findings into `docs/` and retire the subplan.
 
 ## Next up
 

@@ -13,6 +13,7 @@ from typing import Any, ClassVar
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
+from textual.css.query import NoMatches
 from textual.events import Key
 from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
@@ -20,7 +21,7 @@ from backend import analyze_flights_data
 from backend.core.groupings import load_all_groupings
 from widgets.split_flap_datatable import SplitFlapDataTable
 
-from .debug_logger import debug
+from .debug_logger import debug, error
 from .modals import (
     CommandPaletteScreen,
     DiversionModal,
@@ -148,7 +149,6 @@ class VATSIMControlApp(App):
     BINDINGS: ClassVar[list[Binding]] = [
         # Visible in footer (compact labels)
         Binding("ctrl+z", "quit", "Quit", priority=True),
-        Binding("ctrl+r", "refresh", "Refresh", priority=True),
         Binding("f1", "show_help", "Help", priority=True),
         Binding("f2", "show_command_palette", "Cmds", priority=True),
         # Hidden from footer (accessed via shortcuts or command palette)
@@ -202,6 +202,12 @@ class VATSIMControlApp(App):
         self.refresh_interval = args.refresh_interval if args else 5
         self.refresh_timer = None
         self.last_refresh_time = datetime.now(timezone.utc)
+        # Only one refresh runs at a time; a request during a run queues one follow-up
+        self.refresh_in_progress = False
+        self.refresh_pending = False
+        # The auto-refresh interval is measured from the last start, so a failed
+        # analysis retries on the interval rather than on the very next tick
+        self.last_refresh_started_at = self.last_refresh_time
         self.status_update_timer = None
         self.last_activity_time = datetime.now(timezone.utc)
         self.idle_timeout = 3  # seconds of idle time before auto-refresh resumes
@@ -415,11 +421,15 @@ class VATSIMControlApp(App):
 
     def auto_refresh_callback(self) -> None:
         """Callback for auto-refresh timer (called every second)."""
-        # Check if at least refresh_interval seconds have passed since last refresh
-        time_since_refresh = (
-            datetime.now(timezone.utc) - self.last_refresh_time
+        # Never start a refresh while one is already running
+        if self.refresh_in_progress:
+            return
+
+        # Check if at least refresh_interval seconds have passed since the last start
+        time_since_start = (
+            datetime.now(timezone.utc) - self.last_refresh_started_at
         ).total_seconds()
-        if time_since_refresh < self.refresh_interval:
+        if time_since_start < self.refresh_interval:
             return
 
         # Don't refresh if manually paused
@@ -483,7 +493,12 @@ class VATSIMControlApp(App):
 
     def update_status_bar(self) -> None:
         """Update the status bar with current state."""
-        status_bar = self.query_one("#status-bar", Static)
+        try:
+            status_bar = self.query_one("#status-bar", Static)
+        except NoMatches:
+            # The status-bar timer can fire after the screen is torn down
+            debug("Status bar is not mounted; skipping the status update")
+            return
 
         # Check if user has been idle long enough
         idle_time = (
@@ -510,8 +525,12 @@ class VATSIMControlApp(App):
         )
         time_str = self.format_time_since(time_since_refresh)
 
+        # A refresh still in flight says so right after the time
+        refreshing = " · Refreshing…" if self.refresh_in_progress else ""
+
         status_bar.update(
-            f"Auto-refresh: {pause_status} | Last refresh: {time_str} ago | {len(self.airport_data)} airports, {groupings_count} groupings"
+            f"Auto-refresh: {pause_status} | Last refresh: {time_str} ago{refreshing}"
+            f" | {len(self.airport_data)} airports, {groupings_count} groupings"
         )
 
     async def fetch_data_async(self):
@@ -548,9 +567,18 @@ class VATSIMControlApp(App):
         return result
 
     def action_refresh(self) -> None:
-        """Refresh the data from VATSIM asynchronously."""
-        # Update last refresh time
-        self.last_refresh_time = datetime.now(timezone.utc)
+        """Refresh the data from VATSIM asynchronously; only one run at a time."""
+        if self.refresh_in_progress:
+            # A refresh is already running; queue exactly one follow-up
+            self.refresh_pending = True
+            return
+        self._start_refresh()
+
+    def _start_refresh(self) -> None:
+        """Start the refresh worker. Only called when no refresh is running."""
+        self.refresh_in_progress = True
+        self.last_refresh_started_at = datetime.now(timezone.utc)
+        self.update_status_bar()
 
         # Also trigger refresh on the flight board if it's open
         if self.flight_board_open and self.active_flight_board:
@@ -594,7 +622,7 @@ class VATSIMControlApp(App):
                 ].name
                 saved_scroll_offset = groupings_table.scroll_offset.y
 
-        # Start async data fetch
+        # Start async data fetch; never cancel a run already under way
         self.run_worker(
             self.refresh_worker(
                 old_airport_data,
@@ -606,7 +634,7 @@ class VATSIMControlApp(App):
                 saved_scroll_offset,
                 current_tab,
             ),
-            exclusive=True,
+            exclusive=False,
         )
 
     async def refresh_worker(
@@ -621,6 +649,32 @@ class VATSIMControlApp(App):
         current_tab,
     ):
         """Worker to fetch data asynchronously and update tables efficiently."""
+        try:
+            await self._apply_refresh_data(
+                saved_airport_icao,
+                saved_grouping_name,
+                saved_row_index,
+                saved_scroll_offset,
+                current_tab,
+            )
+        except Exception as exc:
+            # A failed analysis must neither take the app down nor stop later refreshes
+            error(f"Refresh failed: {exc}", exc_info=True)
+        finally:
+            self.refresh_in_progress = False
+            if self.refresh_pending:
+                self.refresh_pending = False
+                self._start_refresh()
+
+    async def _apply_refresh_data(
+        self,
+        saved_airport_icao,
+        saved_grouping_name,
+        saved_row_index,
+        saved_scroll_offset,
+        current_tab,
+    ) -> None:
+        """Fetch fresh data and update the tables, keeping the cursor in place."""
         # Fetch fresh data
         airport_data, groupings_data, total_flights = await self.fetch_data_async()
 
@@ -666,58 +720,16 @@ class VATSIMControlApp(App):
             if self.groupings_manager and self.groupings_data:
                 self.groupings_manager.populate(self.groupings_data)
 
-            # Restore cursor position and scroll offset
-            if current_tab == "airports":
-                airports_table = self.query_one("#airports-table", SplitFlapDataTable)
-                old_row_index = saved_row_index
-                # Try to find the same airport by ICAO
-                new_row_index = saved_row_index
-                if saved_airport_icao:
-                    for i, row in enumerate(self.airport_data):
-                        if row.icao == saved_airport_icao:
-                            new_row_index = i
-                            break
-                # Ensure row index is within bounds
-                if new_row_index >= len(self.airport_data):
-                    new_row_index = max(0, len(self.airport_data) - 1)
+            self._restore_table_position(
+                current_tab,
+                saved_airport_icao,
+                saved_grouping_name,
+                saved_row_index,
+                saved_scroll_offset,
+            )
 
-                if len(self.airport_data) > 0:
-                    # Calculate the scroll adjustment to maintain visual position
-                    row_diff = new_row_index - old_row_index
-                    # Move cursor to the new row
-                    airports_table.move_cursor(row=new_row_index)
-                    # Restore scroll position with adjustment for row index change
-                    airports_table.scroll_to(
-                        y=saved_scroll_offset + row_diff, animate=False
-                    )
-                    self._enable_activity_watching()  # Re-enable user activity tracking
-
-            elif current_tab == "groupings" and self.groupings_data:
-                groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
-                old_row_index = saved_row_index
-                # Try to find the same grouping by name
-                new_row_index = saved_row_index
-                if saved_grouping_name:
-                    for i, row in enumerate(self.groupings_data):
-                        if row.name == saved_grouping_name:
-                            new_row_index = i
-                            break
-                # Ensure row index is within bounds
-                if new_row_index >= len(self.groupings_data):
-                    new_row_index = max(0, len(self.groupings_data) - 1)
-
-                if len(self.groupings_data) > 0:
-                    # Calculate the scroll adjustment
-                    row_diff = new_row_index - old_row_index
-                    self._disable_activity_watching()  # Temporarily disable user activity tracking
-                    # Move cursor to the new row
-                    groupings_table.move_cursor(row=new_row_index)
-                    # Restore scroll position with adjustment
-                    groupings_table.scroll_to(
-                        y=saved_scroll_offset + row_diff, animate=False
-                    )
-                    self._enable_activity_watching()  # Re-enable user activity tracking
-
+            # "Last refresh" counts from the landing, not the start of the analysis
+            self.last_refresh_time = datetime.now(timezone.utc)
             self.update_status_bar()
 
             self._enable_activity_watching()  # Re-enable user activity tracking
@@ -728,6 +740,66 @@ class VATSIMControlApp(App):
                 status_bar.update(f"{refresh_status}Failed to refresh data from VATSIM")
             except Exception as e:
                 debug(f"Could not update status bar after failed refresh: {e}")
+
+    def _restore_table_position(
+        self,
+        current_tab,
+        saved_airport_icao,
+        saved_grouping_name,
+        saved_row_index,
+        saved_scroll_offset,
+    ) -> None:
+        """Restore the cursor row and scroll offset after the tables are repopulated."""
+        if current_tab == "airports":
+            airports_table = self.query_one("#airports-table", SplitFlapDataTable)
+            old_row_index = saved_row_index
+            # Try to find the same airport by ICAO
+            new_row_index = saved_row_index
+            if saved_airport_icao:
+                for i, row in enumerate(self.airport_data):
+                    if row.icao == saved_airport_icao:
+                        new_row_index = i
+                        break
+            # Ensure row index is within bounds
+            if new_row_index >= len(self.airport_data):
+                new_row_index = max(0, len(self.airport_data) - 1)
+
+            if len(self.airport_data) > 0:
+                # Calculate the scroll adjustment to maintain visual position
+                row_diff = new_row_index - old_row_index
+                # Move cursor to the new row
+                airports_table.move_cursor(row=new_row_index)
+                # Restore scroll position with adjustment for row index change
+                airports_table.scroll_to(
+                    y=saved_scroll_offset + row_diff, animate=False
+                )
+                self._enable_activity_watching()  # Re-enable user activity tracking
+
+        elif current_tab == "groupings" and self.groupings_data:
+            groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
+            old_row_index = saved_row_index
+            # Try to find the same grouping by name
+            new_row_index = saved_row_index
+            if saved_grouping_name:
+                for i, row in enumerate(self.groupings_data):
+                    if row.name == saved_grouping_name:
+                        new_row_index = i
+                        break
+            # Ensure row index is within bounds
+            if new_row_index >= len(self.groupings_data):
+                new_row_index = max(0, len(self.groupings_data) - 1)
+
+            if len(self.groupings_data) > 0:
+                # Calculate the scroll adjustment
+                row_diff = new_row_index - old_row_index
+                self._disable_activity_watching()  # Temporarily disable activity tracking
+                # Move cursor to the new row
+                groupings_table.move_cursor(row=new_row_index)
+                # Restore scroll position with adjustment
+                groupings_table.scroll_to(
+                    y=saved_scroll_offset + row_diff, animate=False
+                )
+                self._enable_activity_watching()  # Re-enable user activity tracking
 
     def action_toggle_search(self) -> None:
         """Toggle the search box visibility."""

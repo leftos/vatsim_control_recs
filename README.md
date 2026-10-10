@@ -99,7 +99,6 @@ uv run main.py --airports KSFO --groupings "SoCal" --include-all-arriving
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Z` | Quit the application |
-| `Ctrl+R` | Refresh data from VATSIM |
 | `Ctrl+P` | Pause/Resume auto-refresh |
 | `Ctrl+F` | Search/filter airports (airports tab only) |
 | `Ctrl+G` / `Ctrl+L` | Go To - unified search for airports, flights, groupings |

@@ -47,7 +47,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 1. `main.py` parses arguments (`build_arg_parser`), loads the unified airport data with `load_unified_airport_data` only when countries or groupings must be expanded, expands them to the tracked airport list (`resolve_airport_allowlist`), then calls `analyze_flights_data()` and hands the result to the app.
 2. `analyze_flights_data()` in `backend/core/analysis.py` loads the unified airport data itself if `main.py` did not pass it (`data/raw/APT_BASE.csv`, `data/raw/airports.json`, `data/raw/iata-icao.csv`), downloads VATSIM data (`download_vatsim_data`), extracts staffed positions, filters flights to the tracked airports and splits them into departures and arrivals by ground position and ETA.
 3. It fetches weather for the airports it will display in one bbox call (`get_weather_for_airports_bbox`), which fills the METAR cache and requests a box only when one of its airports has neither a fresh (60 seconds) METAR nor a fresh "no METAR" entry; wind (`get_wind_from_metar`, skipped under `--hide-wind`) and altimeter (`get_altimeter_setting`) are then read back from that cache. Display names come from one `get_full_names_batch` call on the disambiguator. It returns `AirportStats` and `GroupingStats` lists, sorted.
-4. `ui/app.py` fills the DataTables from those lists and repeats the analysis on the refresh timer; groupings are expanded to airports for tracking at startup but stay as groupings in the Groupings tab.
+4. `ui/app.py` fills the DataTables from those lists and repeats the analysis on the refresh timer, one refresh at a time (the timer skips a tick while one runs, so the period is the longer of the interval and the analysis time; an app-triggered request during a run, such as closing the Tracked Airports manager after a change, queues exactly one follow-up; a failed analysis is logged as an ERROR and the app keeps running); groupings are expanded to airports for tracking at startup but stay as groupings in the Groupings tab.
 5. Modal screens fetch their own data on demand through `backend` (for example `get_metar_batch` and `get_taf_batch`, run in an executor) and pre-fill the airport from the selected table row, the open flight board or the open flight info screen.
 
 ## Integration Footguns
@@ -74,6 +74,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_goto_r1.py`: Go To modal titles, hints, focus moves, and warning and error toasts.
 - `tests/test_cifp_index.py`: CIFP SID, STAR and approach lookups on a small fixture file: matches, the single file pass, and the index and route-cache rebuild when another file is returned.
 - `tests/test_weather_cache.py`: bbox freshness, "no METAR" negatives and the failures that are never cached.
+- `tests/test_refresh_overlap.py`: refreshes never overlap or cancel, the one queued follow-up, a failed analysis keeping the app running, and the status bar's "Refreshing…" text.
 
 CI runs the suite in the "Run tests" step of `.github/workflows/build-release.yml`, before the PyInstaller build. Outside `tests/`, behavior is checked by running `uv run main.py` against live data or `data/test-vatsim-data.json` (a sample VATSIM response), and the weather daemon by `scripts/weather_daemon/service/LocalTest.ps1`.
 
