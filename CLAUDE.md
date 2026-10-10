@@ -50,6 +50,8 @@ Basic execution:
 python main.py
 ```
 
+When an agent runs the app (to check a change, take screenshots, or drive it with Textual's `run_test`), it always passes a filter: `--airports`, `--groupings`, or `--countries` with one country or a few. With no filter the app tracks every airport with traffic on the network, and that load bogs it down badly.
+
 Track specific airports:
 ```bash
 python main.py --airports KSFO KLAX KJFK
