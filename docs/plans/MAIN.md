@@ -4,16 +4,13 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ## Current focus
 
-- [ ] Convert the project from pip to uv: `requirements.txt`, the `.venv` bootstrap in `main.py` (`ensure_venv_and_restart` line 117, `ensure_requirements_installed` line 237), the spaCy model download, `.github/workflows/build-release.yml` (lines 43–48), the weather-daemon scripts (`scripts/weather_daemon/service/setup.sh` lines 65–73, `deploy.sh` line 99, `Deploy.ps1` line 67, `LocalTest.ps1` lines 53–63) and the setup docs (`CLAUDE.md`, `README.md`, `USER_GUIDE.md`).
-
-  Settled: `uv run main.py` is the entry point and the venv/pip bootstrap in `main.py` is removed; `pyproject.toml` and `uv.lock` replace `requirements.txt`; `en_core_web_sm` is a locked dependency pinned to its wheel URL, with no runtime download; the weather-daemon server scripts move to uv too (`setup.sh` installs uv, deploys run `uv sync`), so the next deploy needs uv on the server.
+- [ ] Profile the app under heavy traffic and plan the wins: drive it headless (Textual `run_test`, the screenshot driver's harness) with a large tracked set and with no filter, which today bogs the app down, and time startup (`main.py` → `analyze_flights_data()` in `backend/core/analysis.py`, the disambiguator's `get_pretty_names_batch`), one refresh cycle (`ui/app.py` refresh worker), and table updates (`ui/tables.py`, `widgets/split_flap_datatable.py`). Use stdlib `cProfile` and `uvx py-spy` (no new dependency); write the findings to a subplan with measured hotspots before any fix.
 
 ## Next up
 
 - [ ] Finish the leftos.dev showcase screenshots and send them back (leftos.dev inbox request 20261010-081555). In `X:\dev\leftos.dev\.tmp\vcr-shots\`: 01–05 and 09 are taken; 06 (Go To) and 07 (Custom Groupings) need a retake; 08 is skipped (no StatSim key).
 
   The driver is `.tmp/vcr-shots-driver/drive.py` (untracked; its `install_bug_shims()` and the `app.vatsim_data = data` line in `do_diversion` come out, since the bugs they covered are fixed). The reply draft with captions and corrections to the request's list is `.tmp/vcr-shots-reply.md`; send it as an inbox request to `leftos.dev`.
-- [ ] Profile the app under heavy traffic and plan the wins: drive it headless (Textual `run_test`, the screenshot driver's harness) with a large tracked set and with no filter, which today bogs the app down, and time startup (`main.py` → `analyze_flights_data()` in `backend/core/analysis.py`, the disambiguator's `get_pretty_names_batch`), one refresh cycle (`ui/app.py` refresh worker), and table updates (`ui/tables.py`, `widgets/split_flap_datatable.py`). Use stdlib `cProfile` and `uvx py-spy` (no new dependency); write the findings to a subplan with measured hotspots before any fix.
 - [ ] Make the Go To modal's mode and keys visible (R1 in [goto-ux-review.md](./goto-ux-review.md)): a title naming the mode, a one-line hint computed from mode, focus and the highlighted row, focus on the list when multi-select starts, and a toast for every key that does nothing (`ui/modals/goto_modal.py`).
 - [ ] Fix Go To edit mode reading and writing a picked airport's dep/arr filter under different keys, so the row shows the wrong filter and F cannot change what is saved (`ui/modals/goto_modal.py:689-691` against `:403-405` and `:761-765`).
 
