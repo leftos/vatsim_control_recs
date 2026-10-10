@@ -1,5 +1,5 @@
 # Plan
-<!-- plan-doc-hygiene: 2026-10-10 3dc6deb -->
+<!-- plan-doc-hygiene: 2026-10-10 d84f1fc -->
 
 The repo's single plan index. Every task is a checkbox here; detail goes into a linked subplan beside this file. A finished item's line is deleted in the commit that lands it.
 
