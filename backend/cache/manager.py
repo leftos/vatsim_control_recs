@@ -45,6 +45,10 @@ _METAR_BLACKLIST: LRUCache = LRUCache(
     maxsize=MAX_BLACKLIST_SIZE
 )  # Keys are ICAOs, values are True
 
+# "No METAR" negatives: airports whose METAR source answered cleanly with no report.
+# {airport_icao: timestamp (UTC datetime)}; guarded by _METAR_CACHE_LOCK, never persisted.
+_METAR_NEGATIVE_CACHE: LRUCache = LRUCache(maxsize=MAX_WEATHER_CACHE_SIZE)
+
 # Cache for TAF data - LRU with size limit
 # {airport_icao: {'taf': str, 'timestamp': datetime}}
 _TAF_DATA_CACHE: LRUCache = LRUCache(maxsize=MAX_WEATHER_CACHE_SIZE)
@@ -92,6 +96,15 @@ def get_metar_cache() -> tuple[LRUCache, LRUCache]:
     when modifying the cache from multiple threads.
     """
     return _METAR_DATA_CACHE, _METAR_BLACKLIST
+
+
+def get_metar_negative_cache() -> LRUCache:
+    """Get the "no METAR" negative cache: ICAO -> UTC timestamp of the clean empty answer.
+
+    It is kept apart from the METAR data cache so it is never persisted and never
+    replaces a METAR entry. Callers must hold get_metar_cache_lock().
+    """
+    return _METAR_NEGATIVE_CACHE
 
 
 def get_taf_cache() -> tuple[LRUCache, LRUCache]:
@@ -142,6 +155,7 @@ def clear_metar_cache() -> None:
     with _METAR_CACHE_LOCK:
         _METAR_DATA_CACHE.clear()
         _METAR_BLACKLIST.clear()
+        _METAR_NEGATIVE_CACHE.clear()
 
 
 def clear_taf_cache() -> None:
@@ -162,6 +176,7 @@ def clear_all_caches() -> None:
     with _METAR_CACHE_LOCK:
         _METAR_DATA_CACHE.clear()
         _METAR_BLACKLIST.clear()
+        _METAR_NEGATIVE_CACHE.clear()
 
     with _TAF_CACHE_LOCK:
         _TAF_DATA_CACHE.clear()

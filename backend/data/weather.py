@@ -11,11 +11,12 @@ import urllib.request
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, NamedTuple
 
 from backend.cache.manager import (
     get_metar_cache,
     get_metar_cache_lock,
+    get_metar_negative_cache,
     get_taf_cache,
     get_taf_cache_lock,
     get_wind_cache,
@@ -255,12 +256,15 @@ def get_wind_info_minute(airport_icao: str) -> str:
         return ""
 
 
-def _fetch_metar_from_aviationweather(airport_icao: str) -> str | None:
+def _fetch_metar_from_aviationweather(airport_icao: str) -> tuple[str | None, bool]:
     """
     Fetch METAR from aviationweather.gov API.
 
     Returns:
-        METAR string, empty string if no data, or None on error
+        (metar, answered): metar is the METAR string, empty string if no data, or None
+        when the station should be blacklisted; answered is True when the server
+        responded successfully, so an empty metar is a clean "no METAR" answer rather
+        than a timeout, rate limit or other error.
     """
     try:
         # Wait for backoff if rate limiting is active
@@ -280,52 +284,59 @@ def _fetch_metar_from_aviationweather(airport_icao: str) -> str | None:
 
         if not metar_text:
             # Empty response (e.g., HTTP 204) - return empty to trigger fallback
-            return ""
+            return "", True
 
         if metar_text.startswith(("No METAR", "Error")):
             # Explicit error - return None to indicate blacklist
-            return None
+            return None, True
 
-        return metar_text
+        return metar_text, True
 
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return None  # Station doesn't exist - blacklist
+            return None, True  # Station doesn't exist - blacklist
         if _check_rate_limit_error(e.code):
             backoff = _record_rate_limit_error()
 
             debug_logger.debug(
                 f"Rate limit detected (HTTP {e.code}) for METAR {airport_icao}, backoff: {backoff:.1f}s"
             )
-        return ""  # Other HTTP errors - try fallback
+        return "", False  # Other HTTP errors - try fallback
     except (urllib.error.URLError, TimeoutError):
-        return ""  # Network error - try fallback
+        return "", False  # Network error - try fallback
     except Exception:
-        return ""  # Other errors - try fallback
+        return "", False  # Other errors - try fallback
 
 
-def _fetch_metar_from_vatsim(airport_icao: str) -> str | None:
+def _fetch_metar_from_vatsim(airport_icao: str) -> tuple[str, bool]:
     """
     Fetch METAR from VATSIM METAR API (fallback).
 
     Returns:
-        METAR string or empty string if unavailable
+        (metar, answered): metar is the METAR string or empty string if unavailable;
+        answered is True when the server responded with HTTP 200, so an empty metar
+        is a clean "no METAR" answer rather than an error.
     """
+    url = f"https://metar.vatsim.net/{airport_icao}"
     try:
-        url = f"https://metar.vatsim.net/{airport_icao}"
         req = urllib.request.Request(url)
         req.add_header("User-Agent", "VATSIM-Control-Recs/1.0")
 
         with urllib.request.urlopen(req, timeout=5) as response:
+            status = response.status
             metar_text = response.read().decode("utf-8").strip()
 
-        if not metar_text or metar_text.startswith("No METAR"):
-            return ""
+    except Exception as e:
+        debug_logger.debug(f"VATSIM METAR fetch failed for {airport_icao} ({url}): {e}")
+        return "", False
 
-        return metar_text
+    if status != 200:
+        return "", False
 
-    except Exception:
-        return ""
+    if not metar_text or metar_text.startswith("No METAR"):
+        return "", True
+
+    return metar_text, True
 
 
 def get_metar(airport_icao: str) -> str:
@@ -345,25 +356,17 @@ def get_metar(airport_icao: str) -> str:
     Returns:
         Full METAR string or empty string if unavailable
     """
-    metar_data_cache, metar_blacklist = get_metar_cache()
+    _metar_data_cache, metar_blacklist = get_metar_cache()
     metar_lock = get_metar_cache_lock()
 
-    # Check if airport is blacklisted (doesn't have METAR data available)
     with metar_lock:
-        if airport_icao in metar_blacklist:
-            return ""
-
-        # Check if we have valid cached data
-        current_time = datetime.now(timezone.utc)
-        if airport_icao in metar_data_cache:
-            cache_entry = metar_data_cache[airport_icao]
-            time_since_cache = (current_time - cache_entry["timestamp"]).total_seconds()
-            if time_since_cache < METAR_CACHE_DURATION:
-                return cache_entry["metar"]
+        cached = _cached_metar(airport_icao, datetime.now(timezone.utc))
+    if cached is not None:
+        return cached
 
     # Cache miss or expired - fetch new data (outside lock to avoid blocking)
     # Try primary source first
-    metar_text = _fetch_metar_from_aviationweather(airport_icao)
+    metar_text, answered = _fetch_metar_from_aviationweather(airport_icao)
 
     if metar_text is None:
         # Station doesn't exist - blacklist it permanently
@@ -371,32 +374,82 @@ def get_metar(airport_icao: str) -> str:
             metar_blacklist[airport_icao] = True
         return ""
 
+    # A negative is cached only when both servers answered cleanly with no METAR
+    clean_empty = False
+
     # If primary returned empty, try VATSIM fallback
     if metar_text == "":
-        metar_text = _fetch_metar_from_vatsim(airport_icao)
+        metar_text, vatsim_answered = _fetch_metar_from_vatsim(airport_icao)
+        clean_empty = answered and vatsim_answered
 
-    # If still empty, return cached data if available or empty string
-    if not metar_text:
-        with metar_lock:
-            if airport_icao in metar_data_cache:
-                return metar_data_cache[airport_icao]["metar"]
-        return ""
-
-    # Parse wind and altimeter from METAR for caching
-    parsed_wind = _parse_wind_from_metar(metar_text)
-    parsed_altimeter = parse_altimeter_from_metar(metar_text)
-
-    # Cache the result with parsed values
     current_time = datetime.now(timezone.utc)
+    if not metar_text:
+        return _no_metar_result(airport_icao, clean_empty, current_time)
+
     with metar_lock:
-        metar_data_cache[airport_icao] = {
-            "metar": metar_text,
-            "wind": parsed_wind,
-            "altimeter": parsed_altimeter,
-            "timestamp": current_time,
-        }
+        _store_metar(airport_icao, metar_text, current_time)
 
     return metar_text
+
+
+def _is_fresh(timestamp: datetime, now: datetime) -> bool:
+    """Whether a METAR cache timestamp is younger than METAR_CACHE_DURATION."""
+    return (now - timestamp).total_seconds() < METAR_CACHE_DURATION
+
+
+def _has_fresh_negative(airport_icao: str, now: datetime) -> bool:
+    """Whether a clean "no METAR" answer for the airport is still fresh. Caller holds the METAR lock."""
+    negative_time = get_metar_negative_cache().get(airport_icao)
+    return negative_time is not None and _is_fresh(negative_time, now)
+
+
+def _cached_metar(airport_icao: str, now: datetime) -> str | None:
+    """
+    Answer get_metar from the caches when they can. Caller holds the METAR lock.
+
+    A METAR entry, fresh or stale, always wins over a "no METAR" negative; the
+    negative is consulted only for airports with no METAR entry at all.
+
+    Returns:
+        The cached answer ("" for a blacklisted airport or a fresh negative), or
+        None when the METAR must be fetched.
+    """
+    metar_data_cache, metar_blacklist = get_metar_cache()
+    if airport_icao in metar_blacklist:
+        return ""
+
+    cache_entry = metar_data_cache.get(airport_icao)
+    if cache_entry is not None:
+        return (
+            cache_entry["metar"] if _is_fresh(cache_entry["timestamp"], now) else None
+        )
+
+    return "" if _has_fresh_negative(airport_icao, now) else None
+
+
+def _store_metar(airport_icao: str, metar_text: str, now: datetime) -> None:
+    """Cache a METAR with its parsed wind and altimeter. Caller holds the METAR lock."""
+    metar_data_cache, _metar_blacklist = get_metar_cache()
+    metar_data_cache[airport_icao] = {
+        "metar": metar_text,
+        "wind": _parse_wind_from_metar(metar_text),
+        "altimeter": parse_altimeter_from_metar(metar_text),
+        "timestamp": now,
+    }
+    get_metar_negative_cache().pop(airport_icao, None)
+
+
+def _no_metar_result(airport_icao: str, clean_empty: bool, now: datetime) -> str:
+    """
+    Settle a fetch that found no METAR: record a clean empty as a negative and
+    return the stale cached METAR if one exists, else "".
+    """
+    metar_data_cache, _metar_blacklist = get_metar_cache()
+    with get_metar_cache_lock():
+        if clean_empty:
+            get_metar_negative_cache()[airport_icao] = now
+        cache_entry = metar_data_cache.get(airport_icao)
+        return cache_entry["metar"] if cache_entry is not None else ""
 
 
 def get_taf(airport_icao: str) -> str:
@@ -801,49 +854,96 @@ def fetch_weather_bbox(
     Returns:
         Tuple of (metars_dict, tafs_dict) where keys are ICAO codes
     """
+    result = _fetch_weather_bbox_result(bbox, include_taf, timeout)
+    return (result.metars, result.tafs)
+
+
+# aviationweather.gov returns at most 400 entries per response (aviationweather.gov/data/api,
+# Restrictions), so a response that size may be truncated.
+BBOX_MAX_ENTRIES = 400
+
+
+class BboxFetchResult(NamedTuple):
+    """One bbox request's METARs and TAFs, whether it succeeded, and its raw entry count."""
+
+    metars: dict[str, str]
+    tafs: dict[str, str]
+    succeeded: bool
+    entry_count: int
+
+
+_FAILED_BBOX_FETCH = BboxFetchResult({}, {}, False, 0)
+
+
+def _parse_bbox_entries(data: list) -> tuple[dict[str, str], dict[str, str]]:
+    """Split a bbox JSON response into (metars, tafs) keyed by ICAO."""
+    metars: dict[str, str] = {}
+    tafs: dict[str, str] = {}
+    for entry in data:
+        icao = entry.get("icaoId", "")
+        raw_metar = entry.get("rawOb", "")
+        raw_taf = entry.get("rawTaf", "")
+
+        if icao and raw_metar:
+            metars[icao] = raw_metar
+        if icao and raw_taf:
+            tafs[icao] = raw_taf
+    return metars, tafs
+
+
+def _fetch_weather_bbox_result(
+    bbox: tuple[float, float, float, float], include_taf: bool, timeout: int
+) -> BboxFetchResult:
+    """
+    Fetch a bbox like fetch_weather_bbox, also reporting success and the entry count.
+
+    An empty body (HTTP 204, no stations in the box) is a success with no entries;
+    an HTTP error, network error or a response that is not a JSON array is a failure.
+    """
     min_lat, min_lon, max_lat, max_lon = bbox
     bbox_str = f"{min_lat},{min_lon},{max_lat},{max_lon}"
 
-    metars: dict[str, str] = {}
-    tafs: dict[str, str] = {}
+    # Use taf=true to get both METAR and TAF in one call
+    taf_param = "&taf=true" if include_taf else ""
+    url = f"https://aviationweather.gov/api/data/metar?bbox={bbox_str}&format=json{taf_param}"
 
     try:
         # Wait for backoff if rate limiting is active
         _wait_for_backoff()
 
-        # Use taf=true to get both METAR and TAF in one call
-        taf_param = "&taf=true" if include_taf else ""
-        url = f"https://aviationweather.gov/api/data/metar?bbox={bbox_str}&format=json{taf_param}"
-
         req = urllib.request.Request(url)
         req.add_header("User-Agent", "VATSIM-Control-Recs/1.0")
 
         with urllib.request.urlopen(req, timeout=timeout) as response:
-            data = json.loads(response.read().decode("utf-8"))
+            body = response.read().decode("utf-8").strip()
 
         # Record successful request
         _record_successful_request()
 
+        if not body:
+            return BboxFetchResult({}, {}, True, 0)
+
         # Parse response - it's an array of METAR objects
-        if isinstance(data, list):
-            for entry in data:
-                icao = entry.get("icaoId", "")
-                raw_metar = entry.get("rawOb", "")
-                raw_taf = entry.get("rawTaf", "")
+        data = json.loads(body)
+        if not isinstance(data, list):
+            debug_logger.warning(
+                f"Bbox weather response for {bbox_str} is not a JSON array"
+            )
+            return _FAILED_BBOX_FETCH
 
-                if icao and raw_metar:
-                    metars[icao] = raw_metar
-                if icao and raw_taf:
-                    tafs[icao] = raw_taf
-
-        return (metars, tafs)
+        metars, tafs = _parse_bbox_entries(data)
+        return BboxFetchResult(metars, tafs, True, len(data))
 
     except urllib.error.HTTPError as e:
         if _check_rate_limit_error(e.code):
             _record_rate_limit_error()
-        return ({}, {})
-    except Exception:
-        return ({}, {})
+        debug_logger.warning(
+            f"Bbox weather fetch failed for {bbox_str} ({url}): HTTP {e.code}"
+        )
+        return _FAILED_BBOX_FETCH
+    except Exception as e:
+        debug_logger.warning(f"Bbox weather fetch failed for {bbox_str} ({url}): {e}")
+        return _FAILED_BBOX_FETCH
 
 
 def get_weather_batch_bbox(
@@ -1419,6 +1519,7 @@ def clear_weather_caches() -> None:
     metar_lock = get_metar_cache_lock()
     with metar_lock:
         metar_data_cache.clear()
+        get_metar_negative_cache().clear()
         # Don't clear blacklist - those are permanent 404s
 
     taf_data_cache, _taf_blacklist = get_taf_cache()
@@ -1595,11 +1696,16 @@ def get_weather_for_airports_bbox(
     Calculates bounding boxes from airport coordinates and fetches weather in bulk,
     then populates the METAR cache for subsequent wind/altimeter lookups.
 
+    A box is requested only when at least one of its airports has neither a METAR
+    entry younger than METAR_CACHE_DURATION nor a fresh "no METAR" negative. A box
+    that succeeded with fewer than BBOX_MAX_ENTRIES entries records a negative for
+    each of its airports it did not return, so get_metar skips their per-station fetch.
+
     Args:
         airport_icaos: List of airport ICAO codes to fetch weather for
         airports_data: Dictionary mapping ICAO codes to airport data with lat/lon
         max_workers: Maximum concurrent bbox fetches (default: 5)
-        progress_callback: Optional callback(completed, total) called as bboxes complete
+        progress_callback: Optional callback(completed, total) called as requested bboxes complete
 
     Returns:
         Dictionary mapping ICAO codes to METAR strings (empty string if unavailable)
@@ -1613,31 +1719,99 @@ def get_weather_for_airports_bbox(
     if not bboxes:
         return {}
 
-    # Convert to set for filtering
-    target_set = {a.upper() for a in airport_icaos}
+    members = {
+        bbox_id: _airports_in_bbox(bbox, airport_icaos, airports_data)
+        for bbox_id, bbox in bboxes.items()
+    }
+    to_fetch = _bboxes_needing_fetch(bboxes, members, datetime.now(timezone.utc))
+    results = _fetch_bboxes(to_fetch, max_workers, progress_callback)
 
-    all_metars: dict[str, str] = {}
+    # Populate the METAR cache so subsequent calls to get_wind_from_metar/get_altimeter_setting
+    # can use the cached data without additional API calls
+    target_set = {a.upper() for a in airport_icaos}
+    current_time = datetime.now(timezone.utc)
+    with get_metar_cache_lock():
+        for bbox_id, fetch in results:
+            _store_bbox_result(fetch, members[bbox_id], target_set, current_time)
+
+        # Ensure all requested airports have an entry (empty string if not found)
+        return {
+            icao: _fresh_cached_metar(icao.upper(), current_time)
+            for icao in airport_icaos
+        }
+
+
+def _airports_in_bbox(
+    bbox: tuple[float, float, float, float],
+    airport_icaos: list[str],
+    airports_data: dict[str, dict[str, Any]],
+) -> set[str]:
+    """Upper-cased ICAOs of the requested airports whose coordinates lie inside the bbox."""
+    min_lat, min_lon, max_lat, max_lon = bbox
+    inside: set[str] = set()
+    for icao in airport_icaos:
+        airport = airports_data.get(icao) or {}
+        lat, lon = airport.get("latitude"), airport.get("longitude")
+        if lat is None or lon is None:
+            continue
+        if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
+            inside.add(icao.upper())
+    return inside
+
+
+def _has_fresh_answer(airport_icao: str, now: datetime) -> bool:
+    """Whether the airport has a fresh METAR entry or a fresh negative. Caller holds the METAR lock."""
+    metar_data_cache, _metar_blacklist = get_metar_cache()
+    cache_entry = metar_data_cache.get(airport_icao)
+    if cache_entry is not None and _is_fresh(cache_entry["timestamp"], now):
+        return True
+    return _has_fresh_negative(airport_icao, now)
+
+
+def _fresh_cached_metar(airport_icao: str, now: datetime) -> str:
+    """The airport's fresh cached METAR, or "". Caller holds the METAR lock."""
+    metar_data_cache, _metar_blacklist = get_metar_cache()
+    cache_entry = metar_data_cache.get(airport_icao)
+    if cache_entry is not None and _is_fresh(cache_entry["timestamp"], now):
+        return cache_entry["metar"]
+    return ""
+
+
+def _bboxes_needing_fetch(
+    bboxes: dict[str, tuple[float, float, float, float]],
+    members: dict[str, set[str]],
+    now: datetime,
+) -> dict[str, tuple[float, float, float, float]]:
+    """The bboxes with at least one airport lacking a fresh METAR entry or negative."""
+    with get_metar_cache_lock():
+        return {
+            bbox_id: bbox
+            for bbox_id, bbox in bboxes.items()
+            if not all(_has_fresh_answer(icao, now) for icao in members[bbox_id])
+        }
+
+
+def _fetch_bboxes(
+    bboxes: dict[str, tuple[float, float, float, float]],
+    max_workers: int,
+    progress_callback: Callable[[int, int], None] | None,
+) -> list[tuple[str, BboxFetchResult]]:
+    """Fetch the bboxes' METARs in parallel, returning (bbox_id, result) per completed request."""
+    if not bboxes:
+        return []
+
+    results: list[tuple[str, BboxFetchResult]] = []
     total = len(bboxes)
     completed = 0
-
-    # Fetch weather for each bbox in parallel
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_bbox = {
-            executor.submit(fetch_weather_bbox, bbox, False): bbox_id
+            executor.submit(_fetch_weather_bbox_result, bbox, False, 30): bbox_id
             for bbox_id, bbox in bboxes.items()
         }
 
         for future in as_completed(future_to_bbox):
             try:
-                metars, _tafs = future.result()
-                # Filter to target airports
-                all_metars.update(
-                    {
-                        icao: metar
-                        for icao, metar in metars.items()
-                        if icao.upper() in target_set
-                    }
-                )
+                results.append((future_to_bbox[future], future.result()))
             except Exception as e:
                 # Individual bbox failure doesn't stop others
                 debug_logger.warning(f"Bbox weather fetch failed: {e}")
@@ -1645,30 +1819,28 @@ def get_weather_for_airports_bbox(
             completed += 1
             if progress_callback:
                 progress_callback(completed, total)
+    return results
 
-    # Populate the METAR cache so subsequent calls to get_wind_from_metar/get_altimeter_setting
-    # can use the cached data without additional API calls
-    metar_data_cache, _metar_blacklist = get_metar_cache()
-    metar_lock = get_metar_cache_lock()
-    current_time = datetime.now(timezone.utc)
 
-    with metar_lock:
-        for icao, metar in all_metars.items():
-            if metar:
-                # Parse wind and altimeter from METAR for caching
-                parsed_wind = _parse_wind_from_metar(metar)
-                parsed_altimeter = parse_altimeter_from_metar(metar)
+def _store_bbox_result(
+    fetch: BboxFetchResult, members: set[str], target_set: set[str], now: datetime
+) -> None:
+    """
+    Cache a bbox result's METARs for the requested airports and, when the request
+    succeeded and was not truncated, a negative for each member airport it omitted.
+    Caller holds the METAR lock.
+    """
+    for icao, metar in fetch.metars.items():
+        if metar and icao.upper() in target_set:
+            _store_metar(icao, metar, now)
 
-                metar_data_cache[icao] = {
-                    "metar": metar,
-                    "wind": parsed_wind,
-                    "altimeter": parsed_altimeter,
-                    "timestamp": current_time,
-                }
+    if not fetch.succeeded or fetch.entry_count >= BBOX_MAX_ENTRIES:
+        return
 
-    # Ensure all requested airports have an entry (empty string if not found)
-    result = {icao: all_metars.get(icao, "") for icao in airport_icaos}
-    return result
+    returned = {icao.upper() for icao in fetch.metars}
+    negatives = get_metar_negative_cache()
+    for icao in members - returned:
+        negatives[icao] = now
 
 
 def get_weather_smart(

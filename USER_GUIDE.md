@@ -656,7 +656,7 @@ uv run main.py --wind-source metar
 - Uses Aviation Weather Center (aviationweather.gov)
 - Standard METAR observations
 - Updated approximately every hour (or more frequently at busy airports)
-- 60-second cache to reduce API calls
+- 60-second cache to reduce API calls; an airport with no METAR is checked at most once per 60 seconds, and failed requests are retried on the next refresh
 
 ### Minute Source
 
