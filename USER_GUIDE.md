@@ -538,7 +538,7 @@ View and manage all currently tracked airports:
 | `A` | Add airports |
 | `Delete` | Remove selected airport(s) |
 | `Space` | Select/deselect multiple airports |
-| `S` | Save current set as custom grouping |
+| `S` | Save the picked airports (or the whole list when none is picked) as a ★ grouping |
 | `Escape` | Close manager |
 
 **Adding Airports:**

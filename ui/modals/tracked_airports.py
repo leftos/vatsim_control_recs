@@ -74,6 +74,7 @@ class TrackedAirportsModal(ModalScreen):
         Binding("a", "add_airports", "Add Airports", priority=True),
         Binding("delete", "remove_selected", "Remove Selected", priority=True),
         Binding("s", "save_as_grouping", "Save as Grouping", priority=True),
+        Binding("space", "toggle_selected", "Select", show=False),
     ]
 
     def __init__(self, airport_allowlist: list, disambiguator=None):
@@ -81,6 +82,7 @@ class TrackedAirportsModal(ModalScreen):
         self.airport_allowlist = sorted(airport_allowlist) if airport_allowlist else []
         self.disambiguator = disambiguator
         self.selected_airports = set()
+        self._saved_airport_count = 0
 
     def compose(self) -> ComposeResult:
         tracking_mode = (
@@ -114,7 +116,7 @@ class TrackedAirportsModal(ModalScreen):
                 yield Button("Close (Esc)", id="close-button", classes="tracked-button")
 
             yield Static(
-                "Use arrow keys to navigate, Space to select/deselect",
+                "Use arrow keys to navigate, Space or Enter to select/deselect",
                 id="tracked-hint",
             )
             yield Static("", id="tracked-status")
@@ -139,23 +141,49 @@ class TrackedAirportsModal(ModalScreen):
             return
 
         for icao in self.airport_allowlist:
-            pretty_name = (
-                self.disambiguator.get_full_name(icao) if self.disambiguator else icao
-            )
-            display_text = f"{icao} - {pretty_name}"
-            if icao in self.selected_airports:
-                display_text = f"[✓] {display_text}"
-            list_view.append(ListItem(Label(display_text), name=icao))
+            list_view.append(ListItem(Label(self._display_text(icao)), name=icao))
+
+    def _display_text(self, icao: str) -> str:
+        """The row text for one airport, marked when it is picked."""
+        pretty_name = (
+            self.disambiguator.get_full_name(icao) if self.disambiguator else icao
+        )
+        display_text = f"{icao} - {pretty_name}"
+        if icao in self.selected_airports:
+            display_text = f"[✓] {display_text}"
+        return display_text
+
+    def _toggle_airport(self, item: ListItem) -> None:
+        """Flip one row's picked state and redraw that row alone.
+
+        Redrawing in place rather than rebuilding the list keeps the highlight
+        where it was: ``populate_list`` clears the ListView, which drops the
+        highlighted index.
+        """
+        if not item.name:
+            return
+
+        icao = item.name
+        if icao in self.selected_airports:
+            self.selected_airports.remove(icao)
+        else:
+            self.selected_airports.add(icao)
+
+        item.query_one(Label).update(self._display_text(icao))
+
+    def action_toggle_selected(self) -> None:
+        """Space: toggle the highlighted airport, leaving the cursor on its row."""
+        list_view = self.query_one("#tracked-list", ListView)
+        if self.focused is not list_view:
+            return
+
+        item = list_view.highlighted_child
+        if item is not None:
+            self._toggle_airport(item)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Handle item selection/deselection"""
-        if event.item.name:
-            icao = event.item.name
-            if icao in self.selected_airports:
-                self.selected_airports.remove(icao)
-            else:
-                self.selected_airports.add(icao)
-            self.populate_list()
+        """Enter: toggle the selected airport, leaving the cursor on its row."""
+        self._toggle_airport(event.item)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses"""
@@ -234,13 +262,15 @@ class TrackedAirportsModal(ModalScreen):
         info_widget.update(f"{tracking_mode} ({airport_count} airports)")
 
     def action_save_as_grouping(self) -> None:
-        """Open modal to save current airports as a custom grouping"""
-        if not self.airport_allowlist:
+        """Open modal to save the picked airports (the whole list when none)."""
+        airports = sorted(self.selected_airports) or self.airport_allowlist
+        if not airports:
             status_widget = self.query_one("#tracked-status", Static)
             status_widget.update("No airports to save (tracking all airports)")
             return
 
-        save_modal = SaveGroupingModal(self.airport_allowlist)
+        self._saved_airport_count = len(airports)
+        save_modal = SaveGroupingModal(airports)
         self.app.push_screen(save_modal, callback=self.handle_save_grouping_result)
 
     def handle_save_grouping_result(self, result) -> None:
@@ -248,7 +278,7 @@ class TrackedAirportsModal(ModalScreen):
         if result:
             status_widget = self.query_one("#tracked-status", Static)
             status_widget.update(
-                f"Saved '{result}' with {len(self.airport_allowlist)} airports"
+                f"Saved '{result}' with {self._saved_airport_count} airports"
             )
 
     def action_close(self) -> None:

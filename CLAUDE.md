@@ -288,7 +288,7 @@ In edit mode a saved filter shows on an individually picked airport's row, and `
 | `A` | Add airports |
 | `Delete` | Remove selected |
 | `Space` | Select/deselect |
-| `S` | Save as custom grouping |
+| `S` | Save the picked airports (or all when none is picked) as a ★ grouping |
 | `Escape` | Close |
 
 ### Diversion Modal

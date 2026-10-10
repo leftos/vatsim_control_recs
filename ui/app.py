@@ -1183,9 +1183,9 @@ class VATSIMControlApp(App):
                     self._open_airport_weather_briefing([icao])
                     return
 
-        # No context - show picker (allows both airports and groupings)
+        # No context - show picker (airport, grouping or flight)
         goto_screen = GoToScreen(
-            title="Weather Briefing: Enter airports or select grouping",
+            title="Weather Briefing: select an airport, grouping or flight",
             callback=self._open_weather_briefing_callback,
         )
         self.push_screen(goto_screen)
@@ -1197,10 +1197,7 @@ class VATSIMControlApp(App):
 
         name, data = result
 
-        if name == "airports":
-            # User typed airport ICAO code(s) directly
-            self._open_airport_weather_briefing(data)
-        elif name == "flight":
+        if name == "flight":
             # Flight selected - open full flight weather briefing
             flight_plan = data.get("flight_plan") or {}
             callsign = data.get("callsign", "Flight")

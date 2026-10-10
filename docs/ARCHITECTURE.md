@@ -84,6 +84,8 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_goto_r1.py`: Go To modal titles, hints, focus moves, and warning and error toasts.
 - `tests/test_cifp_index.py`: CIFP SID, STAR and approach lookups on a small fixture file: matches, the single file pass, and the index and route-cache rebuild when another file is returned.
 - `tests/test_weather_cache.py`: bbox freshness, "no METAR" negatives and the failures that are never cached.
+- `tests/test_tracked_airports.py`: Space and Enter pick a row in the Tracked Airports manager with the cursor kept in place, and `S` saves the picks (or the whole list when none).
+- `tests/test_weather_briefing_callback.py`: the weather-briefing picker routes a flight, a single airport and a grouping to their briefings.
 - `tests/test_grouping_board_filters.py`: a ★ grouping's saved dep/arr filters apply when its board opens from the Groupings tab or Go To; a preset opens unfiltered.
 - `tests/test_cli_options.py`: the CLI parser rejects the removed progressive flags.
 - `tests/test_refresh_overlap.py`: refreshes never overlap or cancel, the one queued follow-up, a failed analysis keeping the app running, and the status bar's "Refreshing…" text.

@@ -22,12 +22,7 @@ Design in [goto-ux-review.md](./goto-ux-review.md). Shared: `ui/modals/goto_moda
 Order (from the map of this wave): R3 removes the edit mode R4's wording would relabel, so R4 splits, its filters half first and its wording sweep last; the `_fill_option_list` split lands before R5, which edits the same hunks; R5 lands before R3.
 
 - [ ] Split `GoToScreen._filter_results` (complexity 11) and `_execute_selected` (10) in `ui/modals/goto_modal.py`, then enable ruff's `C901` with `max-complexity = 8` in `ruff.toml` (no complexity rule is enforced today) and split whatever else it reports or backlog it.
-- [ ] Remove the dead `name == "airports"` branch of `_open_weather_briefing_callback` (`ui/app.py:1207-1209`): Go To's callback sends only `(grouping, airports)`, `(icao, [icao])` and `("flight", data)` (`ui/modals/goto_modal.py:1119-1130`), so typed ICAO lists never reach it; the picker title at `:1195` still promises "Enter airports".
-
-  Settled (owner): the picker title becomes "Weather Briefing: select an airport, grouping or flight" (with the `PICKER_TITLE` constant in `tests/test_goto_r1.py:14` and the user guide's mention, in the same commit).
-- [ ] Tracked Airports Manager: the hint offers Space to select but the `ListView` toggles only on Enter (`ui/modals/tracked_airports.py:117`), and `S` saves the whole tracked list, ignoring the picked rows (`:243`), with a status count at `:251` that is wrong too.
-
-  Settled (owner): Space toggles the highlighted row (Enter keeps working); `S` saves only the picked rows, or the whole list when none is picked, and the status names the count saved.
+- [ ] Tracked Airports manager opens with no highlighted row (`on_mount` calls `populate_list()`, whose `ListView.clear()` sets `index` to `None`, `ui/modals/tracked_airports.py`), and the highlight drops again after a removal or a quick-add (`action_remove_selected`, `handle_quick_tracking_result` rebuild through `populate_list()`).
 - [ ] Go To list hygiene (R5 in [goto-ux-review.md](./goto-ux-review.md)): ★ groupings first with section headers, a "showing 100 of N" row, collapsed members for selected groupings, the "Selected: …" summary line (it repeats the title's pick counts and stays visible after Tab back to browse), and the dead `filter_type="$"` path removed (`ui/app.py` `_build_goto_results`, `ui/modals/goto_modal.py`).
 
   Settled (owner): a picked grouping shows one collapsed "▸ N airports (→ to expand)" row, and → expands it to member rows, where `F` works per member. The "Selected: …" line is replaced, in pick several only, by one dim line naming the picks, truncated ("Picked: Bay Area Arrivals, KLAX, +2").

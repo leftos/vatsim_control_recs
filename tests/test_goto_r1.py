@@ -11,7 +11,7 @@ from textual.widgets import Input
 from tests.conftest import FAVORITE_NAME, GoToFactory, GoToHarness
 from ui.modals import goto_modal as goto_modal_module
 
-PICKER_TITLE = "Weather Briefing: Enter airports or select grouping"
+PICKER_TITLE = "Weather Briefing: select an airport, grouping or flight"
 
 # A setup step: ("query", text) types a query, ("row", option_id) focuses the
 # list on that row, ("press", key) presses a key.

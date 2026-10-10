@@ -144,10 +144,10 @@ The Tracked Airports Manager provides a comprehensive view of all airports being
 
 **Features:**
 - **View All Tracked Airports**: See a complete list of airports currently being tracked, with their full names
-- **Select/Deselect Airports**: Use arrow keys to navigate and Space to select airports for removal
+- **Select/Deselect Airports**: Use arrow keys to navigate and Space or Enter to pick airports
 - **Remove Selected**: Press Delete or click the "Remove Selected" button to stop tracking selected airports
 - **Quick Add/Remove**: Press 'A' or click "Add Airports" to open the quick add/remove dialog
-- **Save as Grouping**: Press 'S' to save the current tracked set as a custom grouping
+- **Save as Grouping**: Press 'S' to save the picked airports (or the whole tracked set when none is picked) as a ★ grouping
 
 **Quick Add/Remove Dialog:**
 Within the Tracked Airports Manager, you can press 'A' to open a quick dialog for adding or removing airports:
