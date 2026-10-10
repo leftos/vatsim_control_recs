@@ -8,12 +8,6 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
   Use stdlib `cProfile` and `uvx py-spy` (no new dependency); write the findings to a subplan with measured hotspots before any fix.
 
-## Next up
-
-- [ ] Finish the leftos.dev showcase screenshots and send them back (leftos.dev inbox request 20261010-081555). In `X:\dev\leftos.dev\.tmp\vcr-shots\`: 01–05 and 09 are taken; 06 (Go To) and 07 (Custom Groupings) need a retake; 08 is skipped (no StatSim key).
-
-  The driver is `.tmp/vcr-shots-driver/drive.py` (untracked; its `install_bug_shims()` and the `app.vatsim_data = data` line in `do_diversion` come out, since the bugs they covered are fixed). The reply draft with captions and corrections to the request's list is `.tmp/vcr-shots-reply.md`; send it as an inbox request to `leftos.dev`.
-
 ## Backlog
 
 - [ ] Add `docs/README.md` as the docs' start page, linking `docs/ARCHITECTURE.md`, `docs/atis-filtering-and-runway-extraction.md`, `USER_GUIDE.md`, `CLAUDE.md` and this plan: the repo has no docs index, so the architecture entry point is reachable only from `CLAUDE.md` (line 83).
@@ -28,5 +22,5 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 - [ ] Investigate the overview's NEXT ETA showing `52h06m` for LFBO, from one long-haul flight from Melbourne. Not yet confirmed.
 - [ ] Investigate display names that fall back to the ICAO code ("ETIK - Etik" in the VFR finder) and two UK weather-briefing areas both named "LONDON AREA". Not yet confirmed.
 - [ ] Go To grouping builder (R3 in [goto-ux-review.md](./goto-ux-review.md)): a separate screen that adds any airport from the unified data, lists every member with its filter, removes or excludes members, and asks before overwriting, shadowing a preset or discarding; grouping file I/O moves into `backend/core/groupings.py`.
-- [ ] Go To list hygiene (R5 in [goto-ux-review.md](./goto-ux-review.md)): ★ groupings first with section headers, a "showing 100 of N" row, collapsed members for selected groupings, and the dead `filter_type="$"` path removed (`ui/app.py` `_build_goto_results`, `ui/modals/goto_modal.py`).
+- [ ] Go To list hygiene (R5 in [goto-ux-review.md](./goto-ux-review.md)): ★ groupings first with section headers, a "showing 100 of N" row, collapsed members for selected groupings, the "Selected: …" summary line (it repeats the title's pick counts and stays visible after Tab back to browse), and the dead `filter_type="$"` path removed (`ui/app.py` `_build_goto_results`, `ui/modals/goto_modal.py`).
 - [ ] One name for saved groupings, and filters that follow them (R4 in [goto-ux-review.md](./goto-ux-review.md)): "my groupings" (★) everywhere instead of favorite, grouping and custom grouping, and saved dep/arr filters applied wherever the grouping is opened. This also closes the Custom Groupings tab filter item above.
