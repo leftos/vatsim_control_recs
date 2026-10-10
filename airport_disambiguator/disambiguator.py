@@ -149,7 +149,13 @@ class AirportDisambiguator:
                 pretty_name = self.name_processor.abbreviate_long_name(full_name)
                 self.icao_to_pretty_name[icao] = pretty_name
         else:
-            # Multiple airports in this location
+            # Multiple airports in this location.
+            # Every name is already known (the CSV filled both caches), and NER
+            # results for those airports would be discarded below, so skip the
+            # engine entirely. A location with one CSV-less airport still runs
+            # NER for the whole group, exactly as before.
+            if all(icao in self.icao_to_full_name for icao in icaos):
+                return
             disambiguated = self.disambiguation_engine.disambiguate_multiple_airports(
                 icaos, self.data_manager.airports_data, location
             )
