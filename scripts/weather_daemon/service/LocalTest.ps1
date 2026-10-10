@@ -19,8 +19,6 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = (Get-Item "$ScriptDir\..\..\..").FullName
 $OutputDir = "$ProjectRoot\test_output"
-$VenvPath = "$ProjectRoot\.venv"
-$VenvPython = "$VenvPath\Scripts\python.exe"
 
 Write-Host "=== Local Weather Briefing Test ===" -ForegroundColor Green
 Write-Host "Project root: $ProjectRoot" -ForegroundColor Cyan
@@ -50,17 +48,13 @@ try {
     Get-ChildItem "$CacheDir\simaware_facilities*.json" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
     Write-Host "  Cleared simaware_facilities cache" -ForegroundColor Cyan
 
-    # Check if venv exists, create if not
-    if (-not (Test-Path $VenvPython)) {
-        Write-Host ""
-        Write-Host "Creating virtual environment..." -ForegroundColor Yellow
-        python -m venv $VenvPath
-    }
-
-    # Install/update requirements
     Write-Host ""
     Write-Host "Installing dependencies..." -ForegroundColor Yellow
-    & $VenvPython -m pip install -q -r requirements.txt
+    uv sync
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "uv sync failed with exit code $LASTEXITCODE" -ForegroundColor Red
+        exit 1
+    }
 
     Write-Host ""
     Write-Host "Generating weather briefings..." -ForegroundColor Yellow
@@ -78,7 +72,7 @@ try {
         $CliArgs += @("--stages", $Stages)
     }
 
-    & $VenvPython @CliArgs
+    uv run python @CliArgs
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""

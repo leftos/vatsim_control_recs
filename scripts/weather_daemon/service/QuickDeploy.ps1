@@ -21,6 +21,9 @@ Write-Host "Services stopped" -ForegroundColor Cyan
 Write-Host "Pulling latest code..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && git reset --hard HEAD && git clean -fd && git pull"
 
+Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
+ssh "$User@$ServerIP" "cd $RemotePath && bash scripts/weather_daemon/service/sync-deps.sh"
+
 Write-Host "Running weather generation..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --verbose"
 

@@ -23,16 +23,19 @@ $Directories = @(
     "ui"
     "airport_disambiguator"
     "data"
+    "common"
+    "widgets"
 )
 
 # Root-level files to deploy
 $RootFiles = @(
-    "common.py"
-    "requirements.txt"
+    "pyproject.toml"
+    "uv.lock"
+    ".python-version"
 )
 
 Write-Host "Creating directory structure on remote..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "mkdir -p $RemotePath/scripts/weather_daemon/service $RemotePath/backend/core $RemotePath/backend/data $RemotePath/backend/cache $RemotePath/backend/config $RemotePath/ui/modals $RemotePath/airport_disambiguator $RemotePath/data/preset_groupings"
+ssh "$User@$ServerIP" "mkdir -p $RemotePath/scripts/weather_daemon/service $RemotePath/backend/core $RemotePath/backend/data $RemotePath/backend/cache $RemotePath/backend/config $RemotePath/ui/modals $RemotePath/airport_disambiguator $RemotePath/data/preset_groupings $RemotePath/common $RemotePath/widgets"
 
 Write-Host "Syncing directories..." -ForegroundColor Yellow
 foreach ($dir in $Directories) {
@@ -64,7 +67,7 @@ Write-Host "Updating systemd services..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cp $RemotePath/scripts/weather_daemon/service/weather-daemon.service /etc/systemd/system/ && cp $RemotePath/scripts/weather_daemon/service/weather-daemon.timer /etc/systemd/system/ && systemctl daemon-reload"
 
 Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
-ssh "$User@$ServerIP" "cd $RemotePath && source .venv/bin/activate && pip install -r requirements.txt"
+ssh "$User@$ServerIP" "cd $RemotePath && bash scripts/weather_daemon/service/sync-deps.sh"
 
 Write-Host "Clearing caches (except weather)..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "rm -f $RemotePath/cache/artcc_boundaries/*.json 2>/dev/null; rm -rf $RemotePath/cache/simaware_boundaries/* 2>/dev/null; rm -f $RemotePath/cache/simaware_facilities*.json 2>/dev/null; echo 'Caches cleared'"

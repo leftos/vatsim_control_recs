@@ -1,0 +1,35 @@
+[project]
+name = "vatsim-control-recs"
+version = "0.0.0"
+description = "Terminal app that analyzes live VATSIM traffic and recommends controller staffing"
+requires-python = ">=3.13"
+dependencies = [
+    # HTTP library for VATSIM API requests
+    "requests==2.34.2",
+    # Terminal UI framework; the Go To modal passes Content prompts to OptionList,
+    # which needs Textual 2.0+
+    "textual==8.2.8",
+    # Natural Language Processing for airport name entity recognition
+    "spacy==3.8.16",
+    # spaCy English model used by the airport name disambiguator
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    # spacy.cli imports click at `import spacy` time, but typer 0.27 dropped click
+    # as a dependency, so it is no longer pulled in transitively
+    "click==8.5.0",
+    # Thread-safe caching with TTL and size limits
+    "cachetools==7.2.1",
+    # Image processing for weather map tile generation
+    "Pillow==12.3.0",
+    # Numerical computing for vectorized tile generation
+    "numpy==2.5.3",
+    # Spatial indexing for memory-efficient tile generation
+    "scipy==1.18.1",
+    # Clipboard support for copy functionality
+    "pyperclip==1.11.0",
+]
+
+[dependency-groups]
+build = ["pyinstaller==6.22.3"]
+
+[tool.uv]
+package = false

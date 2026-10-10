@@ -1,7 +1,8 @@
 # Ruff configuration - https://docs.astral.sh/ruff/
 #
-# The floor is Python 3.10: the bootstrap in main.py recommends 3.10+, and the
-# `X | None` annotations this config enforces need it.
+# Lower than pyproject.toml's requires-python (3.13) on purpose: raising it lets
+# the UP rules rewrite code across the repo, which belongs in its own change.
+# The `X | None` annotations this config enforces need at least 3.10.
 target-version = "py310"
 
 # Matches the existing formatting of the codebase. Long string literals are not
@@ -47,8 +48,7 @@ ignore = [
 # which is swallowing an exception without recording it.
 
 [lint.per-file-ignores]
-# The bootstrap runs before dependencies are guaranteed to exist, so its imports
-# are deliberately deferred and its failures deliberately broad.
+# The --help check exits before the heavy project imports, so they follow it.
 "main.py" = ["E402"]
 # Standalone script: project imports have to follow the sys.path setup above them.
 "scripts/generate_airport_names.py" = ["E402"]

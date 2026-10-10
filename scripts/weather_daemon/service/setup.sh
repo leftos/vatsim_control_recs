@@ -35,7 +35,12 @@ fi
 
 echo -e "${YELLOW}Installing system dependencies...${NC}"
 apt update
-apt install -y python3 python3-pip python3-venv git
+apt install -y git curl
+
+if ! command -v uv &> /dev/null; then
+    echo -e "${YELLOW}Installing uv...${NC}"
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh
+fi
 
 echo -e "${YELLOW}Creating output directory...${NC}"
 mkdir -p "$OUTPUT_DIR"
@@ -61,16 +66,8 @@ cd "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/cache"
 mkdir -p "$INSTALL_DIR/logs"
 
-echo -e "${YELLOW}Creating Python virtual environment...${NC}"
-python3 -m venv "$VENV_DIR"
-source "$VENV_DIR/bin/activate"
-
 echo -e "${YELLOW}Installing Python dependencies...${NC}"
-pip install --upgrade pip
-pip install -r requirements.txt
-
-echo -e "${YELLOW}Downloading spaCy language model...${NC}"
-python -m spacy download en_core_web_sm
+bash scripts/weather_daemon/service/sync-deps.sh
 
 echo -e "${YELLOW}Setting up systemd service...${NC}"
 cp scripts/weather_daemon/service/weather-daemon.service /etc/systemd/system/

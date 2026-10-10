@@ -10,26 +10,13 @@ VATSIM Control Recommendations is a terminal-based application that analyzes liv
 
 ### Installation
 
-The application auto-bootstraps on first run: creates a `.venv`, installs dependencies, and downloads the spaCy model. Just run:
-
-```bash
-python main.py
-```
-
-For manual setup:
-
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Download the required spaCy language model for airport name disambiguation:
-```bash
-python -m spacy download en_core_web_sm
-```
+The project uses [uv](https://docs.astral.sh/uv/). `uv run main.py` creates `.venv` on Python 3.13 and installs the locked dependencies from `uv.lock` before starting; `uv sync` does the install alone. Never use pip: dependencies live in `pyproject.toml` (exact `==` pins) and `uv.lock`, so add or change one with `uv add` / `uv lock`. The PyInstaller build tool is in the `build` dependency group (`uv run --group build pyinstaller vatsim_control_recs.spec --noconfirm`).
 
 ### Dependencies
 
+Declared in `pyproject.toml`:
+
+- `en-core-web-sm` - spaCy English model, pinned to its release wheel URL so `uv sync` installs it (no runtime download)
 - `requests` - HTTP library for VATSIM API requests
 - `textual` - Terminal UI framework
 - `spacy` - NLP for airport name entity recognition
@@ -47,37 +34,37 @@ python -m spacy download en_core_web_sm
 
 Basic execution:
 ```bash
-python main.py
+uv run main.py
 ```
 
 When an agent runs the app (to check a change, take screenshots, or drive it with Textual's `run_test`), it always passes a filter: `--airports`, `--groupings`, or `--countries` with one country or a few. With no filter the app tracks every airport with traffic on the network, and that load bogs it down badly.
 
 Track specific airports:
 ```bash
-python main.py --airports KSFO KLAX KJFK
+uv run main.py --airports KSFO KLAX KJFK
 ```
 
 Track airports by country:
 ```bash
-python main.py --countries US DE
+uv run main.py --countries US DE
 ```
 
 Track custom groupings (recursively expanded to include all airports and sub-groupings):
 ```bash
-python main.py --groupings "Bay Area" "California"
+uv run main.py --groupings "Bay Area" "California"
 ```
 
 Additional useful options:
 ```bash
-python main.py --include-all-staffed    # Include airports with zero planes if staffed
-python main.py --disable-animations     # Disable split-flap animations
-python main.py --hide-wind              # Hide wind column
-python main.py --include-all-arriving   # Include airports with any arrivals filed
-python main.py --max-eta-hours 2.0      # Show arrivals up to 2 hours out
-python main.py --refresh-interval 30    # Refresh every 30 seconds
-python main.py --wind-source minute     # Use up-to-the-minute wind data
-python main.py --progressive-load       # Progressive table loading (auto for 50+ airports)
-python main.py --help                   # All available options
+uv run main.py --include-all-staffed    # Include airports with zero planes if staffed
+uv run main.py --disable-animations     # Disable split-flap animations
+uv run main.py --hide-wind              # Hide wind column
+uv run main.py --include-all-arriving   # Include airports with any arrivals filed
+uv run main.py --max-eta-hours 2.0      # Show arrivals up to 2 hours out
+uv run main.py --refresh-interval 30    # Refresh every 30 seconds
+uv run main.py --wind-source minute     # Use up-to-the-minute wind data
+uv run main.py --progressive-load       # Progressive table loading (auto for 50+ airports)
+uv run main.py --help                   # All available options
 ```
 
 ## Architecture
@@ -323,6 +310,7 @@ The weather daemon generates weather briefing pages for the website at `https://
 **Deployment to server:**
 - `QuickDeploy.ps1` - Git pull on server and regenerate (requires changes to be pushed first)
 - `Deploy.ps1` - Full deployment via rsync (for Linux/WSL only, uses bash)
+- `sync-deps.sh` - Runs on the server: installs the locked dependencies with `uv sync --frozen` into a Python the `www-data` daemon user can read; `setup.sh` and every deploy script call it
 
 **Server management:**
 - `Status.ps1` - Check daemon status and recent logs

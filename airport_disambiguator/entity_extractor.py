@@ -1,7 +1,6 @@
 """Entity extraction using spaCy NER for airport disambiguation."""
 
 import re
-import subprocess
 import sys
 from collections import OrderedDict
 
@@ -35,28 +34,15 @@ class EntityExtractor:
                         "spaCy model 'en_core_web_sm' not found in bundled application. "
                         "The PyInstaller build may be missing the model data."
                     ) from e
-                # Model not found, download it
-                print("\n" + "=" * 80)
-                print("FIRST-TIME SETUP: Downloading spaCy Language Model")
-                print("=" * 80)
-                print("Model: en_core_web_sm (~12 MB)")
-                print("This is a one-time download and will only take a moment...")
-                print("=" * 80 + "\n")
-                subprocess.check_call(
-                    [sys.executable, "-m", "spacy", "download", "en_core_web_sm"]
-                )
-                print("\n" + "=" * 80)
-                print("✓ Model downloaded successfully!")
-                print("=" * 80 + "\n")
-                # Try loading again after download
-                print("Loading model...")
-                self._nlp = spacy.load("en_core_web_sm")
-                print("✓ Ready!\n")
-                sys.stdout.flush()
+                raise OSError(
+                    "spaCy model 'en_core_web_sm' is not installed. It is a locked "
+                    "dependency in pyproject.toml: run `uv sync`, or start the app "
+                    "with `uv run main.py`, which syncs the environment first."
+                ) from e
 
     @property
     def nlp(self) -> spacy.language.Language:
-        """Lazy load spaCy model, downloading it if necessary."""
+        """Lazy load the spaCy model on first use."""
         if self._nlp is None:
             self.load()
         assert self._nlp is not None, "spaCy model failed to load"

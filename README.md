@@ -8,13 +8,15 @@ Built with the [Textual](https://textual.textualize.io/) TUI framework.
 
 ## Quick Start
 
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
+
 ```bash
 git clone https://github.com/your-repo/vatsim_control_recs.git
 cd vatsim_control_recs
-python main.py
+uv run main.py
 ```
 
-The application auto-bootstraps on first run: creates a virtual environment, installs dependencies, and downloads the spaCy language model. Subsequent launches start immediately.
+On first run, `uv run` fetches Python 3.13 if needed, creates `.venv` and installs the locked dependencies from `uv.lock`, including the spaCy language model. Subsequent launches start immediately.
 
 See the [User Guide](USER_GUIDE.md) for detailed usage instructions.
 
@@ -72,22 +74,22 @@ options:
 
 ```bash
 # Track specific airports
-python main.py --airports KSFO KLAX KJFK KORD
+uv run main.py --airports KSFO KLAX KJFK KORD
 
 # Track all airports within an ARTCC, including separate arrival counts for time-limited ETA and all arrivals
-python main.py --groupings "ZOA All" --include-all-arriving
+uv run main.py --groupings "ZOA All" --include-all-arriving
 
 # Track all US airports with staffed positions shown
-python main.py --countries US --include-all-staffed
+uv run main.py --countries US --include-all-staffed
 
 # Track a custom grouping with no animations
-python main.py --groupings "Bay Area" --disable-animations
+uv run main.py --groupings "Bay Area" --disable-animations
 
 # Show arrivals up to 2 hours out with minute-by-minute wind
-python main.py --max-eta-hours 2.0 --wind-source minute
+uv run main.py --max-eta-hours 2.0 --wind-source minute
 
 # Combine filters
-python main.py --airports KSFO --groupings "SoCal" --include-all-arriving
+uv run main.py --airports KSFO --groupings "SoCal" --include-all-arriving
 ```
 
 ## Keyboard Shortcuts

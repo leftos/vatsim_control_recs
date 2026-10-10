@@ -54,12 +54,15 @@ DIRECTORIES=(
     "ui"
     "airport_disambiguator"
     "data"
+    "common"
+    "widgets"
 )
 
 # Root-level files to deploy
 ROOT_FILES=(
-    "common.py"
-    "requirements.txt"
+    "pyproject.toml"
+    "uv.lock"
+    ".python-version"
 )
 
 echo -e "${YELLOW}Creating directory structure on remote...${NC}"
@@ -96,7 +99,7 @@ echo -e "${YELLOW}Updating systemd services...${NC}"
 ssh "$USER@$SERVER_IP" "cp $REMOTE_PATH/scripts/weather_daemon/service/weather-daemon.service /etc/systemd/system/ && cp $REMOTE_PATH/scripts/weather_daemon/service/weather-daemon.timer /etc/systemd/system/ && systemctl daemon-reload"
 
 echo -e "${YELLOW}Installing Python dependencies...${NC}"
-ssh "$USER@$SERVER_IP" "cd $REMOTE_PATH && source .venv/bin/activate && pip install -r requirements.txt"
+ssh "$USER@$SERVER_IP" "cd $REMOTE_PATH && bash scripts/weather_daemon/service/sync-deps.sh"
 
 echo -e "${YELLOW}Clearing caches (except weather)...${NC}"
 ssh "$USER@$SERVER_IP" "rm -f $REMOTE_PATH/cache/artcc_boundaries/*.json 2>/dev/null; rm -rf $REMOTE_PATH/cache/simaware_boundaries/* 2>/dev/null; rm -f $REMOTE_PATH/cache/simaware_facilities*.json 2>/dev/null; echo 'Caches cleared'"

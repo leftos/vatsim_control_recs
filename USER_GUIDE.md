@@ -47,7 +47,7 @@ The application is built using the Textual framework, providing a rich terminal 
 
 ### Prerequisites
 
-- **Python 3.10 or higher** ([Download Python](https://www.python.org/downloads/))
+- **uv** ([Install uv](https://docs.astral.sh/uv/getting-started/installation/)); it fetches Python 3.13 itself if you don't have it
 - **Terminal** with UTF-8 support (Windows Terminal, iTerm2, or similar)
 
 ### Step 1: Clone or Download the Repository
@@ -60,16 +60,16 @@ cd vatsim_control_recs
 ### Step 2: Run the Application
 
 ```bash
-python main.py
+uv run main.py
 ```
 
-**That's it!** The application handles everything else automatically:
+**That's it!** `uv run` handles everything else:
 
-1. **Creates a virtual environment** (`.venv`) if not already running in one
-2. **Installs all dependencies** from `requirements.txt`
-3. **Downloads the spaCy language model** (`en_core_web_sm`) for airport name processing
+1. **Fetches Python 3.13** if no suitable Python is installed
+2. **Creates a virtual environment** (`.venv`) in the application directory
+3. **Installs the locked dependencies** from `uv.lock`, including the spaCy language model (`en_core_web_sm`) for airport name processing
 
-On first run, you'll see progress messages as dependencies are installed. Subsequent launches will start immediately.
+On first run, you'll see uv's progress as dependencies are installed. Subsequent launches start immediately.
 
 ### Optional: Historical Statistics API Key
 
@@ -87,10 +87,10 @@ To use the Historical Flight Statistics feature (`Ctrl+S`), you need a free API 
 To verify everything is set up correctly without launching the full app:
 
 ```bash
-python main.py --help
+uv run main.py --help
 ```
 
-You should see a list of available command-line options (this runs instantly without setup).
+You should see a list of available command-line options.
 
 ---
 
@@ -99,7 +99,7 @@ You should see a list of available command-line options (this runs instantly wit
 ### Track All Airports (Default)
 
 ```bash
-python main.py
+uv run main.py
 ```
 
 This launches the application tracking all airports with active traffic.
@@ -107,31 +107,31 @@ This launches the application tracking all airports with active traffic.
 ### Track Specific Airports
 
 ```bash
-python main.py --airports KSFO KLAX KJFK KORD
+uv run main.py --airports KSFO KLAX KJFK KORD
 ```
 
 ### Track all airports within an ARTCC, including separate arrival counts for time-limited ETA and all arrivals
 
 ```bash
-python main.py --groupings "ZOA All" --include-all-arriving
+uv run main.py --groupings "ZOA All" --include-all-arriving
 ```
 
 ### Track All Airports in Specific Countries
 
 ```bash
-python main.py --countries US CA
+uv run main.py --countries US CA
 ```
 
 ### Track Custom Groupings
 
 ```bash
-python main.py --groupings "Bay Area" "SoCal"
+uv run main.py --groupings "Bay Area" "SoCal"
 ```
 
 ### Combine Multiple Filters
 
 ```bash
-python main.py --airports KSFO --groupings "SoCal" --include-all-staffed
+uv run main.py --airports KSFO --groupings "SoCal" --include-all-staffed
 ```
 
 ---
@@ -157,27 +157,27 @@ python main.py --airports KSFO --groupings "SoCal" --include-all-staffed
 
 **Quick startup with no animations:**
 ```bash
-python main.py --disable-animations --airports KSFO KOAK
+uv run main.py --disable-animations --airports KSFO KOAK
 ```
 
 **Include staffed airports even with no traffic:**
 ```bash
-python main.py --include-all-staffed --countries US
+uv run main.py --include-all-staffed --countries US
 ```
 
 **Longer ETA window (show arrivals up to 2 hours out):**
 ```bash
-python main.py --max-eta-hours 2.0
+uv run main.py --max-eta-hours 2.0
 ```
 
 **Show all filed arrivals alongside ETA-filtered arrivals:**
 ```bash
-python main.py --include-all-arriving --airports KSFO KLAX
+uv run main.py --include-all-arriving --airports KSFO KLAX
 ```
 
 **Use up-to-the-minute wind data:**
 ```bash
-python main.py --wind-source minute
+uv run main.py --wind-source minute
 ```
 
 ---
@@ -636,7 +636,7 @@ Favorites are stored in `favorites.json` in your user data folder: `%LOCALAPPDAT
 ### METAR Source (Default)
 
 ```bash
-python main.py --wind-source metar
+uv run main.py --wind-source metar
 ```
 
 - Uses Aviation Weather Center (aviationweather.gov)
@@ -647,7 +647,7 @@ python main.py --wind-source metar
 ### Minute Source
 
 ```bash
-python main.py --wind-source minute
+uv run main.py --wind-source minute
 ```
 
 - Uses weather.gov
@@ -675,7 +675,7 @@ The application features split-flap display animations (like airport departure b
 
 **Disable animations:**
 ```bash
-python main.py --disable-animations
+uv run main.py --disable-animations
 ```
 
 ### Progressive Loading
@@ -686,7 +686,7 @@ For large airport lists, tables load progressively:
 - Configurable chunk size
 
 ```bash
-python main.py --progressive-load --progressive-chunk-size 30
+uv run main.py --progressive-load --progressive-chunk-size 30
 ```
 
 ### Notification Toasts
@@ -731,13 +731,13 @@ Grouping flight boards show toast notifications when:
 ### Common Workflows
 
 **Sector Controller:**
-1. Start with your sector grouping: `python main.py --groupings "NCT"`
+1. Start with your sector grouping: `uv run main.py --groupings "NCT"`
 2. Or save a favorite with per-airport dep/arr filtering via Go To
 3. Use `Ctrl+B` for sector weather briefing
 4. Monitor flight boards for specific airports
 
 **Approach Controller:**
-1. Track your approach airports: `python main.py --airports KSFO KOAK KSJC`
+1. Track your approach airports: `uv run main.py --airports KSFO KOAK KSJC`
 2. Use `--include-all-staffed` to see when tower/ground positions open
 3. Check VFR alternatives when weather deteriorates
 
@@ -751,35 +751,19 @@ Grouping flight boards show toast notifications when:
 
 ## Troubleshooting
 
-### "Command not found" or "python not found"
+### "Command not found: uv"
 
-Ensure Python is installed and in your PATH. Try:
-```bash
-python3 main.py --help
-# or on Windows:
-py main.py --help
-```
+Install uv ([instructions](https://docs.astral.sh/uv/getting-started/installation/)), then open a new terminal so it is on your PATH.
 
 ### Dependency Installation Fails
 
-The app auto-installs dependencies, but if this fails:
+`uv run` installs the locked dependencies on first start. If that fails:
 
-1. **Upgrade Python**: Ensure you're using Python 3.10+ (has pre-built wheels)
-2. **Check internet**: Dependencies are downloaded from PyPI
-3. **Windows users**: You may need [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) for native compilation
-4. **Manual install**: If auto-install fails, you can manually run:
-   ```bash
-   .venv/Scripts/pip install -r requirements.txt  # Windows
-   .venv/bin/pip install -r requirements.txt      # macOS/Linux
-   ```
+1. **Check internet**: dependencies come from PyPI, and the spaCy model from its GitHub release
+2. **Re-sync by hand** to see the full error: `uv sync`
+3. **Rebuild the environment**: delete the `.venv` directory and run `uv run main.py` again
 
-### spaCy Model Download Fails
-
-The app auto-downloads the spaCy model, but if this fails:
-```bash
-.venv/Scripts/python -m spacy download en_core_web_sm  # Windows
-.venv/bin/python -m spacy download en_core_web_sm      # macOS/Linux
-```
+If the app reports that the spaCy model `en_core_web_sm` is missing, run `uv sync`: the model is a locked dependency and is never downloaded at runtime.
 
 ### Display Issues
 
