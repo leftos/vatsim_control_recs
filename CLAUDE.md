@@ -107,6 +107,8 @@ The global `backend.config.constants.WIND_SOURCE` controls which source is used.
 3. Aircraft-specific approach speed for final 20nm (from `aircraft_data.csv`)
 4. Glide slope clamping with 3-degree model below 10,000ft
 
+NEXT ETA is the earliest ETA among the flights the ARR column counts, so a flight beyond `max_eta_hours` or still on the ground at its departure never feeds it.
+
 **Flight Categorization**:
 - Departure: On ground at departure airport (groundspeed <= 40kt)
 - Arrival: On ground at arrival airport OR in-flight within `max_eta_hours` of arrival

@@ -201,7 +201,7 @@ Shows all tracked airports with columns:
 - **Name**: Human-readable airport name
 - **Dep**: Number of departures (aircraft on ground)
 - **Arr**: Number of arrivals (inbound aircraft within ETA window)
-- **Next ETA**: Time until next arrival (MM:SS format)
+- **Next ETA**: Time until next arrival (e.g. `45m`, `1h30m`, `LANDED`), counting only the arrivals in the Arr column
 - **Wind**: Current wind conditions (direction/speed, gusts if present)
 - **Altim**: Current altimeter setting (inches Hg)
 - **Positions**: Staffed ATC positions

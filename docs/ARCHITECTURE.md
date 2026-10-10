@@ -105,6 +105,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_tracked_airports.py`: Space and Enter pick a row in the Tracked Airports manager with the cursor kept in place, and `S` saves the picks (or the whole list when none).
 - `tests/test_weather_briefing_callback.py`: the weather-briefing picker routes a flight, a single airport and a grouping to their briefings.
 - `tests/test_grouping_board_filters.py`: a ★ grouping's saved dep/arr filters apply when its board opens from the Groupings tab or Go To; a preset opens unfiltered.
+- `tests/test_next_eta_window.py`: NEXT ETA comes only from the inbound flights the ARR column counts: blank when the only inbound is beyond `max_eta_hours`, taken from the one inside the window, and every airborne inbound counts when the window is 0.
 - `tests/test_cli_options.py`: the CLI parser rejects the removed progressive flags.
 - `tests/test_table_refresh.py`: a refresh that changes the row count updates the tables in place (rows keep their slots, extra rows flap to blank then go, new rows append), the cursor and scroll stay on the same row, and column widths grow and shrink with the values.
 - `tests/test_refresh_overlap.py`: refreshes never overlap or cancel, the one queued follow-up, a failed analysis keeping the app running, and the status bar's "Refreshing…" text.

@@ -308,16 +308,6 @@ def analyze_flights_data(
         flight_arrival = flight.get("arrival")
         flight_departure = flight.get("departure")
 
-        # First, calculate the true earliest ETA for all in-flight arrivals
-        if (
-            flight_arrival
-            and flight_arrival in airports
-            and flight.get("groundspeed", 0) > 40
-        ):
-            _, _, eta_hours = calculate_eta(flight, airports, aircraft_approach_speeds)
-            if eta_hours < earliest_arrival_eta[flight_arrival]:
-                earliest_arrival_eta[flight_arrival] = eta_hours
-
         nearest_airport_if_on_ground = get_nearest_airport_if_on_ground(
             flight, airports
         )
@@ -335,10 +325,14 @@ def analyze_flights_data(
             # For flights on ground without flight plans, count them as a departure at the nearest airport
             departure_counts[nearest_airport_if_on_ground] += 1
         elif is_flight_flying_near_arrival(flight, airports, max_eta_hours):
-            # Count as arrival if within the specified ETA hours of arrival airport
+            # Count as arrival if within the specified ETA hours of arrival airport,
+            # and take its ETA so NEXT ETA comes only from the counted flights
             arrival_counts[flight_arrival] += 1
             arrival_counts_all[flight_arrival] += 1
             arrivals_in_flight[flight_arrival] += 1
+            _, _, eta_hours = calculate_eta(flight, airports, aircraft_approach_speeds)
+            if eta_hours < earliest_arrival_eta[flight_arrival]:
+                earliest_arrival_eta[flight_arrival] = eta_hours
         elif flight_arrival and flight_arrival in airports:
             # Flight has arrival filed but isn't on ground at arrival and isn't flying nearby
             # This catches flights on ground at departure that haven't departed yet, or in-flight beyond max_eta_hours
