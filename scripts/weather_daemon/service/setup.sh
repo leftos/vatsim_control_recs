@@ -35,12 +35,8 @@ fi
 
 echo -e "${YELLOW}Installing system dependencies...${NC}"
 apt update
+# curl fetches uv, which sync-deps.sh installs below
 apt install -y git curl
-
-if ! command -v uv &> /dev/null; then
-    echo -e "${YELLOW}Installing uv...${NC}"
-    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh
-fi
 
 echo -e "${YELLOW}Creating output directory...${NC}"
 mkdir -p "$OUTPUT_DIR"

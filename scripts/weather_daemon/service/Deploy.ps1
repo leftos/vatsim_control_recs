@@ -68,6 +68,9 @@ ssh "$User@$ServerIP" "cp $RemotePath/scripts/weather_daemon/service/weather-dae
 
 Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && bash scripts/weather_daemon/service/sync-deps.sh"
+if ($LASTEXITCODE -ne 0) {
+    throw "sync-deps.sh failed on the server (exit $LASTEXITCODE); the weather daemon timer is still stopped"
+}
 
 Write-Host "Clearing caches (except weather)..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "rm -f $RemotePath/cache/artcc_boundaries/*.json 2>/dev/null; rm -rf $RemotePath/cache/simaware_boundaries/* 2>/dev/null; rm -f $RemotePath/cache/simaware_facilities*.json 2>/dev/null; echo 'Caches cleared'"

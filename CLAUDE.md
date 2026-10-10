@@ -310,7 +310,7 @@ The weather daemon generates weather briefing pages for the website at `https://
 **Deployment to server:**
 - `QuickDeploy.ps1` - Git pull on server and regenerate (requires changes to be pushed first)
 - `Deploy.ps1` - Full deployment via rsync (for Linux/WSL only, uses bash)
-- `sync-deps.sh` - Runs on the server: installs the locked dependencies with `uv sync --frozen` into a Python the `www-data` daemon user can read; `setup.sh` and every deploy script call it
+- `sync-deps.sh` - Runs on the server: installs uv into `/usr/local/bin` if it is missing, then the locked dependencies with `uv sync --frozen` into a Python the `www-data` daemon user can read; `setup.sh` and every deploy script call it, and a deploy stops if it fails
 
 **Server management:**
 - `Status.ps1` - Check daemon status and recent logs

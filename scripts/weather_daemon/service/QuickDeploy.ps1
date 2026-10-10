@@ -23,6 +23,9 @@ ssh "$User@$ServerIP" "cd $RemotePath && git reset --hard HEAD && git clean -fd 
 
 Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && bash scripts/weather_daemon/service/sync-deps.sh"
+if ($LASTEXITCODE -ne 0) {
+    throw "sync-deps.sh failed on the server (exit $LASTEXITCODE); the weather daemon timer is still stopped"
+}
 
 Write-Host "Running weather generation..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "cd $RemotePath && sudo -u www-data .venv/bin/python -m scripts.weather_daemon.cli --output /var/www/leftos.dev/weather --verbose"

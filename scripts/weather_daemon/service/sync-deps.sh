@@ -13,6 +13,13 @@ cd "$REPO_ROOT"
 
 export UV_PYTHON_INSTALL_DIR=/opt/uv-python
 
+# Deploys reach this over non-interactive ssh, whose PATH has /usr/local/bin but not
+# uv's default ~/.local/bin, so uv is installed there on first use
+if ! command -v uv &> /dev/null; then
+    echo "Installing uv into /usr/local/bin..."
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh
+fi
+
 uv sync --frozen --no-dev
 
 # uv may pick a system Python and install none here; the chmod still needs the dir
