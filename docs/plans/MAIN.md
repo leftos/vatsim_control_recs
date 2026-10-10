@@ -53,7 +53,9 @@ Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `
 
 - [ ] Investigate the MEA check: when an airway's entry or exit fix is not found, every segment of the airway is checked (`backend/data/navaids.py:1165-1175`), so `ABQ V12 ONM` reported a California V12 segment at 29,000 ft. Seen by the screenshot run, not yet confirmed.
 - [ ] Investigate the MEA warning comparing only the first filed altitude, so step climbs are ignored (`ui/modals/flight_info.py:661-668`); live UAE82M filed step climbs to FL400 and was warned against a 33,000 ft MEA. Not yet confirmed.
-- [ ] Decide whether ETAs use the CIFP procedures of Alaska, Hawaii and the territories: they sit under the `SCANP` area prefix (818 SID/STAR lines for PANC, PHNL, TJSJ, PAFA and others), which the `SUSAP K…` match in `backend/data/cifp.py:633`, `:727` never reads, so those airports' routes skip SID/STAR expansion.
+- [ ] Index the CIFP procedures of Alaska, Hawaii and the territories: they sit under the `SCANP` area prefix (818 SID/STAR lines for PANC, PHNL, TJSJ, PAFA and others), which the `SUSAP K…` match in `backend/data/cifp.py:674` (and the `SUSAP` checks at `:403`, `:531`, `:568`) never reads, so those airports' routes skip SID/STAR expansion.
+
+  Settled (owner): index `SCANP` records whose airport ident starts with `P` or `T` (Alaska, Hawaii, Puerto Rico, Pacific territories); the Canadian records in that area stay out.
 - [ ] Investigate the overview's NEXT ETA showing `52h06m` for LFBO, from one long-haul flight from Melbourne. Not yet confirmed.
 
 ## Backlog
@@ -62,7 +64,7 @@ Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `
 
 Items that share no files. Review: `code-review`. Verification: `uv run --group dev pytest -q` plus `ruff check`.
 
-- [ ] Deploy the self-hosted Leaflet (f4e8083): push, run `scripts/weather_daemon/service/QuickDeploy.ps1`, reinstall `nginx-weather.conf` on the server (`setup.sh`), check `https://leftos.dev/weather/assets/leaflet/1.9.4/leaflet.js` returns 200 with the long `Cache-Control`, then send leftos.dev's inbox the "deployed" note so its policy can drop the unpkg line. Needs the owner's go-ahead (it changes the live site).
+- [ ] Deploy the self-hosted Leaflet (f4e8083): push, run `scripts/weather_daemon/service/QuickDeploy.ps1`, reinstall `nginx-weather.conf` on the server (`setup.sh`), check `https://leftos.dev/weather/assets/leaflet/1.9.4/leaflet.js` returns 200 with the long `Cache-Control`, then send leftos.dev's inbox the "deployed" note so its policy can drop the unpkg line. Settled (owner): deploy now.
 - [ ] `common/logger.py` opens the log file and runs `cleanup_old_logs()` on the first log call (`:50`, `:72`), which happens at import time: `backend/data/statsim_api.py:42`, `:53` log while loading `.env`, reached through `import ui.modals` (`ui/modals/historical_stats.py:12`), so tests and tools write to and prune the user's real log folder; the repo-root `conftest.py` works around it.
 
   Make file logging start from the entry points (`main.py` `main()`, `scripts/weather_daemon/cli.py`, `scripts/generate_airport_names.py`, `scripts/precalculate_airport_spatial_data.py`).
