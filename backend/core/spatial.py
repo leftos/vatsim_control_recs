@@ -110,9 +110,14 @@ class SpatialIndex:
             if cell_key in self.grid:
                 candidates.extend(self.grid[cell_key])
 
-        # If no candidates in neighborhood, fall back to all airports
-        # (this happens near cell boundaries or with very sparse data)
+        # No candidates in the neighborhood (this happens near cell boundaries
+        # or with very sparse data). A radius-limited query can never match an
+        # airport outside it: cells are DEFAULT_CELL_SIZE degrees (about 60nm),
+        # so an airport beyond the neighborhood is farther away than the radius
+        # any caller passes. Only a radius-less query scans every airport.
         if not candidates:
+            if max_distance_nm is not None:
+                return None
             candidates = self.airports
 
         # Find nearest

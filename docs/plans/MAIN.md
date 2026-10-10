@@ -15,7 +15,6 @@ Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is th
 - [ ] Index CIFP SID/STAR records once instead of rescanning the 53 MB file per lookup, and skip airports CIFP cannot hold (`backend/data/cifp.py:606`, `:703`): 86–100 s of CPU per unfiltered refresh. Perf fix 2.
 - [ ] Skip spaCy NER for locations whose names `data/airport_names.csv` already covers (`airport_disambiguator/disambiguator.py:151-162`): the US Go To warm-up takes 36–52 s. Perf fix 4.
 - [ ] Stop refetching still-fresh bbox weather each refresh and cache "no METAR" results (`backend/data/weather.py`, `get_weather_for_airports_bbox`, `get_metar`). Perf fix 5.
-- [ ] Drop `find_nearest`'s full-scan fallback when a radius is given (`backend/core/spatial.py:113-116`). Perf fix 6.
 - [ ] A 0.25 s timer raised `NoMatches '#status-bar'` at shutdown after a US auto-refresh run (`ui/app.py:472`, `:486`).
 
 ## Next up
