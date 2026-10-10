@@ -1630,6 +1630,53 @@ MAX_BBOX_SIZE_DEGREES = 10.0
 BBOX_PADDING_DEGREES = 0.5
 
 
+def _pack_airport_coords(
+    coords: list[tuple[float, float]], max_size_degrees: float
+) -> list[tuple[float, float, float, float]]:
+    """
+    Pack coordinates into first-fit boxes no bigger than max_size_degrees per axis.
+
+    The coordinates are visited in (longitude, latitude) order, so the packing
+    depends only on the coordinates and not on the order they were given in. Each
+    one joins the first box that still fits within max_size_degrees on both axes
+    once it is included; when no box fits, it starts a new one.
+
+    Args:
+        coords: (latitude, longitude) pairs to pack.
+        max_size_degrees: Maximum box extent in degrees, on both axes.
+
+    Returns:
+        One (min_lat, min_lon, max_lat, max_lon) tuple per box, in creation order.
+    """
+    boxes: list[list[float]] = []
+    for lat, lon in sorted(coords, key=lambda coord: (coord[1], coord[0])):
+        for box in boxes:
+            if (
+                max(box[2], lat) - min(box[0], lat) <= max_size_degrees
+                and max(box[3], lon) - min(box[1], lon) <= max_size_degrees
+            ):
+                box[0] = min(box[0], lat)
+                box[1] = min(box[1], lon)
+                box[2] = max(box[2], lat)
+                box[3] = max(box[3], lon)
+                break
+        else:
+            boxes.append([lat, lon, lat, lon])
+    return [(box[0], box[1], box[2], box[3]) for box in boxes]
+
+
+def _pad_and_clamp_bbox(
+    bbox: tuple[float, float, float, float], padding_degrees: float
+) -> tuple[float, float, float, float]:
+    """Grow a (min_lat, min_lon, max_lat, max_lon) box by the padding, clamped to the globe."""
+    return (
+        max(-90.0, bbox[0] - padding_degrees),
+        max(-180.0, bbox[1] - padding_degrees),
+        min(90.0, bbox[2] + padding_degrees),
+        min(180.0, bbox[3] + padding_degrees),
+    )
+
+
 def calculate_airport_bboxes(
     airport_icaos: list[str],
     airports_data: dict[str, dict[str, Any]],
@@ -1640,7 +1687,9 @@ def calculate_airport_bboxes(
     Calculate bounding boxes for a set of airports, splitting if needed.
 
     If all airports fit within max_size_degrees, returns a single bbox.
-    Otherwise, uses simple clustering to create multiple smaller bboxes.
+    Otherwise, packs them into as few boxes as fit that limit: the airports are
+    visited in (longitude, latitude) order and each joins the first box its
+    coordinates still fit in, so the result does not depend on the input order.
 
     Args:
         airport_icaos: List of airport ICAO codes
@@ -1679,59 +1728,21 @@ def calculate_airport_bboxes(
 
     # If small enough, return single bbox
     if lat_span <= max_size_degrees and lon_span <= max_size_degrees:
-        bbox = (
-            max(-90.0, min_lat - padding_degrees),
-            max(-180.0, min_lon - padding_degrees),
-            min(90.0, max_lat + padding_degrees),
-            min(180.0, max_lon + padding_degrees),
-        )
-        return {"bbox_0": bbox}
+        return {
+            "bbox_0": _pad_and_clamp_bbox(
+                (min_lat, min_lon, max_lat, max_lon), padding_degrees
+            )
+        }
 
-    # Need to split into multiple bboxes using grid-based clustering
-    # Calculate grid dimensions
-    lat_cells = max(1, int((lat_span / max_size_degrees) + 1))
-    lon_cells = max(1, int((lon_span / max_size_degrees) + 1))
-
-    cell_lat_size = lat_span / lat_cells if lat_cells > 0 else lat_span
-    cell_lon_size = lon_span / lon_cells if lon_cells > 0 else lon_span
-
-    # Group airports into grid cells
-    grid_cells: dict[tuple[int, int], list[dict]] = {}
-    for airport in airport_coords:
-        # Calculate which cell this airport belongs to
-        lat_idx = (
-            int((airport["lat"] - min_lat) / cell_lat_size) if cell_lat_size > 0 else 0
-        )
-        lon_idx = (
-            int((airport["lon"] - min_lon) / cell_lon_size) if cell_lon_size > 0 else 0
-        )
-
-        # Clamp to valid range
-        lat_idx = min(lat_idx, lat_cells - 1)
-        lon_idx = min(lon_idx, lon_cells - 1)
-
-        cell_key = (lat_idx, lon_idx)
-        if cell_key not in grid_cells:
-            grid_cells[cell_key] = []
-        grid_cells[cell_key].append(airport)
-
-    # Create bboxes for each non-empty cell
-    bboxes = {}
-    for idx, cell_airports in enumerate(grid_cells.values()):
-        cell_min_lat = min(a["lat"] for a in cell_airports)
-        cell_max_lat = max(a["lat"] for a in cell_airports)
-        cell_min_lon = min(a["lon"] for a in cell_airports)
-        cell_max_lon = max(a["lon"] for a in cell_airports)
-
-        bbox = (
-            max(-90.0, cell_min_lat - padding_degrees),
-            max(-180.0, cell_min_lon - padding_degrees),
-            min(90.0, cell_max_lat + padding_degrees),
-            min(180.0, cell_max_lon + padding_degrees),
-        )
-        bboxes[f"bbox_{idx}"] = bbox
-
-    return bboxes
+    # Too wide for one box, so pack the airports into as few boxes as fit the limit
+    packed = _pack_airport_coords(
+        [(airport["lat"], airport["lon"]) for airport in airport_coords],
+        max_size_degrees,
+    )
+    return {
+        f"bbox_{idx}": _pad_and_clamp_bbox(box, padding_degrees)
+        for idx, box in enumerate(packed)
+    }
 
 
 def get_weather_for_airports_bbox(

@@ -22,7 +22,7 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **AIRAC**: the 28-day aeronautical data cycle; CIFP and NASR data are downloaded and cached once per cycle (`backend/data/cifp.py`).
 - **ARTCC**: an air route traffic control center; the app builds automatic groupings from them.
 - **`as_of`**: the one freshness time a refresh or weather pass takes, passed to every METAR cache read so a slow bbox phase cannot expire entries it skipped.
-- **bbox / box**: one weather bounding-box request to aviationweather.gov; `calculate_airport_bboxes` makes one per occupied grid cell of tracked airports.
+- **bbox / box**: one weather bounding-box request to aviationweather.gov; `calculate_airport_bboxes` packs the tracked airports into as few boxes of at most 10° per axis as it can (first fit, in longitude order).
 - **border point**: an FAA airway point named "U.S. CANADIAN BORDER" or "U.S. MEXICAN BORDER"; the MEA check runs up to it on a route that leaves or enters the US, and it never becomes a route fix (`backend/data/navaids.py`).
 - **cap row**: the last, dim and disabled row of the Go To list, "showing 100 of N — type to narrow", shown when more than 100 rows match.
 - **CIFP**: Coded Instrument Flight Procedures, the FAA file the SID, STAR and approach lookups read (`backend/data/cifp.py`).
