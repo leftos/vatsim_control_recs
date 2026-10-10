@@ -7,11 +7,16 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ### Wave 1: Refresh performance
 
-Performance fixes from [perf-profile.md](./perf-profile.md) (measured hotspots, gains and risks per fix there), in its rank order. Shared: `ui/app.py` refresh path, `backend/data/` (`cifp.py`, `weather.py`), `backend/core/` (`analysis.py`, `spatial.py`), `airport_disambiguator/`. Review: `code-review`.
+The six fixes from [perf-profile.md](./perf-profile.md) have landed; [perf-remeasure.md](./perf-remeasure.md) measured them (every refresh lands, one analysis at a time, refresh CPU 0.05–0.33 s, S3 rows at 17 s) and found what is below. Shared: `backend/data/weather.py`, `backend/core/analysis.py`, `ui/tables.py`. Review: `code-review`.
 
-Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is the command; the human check is a run with `--countries US` showing refreshes land every interval, re-measured as the profile did.
+Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is the command; the human check is a run with `--countries US` and an unfiltered run, re-measured as the two docs did.
 
-- [ ] Re-measure with fixes 1-6 landed: a `--countries US` run and an unfiltered run under the profile's method (refreshes landing per interval, CPU per refresh, UI stalls, peak RSS), record the new figures beside the old in [perf-profile.md](./perf-profile.md), then promote its lasting findings into `docs/` and retire the subplan.
+- [ ] Fix the weather-cache expiry race: `get_weather_for_airports_bbox` skips a box whose METARs are fresh when the refresh starts (`backend/data/weather.py:1726`), but the wind and altimeter reads after the box phase (`backend/core/analysis.py:349-358`) judge freshness later (`weather.py:421-425`), so entries that expired during a slow box phase fall to one-station fetches (`weather.py:369`): 31 + 4 sequential fetches and an 83.5 s S3 refresh. Judge read freshness against the time the box decision was made. The failing test is in [perf-remeasure.md](./perf-remeasure.md) ("Failing test"), red against 3fa9c0a.
+- [ ] A clean "no METAR" is fetched again when the airport also has a stale entry: the stale entry wins over the negative (`backend/data/weather.py:421-427`), so the altimeter read refetches after the wind read. Check the negative before refetching, keeping the owner's rule that a stale METAR keeps showing.
+- [ ] A refresh's table update waits for its slowest weather box (18–20 s per slow box in the re-measure, `backend/core/analysis.py:349-358`): decide whether tables show with the previous weather and fill wind and altimeter in when the boxes return. A design question for the owner (what the view shows while it waits).
+- [ ] The largest UI stall is now a full table rebuild (102–427 ms in S3, `ui/tables.py`, the row count changes on most refreshes): update rows in place when only the count changes.
+- [ ] Investigate why S1 (`--countries GB DE NL FR`) shows 0 grouping rows where the profile saw 16, with groupings code and data unchanged (perf-remeasure.md, "Regressions and surprises" 6). Not yet confirmed.
+- [ ] Promote the two perf docs' lasting findings (the GIL-starvation mechanism, the weather API's 400-entry cap, the measuring method and its Windows/uv notes) into `docs/`, then delete [perf-profile.md](./perf-profile.md) and [perf-remeasure.md](./perf-remeasure.md).
 
 ## Next up
 
