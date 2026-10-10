@@ -125,6 +125,54 @@ def cifp_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return path
 
 
+# The outlying areas carry their procedures under the airport's own P/T ident:
+# SCANP has Alaska's (and Canada's, under a C ident), SPACP has Hawaii's and
+# the Pacific territories', SLAMP has Puerto Rico's and the US Virgin Islands'.
+# The SUSAP area carries P/T FAA LIDs of its own, which the index leaves out.
+# This file is separate from the one above, whose records pin what a CONUS
+# lookup answers.
+AREA_LINES = [
+    record("PANC", "D", "TED5", "ALL", 10, "TED", area="SCANP", region="PA"),
+    record("PANC", "D", "TED5", "ALL", 20, "KNIK", area="SCANP", region="PA"),
+    record(
+        "PHNL",
+        "E",
+        "BOOKE8",
+        "ALL",
+        10,
+        "CANON",
+        area="SPACP",
+        region="PH",
+        route_type="5",
+    ),
+    record(
+        "PHNL",
+        "E",
+        "BOOKE8",
+        "ALL",
+        20,
+        "BOOKE",
+        area="SPACP",
+        region="PH",
+        route_type="5",
+    ),
+    record("TJSJ", "F", "I08", "ADDP", 10, "DDP", area="SLAMP", region="TJ"),
+    record("CYQG", "D", "GUSHE1", "ALL", 10, "GUSHE", area="SCANP", region="CZ"),
+    record("05C", "D", "PROC1", "ALL", 10, "FIX01", region="K5"),
+    record("P19", "D", "CCODEX", "ALL", 10, "CODEX", region="K2"),
+    record("T41", "E", "NODE1", "RW26", 10, "CENODE", region="K4"),
+]
+
+
+@pytest.fixture
+def areas_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point the CIFP lookups at a file of outlying-area records."""
+    path = tmp_path / "FAACIFP18-2603"
+    path.write_text("\n".join(AREA_LINES) + "\n", encoding="latin-1")
+    monkeypatch.setattr(cifp, "get_cifp_cache_path", lambda: path)
+    return path
+
+
 def _count_opens(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Wrap the module's ``open`` so a test can count the file reads."""
     opened: list[str] = []
@@ -240,6 +288,54 @@ def test_star_without_a_common_route_uses_its_runway_transitions(
 def test_parsed_route_cache_holds_a_full_refresh() -> None:
     """The route cache is sized for a refresh's ~950 distinct routes."""
     assert route_distance._get_parsed_route.cache_info().maxsize == 4096
+
+
+# --- The outlying areas: Alaska, Hawaii, Puerto Rico and the territories ---
+
+
+def test_scanp_alaska_sid_is_found(areas_file: Path) -> None:
+    dp = cifp.get_dp_data("PANC", "TED5")
+
+    assert dp is not None
+    assert dp.identifier == "TED5"
+    assert dp.waypoints == ["TED", "KNIK"]
+
+
+def test_spacp_hawaii_star_is_found(areas_file: Path) -> None:
+    star = cifp.get_star_data("PHNL", "BOOKE8")
+
+    assert star is not None
+    assert star.waypoints == ["CANON", "BOOKE"]
+
+
+def test_slamp_territory_approach_is_found(areas_file: Path) -> None:
+    approaches = cifp.get_approaches_for_airport("TJSJ")
+
+    assert set(approaches) == {"I08"}
+    assert [fix.fix_identifier for fix in approaches["I08"].fixes] == ["DDP"]
+
+
+def test_scanp_canadian_records_stay_out(areas_file: Path) -> None:
+    assert cifp.get_dp_data("CYQG", "GUSHE1") is None
+
+
+def test_susap_non_k_records_stay_out(areas_file: Path) -> None:
+    assert cifp.get_dp_data("05C", "PROC1") is None
+
+
+def test_susap_p_and_t_lids_stay_out(areas_file: Path) -> None:
+    assert cifp.get_dp_data("P19", "CCODEX") is None
+    assert cifp.get_star_data("T41", "NODE1") is None
+
+
+def test_conus_lookups_unchanged(cifp_file: Path) -> None:
+    """A CONUS airport answers under its K ident, with or without the K."""
+    expected = cifp.get_dp_data("KOAK", "CNDEL5")
+
+    assert expected is not None
+    assert expected.waypoints == ["SUNOL", "TRACY"]
+    assert cifp.get_dp_data("OAK", "CNDEL5") == expected
+    assert cifp.get_star_data("OAK", "SCOLA1") == cifp.get_star_data("KOAK", "SCOLA1")
 
 
 # --- Reference scans, as HEAD's cifp.py ran them per lookup ---

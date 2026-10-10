@@ -49,9 +49,7 @@ Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `
 
 - [ ] Investigate the MEA check: when an airway's entry or exit fix is not found, every segment of the airway is checked (`backend/data/navaids.py:1165-1175`), so `ABQ V12 ONM` reported a California V12 segment at 29,000 ft. Seen by the screenshot run, not yet confirmed.
 - [ ] Investigate the MEA warning comparing only the first filed altitude, so step climbs are ignored (`ui/modals/flight_info.py:661-668`); live UAE82M filed step climbs to FL400 and was warned against a 33,000 ft MEA. Not yet confirmed.
-- [ ] Index the CIFP procedures of Alaska, Hawaii and the territories: they sit under the `SCANP` area prefix (818 SID/STAR lines for PANC, PHNL, TJSJ, PAFA and others), which the `SUSAP K…` match in `backend/data/cifp.py:674` (and the `SUSAP` checks at `:403`, `:531`, `:568`) never reads, so those airports' routes skip SID/STAR expansion.
-
-  Settled (owner): index `SCANP` records whose airport ident starts with `P` or `T` (Alaska, Hawaii, Puerto Rico, Pacific territories); the Canadian records in that area stay out.
+- [ ] `get_dp_data` (`backend/data/cifp.py`) returns None for a SID whose records carry only runway transitions (no `ALL`/blank common route and no enroute transition): all five PANC SIDs in cycle 2610 (ANCH1, FFITZ4, NOEND4, POTTR3, TURN8), so their routes skip SID expansion. Measure how many CONUS SIDs share the shape, then decide which runway transition to expand (or the common fixes they share).
 - [ ] Investigate the overview's NEXT ETA showing `52h06m` for LFBO, from one long-haul flight from Melbourne. Not yet confirmed.
 
 ## Backlog

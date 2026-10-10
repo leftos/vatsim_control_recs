@@ -399,8 +399,9 @@ def parse_approach_record(line: str) -> CifpApproachFix | None:
     if len(line) < 50:
         return None
 
-    # Check record type and subsection
-    if not line.startswith("SUSAP"):
+    # Check record type and subsection. The index reads the areas below, and
+    # its own predicate keeps out the Canadian and non-K records they carry.
+    if not line.startswith(_RECORD_AREA_PREFIXES):
         return None
 
     # Position 13 (0-indexed: 12) = Subsection
@@ -468,7 +469,7 @@ def get_approaches_for_airport(airport: str) -> dict[str, CifpApproach]:
 
     approaches: dict[str, CifpApproach] = {}
 
-    for fixes in _iter_airport_records(approach_index, f"K{airport_code}"):
+    for fixes in _iter_airport_records(approach_index, _lookup_ident(airport_code)):
         for fix in fixes:
             # Create approach if not exists
             if fix.approach_id not in approaches:
@@ -528,7 +529,7 @@ def parse_dp_record(line: str) -> tuple[str, str, str, int] | None:
     if len(line) < 35:
         return None
 
-    if not line.startswith("SUSAP"):
+    if not line.startswith(_RECORD_AREA_PREFIXES):
         return None
 
     if len(line) < 13 or line[12] != "D":
@@ -565,7 +566,7 @@ def parse_star_record(line: str) -> tuple[str, str, str, int] | None:
     if len(line) < 35:
         return None
 
-    if not line.startswith("SUSAP"):
+    if not line.startswith(_RECORD_AREA_PREFIXES):
         return None
 
     if len(line) < 13 or line[12] != "E":
@@ -615,6 +616,24 @@ def _airport_code(airport: str) -> str:
     return airport
 
 
+def _lookup_ident(airport_code: str) -> str:
+    """The index ident a normalized airport code is looked up under.
+
+    An Alaska, Hawaii, Puerto Rico or Pacific-territory airport keeps its own
+    four-character P/T ident ("PANC", "PHNL", "TJSJ"); every other code is a
+    CONUS airport, whose records are keyed by the code with the K back on.
+
+    Args:
+        airport_code: Normalized code, as _airport_code returns it
+
+    Returns:
+        The 4-character ident the index is keyed by (e.g., "KOAK", "PANC")
+    """
+    if len(airport_code) == 4 and airport_code[0] in ("P", "T"):
+        return airport_code
+    return f"K{airport_code}"
+
+
 def _iter_airport_records(index: dict, ident_prefix: str) -> Iterator[list]:
     """Yield the record lists of every airport whose ident matches a prefix.
 
@@ -654,13 +673,45 @@ def _gather_records(
     return records
 
 
+# The customer areas that carry the P/T-ident records the lookups answer from:
+# SCANP is Alaska's, SPACP Hawaii's and the Pacific territories', SLAMP Puerto
+# Rico's and the US Virgin Islands'. The Canadian records that share SCANP keep
+# their C ident, and the SUSAP area keeps its non-K FAA LIDs; neither is
+# indexed.
+_P_T_AREA_PREFIXES = ("SCANP ", "SPACP ", "SLAMP ")
+_RECORD_AREA_PREFIXES = ("SUSAP", *_P_T_AREA_PREFIXES)
+
+
+def _indexed_record_ident(line: str) -> str | None:
+    """The airport ident a CIFP record line is indexed under, or None.
+
+    Indexed are the SUSAP records with a K ident, the CONUS airports, and the
+    P/T-ident records of the areas that carry them: SCANP for Alaska, SPACP for
+    Hawaii and the Pacific territories, SLAMP for Puerto Rico and the US Virgin
+    Islands.
+
+    Args:
+        line: Raw CIFP record line
+
+    Returns:
+        The record's 4-character airport ident, or None when the line is not
+        one the lookups answer from
+    """
+    if line.startswith("SUSAP K"):
+        return line[6:10]
+    if line.startswith(_P_T_AREA_PREFIXES) and len(line) > 6 and line[6] in ("P", "T"):
+        return line[6:10]
+    return None
+
+
 def _build_cifp_index(path: Path) -> None:
     """Index the SID, STAR and approach records of a CIFP file by ident.
 
-    Only records the lookups can match are indexed: the scans always required a
-    SUSAP record whose airport ident starts with K, so the SCANP records of
-    Alaska, Hawaii, the territories and Canada, and the SUSAP records with a
-    non-K ident, stay out.
+    Indexed are the SUSAP records with a K ident, the CONUS airports, and the
+    records whose ident starts with P or T in the SCANP, SPACP and SLAMP areas:
+    Alaska, Hawaii, Puerto Rico, the US Virgin Islands and the Pacific
+    territories. The Canadian records that share SCANP, and the SUSAP records
+    with a non-K ident, stay out.
 
     Args:
         path: Path to the CIFP file
@@ -671,9 +722,9 @@ def _build_cifp_index(path: Path) -> None:
 
     with open(path, encoding="latin-1") as f:
         for line in f:
-            if not line.startswith("SUSAP K"):
+            ident = _indexed_record_ident(line)
+            if ident is None:
                 continue
-            ident = line[6:10]
             dp_record = parse_dp_record(line)
             if dp_record:
                 dp_index.setdefault(ident, []).append(dp_record)
@@ -756,7 +807,7 @@ def get_dp_data(airport: str, dp_name: str) -> CifpDP | None:
     # id, so the filed name is matched against a record's id by prefix
     dp_id_prefix = dp_name.upper().strip()
 
-    dp_records = _gather_records(dp_index, f"K{airport_code}", dp_id_prefix)
+    dp_records = _gather_records(dp_index, _lookup_ident(airport_code), dp_id_prefix)
     if not dp_records:
         return None
 
@@ -820,7 +871,9 @@ def get_star_data(airport: str, star_name: str) -> CifpSTAR | None:
 
     star_id_prefix = star_name.upper().strip()
 
-    star_records = _gather_records(star_index, f"K{airport_code}", star_id_prefix)
+    star_records = _gather_records(
+        star_index, _lookup_ident(airport_code), star_id_prefix
+    )
     if not star_records:
         return None
 
