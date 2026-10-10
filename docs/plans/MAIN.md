@@ -7,14 +7,13 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ### Wave 1: Refresh performance
 
-The six fixes from [perf-profile.md](./perf-profile.md) have landed; [perf-remeasure.md](./perf-remeasure.md) measured them (every refresh lands, one analysis at a time, refresh CPU 0.05–0.33 s, S3 rows at 17 s) and found what is below. Shared: `backend/data/weather.py`, `backend/core/analysis.py`, `ui/tables.py`. Review: `code-review`.
+The refresh's cost structure and how to measure it are in [performance.md](../performance.md). Shared: `backend/data/weather.py`, `backend/core/analysis.py`, `ui/tables.py`. Review: `code-review`.
 
-Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is the command; the human check is a run with `--countries US` and an unfiltered run, re-measured as the two docs did.
+Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is the command; the human check is a run with `--countries US` and an unfiltered run, measured as performance.md's "Measuring" section gives.
 
 - [ ] A refresh's table update waits for its slowest weather box (18–20 s per slow box in the re-measure, `backend/core/analysis.py:349-358`).
 
   Settled (owner, lane B of the [refresh mock](https://claude.ai/artifact/NswGm7DKtQdjXRBZifXVo5)): the traffic columns update as soon as traffic is ready; each region's WIND and ALT keep their previous values until that region's box returns, and an airport new this refresh shows them blank until then. No dimming or pending marker. It builds on the in-place table refresh (`ui/app.py` `_apply_refresh_data`, `ui/tables.py`); its map is `.tmp/map-table-rebuild.md` if still present.
-- [ ] Promote the two perf docs' lasting findings (the GIL-starvation mechanism, the weather API's 400-entry cap, the measuring method and its Windows/uv notes) into `docs/`, then delete [perf-profile.md](./perf-profile.md) and [perf-remeasure.md](./perf-remeasure.md).
 
 ## Next up
 

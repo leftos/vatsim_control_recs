@@ -30,6 +30,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 | Change historical statistics | `backend/data/statsim_api.py` → `ui/modals/historical_stats.py` | none |
 | Change the weather daemon or its deployment | `scripts/weather_daemon/cli.py` → `scripts/weather_daemon/generator.py` → `scripts/weather_daemon/config.py` → `scripts/weather_daemon/service/` | none |
 | Change logging or log-file start-up | `common/logger.py` (`setup_file_logging`, the pre-setup buffer) → `common/paths.py` (`get_user_logs_dir`) → `main.py` (`main`) and the other entry points that call it (`scripts/weather_daemon/cli.py`, `scripts/weather_daemon/generator.py`, `scripts/generate_airport_names.py`, `scripts/precalculate_airport_spatial_data.py`, `airport_disambiguator/__main__.py`) → `conftest.py` → `tests/test_logger.py`, `tests/test_isolation.py` | none |
+| Profile or speed up a refresh | `ui/app.py` (`auto_refresh_callback`, `refresh_worker`) → `backend/core/analysis.py` → `backend/data/weather.py` (`get_weather_for_airports_bbox`) → `backend/data/cifp.py` (`_build_cifp_index`) → `backend/core/spatial.py` (`find_nearest`) | [`performance.md`](performance.md) |
 | Regenerate reference data | `scripts/generate_preset_groupings.py`, `scripts/generate_simaware_boundaries.py`, `scripts/precalculate_airport_spatial_data.py` → the matching file under `data/` | none |
 
 ## Layers
@@ -102,5 +103,6 @@ CI runs the suite in the "Run tests" step of `.github/workflows/build-release.ym
 ## Deep docs
 
 - [`atis-filtering-and-runway-extraction.md`](atis-filtering-and-runway-extraction.md): VATSIM and D-ATIS sources, METAR stripping and runway extraction.
+- [`performance.md`](performance.md): GIL starvation and its design rules, the weather API's 400-entry cap, the per-refresh cost structure and how to profile a refresh.
 - [`../CLAUDE.md`](../CLAUDE.md): setup, command-line options, conventions, data files, keyboard shortcuts and the weather daemon workflow.
 - [`../USER_GUIDE.md`](../USER_GUIDE.md): end-user guide to the app.
