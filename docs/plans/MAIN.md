@@ -15,9 +15,14 @@ Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is th
 
   Judge read freshness against the time the box decision was made. The failing test is in [perf-remeasure.md](./perf-remeasure.md) ("Failing test"), red against 3fa9c0a.
 - [ ] A clean "no METAR" is fetched again when the airport also has a stale entry: the stale entry wins over the negative (`backend/data/weather.py:421-427`), so the altimeter read refetches after the wind read. Check the negative before refetching, keeping the owner's rule that a stale METAR keeps showing.
-- [ ] A refresh's table update waits for its slowest weather box (18–20 s per slow box in the re-measure, `backend/core/analysis.py:349-358`): decide whether tables show with the previous weather and fill wind and altimeter in when the boxes return. A design question for the owner (what the view shows while it waits).
-- [ ] The largest UI stall is now a full table rebuild (102–427 ms in S3, `ui/tables.py`, the row count changes on most refreshes): update rows in place when only the count changes.
-- [ ] Investigate why S1 (`--countries GB DE NL FR`) shows 0 grouping rows where the profile saw 16, with groupings code and data unchanged (perf-remeasure.md, "Regressions and surprises" 6). Not yet confirmed.
+- [ ] A refresh's table update waits for its slowest weather box (18–20 s per slow box in the re-measure, `backend/core/analysis.py:349-358`).
+
+  Settled (owner, lane B of the [refresh mock](https://claude.ai/artifact/NswGm7DKtQdjXRBZifXVo5)): the traffic columns update as soon as traffic is ready; each region's WIND and ALT keep their previous values until that region's box returns, and an airport new this refresh shows them blank until then. No dimming or pending marker. After the table rebuild item below (same `ui/app.py` refresh region).
+- [ ] The largest UI stall is now a full table rebuild (102–427 ms in S3, `ui/tables.py:254`, the row count changes on most refreshes): update rows in place when the count changes. Map: `.tmp/map-table-rebuild.md` (untracked; rerun an explorer if gone).
+
+  Settled from the code: rows stay positional (the equal-count branch's cell diff over the first min(old, new) rows, extra rows added with `add_row(animate=True)`), since Textual has no insert-at and `animated_cells` is keyed by row index; the cursor and scroll restore runs after the update task lands (today `ui/app.py:728` restores before it runs).
+
+  Settled (owner, section 2 of the refresh mock, lane 3): a leftover last row flaps to blank over about 0.5 s and is then removed, reviving the widget's soft-removal path (`widgets/split_flap_datatable.py:445`) with its index-keyed bookkeeping fixed; an airport that joins shifts the rows below and a new last row flaps in from blank.
 - [ ] Promote the two perf docs' lasting findings (the GIL-starvation mechanism, the weather API's 400-entry cap, the measuring method and its Windows/uv notes) into `docs/`, then delete [perf-profile.md](./perf-profile.md) and [perf-remeasure.md](./perf-remeasure.md).
 
 ## Next up
