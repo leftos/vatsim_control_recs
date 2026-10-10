@@ -1,54 +1,59 @@
-"""Edit mode restores a ★ favorite's saved dep/arr filters onto the rows that show them."""
+"""E on a ★ row opens the grouping builder on that grouping, its saved filters shown."""
 
-from tests.conftest import FAVORITE_NAME, GoToFactory, GoToHarness
+from tests.conftest import FAVORITE_NAME, BuilderHarness, GoToFactory, GoToHarness
 
 
-async def _edit_favorite(h: GoToHarness) -> None:
+async def _edit_favorite(h: GoToHarness) -> BuilderHarness:
     await h.type_query(FAVORITE_NAME)
     await h.focus_row(f"grouping:{FAVORITE_NAME}")
     await h.pilot.press("e")
     await h.pilot.pause()
+    return h.builder()
 
 
-async def test_edit_shows_saved_filter_on_individually_picked_airport(
+async def test_e_opens_the_builder_prefilled(goto_modal: GoToFactory) -> None:
+    async with goto_modal() as h:
+        b = await _edit_favorite(h)
+
+        assert b.screen.draft.items == ["Bay Area", "KSMF"]
+        assert b.screen.draft.filters == {"KOAK": "arr", "KSMF": "dep"}
+        assert b.screen.draft.original_name == FAVORITE_NAME
+        assert b.name_input.value == FAVORITE_NAME
+
+
+async def test_saved_filter_shows_on_an_airport_member(
     goto_modal: GoToFactory,
 ) -> None:
     async with goto_modal() as h:
-        await _edit_favorite(h)
+        b = await _edit_favorite(h)
 
-        await h.type_query("KSMF")
-        assert h.row_label("airport:KSMF").startswith("[x D▸] @ KSMF")
+        assert b.member_label("ref:KSMF").rstrip().endswith("dep")
 
 
-async def test_edit_shows_saved_filter_on_grouping_member(
+async def test_saved_filter_shows_on_a_nested_groupings_member(
     goto_modal: GoToFactory,
 ) -> None:
     async with goto_modal() as h:
-        await _edit_favorite(h)
+        b = await _edit_favorite(h)
 
-        await h.type_query("Bay Area")
-        # Members show collapsed under their grouping until → expands them
-        await h.focus_row("grouping:Bay Area")
-        await h.pilot.press("right")
-        await h.pilot.pause()
-        assert h.row_label("sub:Bay Area/KOAK").strip().startswith("[◂A] @ KOAK")
-        assert h.row_label("sub:Bay Area/KSFO").strip().startswith("[  ] @ KSFO")
+        await b.focus_member("ref:Bay Area")
+        await b.press("right")
+
+        assert b.member_label("sub:Bay Area:KOAK").rstrip().endswith("arr")
+        assert not b.member_label("sub:Bay Area:KSFO").rstrip().endswith(("dep", "arr"))
 
 
-async def test_f_on_edited_airport_changes_the_saved_filter(
+async def test_f_then_ctrl_s_saves_the_changed_filter(
     goto_modal: GoToFactory,
 ) -> None:
     async with goto_modal() as h:
-        await _edit_favorite(h)
-        await h.type_query("KSMF")
-        await h.focus_row("airport:KSMF")
+        b = await _edit_favorite(h)
+        await b.focus_member("ref:KSMF")
 
-        await h.pilot.press("f")
-        assert h.row_label("airport:KSMF").startswith("[x ◂A] @ KSMF")
-
-        await h.pilot.press("ctrl+s")
-        await h.pilot.press("enter")
-        await h.pilot.pause()
+        await b.press("f")
+        assert b.member_label("ref:KSMF").rstrip().endswith("arr")
+        await b.press("ctrl+s")
 
         saved = h.saved_favorites()[FAVORITE_NAME]
         assert saved["filters"] == {"KOAK": "arr", "KSMF": "arr"}
+        assert h.app.screen is h.screen

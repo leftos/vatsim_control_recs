@@ -1,15 +1,10 @@
 """Go To shows its mode in the title, its live keys in the hint, and explains no-ops."""
 
-import os
-import stat
-from collections.abc import Callable
 from typing import Any
 
 import pytest
-from textual.widgets import Input
 
 from tests.conftest import FAVORITE_NAME, GoToFactory, GoToHarness
-from ui.modals import goto_modal as goto_modal_module
 
 PICKER_TITLE = "Weather Briefing: select an airport, grouping or flight"
 
@@ -31,12 +26,6 @@ async def _run(h: GoToHarness, steps: list[Step]) -> None:
             await h.pilot.press(value)
     await h.pilot.pause()
 
-
-EDIT_FAVORITE: list[Step] = [
-    ("query", FAVORITE_NAME),
-    ("row", f"grouping:{FAVORITE_NAME}"),
-    ("press", "e"),
-]
 
 # A picked grouping's members show collapsed; → on its row expands them
 EXPAND_BAY_AREA: list[Step] = [("row", "grouping:Bay Area"), ("press", "right")]
@@ -77,12 +66,6 @@ async def test_title_in_multi_select_counts_picks_and_airports(
 
         await h.pilot.press("tab")
         assert h.title == "Go To"
-
-
-async def test_title_in_edit_mode(goto_modal: GoToFactory) -> None:
-    async with goto_modal() as h:
-        await _run(h, EDIT_FAVORITE)
-        assert h.title == f"Go To · Editing ★ {FAVORITE_NAME}"
 
 
 async def test_picker_mode_keeps_its_own_title(goto_modal: GoToFactory) -> None:
@@ -167,15 +150,6 @@ async def test_hint_multi_select_on_member_row(goto_modal: GoToFactory) -> None:
         assert h.hint == (
             "F dep/arr/both · ← collapse · Ctrl+Enter open · Ctrl+S save"
             " · Tab browse · Esc close"
-        )
-
-
-async def test_hint_edit_mode(goto_modal: GoToFactory) -> None:
-    async with goto_modal() as h:
-        await _run(h, [*EDIT_FAVORITE, ("query", "KSMF"), ("row", "airport:KSMF")])
-        assert h.hint == (
-            "Space pick · F dep/arr/both · Ctrl+Enter open · Ctrl+S save"
-            " · Tab browse · Esc close (discard edit)"
         )
 
 
@@ -353,68 +327,12 @@ async def test_working_keys_raise_no_warning(goto_modal: GoToFactory) -> None:
         await _run(
             h,
             [
-                *EDIT_FAVORITE,
+                ("press", "tab"),
                 ("query", "KSMF"),
                 ("row", "airport:KSMF"),
+                ("press", "space"),
                 ("press", "f"),
                 ("press", "space"),
             ],
         )
         assert h.notifications() == []
-
-
-# --- File errors -------------------------------------------------------------
-
-
-def _failing_writes(real_open: Callable[..., Any]) -> Callable[..., Any]:
-    def guarded_open(file: Any, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
-        if "w" in mode:
-            raise OSError("disk full")
-        return real_open(file, mode, *args, **kwargs)
-
-    return guarded_open
-
-
-async def test_rename_failure_on_save_is_an_error_toast(
-    goto_modal: GoToFactory, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    async with goto_modal() as h:
-        await _run(h, [*EDIT_FAVORITE, ("press", "ctrl+s")])
-        h.app.screen.query_one("#save-grouping-input", Input).value = "Ops 2"
-        # The save dialog writes the new name; the Go To modal's removal of the
-        # old name is the write that fails
-        monkeypatch.setattr(
-            goto_modal_module, "open", _failing_writes(open), raising=False
-        )
-
-        await h.pilot.press("enter")
-        await h.pilot.pause()
-
-        assert (
-            "error",
-            f"Saved 'Ops 2' but couldn't remove the old '{FAVORITE_NAME}': disk full",
-        ) in h.notifications()
-        assert set(h.saved_favorites()) == {FAVORITE_NAME, "Ops 2"}
-
-
-async def test_delete_failure_is_an_error_toast(goto_modal: GoToFactory) -> None:
-    async with goto_modal() as h:
-        os.chmod(h.favorites_file, stat.S_IREAD)
-        try:
-            await _run(
-                h,
-                [
-                    ("query", FAVORITE_NAME),
-                    ("row", f"grouping:{FAVORITE_NAME}"),
-                    ("press", "ctrl+d"),
-                    ("press", "y"),
-                ],
-            )
-        finally:
-            os.chmod(h.favorites_file, stat.S_IREAD | stat.S_IWRITE)
-
-        errors = [m for severity, m in h.notifications() if severity == "error"]
-        assert len(errors) == 1
-        assert errors[0].startswith(f"Couldn't delete '{FAVORITE_NAME}': ")
-        assert FAVORITE_NAME in h.saved_favorites()
-        assert h.option_list.get_option(f"grouping:{FAVORITE_NAME}") is not None

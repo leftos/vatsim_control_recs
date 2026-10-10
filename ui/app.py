@@ -8,7 +8,7 @@ import os
 import sys
 import threading
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any, ClassVar
@@ -21,11 +21,14 @@ from textual.events import Key
 from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
 from backend import analyze_flights_data
+from backend.core.airport_search import AirportSearchIndex
 from backend.core.analysis import fetch_weather_for_airports
 from backend.core.groupings import (
+    airport_idents,
     get_user_favorite_names,
     load_all_groupings,
     load_favorite_filters,
+    preset_grouping_names,
     resolve_grouping_recursively,
 )
 from widgets.split_flap_datatable import SplitFlapDataTable
@@ -48,6 +51,8 @@ from .modals import (
     WindInfoScreen,
 )
 from .modals.goto_modal import order_goto_results
+from .modals.grouping_draft import BuilderContext
+from .modals.tracked_airports import TrackingChange
 from .tables import (
     TableManager,
     create_airports_table_config,
@@ -294,6 +299,11 @@ class VATSIMControlApp(App):
         # Pre-built results list for Go To modal (list of (type, identifier, data) tuples)
         self.cached_goto_results: list[tuple[str, str, Any]] = []
         self.goto_cache_ready = False
+        # What the grouping builder derives from the unified airport data, built
+        # once per data object: (that object, search index, preset names, idents)
+        self._builder_data: (
+            tuple[dict, AirportSearchIndex, frozenset[str], frozenset[str]] | None
+        ) = None
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -422,6 +432,36 @@ class VATSIMControlApp(App):
         """Reset the GoTo cache and re-warm it in the background."""
         self.goto_cache_ready = False
         self.run_worker(self._warm_up_goto_cache(), exclusive=False)
+
+    def builder_context(self) -> BuilderContext:
+        """What the grouping builder reads: groupings, tracked list, airport data.
+
+        The search index, the preset names and the airport idents are built once
+        per unified airport data object and are empty (no index) until it loads.
+        """
+        from . import config
+
+        unified = config.UNIFIED_AIRPORT_DATA
+        search_index = None
+        preset_names: frozenset[str] = frozenset()
+        idents: frozenset[str] = frozenset()
+        if unified:
+            if self._builder_data is None or self._builder_data[0] is not unified:
+                self._builder_data = (
+                    unified,
+                    AirportSearchIndex(unified),
+                    frozenset(preset_grouping_names(unified)),
+                    frozenset(airport_idents(unified)),
+                )
+            _, search_index, preset_names, idents = self._builder_data
+        return BuilderContext(
+            groupings=self.cached_groupings or {},
+            user_names=frozenset(get_user_favorite_names()),
+            tracked=frozenset(self.airport_allowlist or ()),
+            search_index=search_index,
+            preset_names=preset_names,
+            airport_idents=idents,
+        )
 
     def _disable_activity_watching(self) -> None:
         """Safely disable user activity tracking with lock."""
@@ -1486,20 +1526,54 @@ class VATSIMControlApp(App):
         )
         self.push_screen(tracking_modal, callback=self.handle_tracking_result)
 
-    def handle_tracking_result(self, result) -> None:
-        """Handle the result from tracked airports modal"""
-        if result is None:
-            # User cancelled
+    def handle_tracking_result(self, change: TrackingChange | None) -> None:
+        """Apply the Tracked Airports Manager's changes to the current list.
+
+        The manager reports what it added and removed against the list it opened
+        with, so an airport tracked meanwhile (from Go To opened above it) is
+        kept. A manager whose list ended empty switches to tracking every airport
+        with activity. Nothing changed means no refresh.
+        """
+        if change is None or not (change.added or change.removed):
             return
 
-        # Result is the updated airport allowlist
-        self.airport_allowlist = result
+        if change.track_everything:
+            self.airport_allowlist = []
+        else:
+            kept = set(self.airport_allowlist) - set(change.removed)
+            self.airport_allowlist = sorted(kept | set(change.added))
+        self._apply_tracking_change()
 
+    def track_airports(self, icaos: Sequence[str]) -> bool:
+        """Add airports to the tracked list and refresh for them.
+
+        Does nothing when the list is empty, which tracks every airport with
+        activity: adding to it would narrow tracking to only these.
+
+        Args:
+            icaos: The airports to track; ones already tracked are skipped.
+
+        Returns:
+            Whether the list changed, in which case the Go To cache was
+            invalidated too.
+        """
+        if not self.airport_allowlist:
+            return False
+        new = [icao for icao in icaos if icao not in self.airport_allowlist]
+        if not new:
+            return False
+        self.airport_allowlist = sorted({*self.airport_allowlist, *new})
+        self._apply_tracking_change()
+        return True
+
+    def _apply_tracking_change(self) -> None:
+        """Refresh weather, the Go To cache and the tables for a new tracked list."""
         # Clear weather caches to ensure fresh data for changed airports
         from backend.data import clear_weather_caches
 
         clear_weather_caches()
-
+        # Go To lists the tracked airports
+        self.invalidate_goto_cache()
         # Refresh data with new configuration
         self.action_refresh()
 

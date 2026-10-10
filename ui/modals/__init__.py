@@ -19,7 +19,6 @@ from .help_modal import HelpScreen
 from .historical_stats import HistoricalStatsScreen
 from .metar_info import MetarInfoScreen
 from .route_weather import RouteWeatherScreen
-from .save_grouping import SaveGroupingModal
 from .tracked_airports import TrackedAirportsModal
 from .vfr_alternatives import VfrAlternativesScreen
 from .weather_briefing import WeatherBriefingScreen
@@ -41,7 +40,6 @@ __all__ = [
     "HistoricalStatsScreen",
     "MetarInfoScreen",
     "RouteWeatherScreen",
-    "SaveGroupingModal",
     "TrackedAirportsModal",
     "VfrAlternativesScreen",
     "WeatherBriefingScreen",

@@ -1,6 +1,8 @@
 """Tracked Airports Management Modal Screen"""
 
-from typing import TYPE_CHECKING, ClassVar
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
+from typing import TYPE_CHECKING, ClassVar, NamedTuple
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -8,11 +10,29 @@ from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, ListItem, ListView, Static
 
+from backend.core.groupings import resolve_grouping_recursively
+
 from .airport_tracking import AirportTrackingModal
-from .save_grouping import SaveGroupingModal
+from .grouping_builder import GroupingBuilderScreen
+from .grouping_draft import BuilderResult
 
 if TYPE_CHECKING:
     from ui.app import VATSIMControlApp
+
+
+class TrackingChange(NamedTuple):
+    """What the manager changed in the tracked list it opened with.
+
+    Attributes:
+        added: The airports the manager added, sorted.
+        removed: The airports the manager removed, sorted.
+        track_everything: The manager's list ended empty, which tracks every
+            airport with activity.
+    """
+
+    added: tuple[str, ...]
+    removed: tuple[str, ...]
+    track_everything: bool
 
 
 class TrackedAirportsModal(ModalScreen):
@@ -88,9 +108,13 @@ class TrackedAirportsModal(ModalScreen):
     def __init__(self, airport_allowlist: list, disambiguator=None):
         super().__init__()
         self.airport_allowlist = sorted(airport_allowlist) if airport_allowlist else []
+        # Closing reports changes against this list, not the whole list, so an
+        # airport tracked elsewhere while the manager is open is not dropped
+        self._opened_with = frozenset(self.airport_allowlist)
         self.disambiguator = disambiguator
         self.selected_airports = set()
-        self._saved_airport_count = 0
+        # The groupings the open builder saw, to count a saved grouping's airports
+        self._builder_groupings: Mapping[str, Sequence[str]] = {}
 
     def compose(self) -> ComposeResult:
         tracking_mode = (
@@ -265,14 +289,19 @@ class TrackedAirportsModal(ModalScreen):
 
         # Update the display
         await self.populate_list(highlight)
-        info_widget = self.query_one("#tracked-info", Static)
+        self._update_info()
+
+    def _update_info(self) -> None:
+        """Say how many airports the list tracks, or that it tracks them all."""
         tracking_mode = (
             "Tracking specific airports"
             if self.airport_allowlist
             else "Tracking all airports with activity"
         )
         airport_count = len(self.airport_allowlist) if self.airport_allowlist else "all"
-        info_widget.update(f"{tracking_mode} ({airport_count} airports)")
+        self.query_one("#tracked-info", Static).update(
+            f"{tracking_mode} ({airport_count} airports)"
+        )
 
     async def action_remove_selected(self) -> None:
         """Remove selected airports from tracking"""
@@ -287,39 +316,59 @@ class TrackedAirportsModal(ModalScreen):
 
         self.selected_airports.clear()
         await self.populate_list(previous_index)
-
-        # Update the info display
-        info_widget = self.query_one("#tracked-info", Static)
-        tracking_mode = (
-            "Tracking specific airports"
-            if self.airport_allowlist
-            else "Tracking all airports with activity"
-        )
-        airport_count = len(self.airport_allowlist) if self.airport_allowlist else "all"
-        info_widget.update(f"{tracking_mode} ({airport_count} airports)")
+        self._update_info()
 
     def action_save_as_grouping(self) -> None:
-        """Open modal to save the picked airports (the whole list when none)."""
+        """Open the grouping builder on the picked airports (the whole list when none)."""
         airports = sorted(self.selected_airports) or self.airport_allowlist
         if not airports:
             status_widget = self.query_one("#tracked-status", Static)
             status_widget.update("No airports to save (tracking all airports)")
             return
 
-        self._saved_airport_count = len(airports)
-        save_modal = SaveGroupingModal(airports)
-        self.app.push_screen(save_modal, callback=self.handle_save_grouping_result)
+        # Until the manager closes, its own list is the tracked one
+        context = replace(
+            self.vatsim_app.builder_context(),
+            tracked=frozenset(self.airport_allowlist),
+        )
+        self._builder_groupings = context.groupings
+        builder = GroupingBuilderScreen(
+            context, items=list(airports), filters={}, name="", original_name=None
+        )
+        self.app.push_screen(builder, callback=self.handle_builder_result)
 
-    def handle_save_grouping_result(self, result) -> None:
-        """Handle result from save grouping modal"""
-        if result:
-            # The Go To modal caches its results; a new ★ grouping must show up
-            self.vatsim_app.invalidate_goto_cache()
-            status_widget = self.query_one("#tracked-status", Static)
-            status_widget.update(
-                f"Saved '{result}' with {self._saved_airport_count} airports"
-            )
+    async def handle_builder_result(self, result: BuilderResult | None) -> None:
+        """Apply a builder save: list the airports it tracks, then report it."""
+        if result is None:
+            return
+        if result.track:
+            await self._track(result.track)
+        # The Go To modal caches its results; a new ★ grouping must show up
+        self.vatsim_app.invalidate_goto_cache()
+
+        saved = result.saved
+        groupings = {**self._builder_groupings, saved.name: list(saved.items)}
+        count = len(resolve_grouping_recursively(saved.name, groupings))
+        self.query_one("#tracked-status", Static).update(
+            f"Saved '{saved.name}' with {count} airports"
+        )
+
+    async def _track(self, icaos: Sequence[str]) -> None:
+        """Add airports to the manager's list; the app gets it when the manager closes."""
+        previous_index = self.query_one("#tracked-list", ListView).index
+        self.airport_allowlist = sorted({*self.airport_allowlist, *icaos})
+        await self.populate_list(previous_index)
+        self._update_info()
+
+    def tracking_change(self) -> TrackingChange:
+        """The airports added and removed since the manager opened."""
+        final = set(self.airport_allowlist)
+        return TrackingChange(
+            added=tuple(sorted(final - self._opened_with)),
+            removed=tuple(sorted(self._opened_with - final)),
+            track_everything=not final,
+        )
 
     def action_close(self) -> None:
-        """Close and return the updated airport list"""
-        self.dismiss(self.airport_allowlist)
+        """Close and return what changed in the tracked list."""
+        self.dismiss(self.tracking_change())

@@ -21,7 +21,11 @@ from textual.widgets import Input, OptionList, Static
 
 import common.paths
 from backend.core.airport_search import AirportSearchIndex
-from backend.core.groupings import airport_idents, load_user_favorites
+from backend.core.groupings import (
+    airport_idents,
+    get_user_favorite_names,
+    load_user_favorites,
+)
 from ui import config as ui_config
 from ui.app import VATSIMControlApp
 from ui.modals import goto_modal as goto_modal_module
@@ -77,6 +81,8 @@ class GoToHost(App):
         self.cached_goto_results: list[tuple[str, str, Any]] = []
         self.goto_cache_ready = False
         self.invalidate_calls = 0
+        # Every track_airports call's airports, in call order
+        self.track_calls: list[tuple[str, ...]] = []
         # Every toast as (severity, message); Textual reaps shown toasts after
         # their timeout, so a stalled run could otherwise miss one
         self.toasts: list[tuple[str, str]] = []
@@ -87,6 +93,31 @@ class GoToHost(App):
         """Record the invalidation; the real app re-warms from the network."""
         self.invalidate_calls += 1
         self.goto_cache_ready = False
+
+    def track_airports(self, icaos: Sequence[str]) -> bool:
+        """Record the airports and extend the list as the real app does.
+
+        The real app's refresh is left out; its Go To cache invalidation is
+        counted, so a test sees one warm-up per change.
+        """
+        self.track_calls.append(tuple(icaos))
+        new = [icao for icao in icaos if icao not in self.airport_allowlist]
+        if not self.airport_allowlist or not new:
+            return False
+        self.airport_allowlist = sorted({*self.airport_allowlist, *new})
+        self.invalidate_goto_cache()
+        return True
+
+    def builder_context(self) -> BuilderContext:
+        """The grouping builder's context over the fixture data."""
+        return BuilderContext(
+            groupings=self.cached_groupings,
+            user_names=frozenset(get_user_favorite_names()),
+            tracked=frozenset(self.airport_allowlist),
+            search_index=AirportSearchIndex(GOTO_AIRPORTS),
+            preset_names=frozenset(PRESET_GROUPINGS),
+            airport_idents=frozenset(airport_idents(GOTO_AIRPORTS)),
+        )
 
     def open_grouping_board(self, name: str) -> None:
         """Open a grouping board the way the real app does."""
@@ -155,6 +186,14 @@ class GoToHarness:
 
     def saved_favorites(self) -> dict[str, Any]:
         return json.loads(self.favorites_file.read_text(encoding="utf-8"))
+
+    def builder(self) -> "BuilderHarness":
+        """Handles on the grouping builder Go To opened above itself."""
+        from ui.modals.grouping_builder import GroupingBuilderScreen
+
+        screen = self.app.screen
+        assert isinstance(screen, GroupingBuilderScreen), f"{screen!r} is on top"
+        return BuilderHarness(self.app, self.pilot, screen, [], self.favorites_file)
 
 
 GoToFactory = Callable[..., AbstractAsyncContextManager[GoToHarness]]
@@ -244,6 +283,28 @@ BUILDER_AIRPORTS: dict[str, dict[str, Any]] = {
 }
 
 BUILDER_TRACKED = ("KSFO", "KOAK", "KSJC", "KSMF")
+
+# The unified airport data behind Go To's builder: every tracked airport, plus
+# KSAC, which Go To's tracked list lacks.
+GOTO_AIRPORTS: dict[str, dict[str, Any]] = {
+    **BUILDER_AIRPORTS,
+    "KLAX": {
+        "icao": "KLAX",
+        "iata": "LAX",
+        "faa": "LAX",
+        "name": "Los Angeles Intl",
+        "city": "Los Angeles",
+        "country": "US",
+    },
+    "KSAN": {
+        "icao": "KSAN",
+        "iata": "SAN",
+        "faa": "SAN",
+        "name": "San Diego Intl",
+        "city": "San Diego",
+        "country": "US",
+    },
+}
 
 # The one preset grouping; the ★ one is FAVORITE_NAME from the favorites file.
 BUILDER_PRESET = "Bay Area"

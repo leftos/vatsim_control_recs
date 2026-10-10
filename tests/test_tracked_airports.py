@@ -12,21 +12,39 @@ from textual.pilot import Pilot
 from textual.widgets import Input, Label, ListView, Static
 
 import common.paths
+from backend.core.airport_search import AirportSearchIndex
+from backend.core.groupings import airport_idents
+from tests.conftest import BUILDER_AIRPORTS, BuilderHarness
+from ui.modals.confirm_modal import ChoiceModal
+from ui.modals.grouping_builder import GroupingBuilderScreen
+from ui.modals.grouping_draft import BuilderContext
 from ui.modals.tracked_airports import TrackedAirportsModal
 
 AIRPORTS = ["KSFO", "KOAK", "KSJC"]
 
 
 class TrackedHost(App):
-    """The smallest app the modal can run under."""
+    """The smallest app the modal and the grouping builder can run under."""
 
     def __init__(self) -> None:
         super().__init__()
         self.invalidate_calls = 0
+        self.airport_allowlist = list(AIRPORTS)
 
     def invalidate_goto_cache(self) -> None:
         """Count the Go To cache invalidations the modal asks for."""
         self.invalidate_calls += 1
+
+    def builder_context(self) -> BuilderContext:
+        """The builder's context: no groupings, the five fixture airports."""
+        return BuilderContext(
+            groupings={},
+            user_names=frozenset(),
+            tracked=frozenset(self.airport_allowlist),
+            search_index=AirportSearchIndex(BUILDER_AIRPORTS),
+            preset_names=frozenset(),
+            airport_idents=frozenset(airport_idents(BUILDER_AIRPORTS)),
+        )
 
 
 @dataclass
@@ -63,12 +81,19 @@ class Harness:
         self.list_view.index = self.index_of(icao)
         await self.pilot.pause()
 
-    async def save_as(self, name: str) -> None:
-        """Press S, type a name into the save dialog, then press Enter."""
+    async def open_builder(self) -> BuilderHarness:
+        """Press S and return handles on the grouping builder it opens."""
         await self.pilot.press("s")
         await self.pilot.pause()
-        self.app.screen.query_one("#save-grouping-input", Input).value = name
-        await self.pilot.press("enter")
+        screen = self.app.screen
+        assert isinstance(screen, GroupingBuilderScreen)
+        return BuilderHarness(self.app, self.pilot, screen, [], self.favorites_file)
+
+    async def save_as(self, name: str) -> None:
+        """Press S, name the grouping in the builder, then press Ctrl+S."""
+        builder = await self.open_builder()
+        await builder.type_name(name)
+        await builder.press("ctrl+s")
         await self.pilot.pause()
 
     async def quick_add(self, text: str) -> None:
@@ -203,6 +228,50 @@ async def test_s_save_invalidates_goto_cache(tracked_modal: TrackedFactory) -> N
         await h.save_as("Test")
         assert h.saved_favorites() == {"Test": ["KOAK", "KSFO", "KSJC"]}
         assert h.app.invalidate_calls == 1
+
+
+async def test_save_with_untracked_add_extends_the_managers_list(
+    tracked_modal: TrackedFactory,
+) -> None:
+    async with tracked_modal() as h:
+        builder = await h.open_builder()
+        await builder.type_query("KSAC")
+        await builder.focus_result("airport:KSAC")
+        await builder.press("enter")
+        await builder.type_name("Trip")
+        await builder.press("ctrl+s")
+        assert isinstance(h.app.screen, ChoiceModal)
+
+        await h.pilot.press("1")
+        await h.pilot.pause()
+        await h.pilot.pause()
+
+        assert h.app.screen is h.modal
+        assert h.saved_favorites() == {"Trip": ["KOAK", "KSFO", "KSJC", "KSAC"]}
+        assert h.modal.airport_allowlist == ["KOAK", "KSAC", "KSFO", "KSJC"]
+        assert h.row_text("KSAC").startswith("KSAC")
+        info = str(h.modal.query_one("#tracked-info", Static).content)
+        assert info == "Tracking specific airports (4 airports)"
+        assert h.status == "Saved 'Trip' with 4 airports"
+        # The manager applies its list to the app when it closes, not before
+        assert h.app.airport_allowlist == AIRPORTS
+
+
+async def test_manager_save_uses_its_own_tracked_list(
+    tracked_modal: TrackedFactory,
+) -> None:
+    async with tracked_modal() as h:
+        await h.quick_add("+KSAC")
+        await h.highlight("KSAC")
+        await h.pilot.press("space")
+
+        builder = await h.open_builder()
+        await builder.type_name("Sacramento")
+        await builder.press("ctrl+s")
+
+        assert not isinstance(h.app.screen, ChoiceModal)
+        assert h.saved_favorites() == {"Sacramento": ["KSAC"]}
+        assert h.status == "Saved 'Sacramento' with 1 airports"
 
 
 async def test_cancelled_s_save_leaves_goto_cache(

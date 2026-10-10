@@ -1,9 +1,8 @@
 """Go To Modal Screen - Unified navigation to airports, groupings, and flights"""
 
 import asyncio
-import json
 import os
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from textual import events
@@ -16,20 +15,22 @@ from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from backend.core.groupings import (
+    GroupingError,
+    delete_user_grouping,
     get_user_favorite_names,
+    get_user_grouping,
     load_all_groupings,
-    load_favorite_filters,
     resolve_grouping_recursively,
 )
 from backend.data.vatsim_api import download_vatsim_data
-from common.paths import get_user_favorites_file
 from ui import config
 from ui.debug_logger import debug
 
 from .confirm_modal import ConfirmModal
 from .flight_board import FlightBoardScreen
 from .flight_info import FlightInfoScreen
-from .save_grouping import SaveGroupingModal
+from .grouping_builder import GroupingBuilderScreen
+from .grouping_draft import BuilderResult
 
 if TYPE_CHECKING:
     from ui.app import VATSIMControlApp
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
 TITLE_PICK_SEVERAL = (
     "Go To \u00b7 Pick several \u00b7 {picked} picked \u2192 {airports} airports"
 )
-TITLE_EDITING = "Go To \u00b7 Editing \u2605 {name}"
+DELETE_CONFIRM = "Delete '{name}' from my groupings?"
 
 # The hint line lists "<key> <action>" items that work in the current state
 HINT_SEPARATOR = " \u00b7 "
@@ -271,9 +272,6 @@ class GoToScreen(ModalScreen):
         # Absent = both directions.
         self.selected_filters: dict[str, str] = {}
 
-        # When editing an existing favorite via E key
-        self._editing_favorite_name: str | None = None
-
         # User grouping names for star prefix
         self.user_grouping_names: set[str] = set()
 
@@ -406,6 +404,10 @@ class GoToScreen(ModalScreen):
     def _warn(self, message: str) -> None:
         """Explain a key press that did nothing because its precondition failed."""
         self.notify(message, severity="warning", markup=False)
+
+    def _error(self, message: str) -> None:
+        """Report a grouping read or write that failed."""
+        self.notify(message, severity="error", markup=False)
 
     def on_descendant_focus(self, _event: events.DescendantFocus) -> None:
         self._update_hint_text()
@@ -933,53 +935,149 @@ class GoToScreen(ModalScreen):
         return f"{self._row_name(item)} is {kinds.get(item[0], 'not a grouping')}"
 
     def _edit_favorite(self) -> None:
-        """Load a favorite into multi-select mode for editing."""
+        """E: open the grouping builder on the highlighted ★ grouping."""
         item = self._get_highlighted_item()
         if item is None or not self._is_favorite_row(item):
             self._warn(f"E edits ★ groupings only; {self._describe_non_favorite(item)}")
             return
 
-        identifier = item[1]
+        name = item[1]
+        try:
+            grouping = get_user_grouping(name)
+        except GroupingError as error:
+            debug(f"Go To: reading '{name}' for the builder failed: {error}")
+            self._error(str(error))
+            return
+        if grouping is None:
+            self._error(f"'{name}' is not one of my groupings")
+            return
+        self._open_builder(
+            items=grouping.items,
+            filters=grouping.filters,
+            name=name,
+            original_name=name,
+        )
 
-        # Switch to multi-select mode
-        self.multi_select_mode = True
-        self._editing_favorite_name = identifier
+    def _open_builder(
+        self,
+        *,
+        items: Sequence[str],
+        filters: Mapping[str, str],
+        name: str,
+        original_name: str | None,
+    ) -> None:
+        """Open the grouping builder above Go To and apply what it saves."""
+        builder = GroupingBuilderScreen(
+            self.vatsim_app.builder_context(),
+            items=items,
+            filters=filters,
+            name=name,
+            original_name=original_name,
+        )
+        self.app.push_screen(builder, callback=self._on_builder_dismissed)
+
+    def _on_builder_dismissed(self, result: BuilderResult | None) -> None:
+        """Apply a builder save: track, patch the local groupings, rebuild.
+
+        A Ctrl+S save (a new grouping) leaves pick-several and shows the saved
+        name in the search box; an E save keeps the mode and the picks, a pick
+        of a renamed grouping following its new name. A cancelled builder (None)
+        changes nothing.
+        """
+        if result is None:
+            return
+        tracked = bool(result.track) and self.vatsim_app.track_airports(result.track)
+        if not tracked:
+            # A changed tracked list has invalidated the cache already
+            self.vatsim_app.invalidate_goto_cache()
+
+        self._patch_saved_grouping(result)
+        if tracked:
+            self.tracked_airports = list(self.vatsim_app.airport_allowlist or [])
+            self._build_all_results()
+
+        if result.original_name is None:
+            self._show_saved_name(result.saved.name)
+        else:
+            self._repoint_picks(result.original_name, result.saved.name)
+            self._apply_current_filter()
+
+    def _patch_saved_grouping(self, result: BuilderResult) -> None:
+        """Put the saved grouping in the local state and drop the names it replaced.
+
+        The app cache re-warms in the background, so the screen patches its own
+        copy to show the save now; the list sorts it into the ★ section. A
+        rename drops the old name, and so does an overwrite that stored the name
+        in a new spelling.
+        """
+        saved = result.saved
+        replaced = {
+            name
+            for name in self.user_grouping_names
+            if name.lower() == saved.name.lower() and name != saved.name
+        }
+        if result.original_name is not None and result.original_name != saved.name:
+            replaced.add(result.original_name)
+        for name in replaced:
+            self._forget_favorite(name)
+
+        self.user_grouping_names = get_user_favorite_names()
+        self.all_groupings[saved.name] = list(saved.items)
+        if not any(r[0] == "grouping" and r[1] == saved.name for r in self.all_results):
+            self.all_results.append(("grouping", saved.name, None))
+
+    def _show_saved_name(self, name: str) -> None:
+        """Leave pick-several and search for the grouping just saved."""
+        self._leave_pick_several()
+        input_widget = self.query_one("#goto-input", Input)
+        input_widget.value = name
+        input_widget.focus()
+        # Rebuild even when the query already equals the name: the rows still
+        # carry multi-select checkboxes, and the title still names the old mode
+        self._apply_current_filter()
+
+    def _repoint_picks(self, old: str, new: str) -> None:
+        """Point a pick of a renamed ★ grouping, its filter and expansion at the new name."""
+        old_key = f"grouping:{old}"
+        if old == new or old_key not in self.selected_identifiers:
+            return
+        new_key = f"grouping:{new}"
+        self.selected_identifiers.discard(old_key)
+        if new_key in self.selected_identifiers:
+            # Saved over another picked grouping: that pick stands for both
+            self._drop_pick(old_key)
+            self._expanded_groupings.discard(old)
+            return
+        self.selected_identifiers.add(new_key)
+        self.selected_items = [
+            ("grouping", new, data)
+            if f"{kind}:{name}" == old_key
+            else (kind, name, data)
+            for kind, name, data in self.selected_items
+        ]
+        mode = self.selected_filters.pop(old_key, None)
+        if mode is not None:
+            self.selected_filters[new_key] = mode
+        if old in self._expanded_groupings:
+            self._expanded_groupings.discard(old)
+            self._expanded_groupings.add(new)
+
+    def _drop_pick(self, key: str) -> None:
+        """Remove one pick's row entry and its filter, by its "type:identifier" key."""
+        self.selected_items = [
+            (kind, name, data)
+            for kind, name, data in self.selected_items
+            if f"{kind}:{name}" != key
+        ]
+        self.selected_filters.pop(key, None)
+
+    def _leave_pick_several(self) -> None:
+        """Return to browse with no picks, filters or expanded groupings."""
+        self.multi_select_mode = False
         self.selected_items.clear()
         self.selected_identifiers.clear()
         self.selected_filters.clear()
         self._expanded_groupings.clear()
-
-        # Load the favorite's stored items (grouping refs + individual airports)
-        items_in_favorite = self.all_groupings.get(identifier, [])
-        for ref in items_in_favorite:
-            # Skip self-references (the favorite is in all_groupings too)
-            if ref == identifier:
-                continue
-            if ref in self.all_groupings:
-                # It's a grouping reference
-                self.selected_identifiers.add(f"grouping:{ref}")
-                self.selected_items.append(("grouping", ref, None))
-            else:
-                # It's an airport ICAO
-                pretty_name = (
-                    config.DISAMBIGUATOR.get_full_name(ref)
-                    if config.DISAMBIGUATOR
-                    else ref
-                )
-                self.selected_identifiers.add(f"airport:{ref}")
-                self.selected_items.append(("airport", ref, pretty_name))
-
-        # Saved filters are per ICAO. An individually picked airport's row reads
-        # its "airport:" key; an airport that came from a grouping reads "sub:".
-        saved_filters = load_favorite_filters(identifier)
-        for icao, mode in saved_filters.items():
-            airport_key = f"airport:{icao}"
-            if airport_key in self.selected_identifiers:
-                self.selected_filters[airport_key] = mode
-            else:
-                self.selected_filters[f"sub:{icao}"] = mode
-
-        self._update_option_list()
 
     def _picked_airports(self) -> set[str]:
         """Resolve the picks to their distinct airport ICAOs."""
@@ -1020,9 +1118,7 @@ class GoToScreen(ModalScreen):
     def _update_title(self) -> None:
         """Name the mode in the title; picker mode keeps its caller's title."""
         title = self.custom_title
-        if self.multi_select_mode and self._editing_favorite_name is not None:
-            title = TITLE_EDITING.format(name=self._editing_favorite_name)
-        elif self.multi_select_mode:
+        if self.multi_select_mode:
             title = TITLE_PICK_SEVERAL.format(
                 picked=len(self.selected_items),
                 airports=len(self._picked_airports()),
@@ -1036,10 +1132,8 @@ class GoToScreen(ModalScreen):
             enter = "Enter select" if self.callback else "Enter open"
             items = [enter, "Esc close"] if _is_result_row(item) else ["Esc close"]
         elif self.multi_select_mode:
-            editing = self._editing_favorite_name is not None
-            close = "Esc close (discard edit)" if editing else "Esc close"
             actions = self._multi_select_hint_actions(item)
-            items = _cap_hint(actions, "Tab browse", close)
+            items = _cap_hint(actions, "Tab browse", "Esc close")
         else:
             actions = self._browse_hint_actions(item)
             items = _cap_hint(actions, "Tab pick several", "Esc close")
@@ -1149,7 +1243,7 @@ class GoToScreen(ModalScreen):
         self.vatsim_app.push_screen(flight_board)
 
     def _save_selection(self) -> None:
-        """Save the current multi-select selection as a custom grouping."""
+        """Ctrl+S: open the grouping builder on the picks and their filters."""
         reason = self._picks_blocked_reason()
         if reason is not None:
             self._warn(f"Ctrl+S saves picks; {reason}")
@@ -1158,94 +1252,12 @@ class GoToScreen(ModalScreen):
             self._warn("Ctrl+S needs at least one pick")
             return
 
-        # Build the raw reference list (mix of ICAOs and grouping names)
-        raw_items: list[str] = [
-            identifier for _item_type, identifier, _data in self.selected_items
-        ]
-
-        # Resolved airport count for the save dialog's hint
-        all_airports = self._picked_airports()
-
-        # Resolve filters for persistence
-        resolved_filters = self._resolve_filters()
-
-        # Stash for callback
-        self._pending_save_items = raw_items
-        self._pending_save_filters = resolved_filters
-
-        save_modal = SaveGroupingModal(
-            raw_items,
-            resolve_count=len(all_airports),
-            filters=resolved_filters or None,
-            prefill_name=self._editing_favorite_name,
+        self._open_builder(
+            items=[identifier for _type, identifier, _data in self.selected_items],
+            filters=self._resolve_filters(),
+            name="",
+            original_name=None,
         )
-        self.app.push_screen(save_modal, callback=self._on_save_dismissed)
-
-    def _on_save_dismissed(self, result: str | None) -> None:
-        """Handle SaveGroupingModal dismissal."""
-        if result is None:
-            return
-
-        saved_name = result
-        saved_items = getattr(self, "_pending_save_items", [])
-
-        # If we were editing a favorite and the name changed, remove the old one
-        old_name = self._editing_favorite_name
-        if old_name and old_name != saved_name:
-            try:
-                self._remove_favorite_from_file(old_name)
-                self._forget_favorite(old_name)
-            except (json.JSONDecodeError, OSError) as e:
-                debug(
-                    f"Go To: saved '{saved_name}' but removing the old "
-                    f"'{old_name}' failed: {e}"
-                )
-                self.notify(
-                    f"Saved '{saved_name}' but couldn't remove the old '{old_name}': {e}",
-                    severity="error",
-                    markup=False,
-                )
-
-        # Invalidate app-level cache so next open is fresh
-        self.vatsim_app.invalidate_goto_cache()
-        self.user_grouping_names = get_user_favorite_names()
-
-        # Inject the new favorite into local state so it's visible immediately
-        self.all_groupings[saved_name] = saved_items
-        # Only add if not already in results; the list sorts it into the ★ section
-        if not any(r[0] == "grouping" and r[1] == saved_name for r in self.all_results):
-            self.all_results.append(("grouping", saved_name, None))
-
-        # Switch to single-select with the new name pre-filled
-        self.multi_select_mode = False
-        self.selected_items.clear()
-        self.selected_identifiers.clear()
-        self.selected_filters.clear()
-        self._expanded_groupings.clear()
-        self._editing_favorite_name = None
-
-        input_widget = self.query_one("#goto-input", Input)
-        input_widget.value = saved_name
-        input_widget.focus()
-        # Rebuild even when the query already equals the name: the rows still
-        # carry multi-select checkboxes, and the title still names the old mode
-        self._apply_current_filter()
-
-    @staticmethod
-    def _remove_favorite_from_file(name: str) -> None:
-        """Remove one entry from favorites.json.
-
-        Raises:
-            OSError: The file could not be read or written.
-            json.JSONDecodeError: The file is not valid JSON.
-        """
-        favorites_file = get_user_favorites_file()
-        with open(favorites_file, encoding="utf-8") as f:
-            data = json.load(f)
-        if name in data:
-            data.pop(name)
-            with open(favorites_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
 
     def _forget_favorite(self, name: str) -> None:
         """Drop a removed favorite from the modal's local state."""
@@ -1292,22 +1304,20 @@ class GoToScreen(ModalScreen):
 
         identifier = item[1]
         self.app.push_screen(
-            ConfirmModal(f"Delete favorite '{identifier}'?"),
+            ConfirmModal(DELETE_CONFIRM.format(name=identifier)),
             callback=lambda confirmed: self._on_delete_confirmed(confirmed, identifier),
         )
 
     def _on_delete_confirmed(self, confirmed: bool, name: str) -> None:
-        """Handle delete confirmation result."""
+        """Delete the ★ grouping once confirmed; a backend failure keeps the row."""
         if not confirmed:
             return
 
         try:
-            self._remove_favorite_from_file(name)
-        except (json.JSONDecodeError, OSError) as e:
-            debug(f"Go To: deleting '{name}' failed: {e}")
-            self.notify(
-                f"Couldn't delete '{name}': {e}", severity="error", markup=False
-            )
+            delete_user_grouping(name)
+        except GroupingError as error:
+            debug(f"Go To: deleting '{name}' failed: {error}")
+            self._error(f"Couldn't delete '{name}': {error}")
             return
 
         self._forget_favorite(name)
