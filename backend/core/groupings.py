@@ -3,7 +3,10 @@ Airport groupings management (custom groupings, preset groupings, and ARTCC-base
 """
 
 import json
+import os
+import tempfile
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +15,27 @@ from common.paths import get_user_favorites_file, load_merged_groupings
 
 # Path to preset groupings directory
 PRESET_GROUPINGS_DIR = Path(__file__).parent.parent.parent / "data" / "preset_groupings"
+
+# The only per-airport filters a grouping stores.
+_DEP_ARR_FILTERS = ("dep", "arr")
+
+
+def _valid_filters(raw: Any) -> dict[str, str]:
+    """Keep only the str-keyed "dep" and "arr" entries of a raw filters mapping.
+
+    Args:
+        raw: The value read from a favorites entry's "filters" key.
+
+    Returns:
+        The entries whose key is a string and whose value is "dep" or "arr".
+    """
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        key: value
+        for key, value in raw.items()
+        if isinstance(key, str) and value in _DEP_ARR_FILTERS
+    }
 
 
 def load_user_favorites() -> dict[str, list[str]]:
@@ -67,13 +91,7 @@ def load_favorite_filters(name: str) -> dict[str, str]:
         if isinstance(data, dict):
             entry = data.get(name)
             if isinstance(entry, dict) and "filters" in entry:
-                filters = entry["filters"]
-                if isinstance(filters, dict):
-                    return {
-                        k: v
-                        for k, v in filters.items()
-                        if isinstance(k, str) and v in ("dep", "arr")
-                    }
+                return _valid_filters(entry["filters"])
     except (json.JSONDecodeError, OSError):
         pass
 
@@ -354,3 +372,380 @@ def load_all_groupings(
         all_groupings.update(user_favorites)
 
     return all_groupings
+
+
+# --- Strict I/O for the user's own groupings ---------------------------------
+#
+# The loaders above are lenient on purpose: the cache and analysis paths must
+# keep working when the file is broken. The functions below are the I/O a
+# grouping name is saved, deleted or renamed through. They raise GroupingError
+# with a user-facing message (the UI shows str(e) in a toast) and never treat a
+# corrupt file as empty, or the next save would erase every grouping in it.
+
+
+class GroupingError(Exception):
+    """A user grouping could not be read or written.
+
+    The message is user-facing: the UI shows str(e) in a toast.
+    """
+
+
+class GroupingNotFoundError(GroupingError):
+    """The named user grouping is not in the favorites file."""
+
+
+class GroupingExistsError(GroupingError):
+    """A user grouping with that name is already in the favorites file."""
+
+
+class GroupingNameError(GroupingError):
+    """The name is blank, a preset's, or an airport ident."""
+
+
+@dataclass(frozen=True)
+class UserGrouping:
+    """A named user grouping: its members and their per-airport dep/arr filters.
+
+    Attributes:
+        name: The stored grouping name.
+        items: Airport idents and/or grouping names, in the user's order.
+        filters: Bare ICAO to "dep" or "arr"; "both" is never stored.
+    """
+
+    name: str
+    items: tuple[str, ...]
+    filters: dict[str, str]
+
+
+def _read_strict() -> dict[str, Any]:
+    """Read the whole favorites file, raising on a file that cannot be trusted.
+
+    Returns:
+        The file's top-level object, or an empty dict when the file is absent.
+
+    Raises:
+        GroupingError: The file cannot be read, is not valid JSON, or is not a
+            JSON object.
+    """
+    favorites_file = get_user_favorites_file()
+    if not favorites_file.exists():
+        return {}
+
+    try:
+        with open(favorites_file, encoding="utf-8") as f:
+            data = json.load(f)
+    except (ValueError, OSError) as e:
+        raise GroupingError(f"couldn't read '{favorites_file}': {e}") from e
+
+    if not isinstance(data, dict):
+        raise GroupingError(
+            f"couldn't read '{favorites_file}': the top level is not a JSON object"
+        )
+
+    return data
+
+
+def _members(name: str, items: list[Any]) -> tuple[str, ...]:
+    """Return a favorites entry's members, refusing any that is not a string.
+
+    Args:
+        name: The entry's name, used in the error message.
+        items: The raw member list.
+
+    Returns:
+        The members in file order.
+
+    Raises:
+        GroupingError: A member is not a string.
+    """
+    if not all(isinstance(item, str) for item in items):
+        raise GroupingError(
+            f"couldn't read '{get_user_favorites_file()}': the entry '{name}' has a member that is not a string"
+        )
+    return tuple(items)
+
+
+def _split_entry(name: str, entry: Any) -> tuple[tuple[str, ...], dict[str, str]]:
+    """Split one favorites entry into its members and its dep/arr filters.
+
+    Args:
+        name: The entry's name, used in the error message.
+        entry: The raw entry, in either the bare-list or the dict shape.
+
+    Returns:
+        The members in file order and the filters with a valid key and value.
+
+    Raises:
+        GroupingError: The entry is in neither accepted shape, or a member is
+            not a string.
+    """
+    if isinstance(entry, list):
+        return _members(name, entry), {}
+
+    if isinstance(entry, dict) and isinstance(entry.get("airports"), list):
+        return _members(name, entry["airports"]), _valid_filters(entry.get("filters"))
+
+    favorites_file = get_user_favorites_file()
+    raise GroupingError(
+        f"couldn't read '{favorites_file}': the entry '{name}' is not a list of airports"
+    )
+
+
+def _entry_for(grouping: UserGrouping) -> list[str] | dict[str, Any]:
+    """Build the file entry for a grouping: a bare list, or a dict when filters remain.
+
+    Members keep the given order with duplicates dropped; filter values other
+    than "dep" and "arr" are dropped.
+    """
+    items = list(dict.fromkeys(grouping.items))
+    filters = _valid_filters(grouping.filters)
+    if filters:
+        return {"airports": items, "filters": filters}
+    return items
+
+
+def _check_name(name: str, preset_names: set[str], idents: set[str]) -> None:
+    """Refuse a blank name, a preset's name, or an airport ident.
+
+    Raises:
+        GroupingNameError: The name is blank, equal case-insensitively to a
+            preset grouping name, or equal to an airport ident (the idents are
+            upper-cased by `airport_idents`).
+    """
+    if not name:
+        raise GroupingNameError("a name is required")
+    if any(preset.lower() == name.lower() for preset in preset_names):
+        raise GroupingNameError("that name belongs to a preset")
+    if name.upper() in idents:
+        raise GroupingNameError("that name is an airport ident")
+
+
+def _replace_key(data: dict[str, Any], old: str, new: str, value: Any) -> None:
+    """Store `value` under `new` at `old`'s position, dropping `old`.
+
+    Args:
+        data: The whole favorites object, updated in place.
+        old: The stored key to replace; it is expected to be there.
+        new: The key to store in its place.
+        value: The entry to store under `new`.
+    """
+    rebuilt = {}
+    for key, entry in data.items():
+        if key == old:
+            rebuilt[new] = value
+        else:
+            rebuilt[key] = entry
+    data.clear()
+    data.update(rebuilt)
+
+
+def _write_atomic(data: dict[str, Any]) -> None:
+    """Write the whole favorites file atomically.
+
+    The app is single-user and writes on the UI thread, so no lock is needed.
+    The temp file is created in the favorites directory, so os.replace is atomic
+    on the same filesystem, and it is removed again when anything fails.
+
+    Raises:
+        GroupingError: The file could not be written or moved into place.
+    """
+    favorites_file = get_user_favorites_file()
+
+    temp_path: Path | None = None
+    try:
+        favorites_file.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            newline="\n",
+            dir=favorites_file.parent,
+            prefix=f"{favorites_file.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            json.dump(data, temp_file, indent=2, ensure_ascii=False)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        os.replace(temp_path, favorites_file)
+    except Exception as error:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                from common import logger
+
+                logger.warning(
+                    f"Could not remove the temporary favorites file {temp_path}: {cleanup_error}"
+                )
+        raise GroupingError(f"couldn't write '{favorites_file}': {error}") from error
+
+
+def get_user_grouping(name: str) -> UserGrouping | None:
+    """Read one user grouping strictly.
+
+    Args:
+        name: The stored grouping name (an exact, case-sensitive key).
+
+    Returns:
+        The grouping, or None when the name is not in the file.
+
+    Raises:
+        GroupingError: The file cannot be read or the entry is malformed.
+    """
+    data = _read_strict()
+    if name not in data:
+        return None
+
+    items, filters = _split_entry(name, data[name])
+    return UserGrouping(name=name, items=items, filters=filters)
+
+
+def save_user_grouping(
+    grouping: UserGrouping,
+    *,
+    overwrite: bool,
+    preset_names: set[str],
+    airport_idents: set[str],
+) -> None:
+    """Write one user grouping to the favorites file.
+
+    The stored name is matched case-insensitively, and the name rules apply only
+    when no stored name matches it, so a legacy favorite that shadows a preset
+    can be saved again under its own name. An overwrite keeps the entry's
+    position and stores it under the given spelling. Every other top-level entry
+    in the file is preserved.
+
+    Args:
+        grouping: The name, members and filters to write.
+        overwrite: Replace an existing entry of the same name instead of raising.
+        preset_names: Grouping names owned by a preset source.
+        airport_idents: Airport idents a grouping name may not collide with.
+
+    Raises:
+        GroupingExistsError: The name exists and overwrite is false.
+        GroupingNameError: The name is blank, a preset's, or an airport ident.
+        GroupingError: The file cannot be read or written.
+    """
+    name = grouping.name.strip()
+    data = _read_strict()
+
+    stored = find_grouping_case_insensitive(name, data)
+    if stored is None:
+        _check_name(name, preset_names, airport_idents)
+    elif not overwrite:
+        raise GroupingExistsError(f"'{name}' is already one of my groupings")
+
+    if stored is None:
+        data[name] = _entry_for(grouping)
+    else:
+        _replace_key(data, stored, name, _entry_for(grouping))
+    _write_atomic(data)
+
+
+def delete_user_grouping(name: str) -> None:
+    """Remove one user grouping from the favorites file.
+
+    Args:
+        name: The stored grouping name (an exact, case-sensitive key).
+
+    Raises:
+        GroupingNotFoundError: The name is not in the file, or the file is absent.
+        GroupingError: The file cannot be read or written.
+    """
+    data = _read_strict()
+    if name not in data:
+        raise GroupingNotFoundError(f"'{name}' is not one of my groupings")
+
+    del data[name]
+    _write_atomic(data)
+
+
+def rename_user_grouping(
+    old: str,
+    new_grouping: UserGrouping,
+    *,
+    overwrite: bool,
+    preset_names: set[str],
+    airport_idents: set[str],
+) -> None:
+    """Rename one user grouping and save its new contents in a single write.
+
+    Both names are matched case-insensitively, so a case-only rename is a rename
+    of the same entry, and the renamed entry keeps its position in the file. A
+    rename onto another entry's name needs overwrite, as a save does, and the
+    name rules apply to a name no stored name matches.
+
+    Args:
+        old: The stored name to remove.
+        new_grouping: The new name and contents.
+        overwrite: Replace an existing entry of the new name instead of raising.
+        preset_names: Grouping names owned by a preset source.
+        airport_idents: Airport idents a grouping name may not collide with.
+
+    Raises:
+        GroupingNotFoundError: old is not in the file.
+        GroupingExistsError: The new name matches another entry and overwrite is false.
+        GroupingNameError: The new name is blank, a preset's, or an airport ident.
+        GroupingError: The file cannot be read or written.
+    """
+    new_name = new_grouping.name.strip()
+    data = _read_strict()
+
+    old_stored = find_grouping_case_insensitive(old, data)
+    if old_stored is None:
+        raise GroupingNotFoundError(f"'{old}' is not one of my groupings")
+
+    new_stored = find_grouping_case_insensitive(new_name, data)
+    if new_stored != old_stored:
+        if new_stored is not None:
+            if not overwrite:
+                raise GroupingExistsError(
+                    f"'{new_name}' is already one of my groupings"
+                )
+            del data[new_stored]
+        else:
+            _check_name(new_name, preset_names, airport_idents)
+
+    _replace_key(data, old_stored, new_name, _entry_for(new_grouping))
+    _write_atomic(data)
+
+
+def preset_grouping_names(unified_data: dict[str, dict[str, Any]]) -> set[str]:
+    """Return the grouping names owned by the non-favorite grouping sources.
+
+    These are the names a user grouping may not take: the ARTCC groupings, the
+    files in data/preset_groupings, and the community custom groupings. A
+    favorite that shadows one of them does not remove it from this set.
+
+    Args:
+        unified_data: Unified airport data (needed for the ARTCC groupings).
+
+    Returns:
+        Every preset grouping name.
+    """
+    names: set[str] = set(load_artcc_groupings(unified_data) if unified_data else {})
+    names.update(load_preset_groupings())
+    names.update(load_custom_groupings() or {})
+    return names
+
+
+def airport_idents(unified_data: dict[str, dict[str, Any]]) -> set[str]:
+    """Return every airport ident the unified data knows.
+
+    Args:
+        unified_data: Unified airport data keyed by ICAO (or FAA) code.
+
+    Returns:
+        Upper-cased keys plus each row's non-empty icao, faa and iata fields.
+    """
+    idents: set[str] = set()
+    for key, info in unified_data.items():
+        idents.add(str(key).strip().upper())
+        if not isinstance(info, dict):
+            continue
+        for field in ("icao", "faa", "iata"):
+            value = info.get(field)
+            if isinstance(value, str) and value.strip():
+                idents.add(value.strip().upper())
+    return idents
