@@ -317,7 +317,7 @@ Debug logs are written to `logs/` in the user data directory (`get_user_logs_dir
 
 The weather daemon generates weather briefing pages for the website at `https://leftos.dev/weather/`. It runs on a Linux server and is managed via PowerShell scripts from Windows.
 
-The pages load no third-party JavaScript: Leaflet is vendored under `scripts/weather_daemon/assets/leaflet/<version>/` and the index stage copies it into the output beside `index.html`; only the CARTO/OpenStreetMap map tiles come from outside. Upgrading Leaflet means a new version folder and `LEAFLET_VERSION` in `index_generator.py` (the folder's `README.md` has the steps), and a changed `nginx-weather.conf` has to be reinstalled on the server.
+The pages load no third-party JavaScript: Leaflet is vendored under `scripts/weather_daemon/assets/leaflet/<version>/` and the index stage copies it into the output beside `index.html`; only the CARTO/OpenStreetMap map tiles come from outside. Upgrading Leaflet means a new version folder and `LEAFLET_VERSION` in `index_generator.py` (the folder's `README.md` has the steps), and a changed `nginx-weather.conf` has to be applied by hand to the server's `/etc/nginx/sites-available/leftos.dev` (then `nginx -t` and a reload): `setup.sh` inserts the weather block only when the file has no `/weather` location yet. The server is the DigitalOcean droplet `leftos-dev-droplet-1`; the deploy scripts read its address from `WEATHER_SERVER_IP` in the untracked repo-root `.env`.
 
 ### PowerShell Scripts (`scripts/weather_daemon/service/`)
 

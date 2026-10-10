@@ -18,10 +18,19 @@ Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is th
 
   Settled from the code: rows stay positional (the equal-count branch's cell diff over the first min(old, new) rows, extra rows added with `add_row(animate=True)`), since Textual has no insert-at and `animated_cells` is keyed by row index; the cursor and scroll restore runs after the update task lands (today `ui/app.py:728` restores before it runs).
 
-  Settled (owner, section 2 of the refresh mock, lane 3): a leftover last row flaps to blank over about 0.5 s and is then removed, reviving the widget's soft-removal path (`widgets/split_flap_datatable.py:445`) with its index-keyed bookkeeping fixed; an airport that joins shifts the rows below and a new last row flaps in from blank.
+  Settled (owner, section 2 of the refresh mock, lane 3): a leftover last row flaps to blank and is then removed (the fade takes as long as the cells' own flap animation, about 1.8 s for visible cells, not the mock's 0.5 s), reviving the widget's soft-removal path (`widgets/split_flap_datatable.py:445`) with its index-keyed bookkeeping fixed; an airport that joins shifts the rows below and a new last row flaps in from blank.
 - [ ] Promote the two perf docs' lasting findings (the GIL-starvation mechanism, the weather API's 400-entry cap, the measuring method and its Windows/uv notes) into `docs/`, then delete [perf-profile.md](./perf-profile.md) and [perf-remeasure.md](./perf-remeasure.md).
 
 ## Next up
+
+### Weather site (leftos.dev/weather)
+
+Reported by leftos.dev's inbox (20261010-122612, 20261010-122640) while it builds a page about the site; send its inbox a note when both are fixed so its screenshots can be retaken. Shared: `scripts/weather_daemon/` and the droplet `leftos-dev-droplet-1`. Verification: `scripts/weather_daemon/service/LocalTest.ps1`, then the live page after `QuickDeploy.ps1`.
+
+- [ ] Finish the self-hosted Leaflet deploy (f4e8083): the `^~ /weather/assets/` block is live in the server's nginx config (afab8e7; backup `leftos.dev.bak-20261010T122340Z`), and `QuickDeploy.ps1` has pulled main. Once an index stage runs (blocked by the next line), check `https://leftos.dev/weather/assets/leaflet/1.9.4/leaflet.js` returns 200 with `Cache-Control: public, max-age=31536000, immutable`, then send leftos.dev's inbox the "deployed" note so its policy can drop the unpkg line.
+- [ ] The index page has not been regenerated since 2026-08-30 05:58 UTC: the unit is `Type=oneshot` with `TimeoutStartSec=300` (`scripts/weather_daemon/service/weather-daemon.service:8`, `:15`), every run since reaches "Processing 1806 potential tiles with 2 workers" and is killed there (`Result=signal`, status 15; 257 tile-stage starts in the 2026-10-09 log, none finishing), and the index stage runs after tiles (`scripts/weather_daemon/generator.py:1546`, `:1624`). Briefings, written before tiles, stay current. Find why the tile stage got slow, and make the index stage not depend on tiles finishing within the unit's limit.
+- [ ] The map's CARTO basemap tiles now come back stamped "API KEY REQUIRED" (`scripts/weather_daemon/index_generator.py:1500`, `basemaps.cartocdn.com/dark_all`). Get a CARTO key or change the tile source; a new provider goes into leftos.dev's privacy policy (its `privacy-policy.html:42` names CARTO and OpenStreetMap), so tell its inbox.
+- [ ] `setup.sh` never updates an existing weather nginx config: it inserts its own inline copy of the `/weather/` block only when `/etc/nginx/sites-available/leftos.dev` has no `/weather` location (`scripts/weather_daemon/service/setup.sh:92-119`), so a change to `nginx-weather.conf` (the `^~ /weather/assets/` block, afab8e7) reaches the server only by hand, and the inline copy can drift from the file. Make it install or update the blocks from `nginx-weather.conf`.
 
 ### Wave 2: Go To and groupings
 
@@ -65,7 +74,6 @@ Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `
 
 Items that share no files. Review: `code-review`. Verification: `uv run --group dev pytest -q` plus `ruff check`.
 
-- [ ] Deploy the self-hosted Leaflet (f4e8083): push, run `scripts/weather_daemon/service/QuickDeploy.ps1`, reinstall `nginx-weather.conf` on the server (`setup.sh`), check `https://leftos.dev/weather/assets/leaflet/1.9.4/leaflet.js` returns 200 with the long `Cache-Control`, then send leftos.dev's inbox the "deployed" note so its policy can drop the unpkg line. Settled (owner): deploy now.
 - [ ] Investigate display names that fall back to the ICAO code ("ETIK - Etik" in the VFR finder) and two UK weather-briefing areas both named "LONDON AREA". Not yet confirmed.
 - [ ] Cut cold-start weather boxes: `calculate_airport_bboxes` (`backend/data/weather.py`) makes one box per occupied grid cell sized to the airports' overall span, not the 10° maximum, so 30 US airports took 14 bbox requests and 17.8 s on a cold start (live check while landing perf fix 5).
 - [ ] Add `docs/README.md` as the docs' start page, linking `docs/ARCHITECTURE.md`, `docs/atis-filtering-and-runway-extraction.md`, `USER_GUIDE.md`, `CLAUDE.md` and this plan: the repo has no docs index, so the architecture entry point is reachable only from `CLAUDE.md` (line 83). Give it a glossary for the project's terms: AIRAC, bbox (a weather bounding-box request), CIFP, clean empty and negative cache (a cached "no METAR" answer), MEA, SID/STAR.
