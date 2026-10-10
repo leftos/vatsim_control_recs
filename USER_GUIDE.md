@@ -14,6 +14,7 @@ A comprehensive guide for installing and using the VATSIM Control Recommendation
   - [Flight Boards](#flight-boards)
   - [Flight Information](#flight-information)
   - [Go To Navigation](#go-to-navigation)
+  - [Grouping Builder](#grouping-builder)
   - [Weather Lookups](#weather-lookups)
   - [Weather Briefings](#weather-briefings)
   - [VFR Alternatives Finder](#vfr-alternatives-finder)
@@ -371,7 +372,7 @@ The list groups its rows under dim headers, shown only when the section has rows
 With more than 100 matching rows the list ends with a dim "showing 100 of N — type to narrow" row; type more to narrow the results.
 
 **Title and Hint Line:**
-The title names the current mode: "Go To" while browsing, "Go To · Pick several · 3 picked → 12 airports" while picking several (the picks and the airports they resolve to), and "Go To · Editing ★ Name" while editing a favorite. When Go To is opened to choose an airport for another screen, it keeps that screen's title.
+The title names the current mode: "Go To" while browsing, "Go To · Pick several · 3 picked → 12 airports" while picking several (the picks and the airports they resolve to). When Go To is opened to choose an airport for another screen, it keeps that screen's title.
 
 A hint line under the results lists only the keys that work right now, for the current mode, focus and highlighted row (for example "Enter open · E edit · Ctrl+D delete · Tab pick several · Esc close"). It shows at most six items; `Tab` and `Esc` are always among them, and the `←` and `→` hints are the first to give way when there are more.
 
@@ -385,14 +386,14 @@ If a key cannot do anything (for example `E` on a preset, `F` on a row that is n
 Press `Tab` to toggle multi-select mode, which allows selecting multiple airports/groupings to open at once:
 - `Enter` (search box) or `Space` (results list) - Pick or unpick the highlighted item; with `Space` the highlight stays on that item
 - `Ctrl+Enter` - Open all picked items
-- `Ctrl+S` - Save the picks as a favorite (see [Favorites](#favorites)); while editing a favorite it saves that favorite
+- `Ctrl+S` - Open the [Grouping Builder](#grouping-builder) on the picks and their filters, to save them as a ★ grouping
 - `Tab` - Back to browsing
-- `Esc` - Close; while editing a favorite, this discards the edit
+- `Esc` - Close
 
 A line under the search box, "Picked: name, name, +N", lists your picks in the order you picked them, with "+N" for those that do not fit; it is hidden when nothing is picked.
 
 **Picked Groupings:**
-A picked grouping's airports show as one row, "▸ N airports (→ to expand)". Press `→` to list its airports as separate rows (the highlight lands on the first), and `←` on the grouping row or any of its airports to collapse them again. The expanded state stays while you search or switch with `Tab`, and resets when you unpick the grouping, start editing a favorite or save.
+A picked grouping's airports show as one row, "▸ N airports (→ to expand)". Press `→` to list its airports as separate rows (the highlight lands on the first), and `←` on the grouping row or any of its airports to collapse them again. The expanded state stays while you search or switch with `Tab`, and resets when you unpick the grouping or leave pick several (a `Ctrl+S` save does).
 
 **Per-Airport Filtering:**
 In multi-select mode, press `F` in the results list on a picked airport to cycle its filter (for an airport inside a picked grouping, expand the grouping with `→` first):
@@ -404,11 +405,36 @@ This filtering is preserved when saving as a favorite.
 
 **Favorite Management:**
 - Favorites appear with a star prefix in the results list
-- `E` - Edit an existing favorite from the results list (loads its airports and their saved filters into multi-select; `F` on a picked airport, or on a grouping's airport after `→`, changes the filter that is saved)
-- `Ctrl+D` - Delete a favorite (with confirmation)
-- If a delete fails, an error message names the favorite and the cause; if a rename saves the new name but cannot remove the old one, a message says so
+- `E` - Edit an existing favorite from the results list: opens it in the [Grouping Builder](#grouping-builder) with its name, airports and saved filters
+- `Ctrl+D` - Delete a favorite; asks "Delete '{name}' from my groupings?" first
+- If a delete fails, an error message names the favorite and the cause
+- After a `Ctrl+S` save the modal leaves pick several and shows the saved name in the search box; after an `E` save it stays as it was, with your picks (a picked grouping that was renamed stays picked under its new name)
 
 Uses a pre-built cache for instant search responsiveness.
+
+---
+
+### Grouping Builder
+
+The builder is where you name a ★ grouping, choose its members and set their filters. It opens from:
+- Go To: `E` on a ★ row (editing that grouping), or `Ctrl+S` in pick several (a new grouping, prefilled with your picks and their filters)
+- Tracked Airports Manager: `S` (a new grouping, prefilled with the picked airports, or the whole list when none is picked)
+
+The title is "New grouping" or "Edit grouping ★ Name". From 110 columns the Add pane and the Members pane sit side by side, and `Tab` moves focus between the Name field, the Add search and the Members list. Narrower, one list shows at a time and `Tab` flips between Members and Add.
+
+**Adding:** The Add search finds any airport the app knows (not only the ones you track) and any grouping, ★ ones first. Prefix with `@` for airports only or `$` for groupings only. It shows at most 50 rows, then a dim "showing 50 of N — type to narrow" row. `Enter` adds the highlighted result; one already in the grouping is marked "member". An airport you do not track carries a `○` mark, and the hint line then shows "○ not tracked".
+
+**Members:** The pane title counts members and the airports they resolve to ("Members · 3 → 14 airports"). A nested grouping shows as one row with a folded "▸ N airports (→ to expand)" row under it.
+- `Del` - Remove the highlighted member. On an airport of an expanded nested grouping it leaves out that airport only, replacing the grouping with its other airports
+- `F` - Cycle the highlighted airport's filter: both, then dep, then arr
+- `→` - Expand a nested grouping into its airports
+- `←` - Collapse them again, from the grouping row or any of its airports
+
+**Saving:** `Ctrl+S` saves; `Esc` cancels, and when you changed anything it first asks "Discard your changes to 'Name'?".
+- A name is required. A name that is a preset grouping's, or a known airport ident, is refused with the reason shown under the Name field; so is a grouping that would contain itself
+- If the airport data is still loading, a message asks you to try again in a moment
+- If some of the airports are not tracked, a choice appears: "N of these aren't tracked (KAAA, KBBB). Add them to your tracked airports?" with "Add and save" (`1`), "Save only" (`2`) and "Cancel" (`3`)
+- If the name is already one of your groupings you are asked "'Name' is already one of my groupings. Replace it?"; renaming onto another of your groupings asks "'New' is already one of my groupings. Replace it with this one? ('Old' is removed)"
 
 ---
 
@@ -550,7 +576,7 @@ View and manage all currently tracked airports:
 | `A` | Add airports |
 | `Delete` | Remove selected airport(s) |
 | `Space` | Select/deselect multiple airports |
-| `S` | Save the picked airports (or the whole list when none is picked) as a ★ grouping |
+| `S` | Open the [Grouping Builder](#grouping-builder) on the picked airports (or the whole list when none is picked) |
 | `Escape` | Close manager |
 
 **Adding Airports:**
@@ -609,16 +635,16 @@ Over 600 worldwide facility boundary groupings from SimAware data are available 
 ### Creating Groupings from UI
 
 1. Use the Tracked Airports Manager (`Ctrl+T`)
-2. Add all desired airports
-3. Press `S` to save as a custom grouping
-4. Enter a name for the grouping
+2. Pick the airports you want (or pick none to use the whole list)
+3. Press `S` to open the [Grouping Builder](#grouping-builder)
+4. Enter a name for the grouping and press `Ctrl+S`
 
 ### Creating Groupings from Go To
 
 1. Open Go To (`Ctrl+G`)
 2. Press `Tab` to enter multi-select mode
 3. Select airports and groupings
-4. Press `Ctrl+S` to save as a favorite (see [Favorites](#favorites))
+4. Press `Ctrl+S` to open the [Grouping Builder](#grouping-builder) on your picks, then name and save it (see [Favorites](#favorites))
 
 ---
 
@@ -632,7 +658,7 @@ Favorites are user-saved multi-airport selections that appear in the Go To modal
 2. Press `Tab` to enter multi-select mode
 3. Select airports, groupings, or a mix
 4. Optionally press `F` on items to set dep/arr filters
-5. Press `Ctrl+S` and enter a name
+5. Press `Ctrl+S` to open the [Grouping Builder](#grouping-builder), enter a name and press `Ctrl+S` again
 
 ### Using Favorites
 
@@ -640,12 +666,12 @@ Favorites appear in Go To search results with a star prefix, sorted alphabetical
 
 ### Managing Favorites
 
-- **Edit**: Highlight a favorite in Go To and press `E` to load its airports into multi-select mode for modification
-- **Delete**: Highlight a favorite and press `Ctrl+D` to delete (with confirmation)
+- **Edit**: Highlight a favorite in Go To and press `E` to edit it in the [Grouping Builder](#grouping-builder)
+- **Delete**: Highlight a favorite and press `Ctrl+D` to delete it, after a confirmation
 
 ### Per-Airport Filtering
 
-When creating or editing a favorite, press `F` on a selected airport to cycle its filter:
+In Go To's pick several, press `F` on a picked airport to cycle its filter; in the Grouping Builder, press `F` on a member airport:
 - Both departures and arrivals (default)
 - Departures only (`[D>]` indicator)
 - Arrivals only (`[<A]` indicator)
@@ -801,7 +827,9 @@ If the app reports that the spaCy model `en_core_web_sm` is missing, run `uv syn
 
 ### Debug Logs
 
-Debug information is written to `debug_YYYYMMDD.log` in the `logs` folder of the user data directory: `%LOCALAPPDATA%\VATSIMControlRecs\logs` on Windows, `~/Library/Application Support/VATSIMControlRecs/logs` on macOS, `~/.local/share/VATSIMControlRecs/logs` on Linux. Logs older than 10 days are automatically cleaned when the app starts. `--help` or an invalid argument creates no log folder. If the log file cannot be created, the app keeps running and prints `vatsim_debug: cannot write log file <path>: <error>` to stderr.
+Debug information is written to `debug_YYYYMMDD.log` in the `logs` folder of the user data directory: `%LOCALAPPDATA%\VATSIMControlRecs\logs` on Windows, `~/Library/Application Support/VATSIMControlRecs/logs` on macOS, `~/.local/share/VATSIMControlRecs/logs` on Linux.
+
+Logs older than 10 days are automatically cleaned when the app starts. `--help` or an invalid argument creates no log folder. If the log file cannot be created, the app keeps running and prints `vatsim_debug: cannot write log file <path>: <error>` to stderr.
 
 ---
 

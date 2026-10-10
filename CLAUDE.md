@@ -39,7 +39,9 @@ Declared in `pyproject.toml`:
 ### Environment Variables
 
 - `STATSIM_API_KEY` - API key from statsim.net for historical flight statistics feature (optional; read from the environment, else from the repo-root `.env`, and never copied into the environment)
-- `CARTO_BASEMAP_KEY` - domain-locked CARTO key for the weather index's basemap (`https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?key=<key>`). The daemon CLI reads it from the environment, else from the untracked repo-root `.env` (`scripts/weather_daemon/env_file.py`). The production key (leftos.dev, www.leftos.dev) lives in the server's `/opt/vatsim-weather-daemon/.env` (root:www-data, mode 640); `LocalTest.ps1` uses a localhost key from the local `.env`. With no key or an invalid one the page renders without a basemap and the log says so. Background: `docs/research/2026-10-10-basemap-tiles.md`
+- `CARTO_BASEMAP_KEY` - domain-locked CARTO key for the weather index's basemap (`https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?key=<key>`). The daemon CLI reads it from the environment, else from the untracked repo-root `.env` (`scripts/weather_daemon/env_file.py`).
+
+  The production key (leftos.dev, www.leftos.dev) lives in the server's `/opt/vatsim-weather-daemon/.env` (root:www-data, mode 640); `LocalTest.ps1` uses a localhost key from the local `.env`. With no key or an invalid one the page renders without a basemap and the log says so. Background: `docs/research/2026-10-10-basemap-tiles.md`
 
 ### Running the Application
 
@@ -259,31 +261,67 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 | `Enter` | Open the highlighted item (browse), or pick it (pick several) |
 | `Space` | Pick or unpick the highlighted row, which keeps the highlight (pick several, list focused) |
 | `Ctrl+Enter` | Open the board for the picks (pick several) |
-| `Ctrl+S` | Save the picks as a grouping; while editing a favorite, save it |
-| `Ctrl+D` | Delete the highlighted ★ favorite (not in picker mode) |
-| `E` | Edit the highlighted ★ favorite (list focused) |
+| `Ctrl+S` | Open the grouping builder on the picks and their filters (pick several) |
+| `Ctrl+D` | Delete the highlighted ★ grouping after a "Delete '{name}' from my groupings?" confirm (not in picker mode) |
+| `E` | Open the grouping builder on the highlighted ★ grouping (list focused) |
 | `F` | Cycle the dep/arr filter of a picked airport row (pick several, list focused; both -> dep -> arr); a picked grouping's members need `→` first, then `F` works per member |
 | `→` | Expand a picked grouping's collapsed row into its member rows (pick several, list focused); the highlight lands on the first member |
 | `←` | Collapse the grouping's members (from its row or any member); the highlight returns to the grouping row |
-| `Esc` | Close; while editing a favorite, this discards the edit |
+| `Esc` | Close |
 | `@` prefix | Search airports only |
 | `#` prefix | Search flights only |
 | `$` prefix | Search groupings only |
 
-The list has dim upper-case section headers, each shown once and only when its section has rows, in this order: "★ MY GROUPINGS", "AIRPORTS (tracked only)", "GROUPINGS", "FLIGHTS" (results are stable-sorted by section). A `@`, `#` or `$` prefix shows only its own kind; `$` shows both "★ MY GROUPINGS" and "GROUPINGS". The highlight skips headers and the cap row; `Up` from the first result row and `Down` from the last return to the search box, and `Down`/`Up` from the search box do nothing when no row can be highlighted. Reaching the first or last result row scrolls the list to its top or bottom.
+The list has dim upper-case section headers, each shown once and only when its section has rows, in this order: "★ MY GROUPINGS", "AIRPORTS (tracked only)", "GROUPINGS", "FLIGHTS" (results are stable-sorted by section). A `@`, `#` or `$` prefix shows only its own kind; `$` shows both "★ MY GROUPINGS" and "GROUPINGS".
+
+The highlight skips headers and the cap row; `Up` from the first result row and `Down` from the last return to the search box, and `Down`/`Up` from the search box do nothing when no row can be highlighted. Reaching the first or last result row scrolls the list to its top or bottom.
 
 Past 100 result rows (`_MAX_OPTIONS`) the last row is the dim, disabled cap row, "showing 100 of N — type to narrow", where N counts the matching rows after prefix and flight hiding (headers, collapsed rows and member rows excluded).
 
-In pick several, a picked grouping's members show as one collapsed row, "▸ N airports (→ to expand)"; a grouping that resolves to 0 airports gets none. The expanded state is kept across queries and `Tab` and dropped on unpick, on starting an edit and on save. Pick several also shows one dim "Picked: name, name, +N" line under the search box, names in pick order, fitted to the modal's width with "+N" for the rest; it is hidden with no picks and in browse.
+In pick several, a picked grouping's members show as one collapsed row, "▸ N airports (→ to expand)"; a grouping that resolves to 0 airports gets none. The expanded state is kept across queries and `Tab` and dropped on unpick and when pick several ends. Pick several also shows one dim "Picked: name, name, +N" line under the search box, names in pick order, fitted to the modal's width with "+N" for the rest; it is hidden with no picks and in browse.
 
-The modal is 96 columns wide. The title names the mode: "Go To", "Go To · Pick several · {n} picked → {m} airports", or "Go To · Editing ★ {name}"; the picker (callback) mode keeps its caller's title.
+The modal is 96 columns wide. The title names the mode: "Go To", or "Go To · Pick several · {n} picked → {m} airports"; the picker (callback) mode keeps its caller's title.
 
 A context hint line under the list shows only the keys that act in the current mode, focus and row, joined by " · ", at most six items; when more apply, `←`, `→`, Ctrl+D, E, F, Ctrl+S and Ctrl+Enter give way in that order (`_HINT_DROP_ORDER` in `ui/modals/goto_modal.py`), and Tab and Esc always show. A collapsed grouping row hints "→ expand" and a member row "← collapse" (e.g. a member row: "F dep/arr/both · ← collapse · Ctrl+Enter open · Ctrl+S save · Tab browse · Esc close").
 
 Focus: with the list focused, a printable key moves focus to the search box and is appended to the query. In pick several, `E`, `F` and `Space` act on the list instead; in browse only `E` does; in picker (callback) mode all three are typed. The search box does not select its text on focus.
 
-A key that cannot act (for example `E` on a preset, `F` on an unpicked row, `Ctrl+D` in picker mode, `Enter` ("Enter can't open this row; …") or `Space` ("Space can't pick this row; …") on a header, the cap row or with no highlighted row, `E`, `Ctrl+D` or `F` on a header, the cap row or a collapsed row, `→` on a row that is not a picked grouping ("→ expands a picked grouping's members; …"), `←` on a row outside an expanded grouping ("← collapses a picked grouping's members; …"), `Ctrl+Enter` with no picks) shows a warning toast saying why. `→` on an already expanded grouping and `←` on a collapsed one are silent. A failed favorite delete shows an error toast, and a rename whose old entry cannot be removed says the new one was saved.
-In edit mode a saved filter shows on an individually picked airport's row, and on a grouping member's row after `→`; `F` there changes what is saved.
+A key that cannot act shows a warning toast saying why: `E` on a preset, `F` on an unpicked row, `Ctrl+D` in picker mode, `Ctrl+Enter` with no picks, `Enter` ("Enter can't open this row; …") or `Space` ("Space can't pick this row; …") on a header, the cap row or with no highlighted row, and `E`, `Ctrl+D` or `F` on a header, the cap row or a collapsed row. So do `→` on a row that is not a picked grouping ("→ expands a picked grouping's members; …") and `←` on a row outside an expanded grouping ("← collapses a picked grouping's members; …").
+
+`→` on an already expanded grouping and `←` on a collapsed one are silent. A failed favorite delete or a failed read of the grouping for `E` shows an error toast.
+
+Saving in the builder from Go To patches the modal's own groupings and rebuilds the list. A `Ctrl+S` save leaves pick several and puts the saved name in the search box; an `E` save keeps the mode and the picks, a pick of a renamed grouping following its new name.
+
+### Grouping Builder
+
+Opened by Go To (`E` on a ★ row, `Ctrl+S` in pick several) and by the Tracked Airports Manager (`S`); `ui/modals/grouping_builder.py` holds the screen and `ui/modals/grouping_draft.py` its model.
+
+| Shortcut | Action |
+|----------|--------|
+| `Tab` | From 110 columns: move focus Name, Add search, Members in turn. Narrower: flip the one shown pane between Members and Add |
+| `Enter` | Add the highlighted Add result to the members (search box or Add list); in the Name field, move to the panes |
+| `Del` | Members: remove the highlighted member; on an expanded nested grouping's airport, exclude that airport instead |
+| `F` | Members: cycle the highlighted airport's filter (both -> dep -> arr) |
+| `→` | Members: expand a nested grouping into its airports |
+| `←` | Members: collapse an expanded nested grouping (from its row or any of its airports) |
+| `Up` / `Down` | Move between the Name field, the search box and the lists |
+| `Ctrl+S` | Save |
+| `Esc` | Cancel; asks "Discard your changes to '{name}'?" first when the draft changed |
+| `@` / `$` prefix | In the Add search: airports only / groupings only |
+
+The title is "New grouping" or "Edit grouping ★ {name}". The Members pane title reads "Members · {n} → {m} airports" (members, then the airports they resolve to). The Add search covers every airport the unified data knows (not only tracked ones) and every grouping, ★ ones first; it shows at most 50 rows, then the dim row "showing 50 of N — type to narrow".
+
+A result already in the draft is marked "member". An airport the tracked list lacks carries a `○` mark (never when the list is empty, which tracks everything), and the hint line then ends with the legend "○ not tracked". The hint line lists only the keys that act on the focused row, at most six items, with `Ctrl+S save` and `Esc cancel` always shown.
+
+Save checks in this order: airport data not loaded yet warns "airport data is still loading; try again in a moment".
+
+Then a member that would nest the grouping in itself is refused ("a grouping can't contain itself"); the name is checked (blank "a name is required", a preset's name "that name belongs to a preset", a known airport ident "that name is an airport ident"; the refusal shows under the Name field), skipped for a name matching, case-insensitively, the one being edited or another of my groupings.
+
+If resolved airports are outside the tracked list, a three-way choice follows: "{n} of these aren't tracked ({icaos}). Add them to your tracked airports?" with "Add and save", "Save only" and "Cancel" (`ChoiceModal`, keys `1`, `2`, `3`; at most six ICAOs spelled out, then ", +N").
+
+A name already held by another of my groupings asks "'{name}' is already one of my groupings. Replace it?", or on a rename "'{new}' is already one of my groupings. Replace it with this one? ('{old}' is removed)".
+
+The builder writes through `backend/core/groupings.py` and dismisses with a `BuilderResult`; the caller applies it (tracking the "Add and save" airports through `VATSIMControlApp.track_airports`, refreshing its list).
 
 ### Weather Briefing
 
@@ -299,7 +337,7 @@ In edit mode a saved filter shows on an individually picked airport's row, and o
 | `A` | Add airports |
 | `Delete` | Remove selected |
 | `Space` | Select/deselect |
-| `S` | Save the picked airports (or all when none is picked) as a ★ grouping |
+| `S` | Open the grouping builder on the picked airports (or all when none is picked) |
 | `Escape` | Close |
 
 ### Diversion Modal
@@ -332,7 +370,9 @@ The pages load no third-party JavaScript: Leaflet is vendored under `scripts/wea
 
 The index stage runs before the tile stage, so a run killed in the tile stage still writes `index.html`. The tile stage writes each tile atomically (temp file, then `os.replace`), skips polygons whose bounding box cannot reach a tile, and writes `tiles/version.txt` (the run's start time) after all tiles; the page's tile `?v=` is that last completed version, falling back to the run's start time.
 
-A run that fetched fresh weather with `skip_if_unchanged` on skips only the tile stage when its skip key matches the stored one, so briefings, ARTCC briefings and the index still regenerate and `tiles/version.txt` stays as it was. The key is `<weather hash>:<code version>`: the hash is a sha256 of METARs and TAFs (not ATIS), the code version a sha256 over every `*.py` under `scripts/weather_daemon/` (not the git sha, since rsync deploys have no `.git`). It lives in `cache/weather/weather_hash.txt` and is written only after the tile stage completes, so a run killed in the tile stage regenerates on the next run. Runs from cached weather (`--stages` without `weather`) never skip, and `--force` forces the tile stage.
+A run that fetched fresh weather with `skip_if_unchanged` on skips only the tile stage when its skip key matches the stored one, so briefings, ARTCC briefings and the index still regenerate and `tiles/version.txt` stays as it was. The key is `<weather hash>:<code version>`: the hash is a sha256 of METARs and TAFs (not ATIS), the code version a sha256 over every `*.py` under `scripts/weather_daemon/` (not the git sha, since rsync deploys have no `.git`).
+
+It lives in `cache/weather/weather_hash.txt` and is written only after the tile stage completes, so a run killed in the tile stage regenerates on the next run. Runs from cached weather (`--stages` without `weather`) never skip, and `--force` forces the tile stage.
 
 The systemd unit is oneshot with `TimeoutStartSec=300` on a 1-vCPU droplet, so time a tile-stage change against that limit. Upgrading Leaflet means a new version folder and `LEAFLET_VERSION` in `index_generator.py` (the folder's `README.md` has the steps), and every deploy installs `nginx-weather.conf` as `/etc/nginx/snippets/weather.conf` through `install-nginx.sh`, which reloads nginx after `nginx -t`.
 
@@ -351,7 +391,9 @@ nginx loads `/etc/nginx/sites-enabled/leftos.dev`, a regular file rather than a 
 - `QuickDeploy.ps1` - Git pull on server and regenerate (requires changes to be pushed first)
 - `Deploy.ps1` - Full deployment via rsync (for Linux/WSL only, uses bash)
 - `sync-deps.sh` - Runs on the server: installs uv into `/usr/local/bin` if it is missing, then the locked dependencies with `uv sync --frozen` into a Python the `www-data` daemon user can read; `setup.sh` and every deploy script call it, and a deploy stops if it fails
-- `install-nginx.sh` - Runs on the server as root: installs `nginx-weather.conf` as the `/etc/nginx/snippets/weather.conf` snippet, runs `nginx_include.py` on both `leftos.dev` site files, then `nginx -t` and `systemctl reload nginx`; backups go to `/etc/nginx/weather-backup/` and are restored when `nginx -t` fails. `setup.sh` and the last ssh step of `QuickDeploy.ps1`, `Deploy.ps1` and `deploy.sh` (after the timer restart) call it; a failure prints that the previous nginx config is still live and exits nonzero with the daemon running
+- `install-nginx.sh` - Runs on the server as root: installs `nginx-weather.conf` as the `/etc/nginx/snippets/weather.conf` snippet, runs `nginx_include.py` on both `leftos.dev` site files, then `nginx -t` and `systemctl reload nginx`; backups go to `/etc/nginx/weather-backup/` and are restored when `nginx -t` fails.
+
+  `setup.sh` and the last ssh step of `QuickDeploy.ps1`, `Deploy.ps1` and `deploy.sh` (after the timer restart) call it; a failure prints that the previous nginx config is still live and exits nonzero with the daemon running
 
 **Server management:**
 - `Status.ps1` - Check daemon status and recent logs

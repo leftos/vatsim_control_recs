@@ -130,13 +130,29 @@ uv run main.py --airports KSFO --groupings "SoCal" --include-all-arriving
 | `Tab` | Toggle pick several (multi-select) mode |
 | `Space` | Pick or unpick the highlighted row (pick several) |
 | `Ctrl+Enter` | Open the board for the picks (pick several) |
-| `Ctrl+S` | Save the picks as a grouping (or save the favorite being edited) |
-| `Ctrl+D` | Delete the highlighted ★ favorite |
-| `E` | Edit the highlighted ★ favorite |
+| `Ctrl+S` | Open the grouping builder on the picks and their filters (pick several) |
+| `Ctrl+D` | Delete the highlighted ★ grouping, after a confirm |
+| `E` | Open the grouping builder on the highlighted ★ grouping |
 | `F` | Cycle the dep/arr filter of a picked row |
+| `→` | Expand a picked grouping into its airports (pick several) |
+| `←` | Collapse a picked grouping's airports |
 | `@` prefix | Search airports only |
 | `#` prefix | Search flights only |
 | `$` prefix | Search groupings only |
+
+### Grouping Builder
+
+Opened from Go To (`E` on a ★ grouping, `Ctrl+S` in pick several) and from the Tracked Airports Manager (`S`).
+
+| Shortcut | Action |
+|----------|--------|
+| `Tab` | Move between the Name field and the panes (from 110 columns); narrower, flip between Members and Add |
+| `Enter` | Add the highlighted Add result to the members |
+| `Del` | Remove the highlighted member (or exclude one airport of an expanded nested grouping) |
+| `F` | Cycle the highlighted airport's filter (both, dep, arr) |
+| `→` / `←` | Expand / collapse a nested grouping's airports |
+| `Ctrl+S` | Save |
+| `Esc` | Cancel; asks first when you changed something |
 
 ### Tracked Airports Manager (`Ctrl+T`)
 
@@ -147,7 +163,7 @@ The Tracked Airports Manager provides a comprehensive view of all airports being
 - **Select/Deselect Airports**: Use arrow keys to navigate and Space or Enter to pick airports
 - **Remove Selected**: Press Delete or click the "Remove Selected" button to stop tracking selected airports
 - **Quick Add/Remove**: Press 'A' or click "Add Airports" to open the quick add/remove dialog
-- **Save as Grouping**: Press 'S' to save the picked airports (or the whole tracked set when none is picked) as a ★ grouping
+- **Save as Grouping**: Press 'S' to open the grouping builder on the picked airports (or the whole tracked set when none is picked)
 
 **Quick Add/Remove Dialog:**
 Within the Tracked Airports Manager, you can press 'A' to open a quick dialog for adding or removing airports:
@@ -166,7 +182,11 @@ The app will automatically refresh with the updated airport list after applying 
 
 ### Go To Navigation (`Ctrl+G`)
 
-Unified search modal for navigating to airports, flights, or groupings. Supports multi-select mode (Tab) to open multiple targets at once, and per-airport dep/arr filtering (F key). Favorites (saved with Ctrl+S) appear with a star prefix and support editing and deletion.
+Unified search modal for navigating to airports, flights, or groupings. Supports multi-select mode (Tab) to open multiple targets at once, and per-airport dep/arr filtering (F key). Your own groupings (built with Ctrl+S or the Tracked Airports Manager's S) appear with a star prefix; E edits one in the grouping builder and Ctrl+D deletes it after a confirm.
+
+### Grouping Builder
+
+A screen for naming a ★ grouping, adding airports and other groupings from a search over every airport, and setting each airport's dep/arr filter. Two panes sit side by side from 110 columns. Saving offers to add any untracked airports to your tracked airports.
 
 ### Weather Briefing (`Ctrl+B`)
 
