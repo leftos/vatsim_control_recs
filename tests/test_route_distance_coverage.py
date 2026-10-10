@@ -219,6 +219,7 @@ def test_us_route_long_excess_under_ratio_keeps_route(
         ("TJSJ", True),
         ("TIST", True),
         ("NSTU", True),
+        ("NSFA", False),
         ("TNCM", False),
         ("TKPK", False),
         ("CYVR", False),

@@ -102,7 +102,7 @@ The global `backend.config.constants.WIND_SOURCE` controls which source is used.
 - Multiple positions: Display comma-separated (ATIS excluded if other positions present)
 
 **ETA Calculation**: Flight ETA is calculated using:
-1. Filed route distance or great circle distance to destination: the route distance is used only when both flight-plan ends pass `is_us_airport` (4-character ICAO starting K, PA, PH, PG, PW, PM, TJ, TI or NS, since NASR covers only the US and its territories), the route parses, and it is not both over 2x the remaining great circle and more than 100 nm longer; otherwise the great circle
+1. Filed route distance or great circle distance to destination: the route distance is used only when both flight-plan ends pass `is_us_airport` (4-character ICAO starting K, PA, PH, PG, PW, PM, TJ or TI, or exactly NSTU, since NASR covers only the US and its territories), the route parses, and it is not both over 2x the remaining great circle and more than 100 nm longer; otherwise the great circle
 2. Current groundspeed
 3. Aircraft-specific approach speed for final 5nm (from `aircraft_data.csv`)
 4. Glide slope clamping with 3-degree model below 10,000ft

@@ -10,7 +10,11 @@ from typing import Any
 # territories, and the Pacific and Caribbean areas it administers. A route with
 # an end outside this set is not resolved against NASR, where a foreign ident
 # would land on its US namesake.
-_US_ICAO_PREFIXES = ("K", "PA", "PH", "PG", "PW", "PM", "TJ", "TI", "NS")
+_US_ICAO_PREFIXES = ("K", "PA", "PH", "PG", "PW", "PM", "TJ", "TI")
+
+# American Samoa shares the NS prefix with independent Samoa (NSFA), so only
+# its airport is named.
+_US_ICAO_IDENTS = frozenset({"NSTU"})
 
 # A route distance is accepted only below both bounds: at most twice the
 # remaining great circle, and at most 100 nm longer than it.
@@ -27,12 +31,14 @@ def is_us_airport(ident: str | None) -> bool:
 
     Returns:
         True when the stripped, upper-cased ident is 4 characters long and
-        starts with a US prefix (K, PA, PH, PG, PW, PM, TJ, TI or NS)
+        starts with a US prefix (K, PA, PH, PG, PW, PM, TJ or TI), or is NSTU
     """
     if not ident:
         return False
     code = ident.strip().upper()
-    return len(code) == 4 and code.startswith(_US_ICAO_PREFIXES)
+    return len(code) == 4 and (
+        code.startswith(_US_ICAO_PREFIXES) or code in _US_ICAO_IDENTS
+    )
 
 
 def haversine_distance_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
