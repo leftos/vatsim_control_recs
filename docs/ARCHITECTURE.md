@@ -38,7 +38,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - **`backend/cache/`** (`manager.py`): owns the wind, METAR and TAF caches, the aircraft-speeds and ARTCC-grouping caches, and the weather cache save/load. References `backend/config` and `common.paths`.
 - **`backend/config/`** (`constants.py`): owns cache TTLs and the global `WIND_SOURCE`, which `main.py` sets from `--wind-source`. References nothing.
 - **`airport_disambiguator/`**: owns ICAO-to-display-name resolution (`disambiguator.py` public API, `disambiguation_engine.py`, `entity_extractor.py`, `name_processor.py`, `data_manager.py`); checks `data/airport_names.csv` first, then falls back to spaCy. References `backend/data`; never `ui`.
-- **`ui/`**: owns the `VATSIMControlApp` (`app.py`, which refreshes on a `set_interval` timer, 15 seconds by default via `--refresh-interval`), table config and management (`tables.py`, `config.py`) and the screens in `ui/modals/`. `tables.py` loads rows in chunks when `--progressive-load` is set (`--progressive-chunk-size` rows at a time; the argument help says automatic for 50 or more airports). References `backend`, `widgets`, `common`.
+- **`ui/`**: owns the `VATSIMControlApp` (`app.py`, which refreshes on a `set_interval` timer, 15 seconds by default via `--refresh-interval`), table config and management (`tables.py`, `config.py`) and the screens in `ui/modals/`. References `backend`, `widgets`, `common`.
 - **`widgets/`** (`split_flap_datatable.py`): owns the animated DataTable. References `ui.debug_logger` only.
 - **`common/`**: owns path resolution (`paths.py`) and logging (`logger.py`). References only itself.
 - **`scripts/`**: owns the generators for `data/` files and `scripts/weather_daemon/` (staged `weather`, `briefings`, `tiles`, `index` generation, systemd unit and timer, nginx config, PowerShell deployment scripts). References `backend` and `airport_disambiguator`; nothing references `scripts`.
@@ -85,6 +85,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_cifp_index.py`: CIFP SID, STAR and approach lookups on a small fixture file: matches, the single file pass, and the index and route-cache rebuild when another file is returned.
 - `tests/test_weather_cache.py`: bbox freshness, "no METAR" negatives and the failures that are never cached.
 - `tests/test_grouping_board_filters.py`: a ★ grouping's saved dep/arr filters apply when its board opens from the Groupings tab or Go To; a preset opens unfiltered.
+- `tests/test_cli_options.py`: the CLI parser rejects the removed progressive flags.
 - `tests/test_refresh_overlap.py`: refreshes never overlap or cancel, the one queued follow-up, a failed analysis keeping the app running, and the status bar's "Refreshing…" text.
 
 CI runs the suite in the "Run tests" step of `.github/workflows/build-release.yml`, before the PyInstaller build. Outside `tests/`, behavior is checked by running `uv run main.py` against live data or `data/test-vatsim-data.json` (a sample VATSIM response), and the weather daemon by `scripts/weather_daemon/service/LocalTest.ps1`.

@@ -29,8 +29,6 @@ usage: main.py [-h] [--max-eta-hours MAX_ETA_HOURS]
                [--countries COUNTRIES [COUNTRIES ...]]
                [--groupings GROUPINGS [GROUPINGS ...]]
                [--include-all-staffed] [--disable-animations]
-               [--progressive-load]
-               [--progressive-chunk-size PROGRESSIVE_CHUNK_SIZE]
                [--wind-source {metar,minute}] [--hide-wind]
                [--include-all-arriving]
 
@@ -56,11 +54,6 @@ options:
                         (default: False)
   --disable-animations  Disable split-flap animations for instant text updates
                         (default: False)
-  --progressive-load    Enable progressive loading for faster perceived startup
-                        (default: auto for 50+ airports)
-  --progressive-chunk-size PROGRESSIVE_CHUNK_SIZE
-                        Number of rows to load per chunk in progressive mode
-                        (default: 20)
   --wind-source {metar,minute}
                         Wind data source: 'metar' for METAR from aviationweather.gov
                         (default), 'minute' for up-to-the-minute from weather.gov

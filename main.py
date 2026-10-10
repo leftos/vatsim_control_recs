@@ -52,17 +52,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Disable split-flap animations for instant text updates (default: False)",
     )
     parser.add_argument(
-        "--progressive-load",
-        action="store_true",
-        help="Enable progressive loading for faster perceived startup (default: auto for 50+ airports)",
-    )
-    parser.add_argument(
-        "--progressive-chunk-size",
-        type=int,
-        default=20,
-        help="Number of rows to load per chunk in progressive mode (default: 20)",
-    )
-    parser.add_argument(
         "--wind-source",
         choices=["metar", "minute"],
         default="metar",

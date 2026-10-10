@@ -148,8 +148,6 @@ uv run main.py --airports KSFO --groupings "SoCal" --include-all-staffed
 | `--include-all-staffed` | false | Include airports with zero traffic if they have ATC online |
 | `--include-all-arriving` | false | Include airports with any filed arrivals, regardless of ETA |
 | `--disable-animations` | false | Disable split-flap animations for instant updates |
-| `--progressive-load` | auto | Enable progressive table loading (auto-enabled for 50+ airports) |
-| `--progressive-chunk-size N` | 20 | Rows to load per chunk in progressive mode |
 | `--wind-source SOURCE` | metar | Wind data source: `metar` or `minute` |
 | `--hide-wind` | false | Hide the wind column from the main table |
 
@@ -691,17 +689,6 @@ The application features split-flap display animations (like airport departure b
 uv run main.py --disable-animations
 ```
 
-### Progressive Loading
-
-For large airport lists, tables load progressively:
-- Shows rows in chunks for faster perceived startup
-- Auto-enabled when tracking 50+ airports
-- Configurable chunk size
-
-```bash
-uv run main.py --progressive-load --progressive-chunk-size 30
-```
-
 ### Notification Toasts
 
 Grouping flight boards show toast notifications when:
@@ -737,9 +724,8 @@ Grouping flight boards show toast notifications when:
 ### Performance
 
 1. **Disable animations** for faster updates on slower systems
-2. **Use progressive loading** for large airport lists
-3. **Filter airports** rather than tracking entire countries for better responsiveness
-4. **Increase refresh interval** (`--refresh-interval 30`) to reduce API calls
+2. **Filter airports** rather than tracking entire countries for better responsiveness
+3. **Increase refresh interval** (`--refresh-interval 30`) to reduce API calls
 
 ### Common Workflows
 
@@ -797,7 +783,6 @@ If the app reports that the spaCy model `en_core_web_sm` is missing, run `uv syn
 1. Reduce tracked airports or use specific groupings
 2. Enable `--disable-animations`
 3. Increase `--refresh-interval` to reduce API calls
-4. Use progressive loading for large airport lists
 
 ### Debug Logs
 

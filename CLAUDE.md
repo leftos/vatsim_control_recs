@@ -73,7 +73,6 @@ uv run main.py --include-all-arriving   # Include airports with any arrivals fil
 uv run main.py --max-eta-hours 2.0      # Show arrivals up to 2 hours out
 uv run main.py --refresh-interval 30    # Refresh every 30 seconds
 uv run main.py --wind-source minute     # Use up-to-the-minute wind data
-uv run main.py --progressive-load       # Progressive table loading (auto for 50+ airports)
 uv run main.py --help                   # All available options
 ```
 

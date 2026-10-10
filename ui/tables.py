@@ -31,14 +31,11 @@ class TableManager:
         table: SplitFlapDataTable,
         config: TableConfig,
         row_keys: list,
-        progressive_load_chunk_size: int = 20,
     ):
         self.table = table
         self.config = config
         self.row_keys = row_keys
         self.is_first_load = True
-        self.progressive_load_chunk_size = progressive_load_chunk_size
-        self.progressive_load_active = False
         self.pending_removal_tasks = []  # Track pending async removal tasks
         self._active_tasks: set = set()  # Track all active async tasks for cleanup
 
@@ -137,13 +134,12 @@ class TableManager:
                     content_align=col_config.content_align,
                 )
 
-    def populate(self, data: list[Any], progressive: bool = False) -> None:
+    def populate(self, data: list[Any]) -> None:
         """
         Populate table with data, applying sorting and animations.
 
         Args:
             data: List of AirportStats, GroupingStats, or tuple objects
-            progressive: If True, load data in chunks for better perceived performance
         """
 
         # Apply sorting if configured (works with both objects and tuples)
@@ -158,15 +154,7 @@ class TableManager:
             # First load: clear table and animate from blank
             self.table.clear()
             self.row_keys.clear()
-
-            if progressive and len(data) > self.progressive_load_chunk_size:
-                # Progressive loading: load in chunks
-                self.progressive_load_active = True
-                self._create_tracked_task(self._populate_progressive(data, column_keys))
-            else:
-                # Standard loading: load all at once
-                self._add_rows_to_table(data, column_keys)
-
+            self._add_rows_to_table(data, column_keys)
             self.is_first_load = False
         else:
             # Subsequent updates: efficiently update existing rows
@@ -190,22 +178,6 @@ class TableManager:
 
         # Signal end of bulk update to start animations
         self.table.end_bulk_update()
-
-    async def _populate_progressive(self, data: list[Any], column_keys: list) -> None:
-        """Populate table progressively in chunks for better perceived performance"""
-        total_rows = len(data)
-        chunk_size = self.progressive_load_chunk_size
-
-        for i in range(0, total_rows, chunk_size):
-            chunk = data[i : i + chunk_size]
-
-            # Add this chunk of rows
-            self._add_rows_to_table(chunk, column_keys)
-
-            # Small delay to allow UI to update and remain responsive
-            await asyncio.sleep(0.05)  # 50ms between chunks
-
-        self.progressive_load_active = False
 
     def _to_tuple(self, row_obj: Any) -> tuple:
         """
