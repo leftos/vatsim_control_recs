@@ -1,6 +1,8 @@
 # VATSIM Control Recommendations — architecture
 
-A terminal app (Textual) that analyzes live VATSIM flight data and shows controller staffing recommendations per airport and grouping, plus a weather-briefing daemon that publishes web pages from the same backend. Layers: `backend/` (data fetching and analysis, no UI), `ui/` and `widgets/` (Textual screens and the split-flap table), `airport_disambiguator/` (airport display names), `common/` (paths, logging), `scripts/` (data generators and the weather daemon); `main.py` bootstraps the venv, parses arguments, expands the tracked airports and starts the app. Tracking happens per airport; groupings only organize the display. There is no test suite in the repo.
+A terminal app (Textual) that analyzes live VATSIM flight data and shows controller staffing recommendations per airport and grouping, plus a weather-briefing daemon that publishes web pages from the same backend.
+
+Layers: `backend/` (data fetching and analysis, no UI), `ui/` and `widgets/` (Textual screens and the split-flap table), `airport_disambiguator/` (airport display names), `common/` (paths, logging), `scripts/` (data generators and the weather daemon); `main.py` bootstraps the venv, parses arguments, expands the tracked airports and starts the app. Tracking happens per airport; groupings only organize the display. There is no test suite in the repo.
 
 ## Task Index
 
