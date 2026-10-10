@@ -1,0 +1,543 @@
+<title>Grouping Builder Mocks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;700;800&display=swap">
+<style>
+/* Layout: one reading column of decision lanes; each lane is a big option id, two lines of
+   description, then terminal screens drawn cell by cell on a fixed character grid. */
+:root {
+  --bg: #eceff2;
+  --card: #ffffff;
+  --fg: #151a20;
+  --muted: #5a6470;
+  --rule: #ccd3db;
+  --accent: #0169b8;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+
+  /* Terminal palette: Textual's textual-dark theme, the same in both page themes. */
+  --t-bd: #0c0c0c;
+  --t-sf: #1e1e1e;
+  --t-in: #262626;
+  --t-dd: #2d3135;
+  --t-hl: #0178d4;
+  --t-hb: #183a57;
+  --t-tx: #e0e0e0;
+  --t-mu: #868686;
+  --t-ac: #ffa62b;
+  --t-pr: #0178d4;
+  --t-bdb: #464646;
+  --t-ok: #4ebf71;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1215; --card: #171b20; --fg: #e3e7ec; --muted: #8e98a4; --rule: #29303a; --accent: #4fa8ef;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1215; --card: #171b20; --fg: #e3e7ec; --muted: #8e98a4; --rule: #29303a; --accent: #4fa8ef;
+  color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font-body); }
+.page { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 64px; display: grid; gap: 40px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font: 700 30px/1.15 var(--font-mono); letter-spacing: -0.01em; }
+h2 { font-size: 22px; font-weight: 600; }
+h3 { font-size: 18px; font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+.eyebrow { font: 500 12px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.intro { display: grid; gap: 14px; }
+.sample { display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
+.sample code, .keys code, p code { font-family: var(--font-mono); font-size: 0.92em; color: var(--fg); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 22px; height: 12px; border-radius: 2px; display: inline-block; }
+
+.section { display: grid; gap: 28px; }
+.section-head { display: grid; gap: 6px; border-top: 2px solid var(--fg); padding-top: 14px; }
+.lane { display: grid; gap: 16px; background: var(--card); border: 1px solid var(--rule); border-radius: 6px; padding: 20px; min-width: 0; }
+.lane-head { display: flex; gap: 20px; align-items: flex-start; }
+.lane-id { font: 800 64px/0.9 var(--font-mono); color: var(--accent); letter-spacing: -0.03em; flex: none; min-width: 2.2ch; }
+.lane-text { display: grid; gap: 6px; min-width: 0; }
+.lane-text p { color: var(--muted); }
+.shots { display: grid; gap: 18px; min-width: 0; }
+figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+figcaption { font: 500 12px/1.3 var(--font-mono); color: var(--muted); letter-spacing: 0.02em; }
+.scroll { overflow-x: auto; padding-bottom: 4px; }
+.keys { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; font-size: 14px; }
+.keys dt { font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
+.keys dd { margin: 0; color: var(--muted); }
+@media (max-width: 560px) {
+  .lane-head { flex-direction: column; gap: 8px; }
+  .lane-id { font-size: 52px; }
+  .lane { padding: 14px; }
+}
+
+/* Terminal grid: every row is a flex line of fixed-width cells. */
+.term { font: 400 13px var(--font-mono); font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; --lh: 17px; width: max-content; }
+.ruler { color: var(--muted); opacity: 0.75; }
+.tr { display: flex; height: var(--lh); }
+/* Cells are a whole number of pixels wide (--cw) so every column lines up across rows;
+   letter-spacing (--ls) stretches the font's fractional advance to that width. */
+.term { --cw: 8px; --ls: 0px; }
+.tr > span { display: block; flex: none; white-space: pre; overflow: hidden; line-height: var(--lh); height: var(--lh); width: calc(var(--n) * var(--cw)); letter-spacing: var(--ls); }
+.tr > span.g { text-align: center; overflow: visible; letter-spacing: 0; }
+.screen { box-shadow: 0 1px 0 var(--rule); }
+
+.bg-bd { background-color: var(--t-bd); }
+.bg-sf { background-color: var(--t-sf); }
+.bg-in { background-color: var(--t-in); }
+.bg-dd { background-color: var(--t-dd); }
+.bg-hb { background-color: var(--t-hb); }
+.bg-hl { background-color: var(--t-hl); font-weight: 700; }
+.fg-tx { color: var(--t-tx); }
+.fg-mu { color: var(--t-mu); }
+.fg-ac { color: var(--t-ac); }
+.fg-pr { color: var(--t-pr); }
+.fg-bdb { color: var(--t-bdb); }
+.fg-ok { color: var(--t-ok); }
+.bg-hl.fg-tx, .bg-hl.fg-ac { color: #ffffff; }
+.bg-hl.fg-mu { color: #a9cdee; }
+.b { font-weight: 700; }
+.cur { background-color: var(--t-tx); color: var(--t-sf); }
+
+.d-bf { background-image: linear-gradient(currentColor, currentColor); }
+.d-bt { background-image: linear-gradient(to bottom, currentColor 50%, transparent 50%); }
+.d-bb { background-image: linear-gradient(to top, currentColor 50%, transparent 50%); }
+.d-vl { background-image: linear-gradient(to right, transparent calc(50% - 0.5px), currentColor calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)); }
+.d-hl { background-image: linear-gradient(to bottom, transparent calc(50% - 0.5px), currentColor calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)); }
+.d-hh { background-image: linear-gradient(to bottom, transparent calc(50% - 1.5px), currentColor calc(50% - 1.5px) calc(50% + 1.5px), transparent calc(50% + 1.5px)); }
+.d-it { background-image: linear-gradient(to bottom, currentColor 2px, transparent 2px); }
+.d-ib { background-image: linear-gradient(to top, currentColor 2px, transparent 2px); }
+.d-il { background-image: linear-gradient(to right, currentColor 2px, transparent 2px); }
+.d-ir { background-image: linear-gradient(to left, currentColor 2px, transparent 2px); }
+.d-itl { background-image: linear-gradient(to bottom, currentColor 2px, transparent 2px), linear-gradient(to right, currentColor 2px, transparent 2px); }
+.d-itr { background-image: linear-gradient(to bottom, currentColor 2px, transparent 2px), linear-gradient(to left, currentColor 2px, transparent 2px); }
+.d-ibl { background-image: linear-gradient(to top, currentColor 2px, transparent 2px), linear-gradient(to right, currentColor 2px, transparent 2px); }
+.d-ibr { background-image: linear-gradient(to top, currentColor 2px, transparent 2px), linear-gradient(to left, currentColor 2px, transparent 2px); }
+</style>
+
+<main class="page">
+  <header class="intro">
+    <div class="eyebrow">Go To UX review · R3 · grouping builder</div>
+    <h1>Grouping Builder Mocks</h1>
+    <p>Each lane draws the builder screen on a fixed character grid in the app's dark Textual theme, one cell per terminal column, with a column ruler above it. Answer with one id per section, for example "A2, B1".</p>
+    <div class="sample">
+      <div>Sample grouping <code>★ NorCal majors</code>: <code>KSFO</code> both, <code>KOAK</code> arr, <code>KSJC</code> dep, <code>KSMF</code> both (not tracked), and the preset <code>$ O90</code> (8 airports) collapsed. Together they resolve to 9 airports.</div>
+      <div>Add search: <code>sac</code> finds <code>KSAC</code> (tracked), <code>KSMF</code> (already a member, not tracked), <code>KMCC</code> (not tracked) and the grouping <code>$ SAC area</code>.</div>
+      <div>Section A draws the not-tracked mark as B1 (dim suffix), so only the layout changes between its lanes.</div>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--t-hl)"></i>cursor in the focused pane</span>
+      <span><i class="sw" style="background:var(--t-hb)"></i>cursor in an unfocused pane</span>
+      <span><i class="sw" style="background:var(--t-in);box-shadow:inset 0 0 0 2px var(--t-pr)"></i>focused input</span>
+      <span><i class="sw" style="background:var(--t-ac)"></i>a dep or arr filter (both is dim)</span>
+    </div>
+  </header>
+
+  <section class="section" id="layout">
+    <div class="section-head">
+      <div class="eyebrow">Section A · open decision 2 · layout</div>
+      <h2>Where the Name, Add search and Members sit</h2>
+    </div>
+
+    <article class="lane" id="A1">
+      <div class="lane-head">
+        <div class="lane-id">A1</div>
+        <div class="lane-text">
+          <h3>Two panes side by side</h3>
+          <p>Name on top, Add search on the left, Members on the right, all visible at once; Tab moves Name → Add → Members.</p>
+          <p>Needs about 110 columns. In an 80-column terminal the modal shrinks to 80 and both panes squeeze to about 35 columns, so names and the Members hint truncate.</p>
+        </div>
+      </div>
+      <div class="shots">
+        <figure><figcaption>Modal 110 columns on a 116-column terminal · focus in the Add search</figcaption><div class="scroll"><div class="term" data-screen="A1-wide"></div></div></figure>
+        <figure><figcaption>Same screen in an 80-column terminal (modal max-width 100%)</figcaption><div class="scroll"><div class="term" data-screen="A1-80"></div></div></figure>
+      </div>
+      <dl class="keys">
+        <dt>Tab / Shift+Tab</dt><dd>Name → Add → Members, and back; the Name field is the first stop</dd>
+        <dt>Enter</dt><dd>Add pane: add the highlighted airport or grouping to Members</dd>
+        <dt>Del · F · →</dt><dd>Members pane: remove · cycle both/dep/arr · expand a nested grouping</dd>
+        <dt>Ctrl+S · Esc</dt><dd>Save · cancel (asks if changed)</dd>
+      </dl>
+    </article>
+
+    <article class="lane" id="A2">
+      <div class="lane-head">
+        <div class="lane-id">A2</div>
+        <div class="lane-text">
+          <h3>One list, Tab switches Members and Add</h3>
+          <p>One full-width list under the Name field; Tab flips it between the member list and the Add search with its results.</p>
+          <p>96 columns and fits 80 with room to spare, but you see either the members or the search results, never both.</p>
+        </div>
+      </div>
+      <div class="shots">
+        <figure><figcaption>Modal 96 columns on a 102-column terminal · Members mode</figcaption><div class="scroll"><div class="term" data-screen="A2-members"></div></div></figure>
+        <figure><figcaption>Modal 96 columns · after Tab: Add mode, "sac" typed</figcaption><div class="scroll"><div class="term" data-screen="A2-add"></div></div></figure>
+        <figure><figcaption>Add mode in an 80-column terminal</figcaption><div class="scroll"><div class="term" data-screen="A2-80"></div></div></figure>
+      </div>
+      <dl class="keys">
+        <dt>Tab</dt><dd>switch the list between Members and Add</dd>
+        <dt>↑ from the top</dt><dd>reaches the Name field (from the first member row, or from the Add search box); ↓ or Enter returns</dd>
+        <dt>Enter</dt><dd>Add mode: add the highlighted result (the list stays in Add mode)</dd>
+        <dt>Del · F · →</dt><dd>Members mode: remove · cycle both/dep/arr · expand a nested grouping</dd>
+        <dt>Ctrl+S · Esc</dt><dd>Save · cancel (asks if changed)</dd>
+      </dl>
+    </article>
+
+    <article class="lane" id="A3">
+      <div class="lane-head">
+        <div class="lane-id">A3</div>
+        <div class="lane-text">
+          <h3>Members on top, Add search with a dropdown below</h3>
+          <p>The member list is always shown; the Add search sits under it and its results open as a dropdown beneath the box.</p>
+          <p>One column, 96 wide and fits 80. The modal grows by the dropdown's height while results are open, and Esc closes the dropdown before it cancels.</p>
+        </div>
+      </div>
+      <div class="shots">
+        <figure><figcaption>Modal 96 columns on a 102-column terminal · focus in the Add search, dropdown open</figcaption><div class="scroll"><div class="term" data-screen="A3-wide"></div></div></figure>
+        <figure><figcaption>Same screen in an 80-column terminal</figcaption><div class="scroll"><div class="term" data-screen="A3-80"></div></div></figure>
+      </div>
+      <dl class="keys">
+        <dt>Tab / Shift+Tab</dt><dd>Name → Members → Add search, and back; ↑ from the first member also reaches Name</dd>
+        <dt>typing</dt><dd>with the member list focused, a printable key goes to the Add search (Go To's rule); F and Del act on the list</dd>
+        <dt>Enter · ↓</dt><dd>add the highlighted result · move into the dropdown</dd>
+        <dt>Del · F · →</dt><dd>Members: remove · cycle both/dep/arr · expand a nested grouping</dd>
+        <dt>Ctrl+S · Esc</dt><dd>Save · close the dropdown, then cancel (asks if changed)</dd>
+      </dl>
+    </article>
+  </section>
+
+  <section class="section" id="mark">
+    <div class="section-head">
+      <div class="eyebrow">Section B · open decision 5 · the not-tracked mark</div>
+      <h2>How an untracked airport shows in Members and in Add results</h2>
+      <p>Same list in each lane. The Members cursor (unfocused) is on KOAK; the Add cursor is on KMCC, which is not tracked, to show how each mark reads under the highlight.</p>
+    </div>
+
+    <article class="lane" id="B1">
+      <div class="lane-head">
+        <div class="lane-id">B1</div>
+        <div class="lane-text">
+          <h3>Dim "not tracked" suffix</h3>
+          <p>The words "not tracked" in dim text after the airport name; nothing to learn.</p>
+          <p>Takes 13 columns on those rows, and at narrow widths the name truncates first to keep it.</p>
+        </div>
+      </div>
+      <div class="shots"><figure><figcaption>Builder list, 72 columns</figcaption><div class="scroll"><div class="term" data-screen="B1"></div></div></figure></div>
+    </article>
+
+    <article class="lane" id="B2">
+      <div class="lane-head">
+        <div class="lane-id">B2</div>
+        <div class="lane-text">
+          <h3>○ glyph before the ICAO, legend in the hint</h3>
+          <p>A ○ in its own column before the ICAO; the hint line ends with "○ not tracked".</p>
+          <p>Costs 2 columns on every row and keeps names whole, but the meaning lives in the legend.</p>
+        </div>
+      </div>
+      <div class="shots"><figure><figcaption>Builder list, 72 columns</figcaption><div class="scroll"><div class="term" data-screen="B2"></div></div></figure></div>
+    </article>
+
+    <article class="lane" id="B3">
+      <div class="lane-head">
+        <div class="lane-id">B3</div>
+        <div class="lane-text">
+          <h3>Whole row dimmed, no text</h3>
+          <p>The untracked row is drawn in dim text, filter included, with no word or glyph.</p>
+          <p>Costs no columns, but nothing says what dim means, it looks like the dim section headers, and under the cursor it fades to a lighter blue.</p>
+        </div>
+      </div>
+      <div class="shots"><figure><figcaption>Builder list, 72 columns</figcaption><div class="scroll"><div class="term" data-screen="B3"></div></div></figure></div>
+    </article>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var warnings = [];
+  window.__mockWarnings = warnings;
+
+  var BG = /\bbg-/;
+  function seg(t, c) { c = c || ""; return Array.from(t, function (ch) { return { ch: ch, c: c }; }); }
+  function blank(n, c) { return n > 0 ? seg(" ".repeat(n), c) : []; }
+  function fit(t, w) { var a = Array.from(t); if (w <= 0) return ""; return a.length <= w ? t : a.slice(0, w - 1).join("") + "…"; }
+  function pad(cells, w, c) {
+    if (cells.length > w) { warnings.push("overflow " + w + ": " + cells.map(function (x) { return x.ch; }).join("")); return cells.slice(0, w); }
+    return cells.concat(blank(w - cells.length, c));
+  }
+  function center(cells, w, c) {
+    if (cells.length >= w) return pad(cells, w, c);
+    var l = Math.floor((w - cells.length) / 2);
+    return pad(blank(l, c).concat(cells), w, c);
+  }
+  function addCls(cells, c) { return cells.map(function (x) { return { ch: x.ch, c: (x.c + " " + c).trim() }; }); }
+  function withBg(cells, bg) { return cells.map(function (x) { return BG.test(x.c) ? x : { ch: x.ch, c: (x.c + " " + bg).trim() }; }); }
+  function hint(text, w) { return center(seg(fit(text, w), "fg-mu"), w); }
+  function title(text, w) { return center(seg(text, "fg-tx b"), w); }
+
+  var MEMBERS = [
+    { k: "@", id: "KSFO", name: "San Francisco Intl", f: "both", tr: true },
+    { k: "@", id: "KOAK", name: "Oakland", f: "arr", tr: true },
+    { k: "@", id: "KSJC", name: "San Jose Intl", f: "dep", tr: true },
+    { k: "@", id: "KSMF", name: "Sacramento Intl", f: "both", tr: false },
+    { k: "$", id: "O90", n: 8, f: "both" }
+  ];
+  var RESULTS = [
+    { hdr: "AIRPORTS (all, tracked or not)" },
+    { k: "@", id: "KSAC", name: "Sacramento Exec", tr: true },
+    { k: "@", id: "KSMF", name: "Sacramento Intl", tr: false, member: true },
+    { k: "@", id: "KMCC", name: "Sacramento - Mc Clellan", tr: false },
+    { hdr: "GROUPINGS" },
+    { k: "$", id: "SAC area", n: 6 }
+  ];
+
+  function itemRow(it, w, o) {
+    var mark = o.mark || "suffix";
+    var un = it.k === "@" && it.tr === false;
+    var dimAll = mark === "dim" && un;
+    var tx = dimAll ? "fg-mu" : "fg-tx";
+    var lead = seg(" " + it.k + " ", tx);
+    if (mark === "glyph") lead = lead.concat(un ? seg("○", "fg-tx").concat(blank(1)) : blank(2));
+    var right = [];
+    if (o.rightW) {
+      var r = [];
+      if (o.rightKind === "filter" && it.f) r = seg(it.f, dimAll || it.f === "both" ? "fg-mu" : "fg-ac");
+      if (o.rightKind === "member" && it.member) r = seg("member", "fg-mu");
+      right = blank(1).concat(pad(r, o.rightW), blank(1));
+    }
+    var suffix = mark === "suffix" && un ? seg("  not tracked", "fg-mu") : [];
+    var avail = w - lead.length - right.length;
+    var body;
+    if (it.k === "@") body = seg(it.id + "  ", tx).concat(seg(fit(it.name, avail - 6 - suffix.length), tx));
+    else body = seg(fit(it.id + " (" + it.n + " airports)", avail - suffix.length), tx);
+    var row = pad(lead.concat(body, suffix), w - right.length).concat(right);
+    if (o.cursor) row = addCls(row, o.cursor);
+    return row;
+  }
+  function collapsed(n, w) { return pad(seg(fit("     ▸ " + n + " airports (→ to expand)", w), "fg-tx"), w); }
+  function header(text, w) { return pad(seg(fit(" " + text, w), "fg-mu"), w); }
+
+  function membersRows(w, o) {
+    var rows = [];
+    MEMBERS.forEach(function (it) {
+      rows.push(itemRow(it, w, { mark: o.mark, rightW: 4, rightKind: "filter", cursor: it.id === o.cursorId ? o.cursor : null }));
+      if (it.k === "$") rows.push(collapsed(it.n, w));
+    });
+    return rows;
+  }
+  function resultsRows(w, o) {
+    return RESULTS.map(function (it) {
+      if (it.hdr) return header(it.hdr, w);
+      return itemRow(it, w, { mark: o.mark, rightW: 6, rightKind: "member", cursor: it.id === o.cursorId ? o.cursor : null });
+    });
+  }
+
+  function input(w, text, focused) {
+    var b = (focused ? "fg-pr" : "fg-bdb") + " bg-in ";
+    function edge(l, m, r) {
+      var row = [{ ch: " ", c: b + l }];
+      for (var i = 0; i < w - 2; i++) row.push({ ch: " ", c: b + m });
+      row.push({ ch: " ", c: b + r });
+      return row;
+    }
+    var mid = [{ ch: " ", c: b + "d-il" }].concat(seg(" " + text, "fg-tx bg-in"));
+    if (focused) mid.push({ ch: " ", c: "cur" });
+    mid = pad(mid, w - 1, "bg-in").concat([{ ch: " ", c: b + "d-ir" }]);
+    return [edge("d-itl", "d-it", "d-itr"), mid, edge("d-ibl", "d-ib", "d-ibr")];
+  }
+  function labeled(label, lab, rows) {
+    return [blank(lab).concat(rows[0]), seg(label.padEnd(lab), "fg-tx b").concat(rows[1]), blank(lab).concat(rows[2])];
+  }
+
+  function frame(content, modalW, termW, vpad) {
+    var C = modalW - 6;
+    var bc = "fg-pr bg-sf ";
+    function E(cls) { return { ch: " ", c: bc + cls }; }
+    function edgeRow(cls) {
+      var row = [E("d-bf")];
+      for (var i = 0; i < modalW - 2; i++) row.push(E(cls));
+      return row.concat([E("d-bf")]);
+    }
+    function body(r) { return [E("d-bf")].concat(blank(2, "bg-sf"), r, blank(2, "bg-sf"), [E("d-bf")]); }
+    var box = [edgeRow("d-bt"), body(blank(C, "bg-sf"))];
+    content.forEach(function (r) { box.push(body(withBg(pad(r, C), "bg-sf"))); });
+    box.push(body(blank(C, "bg-sf")), edgeRow("d-bb"));
+    var side = termW - modalW, l = Math.floor(side / 2), rr = side - l;
+    var out = [];
+    for (var i = 0; i < vpad; i++) out.push(blank(termW, "bg-bd"));
+    box.forEach(function (row) { out.push(blank(l, "bg-bd").concat(row, blank(rr, "bg-bd"))); });
+    for (var j = 0; j < vpad; j++) out.push(blank(termW, "bg-bd"));
+    return out;
+  }
+
+  function nameBlock(C, focused) { return labeled("Name", 6, input(C - 6, "NorCal majors", focused)); }
+
+  function laneA1(C) {
+    var rows = [title("Edit grouping ★ NorCal majors", C), blank(C)].concat(nameBlock(C, false), [blank(C)]);
+    var L = Math.floor((C - 3) / 2), R = C - 3 - L;
+    var left = [pad(seg(" ADD", "fg-ac b").concat(seg(fit("  any airport or grouping", L - 4), "fg-mu")), L)]
+      .concat(input(L, "sac", true), resultsRows(L, { mark: "suffix", cursorId: "KSAC", cursor: "bg-hl" }));
+    var right = [pad(seg(" MEMBERS", "fg-tx b").concat(seg(" · 5 → 9 airports", "fg-mu")), R)]
+      .concat(membersRows(R, { mark: "suffix", cursorId: "KSFO", cursor: "bg-hb" }));
+    while (left.length < right.length) left.push(blank(L));
+    while (right.length < left.length) right.push(blank(R));
+    left.push(blank(L), pad(seg(fit(" Enter add →", L), "fg-mu"), L));
+    right.push(blank(R), pad(seg(fit(" Del remove · F dep/arr/both · → expand", R), "fg-mu"), R));
+    var sep = [{ ch: " ", c: "" }, { ch: " ", c: "fg-bdb d-vl" }, { ch: " ", c: "" }];
+    for (var i = 0; i < left.length; i++) rows.push(left[i].concat(sep, right[i]));
+    var rule = [];
+    for (var k = 0; k < C; k++) rule.push({ ch: " ", c: "fg-bdb d-hl" });
+    rows.push(rule);
+    rows.push(hint("Tab Name ▸ Add ▸ Members · Ctrl+S save · Esc cancel (asks if changed)", C));
+    return rows;
+  }
+
+  function tabs(C, active) {
+    var labels = [" Members (5) ", " Add "];
+    var row = blank(1), under = [];
+    var spans = [];
+    labels.forEach(function (t, i) {
+      if (i) row = row.concat(blank(2));
+      spans.push([row.length, row.length + t.length, i === active]);
+      row = row.concat(seg(t, i === active ? "fg-tx b" : "fg-mu"));
+    });
+    var tail = "5 members → 9 airports ";
+    row = pad(row, C - tail.length).concat(seg(tail, "fg-mu"));
+    for (var k = 0; k < C; k++) under.push({ ch: " ", c: "fg-bdb d-hl" });
+    spans.forEach(function (s) { if (s[2]) for (var x = s[0]; x < s[1]; x++) under[x] = { ch: " ", c: "fg-ac d-hh" }; });
+    return [row, under];
+  }
+
+  function laneA2(C, mode) {
+    var rows = [title("Edit grouping ★ NorCal majors · " + (mode === "add" ? "Add" : "Members"), C), blank(C)]
+      .concat(nameBlock(C, false), [blank(C)], tabs(C, mode === "add" ? 1 : 0));
+    var list = mode === "add"
+      ? input(C, "sac", true).concat(resultsRows(C, { mark: "suffix", cursorId: "KSAC", cursor: "bg-hl" }))
+      : membersRows(C, { mark: "suffix", cursorId: "KSFO", cursor: "bg-hl" });
+    while (list.length < 9) list.push(blank(C));
+    rows = rows.concat(list, [blank(C)]);
+    if (mode === "add") {
+      rows.push(hint("Enter add · ↓ results · ↑ Name", C));
+      rows.push(hint("Tab Members · Ctrl+S save · Esc cancel (asks if changed)", C));
+    } else {
+      rows.push(hint("Del remove · F dep/arr/both · → expand · ↑ from top row: Name", C));
+      rows.push(hint("Tab Add · Ctrl+S save · Esc cancel (asks if changed)", C));
+    }
+    return rows;
+  }
+
+  function laneA3(C) {
+    var lab = 6;
+    var rows = [title("Edit grouping ★ NorCal majors", C), blank(C)].concat(nameBlock(C, false), [blank(C)]);
+    rows.push(pad(seg(" MEMBERS", "fg-tx b").concat(seg(" · 5 → 9 airports", "fg-mu")), C));
+    rows = rows.concat(membersRows(C, { mark: "suffix", cursorId: "KSFO", cursor: "bg-hb" }), [blank(C)]);
+    rows = rows.concat(labeled("Add", lab, input(C - lab, "sac", true)));
+    var dd = resultsRows(C - lab, { mark: "suffix", cursorId: "KSAC", cursor: "bg-hl" })
+      .map(function (r) { return blank(lab).concat(withBg(r, "bg-dd")); });
+    rows = rows.concat(dd, [blank(C)]);
+    rows.push(hint("Enter add · Del remove · F dep/arr/both · → expand · typing goes to Add", C));
+    rows.push(hint("Tab Name ▸ Members ▸ Add · Ctrl+S save · Esc close results, then cancel", C));
+    return rows;
+  }
+
+  function laneB(C, mark) {
+    var rows = [pad(seg(" MEMBERS", "fg-tx b").concat(seg(" · 5 → 9 airports", "fg-mu")), C)];
+    rows = rows.concat(membersRows(C, { mark: mark, cursorId: "KOAK", cursor: "bg-hb" }), [blank(C)]);
+    rows = rows.concat(input(C, "sac", true), resultsRows(C, { mark: mark, cursorId: "KMCC", cursor: "bg-hl" }), [blank(C)]);
+    rows.push(hint("Enter add · Del remove · F dep/arr/both · → expand" + (mark === "glyph" ? " · ○ not tracked" : ""), C));
+    return rows;
+  }
+
+  var SCREENS = {
+    "A1-wide": function () { return frame(laneA1(104), 110, 116, 1); },
+    "A1-80": function () { return frame(laneA1(74), 80, 80, 1); },
+    "A2-members": function () { return frame(laneA2(90, "members"), 96, 102, 1); },
+    "A2-add": function () { return frame(laneA2(90, "add"), 96, 102, 1); },
+    "A2-80": function () { return frame(laneA2(74, "add"), 80, 80, 1); },
+    "A3-wide": function () { return frame(laneA3(90), 96, 102, 1); },
+    "A3-80": function () { return frame(laneA3(74), 80, 80, 1); },
+    "B1": function () { return frame(laneB(66, "suffix"), 72, 72, 0); },
+    "B2": function () { return frame(laneB(66, "glyph"), 72, 72, 0); },
+    "B3": function () { return frame(laneB(66, "dim"), 72, 72, 0); }
+  };
+
+  function rulerRows(n) {
+    var nums = Array(n).fill(" "), ticks = Array(n).fill(" ");
+    for (var i = 0; i < n; i++) {
+      if (i % 10 === 0) {
+        ticks[i] = "|";
+        String(i).split("").forEach(function (d, k) { if (i + k < n) nums[i + k] = d; });
+      } else if (i % 5 === 0) ticks[i] = "·";
+    }
+    return [seg(nums.join(""), "ruler"), seg(ticks.join(""), "ruler")];
+  }
+
+  function renderRows(rows, el) {
+    var frag = document.createDocumentFragment();
+    rows.forEach(function (r) {
+      var div = document.createElement("div");
+      div.className = "tr";
+      var i = 0;
+      while (i < r.length) {
+        var cell = r[i];
+        var simple = cell.ch.charCodeAt(0) < 128 && !/\bd-/.test(cell.c);
+        var sp = document.createElement("span");
+        if (simple) {
+          var j = i, s = "";
+          while (j < r.length && r[j].c === cell.c && r[j].ch.charCodeAt(0) < 128) { s += r[j].ch; j++; }
+          sp.className = cell.c;
+          sp.style.setProperty("--n", String(j - i));
+          sp.textContent = s;
+          i = j;
+        } else {
+          sp.className = (cell.c + " g").trim();
+          sp.style.setProperty("--n", "1");
+          sp.textContent = cell.ch;
+          i++;
+        }
+        div.appendChild(sp);
+      }
+      frag.appendChild(div);
+    });
+    el.appendChild(frag);
+  }
+
+  document.querySelectorAll(".term[data-screen]").forEach(function (el) {
+    var id = el.getAttribute("data-screen");
+    var rows = SCREENS[id]();
+    var w = rows[0].length;
+    rows.forEach(function (r, n) { if (r.length !== w) warnings.push(id + " row " + n + " is " + r.length + " wide, expected " + w); });
+    var ruler = document.createElement("div");
+    ruler.className = "ruler";
+    renderRows(rulerRows(w), ruler);
+    var screen = document.createElement("div");
+    screen.className = "screen";
+    renderRows(rows, screen);
+    el.appendChild(ruler);
+    el.appendChild(screen);
+    el.setAttribute("aria-label", id + " mock, " + w + " columns");
+  });
+  function snapCells() {
+    var probe = document.createElement("span");
+    probe.className = "term";
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre;width:auto";
+    probe.textContent = "0".repeat(100);
+    document.body.appendChild(probe);
+    var adv = probe.getBoundingClientRect().width / 100;
+    probe.remove();
+    if (!(adv > 0)) return;
+    var cw = Math.ceil(adv);
+    document.querySelectorAll(".term").forEach(function (el) {
+      el.style.setProperty("--cw", cw + "px");
+      el.style.setProperty("--ls", (cw - adv).toFixed(3) + "px");
+    });
+  }
+  snapCells();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(snapCells);
+  if (warnings.length) console.warn("mock warnings", warnings);
+})();
+</script>
