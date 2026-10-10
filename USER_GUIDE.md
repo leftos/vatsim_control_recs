@@ -366,14 +366,27 @@ Unified search modal for quickly navigating to:
 - `#` - Search flights only (e.g., `#AAL123`)
 - `$` - Search groupings only (e.g., `$Bay`)
 
-**Multi-Select Mode:**
+**Title and Hint Line:**
+The title names the current mode: "Go To" while browsing, "Go To · Pick several · 3 picked → 12 airports" while picking several (the picks and the airports they resolve to), and "Go To · Editing ★ Name" while editing a favorite. When Go To is opened to choose an airport for another screen, it keeps that screen's title.
+
+A hint line under the results lists only the keys that work right now, for the current mode, focus and highlighted row (for example "Enter open · E edit · Ctrl+D delete · Tab pick several · Esc close"). It shows at most six items; `Tab` and `Esc` are always among them.
+
+**Keyboard Focus:**
+
+`Tab` toggles pick several and, when it switches it on, moves focus to the results list. With the list focused, typing a letter or other character jumps back to the search box and adds it to your search. While picking several, `E`, `F` and `Space` keep their jobs in the list; while browsing, only `E` does. `Up` and `Down` move between the search box and the list.
+
+If a key cannot do anything (for example `E` on a preset, `F` on a row that is not picked, `Enter` with no highlighted result, or `Ctrl+Enter` with nothing picked), a warning message tells you why.
+
+**Multi-Select Mode ("Pick several"):**
 Press `Tab` to toggle multi-select mode, which allows selecting multiple airports/groupings to open at once:
-- `Enter` or `Space` - Toggle selection of highlighted item
-- `Ctrl+Enter` - Open all selected items
-- `Ctrl+S` - Save selection as a favorite (see [Favorites](#favorites))
+- `Enter` (search box) or `Space` (results list) - Pick or unpick the highlighted item
+- `Ctrl+Enter` - Open all picked items
+- `Ctrl+S` - Save the picks as a favorite (see [Favorites](#favorites)); while editing a favorite it saves that favorite
+- `Tab` - Back to browsing
+- `Esc` - Close; while editing a favorite, this discards the edit
 
 **Per-Airport Filtering:**
-In multi-select mode, press `F` on a selected item to cycle its filter:
+In multi-select mode, press `F` in the results list on a picked item to cycle its filter:
 - `[  ]` - Both departures and arrivals (default)
 - `[D>]` - Departures only
 - `[<A]` - Arrivals only
@@ -382,8 +395,9 @@ This filtering is preserved when saving as a favorite.
 
 **Favorite Management:**
 - Favorites appear with a star prefix in the results list
-- `E` - Edit an existing favorite (loads its airports into multi-select)
+- `E` - Edit an existing favorite from the results list (loads its airports and their saved filters into multi-select; `F` on a picked airport changes the filter that is saved)
 - `Ctrl+D` - Delete a favorite (with confirmation)
+- If a delete fails, an error message names the favorite and the cause; if a rename saves the new name but cannot remove the old one, a message says so
 
 Uses a pre-built cache for instant search responsiveness.
 
@@ -613,7 +627,7 @@ Favorites are user-saved multi-airport selections that appear in the Go To modal
 
 ### Using Favorites
 
-Favorites appear at the top of Go To search results with a star prefix. Select one and press `Enter` to open a flight board showing only the selected airports (with filters applied).
+Favorites appear in Go To search results with a star prefix, sorted alphabetically among the groupings. Select one and press `Enter` to open a flight board showing only the selected airports (with filters applied).
 
 ### Managing Favorites
 

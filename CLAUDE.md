@@ -12,6 +12,16 @@ VATSIM Control Recommendations is a terminal-based application that analyzes liv
 
 The project uses [uv](https://docs.astral.sh/uv/). `uv run main.py` creates `.venv` on Python 3.13 and installs the locked dependencies from `uv.lock` before starting; `uv sync` does the install alone. Never use pip: dependencies live in `pyproject.toml` (exact `==` pins) and `uv.lock`, so add or change one with `uv add` / `uv lock`. The PyInstaller build tool is in the `build` dependency group (`uv run --group build pyinstaller vatsim_control_recs.spec --noconfirm`).
 
+### Tests
+
+```bash
+uv run --group dev pytest -q
+```
+
+Tests live under `tests/` and run in the `dev` dependency group (`pytest`, `pytest-asyncio`, pinned in `pyproject.toml`). They are headless Textual Pilot tests on fixture data and never touch the network. CI runs them in the "Run tests" step of `.github/workflows/build-release.yml` before the PyInstaller build.
+
+Tests isolate the user data directory for the whole session: the repo-root `conftest.py` points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a temp dir before any project import (module imports log, and the first log call opens the log file there), and blanks `STATSIM_API_KEY` so `.env` is not read. `tests/test_isolation.py` checks it.
+
 ### Dependencies
 
 Declared in `pyproject.toml`:
@@ -244,16 +254,27 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 
 | Shortcut | Action |
 |----------|--------|
-| `Tab` | Toggle multi-select mode |
-| `Enter` / `Space` | Select/toggle item (multi-select) |
-| `Ctrl+Enter` | Open selection (multi-select) |
-| `Ctrl+S` | Save selection as favorite |
-| `Ctrl+D` | Delete favorite |
-| `E` | Edit favorite |
-| `F` | Cycle per-airport filter (both -> dep -> arr) |
+| `Tab` | Toggle "pick several" (multi-select) mode; entering it moves focus to the list |
+| `Enter` | Open the highlighted item (browse), or pick it (pick several) |
+| `Space` | Pick or unpick the highlighted row (pick several, list focused) |
+| `Ctrl+Enter` | Open the board for the picks (pick several) |
+| `Ctrl+S` | Save the picks as a grouping; while editing a favorite, save it |
+| `Ctrl+D` | Delete the highlighted ★ favorite (not in picker mode) |
+| `E` | Edit the highlighted ★ favorite (list focused) |
+| `F` | Cycle the dep/arr filter of a picked row (pick several, list focused; both -> dep -> arr) |
+| `Esc` | Close; while editing a favorite, this discards the edit |
 | `@` prefix | Search airports only |
 | `#` prefix | Search flights only |
 | `$` prefix | Search groupings only |
+
+The modal is 96 columns wide. The title names the mode: "Go To", "Go To · Pick several · {n} picked → {m} airports", or "Go To · Editing ★ {name}"; the picker (callback) mode keeps its caller's title.
+
+A context hint line under the list shows only the keys that act in the current mode, focus and row, joined by " · ", at most six items; when more apply, Ctrl+D, E, F, Ctrl+S and Ctrl+Enter give way in that order, and Tab and Esc always show (e.g. a picked row: "Space pick · F dep/arr/both · Ctrl+Enter open · Ctrl+S save · Tab browse · Esc close").
+
+Focus: with the list focused, a printable key moves focus to the search box and is appended to the query. In pick several, `E`, `F` and `Space` act on the list instead; in browse only `E` does; in picker (callback) or grouping-only mode all three are typed. The search box does not select its text on focus.
+
+A key that cannot act (for example `E` on a preset, `F` on an unpicked row, `Ctrl+D` in picker mode, `Enter` or `Space` with no highlighted row, `Ctrl+Enter` with no picks) shows a warning toast saying why. A failed favorite delete shows an error toast, and a rename whose old entry cannot be removed says the new one was saved.
+In edit mode a saved filter shows on an individually picked airport's row, and `F` there changes what is saved.
 
 ### Weather Briefing
 

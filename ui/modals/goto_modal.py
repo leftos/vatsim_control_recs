@@ -6,6 +6,7 @@ import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
@@ -34,14 +35,14 @@ if TYPE_CHECKING:
     from ui.app import VATSIMControlApp
 
 
-HINT_SINGLE_SELECT = (
-    "@ Airport | # Flight | $ Grouping"
-    " | Tab Multi-select | Ctrl+D Delete \u2605 | E Edit \u2605 | Enter Open | Esc Close"
+TITLE_PICK_SEVERAL = (
+    "Go To \u00b7 Pick several \u00b7 {picked} picked \u2192 {airports} airports"
 )
-HINT_MULTI_SELECT = (
-    "Enter/Space Toggle | F Filter"
-    " | Ctrl+Enter Open | Ctrl+S Save | Ctrl+D Delete \u2605 | Tab Single-select | Esc Close"
-)
+TITLE_EDITING = "Go To \u00b7 Editing \u2605 {name}"
+
+# The hint line lists "<key> <action>" items that work in the current state
+HINT_SEPARATOR = " \u00b7 "
+HINT_MAX_ITEMS = 6
 
 # Filter mode display indicators
 _FILTER_INDICATORS = {
@@ -52,6 +53,20 @@ _FILTER_INDICATOR_BOTH = "[  ]"
 
 # Filter cycling order: None (both) -> dep -> arr -> None
 _FILTER_CYCLE = {None: "dep", "dep": "arr", "arr": None}
+
+
+# Actions dropped from an over-long hint, lowest priority first. Picking,
+# opening and saving outrank the per-row keys; Tab and Esc are never dropped.
+_HINT_DROP_ORDER = ("Ctrl+D ", "E ", "F ", "Ctrl+S ", "Ctrl+Enter ")
+
+
+def _cap_hint(actions: list[str], tab: str, close: str) -> list[str]:
+    """Fit the actions, the Tab item and the Esc item into HINT_MAX_ITEMS."""
+    for prefix in _HINT_DROP_ORDER:
+        if len(actions) + 2 <= HINT_MAX_ITEMS:
+            break
+        actions = [action for action in actions if not action.startswith(prefix)]
+    return [*actions, tab, close]
 
 
 class GoToScreen(ModalScreen):
@@ -68,7 +83,8 @@ class GoToScreen(ModalScreen):
     }
 
     #goto-container {
-        width: 80;
+        width: 96;
+        max-width: 100%;
         height: auto;
         max-height: 70%;
         background: $surface;
@@ -163,113 +179,126 @@ class GoToScreen(ModalScreen):
         self._display_items: list[tuple[str, str, Any]] = []
 
     def compose(self) -> ComposeResult:
-        # Determine placeholder and hint based on filter_type
         if self.filter_type == "$":
             placeholder = "Search groupings..."
-            hint = "Enter: Select | Esc: Close"
         else:
             placeholder = "Search... (@airport, #flight, $grouping)"
-            hint = HINT_SINGLE_SELECT
 
         with Container(id="goto-container"):
-            yield Static(self.custom_title, id="goto-title")
-            yield Input(placeholder=placeholder, id="goto-input")
+            yield Static(Content(self.custom_title), id="goto-title")
+            # No select-all on focus: a letter typed in the list is appended to
+            # the query, and the next letter must not replace the whole query
+            yield Input(placeholder=placeholder, id="goto-input", select_on_focus=False)
             yield Static("", id="goto-selection-summary")
             yield OptionList(Option("Loading...", disabled=True), id="goto-list")
-            yield Static(hint, id="goto-hint")
+            yield Static("", id="goto-hint")
 
     def on_mount(self) -> None:
         """Focus input and load data"""
         self.query_one("#goto-input", Input).focus()
+        self._refresh_chrome()
         self._load_worker = self.run_worker(self._load_data(), exclusive=True)
 
     def _can_multi_select(self) -> bool:
         """Multi-select is disabled in callback mode and grouping-only filter."""
         return self.callback is None and self.filter_type is None
 
-    def on_key(self, event) -> None:
-        """Handle key events for navigation between input and list"""
+    def on_key(self, event: events.Key) -> None:
+        """Dispatch the modal's keys; the hint line mirrors these handlers."""
+        if (
+            self._handle_command_key(event.key)
+            or self._handle_list_key(event)
+            or self._handle_focus_move(event.key)
+        ):
+            event.prevent_default()
+            event.stop()
+
+    def _handle_command_key(self, key: str) -> bool:
+        """Handle the keys that work from the input and the list alike."""
+        if key == "tab" and self._can_multi_select():
+            self._toggle_multi_select()
+            return True
+        # Terminals vary: some send "ctrl+enter", others "ctrl+j". Outside
+        # multi-select ctrl+j is left alone, as some terminals send it for Enter.
+        if key == "ctrl+enter" or (key == "ctrl+j" and self.multi_select_mode):
+            self._open_multi_select_flight_board()
+            return True
+        if key == "ctrl+s":
+            self._save_selection()
+            return True
+        if key == "ctrl+d":
+            self._prompt_delete_favorite()
+            return True
+        return False
+
+    def _handle_list_key(self, event: events.Key) -> bool:
+        """Handle E (and F and Space while picking); other characters go to the search."""
+        if not self.query_one("#goto-list", OptionList).has_focus:
+            return False
+        if self._can_multi_select() and event.key == "e":
+            self._edit_favorite()
+            return True
+        if self.multi_select_mode and event.key in ("f", "space"):
+            if event.key == "f":
+                self._cycle_filter_on_highlighted()
+            else:
+                self._toggle_highlighted("Space")
+            return True
+        if event.is_printable and event.character:
+            self._type_into_search(event.character)
+            return True
+        return False
+
+    def _handle_focus_move(self, key: str) -> bool:
+        """Move focus between the input and the list with Up and Down."""
         option_list = self.query_one("#goto-list", OptionList)
         input_widget = self.query_one("#goto-input", Input)
 
-        input_focused = input_widget.has_focus
-        list_focused = option_list.has_focus
+        if input_widget.has_focus:
+            if option_list.option_count == 0 or key not in ("down", "up"):
+                return False
+            option_list.focus()
+            option_list.highlighted = (
+                0 if key == "down" else option_list.option_count - 1
+            )
+            return True
 
-        # Tab: toggle multi-select mode
-        if event.key == "tab" and self._can_multi_select():
-            self.multi_select_mode = not self.multi_select_mode
-            self._update_hint_text()
-            self._update_option_list()
-            event.prevent_default()
-            event.stop()
-            return
-
-        # Ctrl+Enter: open multi-select flight board
-        # Terminals vary: some send "ctrl+enter", others map it to "ctrl+j" or "ctrl+m"
-        if event.key in ("ctrl+enter", "ctrl+j") and self.multi_select_mode:
-            self._open_multi_select_flight_board()
-            event.prevent_default()
-            event.stop()
-            return
-
-        # Ctrl+S: save selection as favorite
-        if event.key == "ctrl+s" and self.multi_select_mode:
-            self._save_selection()
-            event.prevent_default()
-            event.stop()
-            return
-
-        # Ctrl+D: delete highlighted favorite
-        if event.key == "ctrl+d":
-            self._prompt_delete_favorite()
-            event.prevent_default()
-            event.stop()
-            return
-
-        # E key: edit highlighted favorite (list must be focused)
-        if event.key == "e" and list_focused and self._can_multi_select():
-            self._edit_favorite()
-            event.prevent_default()
-            event.stop()
-            return
-
-        # F key: cycle filter on highlighted item (multi-select, list focused)
-        if event.key == "f" and self.multi_select_mode and list_focused:
-            self._cycle_filter_on_highlighted()
-            event.prevent_default()
-            event.stop()
-            return
-
-        # Space in multi-select mode when list is focused: toggle selection
-        if event.key == "space" and self.multi_select_mode and list_focused:
-            self._toggle_highlighted()
-            event.prevent_default()
-            event.stop()
-            return
-
-        if input_focused:
-            if event.key == "down":
-                if option_list.option_count > 0:
-                    option_list.focus()
-                    option_list.highlighted = 0
-                    event.prevent_default()
-                    event.stop()
-            elif event.key == "up" and option_list.option_count > 0:
-                option_list.focus()
-                option_list.highlighted = option_list.option_count - 1
-                event.prevent_default()
-                event.stop()
-
-        elif list_focused and (
-            (event.key == "up" and option_list.highlighted == 0)
+        if option_list.has_focus and (
+            (key == "up" and option_list.highlighted == 0)
             or (
-                event.key == "down"
+                key == "down"
                 and option_list.highlighted == option_list.option_count - 1
             )
         ):
             input_widget.focus()
-            event.prevent_default()
-            event.stop()
+            return True
+        return False
+
+    def _toggle_multi_select(self) -> None:
+        """Switch between browse and multi-select; picking happens in the list."""
+        self.multi_select_mode = not self.multi_select_mode
+        self._update_option_list()
+        if self.multi_select_mode:
+            self.query_one("#goto-list", OptionList).focus()
+
+    def _type_into_search(self, character: str) -> None:
+        """Move focus to the search input and append the typed character."""
+        input_widget = self.query_one("#goto-input", Input)
+        input_widget.focus()
+        input_widget.value += character
+        input_widget.cursor_position = len(input_widget.value)
+
+    def _warn(self, message: str) -> None:
+        """Explain a key press that did nothing because its precondition failed."""
+        self.notify(message, severity="warning", markup=False)
+
+    def on_descendant_focus(self, _event: events.DescendantFocus) -> None:
+        self._update_hint_text()
+
+    def on_option_list_option_highlighted(
+        self, _event: OptionList.OptionHighlighted
+    ) -> None:
+        self._update_hint_text()
 
     def on_unmount(self) -> None:
         """Cancel any pending workers when modal is closed"""
@@ -413,7 +442,12 @@ class GoToScreen(ModalScreen):
         return base
 
     def _update_option_list(self) -> None:
-        """Update the option list with current filtered results.
+        """Rebuild the list, then the title and hint that describe it."""
+        self._fill_option_list()
+        self._refresh_chrome()
+
+    def _fill_option_list(self) -> None:
+        """Fill the option list with current filtered results.
 
         In multi-select mode, inserts expanded sub-items for selected
         groupings immediately after the grouping entry.
@@ -529,7 +563,7 @@ class GoToScreen(ModalScreen):
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key in input"""
         if self.multi_select_mode:
-            self._toggle_highlighted()
+            self._toggle_highlighted("Enter")
         else:
             await self._execute_selected()
 
@@ -538,23 +572,29 @@ class GoToScreen(ModalScreen):
     ) -> None:
         """Handle option selection (Enter/click on list item)"""
         if self.multi_select_mode:
-            self._toggle_highlighted()
+            self._toggle_highlighted("Enter")
         else:
             await self._execute_selected()
 
-    def _toggle_highlighted(self) -> None:
-        """Toggle selection of the currently highlighted item."""
-        option_list = self.query_one("#goto-list", OptionList)
-        if option_list.highlighted is None:
+    def _toggle_highlighted(self, key_name: str) -> None:
+        """Toggle selection of the currently highlighted item.
+
+        Args:
+            key_name: The key that asked for the toggle, named in the warning
+                when there is no row to pick or the row cannot be picked.
+        """
+        item = self._get_highlighted_item()
+        if item is None:
+            self._warn(f"{key_name} needs a highlighted row")
             return
 
-        if option_list.highlighted >= len(self._display_items):
-            return
-
-        item_type, identifier, data = self._display_items[option_list.highlighted]
+        item_type, identifier, data = item
 
         # Sub-items are not toggleable (they belong to their parent grouping)
         if item_type == "sub":
+            self._warn(
+                f"{key_name} can't pick a member row; pick or unpick its grouping"
+            )
             return
 
         self._toggle_selection(item_type, identifier, data)
@@ -581,82 +621,101 @@ class GoToScreen(ModalScreen):
         self._update_selection_summary()
         self._update_option_list()
 
+    def _filter_blocked_reason(self, item: tuple[str, str, Any] | None) -> str | None:
+        """Say why F cannot cycle a filter on this row, or None when it can.
+
+        F is only handled while picking several, so the mode is not checked.
+        """
+        if item is None:
+            return "no row is highlighted"
+        item_type, identifier, _data = item
+        if (
+            item_type == "sub"
+            or f"{item_type}:{identifier}" in self.selected_identifiers
+        ):
+            return None
+        return f"{self._row_name(item)} isn't picked"
+
     def _cycle_filter_on_highlighted(self) -> None:
         """Cycle the dep/arr filter on the currently highlighted item."""
+        item = self._get_highlighted_item()
+        reason = self._filter_blocked_reason(item)
+        if item is None or reason is not None:
+            self._warn(f"F works on picked rows only; {reason}")
+            return
+
+        item_type, identifier, _data = item
         option_list = self.query_one("#goto-list", OptionList)
-        if option_list.highlighted is None:
-            return
-
-        if option_list.highlighted >= len(self._display_items):
-            return
-
-        item_type, identifier, _data = self._display_items[option_list.highlighted]
-
         # Save position before rebuilding the list
-        saved_pos = option_list.highlighted
-
-        if item_type == "sub":
-            # Cycle filter on individual sub-item airport
-            key = f"sub:{identifier}"
-            current = self.selected_filters.get(key)
-            new_mode = _FILTER_CYCLE[current]
-            if new_mode is None:
-                self.selected_filters.pop(key, None)
-            else:
-                self.selected_filters[key] = new_mode
-            self._update_option_list()
-            option_list.highlighted = min(saved_pos, option_list.option_count - 1)
-            return
-
-        key = f"{item_type}:{identifier}"
-
-        # Only act on selected items
-        if key not in self.selected_identifiers:
-            return
+        saved_pos = option_list.highlighted or 0
 
         if item_type == "grouping":
-            # Cycle filter on ALL resolved airports of the grouping
-            resolved = resolve_grouping_recursively(identifier, self.all_groupings)
-            # Determine current grouping-level filter by checking if all
-            # sub-items share the same filter
-            sub_modes = {self.selected_filters.get(f"sub:{icao}") for icao in resolved}
-            # Mixed sub-filters are treated as "both" so next press sets all to dep
-            current = sub_modes.pop() if len(sub_modes) == 1 else None
-
-            new_mode = _FILTER_CYCLE[current]
-            for icao in resolved:
-                sub_key = f"sub:{icao}"
-                if new_mode is None:
-                    self.selected_filters.pop(sub_key, None)
-                else:
-                    self.selected_filters[sub_key] = new_mode
-
-            # Also set grouping-level filter for display
-            if new_mode is None:
-                self.selected_filters.pop(key, None)
-            else:
-                self.selected_filters[key] = new_mode
+            self._cycle_grouping_filter(identifier)
         else:
-            # Airport: cycle its own filter
-            current = self.selected_filters.get(key)
-            new_mode = _FILTER_CYCLE[current]
-            if new_mode is None:
-                self.selected_filters.pop(key, None)
-            else:
-                self.selected_filters[key] = new_mode
+            # A picked airport or a grouping's member airport: its own key
+            self._cycle_filter_key(f"{item_type}:{identifier}")
 
         self._update_option_list()
         option_list.highlighted = min(saved_pos, option_list.option_count - 1)
 
+    def _cycle_filter_key(self, key: str) -> None:
+        """Advance one filter key through both -> dep -> arr -> both."""
+        new_mode = _FILTER_CYCLE[self.selected_filters.get(key)]
+        if new_mode is None:
+            self.selected_filters.pop(key, None)
+        else:
+            self.selected_filters[key] = new_mode
+
+    def _cycle_grouping_filter(self, identifier: str) -> None:
+        """Cycle the filter on every resolved airport of a picked grouping."""
+        resolved = resolve_grouping_recursively(identifier, self.all_groupings)
+        # Determine current grouping-level filter by checking if all
+        # sub-items share the same filter
+        sub_modes = {self.selected_filters.get(f"sub:{icao}") for icao in resolved}
+        # Mixed sub-filters are treated as "both" so next press sets all to dep
+        current = sub_modes.pop() if len(sub_modes) == 1 else None
+
+        new_mode = _FILTER_CYCLE[current]
+        # The grouping-level key is for display; the sub keys are what is saved
+        for key in [f"grouping:{identifier}", *(f"sub:{icao}" for icao in resolved)]:
+            if new_mode is None:
+                self.selected_filters.pop(key, None)
+            else:
+                self.selected_filters[key] = new_mode
+
+    def _is_favorite_row(self, item: tuple[str, str, Any] | None) -> bool:
+        return (
+            item is not None
+            and item[0] == "grouping"
+            and item[1] in self.user_grouping_names
+        )
+
+    @staticmethod
+    def _row_name(item: tuple[str, str, Any]) -> str:
+        """Name a row in a toast: groupings quoted, ICAOs and callsigns bare."""
+        item_type, identifier, _data = item
+        return f"'{identifier}'" if item_type == "grouping" else identifier
+
+    def _describe_non_favorite(self, item: tuple[str, str, Any] | None) -> str:
+        """Say what the highlighted row is, when E or Ctrl+D needs a ★ row."""
+        if item is None:
+            return "no row is highlighted"
+        kinds = {
+            "grouping": "a preset",
+            "airport": "an airport",
+            "sub": "a grouping member",
+            "flight": "a flight",
+        }
+        return f"{self._row_name(item)} is {kinds.get(item[0], 'not a grouping')}"
+
     def _edit_favorite(self) -> None:
         """Load a favorite into multi-select mode for editing."""
         item = self._get_highlighted_item()
-        if item is None:
+        if item is None or not self._is_favorite_row(item):
+            self._warn(f"E edits ★ groupings only; {self._describe_non_favorite(item)}")
             return
 
-        item_type, identifier, _data = item
-        if item_type != "grouping" or identifier not in self.user_grouping_names:
-            return
+        identifier = item[1]
 
         # Switch to multi-select mode
         self.multi_select_mode = True
@@ -685,14 +744,30 @@ class GoToScreen(ModalScreen):
                 self.selected_identifiers.add(f"airport:{ref}")
                 self.selected_items.append(("airport", ref, pretty_name))
 
-        # Load saved filters and map them into selected_filters
+        # Saved filters are per ICAO. An individually picked airport's row reads
+        # its "airport:" key; an airport that came from a grouping reads "sub:".
         saved_filters = load_favorite_filters(identifier)
         for icao, mode in saved_filters.items():
-            self.selected_filters[f"sub:{icao}"] = mode
+            airport_key = f"airport:{icao}"
+            if airport_key in self.selected_identifiers:
+                self.selected_filters[airport_key] = mode
+            else:
+                self.selected_filters[f"sub:{icao}"] = mode
 
-        self._update_hint_text()
         self._update_selection_summary()
         self._update_option_list()
+
+    def _picked_airports(self) -> set[str]:
+        """Resolve the picks to their distinct airport ICAOs."""
+        airports: set[str] = set()
+        for item_type, identifier, _data in self.selected_items:
+            if item_type == "airport":
+                airports.add(identifier)
+            elif item_type == "grouping":
+                airports.update(
+                    resolve_grouping_recursively(identifier, self.all_groupings)
+                )
+        return airports
 
     def _update_selection_summary(self) -> None:
         """Update the selection summary widget text."""
@@ -709,15 +784,7 @@ class GoToScreen(ModalScreen):
             if item_type == "airport" or item_type == "grouping":
                 names.append(identifier)
 
-        # Count total unique airports
-        all_airports: set[str] = set()
-        for item_type, identifier, _data in self.selected_items:
-            if item_type == "airport":
-                all_airports.add(identifier)
-            elif item_type == "grouping":
-                all_airports.update(
-                    resolve_grouping_recursively(identifier, self.all_groupings)
-                )
+        all_airports = self._picked_airports()
 
         # Build text with truncation for >3 items
         if len(names) <= 3:
@@ -730,13 +797,64 @@ class GoToScreen(ModalScreen):
         )
         summary_widget.add_class("has-selection")
 
+    def _refresh_chrome(self) -> None:
+        """Bring the title and the hint line up to date with the state."""
+        self._update_title()
+        self._update_hint_text()
+
+    def _update_title(self) -> None:
+        """Name the mode in the title; picker mode keeps its caller's title."""
+        title = self.custom_title
+        if self.multi_select_mode and self._editing_favorite_name is not None:
+            title = TITLE_EDITING.format(name=self._editing_favorite_name)
+        elif self.multi_select_mode:
+            title = TITLE_PICK_SEVERAL.format(
+                picked=len(self.selected_items),
+                airports=len(self._picked_airports()),
+            )
+        self.query_one("#goto-title", Static).update(Content(title))
+
     def _update_hint_text(self) -> None:
-        """Update the hint text based on current mode."""
-        hint_widget = self.query_one("#goto-hint", Static)
-        if self.multi_select_mode:
-            hint_widget.update(HINT_MULTI_SELECT)
+        """Show the keys that do something for this mode, focus and row."""
+        item = self._get_highlighted_item()
+        if not self._can_multi_select():
+            enter = "Enter select" if self.callback else "Enter open"
+            items = [enter, "Esc close"] if item is not None else ["Esc close"]
+        elif self.multi_select_mode:
+            editing = self._editing_favorite_name is not None
+            close = "Esc close (discard edit)" if editing else "Esc close"
+            actions = self._multi_select_hint_actions(item)
+            items = _cap_hint(actions, "Tab browse", close)
         else:
-            hint_widget.update(HINT_SINGLE_SELECT)
+            actions = self._browse_hint_actions(item)
+            items = _cap_hint(actions, "Tab pick several", "Esc close")
+        self.query_one("#goto-hint", Static).update(Content(HINT_SEPARATOR.join(items)))
+
+    def _browse_hint_actions(self, item: tuple[str, str, Any] | None) -> list[str]:
+        actions = ["Enter open"] if item is not None else []
+        return [*actions, *self._favorite_hint_items(item)]
+
+    def _multi_select_hint_actions(
+        self, item: tuple[str, str, Any] | None
+    ) -> list[str]:
+        list_focused = self.query_one("#goto-list", OptionList).has_focus
+        actions: list[str] = []
+        if item is not None and item[0] != "sub":
+            actions.append("Space pick" if list_focused else "Enter pick")
+        if list_focused and self._filter_blocked_reason(item) is None:
+            actions.append("F dep/arr/both")
+        if self._picked_airports():
+            actions.append("Ctrl+Enter open")
+        if self.selected_items:
+            actions.append("Ctrl+S save")
+        return [*actions, *self._favorite_hint_items(item)]
+
+    def _favorite_hint_items(self, item: tuple[str, str, Any] | None) -> list[str]:
+        """E (list focus only) and Ctrl+D, which act on ★ rows."""
+        if not self._is_favorite_row(item):
+            return []
+        list_focused = self.query_one("#goto-list", OptionList).has_focus
+        return ["E edit", "Ctrl+D delete"] if list_focused else ["Ctrl+D delete"]
 
     def _resolve_filters(self) -> dict[str, str]:
         """Resolve selected_filters to per-airport ICAO filters.
@@ -768,23 +886,22 @@ class GoToScreen(ModalScreen):
 
     def _open_multi_select_flight_board(self) -> None:
         """Open a flight board for the multi-select selection."""
+        reason = self._picks_blocked_reason()
+        if reason is not None:
+            self._warn(f"Ctrl+Enter opens picks; {reason}")
+            return
         if not self.selected_items:
+            self._warn("Ctrl+Enter needs at least one pick")
             return
 
-        # Resolve all selected items to a flat, deduplicated set of ICAO codes
-        all_airports: set[str] = set()
-        names: list[str] = []
-        for item_type, identifier, _data in self.selected_items:
-            names.append(identifier)
-            if item_type == "airport":
-                all_airports.add(identifier)
-            elif item_type == "grouping":
-                all_airports.update(
-                    resolve_grouping_recursively(identifier, self.all_groupings)
-                )
-
+        all_airports = self._picked_airports()
         if not all_airports:
+            self._warn(
+                "Ctrl+Enter needs at least one airport; the picks resolve to none"
+            )
             return
+
+        names = [identifier for _type, identifier, _data in self.selected_items]
 
         # Resolve filters
         resolved_filters = self._resolve_filters()
@@ -819,7 +936,12 @@ class GoToScreen(ModalScreen):
 
     def _save_selection(self) -> None:
         """Save the current multi-select selection as a custom grouping."""
-        if not self.multi_select_mode or not self.selected_items:
+        reason = self._picks_blocked_reason()
+        if reason is not None:
+            self._warn(f"Ctrl+S saves picks; {reason}")
+            return
+        if not self.selected_items:
+            self._warn("Ctrl+S needs at least one pick")
             return
 
         # Build the raw reference list (mix of ICAOs and grouping names)
@@ -827,15 +949,8 @@ class GoToScreen(ModalScreen):
             identifier for _item_type, identifier, _data in self.selected_items
         ]
 
-        # Compute resolved airport count for the hint
-        all_airports: set[str] = set()
-        for item_type, identifier, _data in self.selected_items:
-            if item_type == "airport":
-                all_airports.add(identifier)
-            elif item_type == "grouping":
-                all_airports.update(
-                    resolve_grouping_recursively(identifier, self.all_groupings)
-                )
+        # Resolved airport count for the save dialog's hint
+        all_airports = self._picked_airports()
 
         # Resolve filters for persistence
         resolved_filters = self._resolve_filters()
@@ -863,24 +978,19 @@ class GoToScreen(ModalScreen):
         # If we were editing a favorite and the name changed, remove the old one
         old_name = self._editing_favorite_name
         if old_name and old_name != saved_name:
-            favorites_file = get_user_favorites_file()
             try:
-                with open(favorites_file, encoding="utf-8") as f:
-                    data = json.load(f)
-                if old_name in data:
-                    data.pop(old_name)
-                    with open(favorites_file, "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=2, ensure_ascii=False)
-                # Remove old from local state
-                self.all_groupings.pop(old_name, None)
-                self.all_results = [
-                    r
-                    for r in self.all_results
-                    if not (r[0] == "grouping" and r[1] == old_name)
-                ]
-                self.user_grouping_names.discard(old_name)
-            except (json.JSONDecodeError, OSError):
-                pass
+                self._remove_favorite_from_file(old_name)
+                self._forget_favorite(old_name)
+            except (json.JSONDecodeError, OSError) as e:
+                debug(
+                    f"Go To: saved '{saved_name}' but removing the old "
+                    f"'{old_name}' failed: {e}"
+                )
+                self.notify(
+                    f"Saved '{saved_name}' but couldn't remove the old '{old_name}': {e}",
+                    severity="error",
+                    markup=False,
+                )
 
         # Invalidate app-level cache so next open is fresh
         self.vatsim_app.invalidate_goto_cache()
@@ -899,11 +1009,45 @@ class GoToScreen(ModalScreen):
         self.selected_filters.clear()
         self._editing_favorite_name = None
         self._update_selection_summary()
-        self._update_hint_text()
 
         input_widget = self.query_one("#goto-input", Input)
         input_widget.value = saved_name
         input_widget.focus()
+        # Rebuild even when the query already equals the name: the rows still
+        # carry multi-select checkboxes, and the title still names the old mode
+        self._apply_current_filter()
+
+    @staticmethod
+    def _remove_favorite_from_file(name: str) -> None:
+        """Remove one entry from favorites.json.
+
+        Raises:
+            OSError: The file could not be read or written.
+            json.JSONDecodeError: The file is not valid JSON.
+        """
+        favorites_file = get_user_favorites_file()
+        with open(favorites_file, encoding="utf-8") as f:
+            data = json.load(f)
+        if name in data:
+            data.pop(name)
+            with open(favorites_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def _forget_favorite(self, name: str) -> None:
+        """Drop a removed favorite from the modal's local state."""
+        self.all_groupings.pop(name, None)
+        self.all_results = [
+            r for r in self.all_results if not (r[0] == "grouping" and r[1] == name)
+        ]
+        self.user_grouping_names.discard(name)
+
+    def _picks_blocked_reason(self) -> str | None:
+        """Say why Ctrl+S and Ctrl+Enter cannot act on picks now, or None."""
+        if not self._can_multi_select():
+            return "picking isn't available here"
+        if not self.multi_select_mode:
+            return "press Tab to pick several"
+        return None
 
     def _get_highlighted_item(self) -> tuple[str, str, Any] | None:
         """Return the currently highlighted item, or None.
@@ -922,14 +1066,17 @@ class GoToScreen(ModalScreen):
 
     def _prompt_delete_favorite(self) -> None:
         """Prompt to delete the highlighted item if it's a user favorite."""
+        if not self._can_multi_select():
+            self._warn("Ctrl+D isn't available here")
+            return
         item = self._get_highlighted_item()
-        if item is None:
+        if item is None or not self._is_favorite_row(item):
+            self._warn(
+                f"Ctrl+D deletes ★ groupings only; {self._describe_non_favorite(item)}"
+            )
             return
 
-        item_type, identifier, _data = item
-        if item_type != "grouping" or identifier not in self.user_grouping_names:
-            return
-
+        identifier = item[1]
         self.app.push_screen(
             ConfirmModal(f"Delete favorite '{identifier}'?"),
             callback=lambda confirmed: self._on_delete_confirmed(confirmed, identifier),
@@ -940,37 +1087,28 @@ class GoToScreen(ModalScreen):
         if not confirmed:
             return
 
-        favorites_file = get_user_favorites_file()
         try:
-            with open(favorites_file, encoding="utf-8") as f:
-                data = json.load(f)
-            data.pop(name, None)
-            with open(favorites_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        except (json.JSONDecodeError, OSError):
+            self._remove_favorite_from_file(name)
+        except (json.JSONDecodeError, OSError) as e:
+            debug(f"Go To: deleting '{name}' failed: {e}")
+            self.notify(
+                f"Couldn't delete '{name}': {e}", severity="error", markup=False
+            )
             return
 
-        # Update local state
-        self.all_groupings.pop(name, None)
-        self.all_results = [
-            r for r in self.all_results if not (r[0] == "grouping" and r[1] == name)
-        ]
-        self.user_grouping_names.discard(name)
+        self._forget_favorite(name)
         self.vatsim_app.invalidate_goto_cache()
 
         self._apply_current_filter()
 
     async def _execute_selected(self) -> None:
         """Execute action for the selected item"""
-        option_list = self.query_one("#goto-list", OptionList)
-
-        if option_list.highlighted is None or not self._display_items:
+        item = self._get_highlighted_item()
+        if item is None:
+            self._warn("Enter needs a highlighted row")
             return
 
-        if option_list.highlighted >= len(self._display_items):
-            return
-
-        item_type, identifier, data = self._display_items[option_list.highlighted]
+        item_type, identifier, data = item
 
         # Sub-items in single-select mode shouldn't happen, but handle gracefully
         if item_type == "sub":

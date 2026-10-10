@@ -4,22 +4,23 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ## Current focus
 
-- [ ] Profile the app under heavy traffic and plan the wins: drive it headless (Textual `run_test`, the screenshot driver's harness) with a large tracked set and with no filter, which today bogs the app down, and time startup (`main.py` → `analyze_flights_data()` in `backend/core/analysis.py`, the disambiguator's `get_pretty_names_batch`), one refresh cycle (`ui/app.py` refresh worker), and table updates (`ui/tables.py`, `widgets/split_flap_datatable.py`). Use stdlib `cProfile` and `uvx py-spy` (no new dependency); write the findings to a subplan with measured hotspots before any fix.
+- [ ] Profile the app under heavy traffic and plan the wins: drive it headless (Textual `run_test`, the screenshot driver's harness) with a large tracked set and with no filter, which today bogs the app down, and time startup (`main.py` → `analyze_flights_data()` in `backend/core/analysis.py`, the disambiguator's `get_pretty_names_batch`), one refresh cycle (`ui/app.py` refresh worker), and table updates (`ui/tables.py`, `widgets/split_flap_datatable.py`).
+
+  Use stdlib `cProfile` and `uvx py-spy` (no new dependency); write the findings to a subplan with measured hotspots before any fix.
 
 ## Next up
 
 - [ ] Finish the leftos.dev showcase screenshots and send them back (leftos.dev inbox request 20261010-081555). In `X:\dev\leftos.dev\.tmp\vcr-shots\`: 01–05 and 09 are taken; 06 (Go To) and 07 (Custom Groupings) need a retake; 08 is skipped (no StatSim key).
 
   The driver is `.tmp/vcr-shots-driver/drive.py` (untracked; its `install_bug_shims()` and the `app.vatsim_data = data` line in `do_diversion` come out, since the bugs they covered are fixed). The reply draft with captions and corrections to the request's list is `.tmp/vcr-shots-reply.md`; send it as an inbox request to `leftos.dev`.
-- [ ] Make the Go To modal's mode and keys visible (R1 in [goto-ux-review.md](./goto-ux-review.md)): a title naming the mode, a one-line hint computed from mode, focus and the highlighted row, focus on the list when multi-select starts, and a toast for every key that does nothing (`ui/modals/goto_modal.py`). Settled: this and the edit-mode filter fix below land with the repo's first automated tests: a `dev` dependency group (pytest, pytest-asyncio) and headless Textual Pilot tests under `tests/` on fixture data, never the network.
-- [ ] Fix Go To edit mode reading and writing a picked airport's dep/arr filter under different keys, so the row shows the wrong filter and F cannot change what is saved (`ui/modals/goto_modal.py:689-691` against `:403-405` and `:761-765`).
 
 ## Backlog
 
 - [ ] Add `docs/README.md` as the docs' start page, linking `docs/ARCHITECTURE.md`, `docs/atis-filtering-and-runway-extraction.md`, `USER_GUIDE.md`, `CLAUDE.md` and this plan: the repo has no docs index, so the architecture entry point is reachable only from `CLAUDE.md` (line 83).
 - [ ] Raise ruff's `target-version` from `py310` (`ruff.toml:6`) to `py313` to match `requires-python` in `pyproject.toml`, and land the UP-rule rewrites it triggers as their own commit.
 - [ ] Tracked Airports Manager: the hint offers Space to select but the `ListView` toggles only on Enter (`ui/modals/tracked_airports.py:117`), and `S` saves the whole tracked list, ignoring the picked rows (`:243`).
-- [ ] Ctrl+D still deletes a favorite inside the Weather Briefing grouping picker, which reuses the Go To screen (`ui/modals/goto_modal.py:223`).
+- [ ] Split `GoToScreen._fill_option_list` (`ui/modals/goto_modal.py`, the old `_update_option_list` body): its cyclomatic complexity is about 11, over the limit of 8.
+- [ ] `common/logger.py` opens the log file and runs `cleanup_old_logs()` on the first log call, which happens at import time (`backend/data/statsim_api.py` logs while loading `.env`), so any importer of `backend` writes to and prunes the user's real log folder; the tests work around it with a repo-root `conftest.py`. Make file logging start from the app's entry points instead.
 - [ ] A favorite's saved dep/arr filters apply only when it is opened from Go To, not from Enter on the Custom Groupings tab (`ui/app.py` flight-board open path).
 - [ ] Unhandled `"airports"` result type in `ui/app.py:1135`.
 - [ ] Investigate the MEA check: when an airway's entry or exit fix is not found, every segment of the airway is checked (`backend/data/navaids.py:1165-1175`), so `ABQ V12 ONM` reported a California V12 segment at 29,000 ft. Seen by the screenshot run, not yet confirmed.

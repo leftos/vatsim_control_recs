@@ -30,6 +30,14 @@ dependencies = [
 
 [dependency-groups]
 build = ["pyinstaller==6.22.3"]
+dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The app is not an installed package, so its modules import from the repo root
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.uv]
 package = false

@@ -135,11 +135,13 @@ uv run main.py --airports KSFO --groupings "SoCal" --include-all-arriving
 
 | Shortcut | Action |
 |----------|--------|
-| `Tab` | Toggle multi-select mode |
-| `Ctrl+S` | Save selection as favorite |
-| `Ctrl+D` | Delete favorite |
-| `E` | Edit favorite |
-| `F` | Cycle per-airport dep/arr filter |
+| `Tab` | Toggle pick several (multi-select) mode |
+| `Space` | Pick or unpick the highlighted row (pick several) |
+| `Ctrl+Enter` | Open the board for the picks (pick several) |
+| `Ctrl+S` | Save the picks as a grouping (or save the favorite being edited) |
+| `Ctrl+D` | Delete the highlighted ★ favorite |
+| `E` | Edit the highlighted ★ favorite |
+| `F` | Cycle the dep/arr filter of a picked row |
 | `@` prefix | Search airports only |
 | `#` prefix | Search flights only |
 | `$` prefix | Search groupings only |
