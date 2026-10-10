@@ -116,7 +116,9 @@ def _clear_airway_caches() -> None:
 @pytest.fixture(autouse=True)
 def awy_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     """Point the airway loaders at the fixture AWY.txt instead of the NASR cache."""
-    (tmp_path / "AWY.txt").write_text("\n".join(FIXTURE_LINES) + "\n", encoding="latin-1")
+    (tmp_path / "AWY.txt").write_text(
+        "\n".join(FIXTURE_LINES) + "\n", encoding="latin-1"
+    )
     monkeypatch.setattr(navaids, "ensure_nasr_data", lambda quiet=False: tmp_path)
     _clear_airway_caches()
     yield tmp_path / "AWY.txt"
@@ -222,13 +224,31 @@ UNIFIED_AIRPORT_DATA: dict[str, dict[str, Any]] = {
 }
 
 CLIMBING_OUT_OF_YMML: dict[str, Any] = {
-    "callsign": "AIB1", "latitude": -37.59, "longitude": 144.843, "groundspeed": 175, "altitude": 2500,
-    "flight_plan": {"departure": "YMML", "arrival": "LFBO", "aircraft_short": "A35K", "route": ""},
+    "callsign": "AIB1",
+    "latitude": -37.59,
+    "longitude": 144.843,
+    "groundspeed": 175,
+    "altitude": 2500,
+    "flight_plan": {
+        "departure": "YMML",
+        "arrival": "LFBO",
+        "aircraft_short": "A35K",
+        "route": "",
+    },
 }
 
 ON_DESCENT_INTO_LFBO: dict[str, Any] = {
-    "callsign": "AFR2", "latitude": 44.2291, "longitude": 1.3638, "groundspeed": 250, "altitude": 9000,
-    "flight_plan": {"departure": "LFPO", "arrival": "LFBO", "aircraft_short": "A320", "route": ""},
+    "callsign": "AFR2",
+    "latitude": 44.2291,
+    "longitude": 1.3638,
+    "groundspeed": 250,
+    "altitude": 9000,
+    "flight_plan": {
+        "departure": "LFPO",
+        "arrival": "LFBO",
+        "aircraft_short": "A320",
+        "route": "",
+    },
 }
 
 
@@ -238,14 +258,20 @@ class _NoDisplayNames:
 
 
 def _expected_eta_display(pilot: dict[str, Any]) -> str:
-    flight = {**pilot, "departure": pilot["flight_plan"]["departure"], "arrival": "LFBO"}
+    flight = {
+        **pilot,
+        "departure": pilot["flight_plan"]["departure"],
+        "arrival": "LFBO",
+    }
     airports = analysis.load_airport_data(UNIFIED_AIRPORT_DATA)
     speeds = load_aircraft_approach_speeds("data/aircraft_data.csv")
     display, _, _ = calculate_eta(flight, airports, speeds)
     return display
 
 
-def _lfbo_row(monkeypatch: pytest.MonkeyPatch, pilots: list[dict[str, Any]], max_eta_hours: float) -> Any:
+def _lfbo_row(
+    monkeypatch: pytest.MonkeyPatch, pilots: list[dict[str, Any]], max_eta_hours: float
+) -> Any:
     feed = {"general": {}, "pilots": pilots, "controllers": [], "atis": []}
     monkeypatch.setattr(analysis, "download_vatsim_data", lambda: feed)
     airport_rows, _, _, _, _ = analysis.analyze_flights_data(
@@ -260,19 +286,29 @@ def _lfbo_row(monkeypatch: pytest.MonkeyPatch, pilots: list[dict[str, Any]], max
     return row
 
 
-def test_next_eta_is_blank_when_the_only_inbound_is_beyond_the_window(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_next_eta_is_blank_when_the_only_inbound_is_beyond_the_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     row = _lfbo_row(monkeypatch, [CLIMBING_OUT_OF_YMML], max_eta_hours=1.0)
     assert (row.arrivals, row.arrivals_all) == (0, 1)
-    assert row.next_eta == "", f"NEXT ETA {row.next_eta!r} comes from a flight the ARR column does not count"
+    assert row.next_eta == "", (
+        f"NEXT ETA {row.next_eta!r} comes from a flight the ARR column does not count"
+    )
 
 
-def test_next_eta_comes_from_the_inbound_inside_the_window(monkeypatch: pytest.MonkeyPatch) -> None:
-    row = _lfbo_row(monkeypatch, [CLIMBING_OUT_OF_YMML, ON_DESCENT_INTO_LFBO], max_eta_hours=1.0)
+def test_next_eta_comes_from_the_inbound_inside_the_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = _lfbo_row(
+        monkeypatch, [CLIMBING_OUT_OF_YMML, ON_DESCENT_INTO_LFBO], max_eta_hours=1.0
+    )
     assert (row.arrivals, row.arrivals_all) == (1, 2)
     assert row.next_eta == _expected_eta_display(ON_DESCENT_INTO_LFBO)
 
 
-def test_next_eta_shows_every_airborne_inbound_when_the_window_is_off(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_next_eta_shows_every_airborne_inbound_when_the_window_is_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     row = _lfbo_row(monkeypatch, [CLIMBING_OUT_OF_YMML], max_eta_hours=0)
     assert (row.arrivals, row.arrivals_all) == (1, 1)
     assert row.next_eta == _expected_eta_display(CLIMBING_OUT_OF_YMML)

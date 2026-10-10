@@ -26,7 +26,8 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 | Add or change a command-line option | `main.py` (`build_arg_parser`, `resolve_airport_allowlist`) → `backend/config/constants.py` → `ui/app.py` | none |
 | Fix an airport display name | `data/airport_names.csv` (edit directly) → `scripts/generate_airport_names.py` → `airport_disambiguator/disambiguator.py` | none |
 | Change diversion or VFR-alternative search | `backend/core/diversions.py` → `backend/core/spatial.py` → `backend/core/aircraft_performance.py` → `ui/modals/diversion_modal.py` / `ui/modals/vfr_alternatives.py` | none |
-| Change route weather or the MEA warning | `backend/core/route.py` → `backend/data/navaids.py` → `backend/data/cifp.py` → `ui/modals/route_weather.py` → `ui/modals/flight_info.py` | none |
+| Change route weather | `backend/core/route.py` → `backend/data/navaids.py` → `backend/data/cifp.py` → `ui/modals/route_weather.py` | none |
+| Change the MEA warning or how an airway is expanded in a route | `backend/data/navaids.py` (`load_airways`, `get_airway_fixes`, `get_max_mea_for_route`) → `ui/modals/flight_info.py` (`format_mea_lines`) → `tests/test_mea_check.py`, `tests/test_airway_fixes.py`, `tests/test_flight_info_mea.py` | none |
 | Change split-flap animation or flap character sets | `ui/config.py` → `widgets/split_flap_datatable.py` → `ui/tables.py` | none |
 | Change how the airport, grouping or flight-board tables update on refresh, or restore cursor and scroll | `ui/app.py` (`_apply_refresh_data`, `_populate_tables_and_wait`, `_restore_table_position`) → `ui/tables.py` (`TableManager.populate`, `_update_efficiently`, `_remove_tail_rows`, `_drop_tail_rows`) → `widgets/split_flap_datatable.py` (`blank_rows`, `truncate_rows`, `recompute_column_widths`) → `tests/test_table_refresh.py` | none |
 | Change historical statistics | `backend/data/statsim_api.py` → `ui/modals/historical_stats.py` | none |
@@ -100,6 +101,9 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_goto_r1.py`: Go To modal titles, hints, focus moves, and warning and error toasts.
 - `tests/test_goto_r5.py`: Go To section headers, the cap row, collapsed and expanded grouping rows, the "Picked:" line, hint drop order, highlight skipping, and the highlight staying on the row `Space` picks or unpicks.
 - `tests/test_cifp_index.py`: CIFP SID, STAR and approach lookups on a small fixture file: matches, the single file pass, and the index and route-cache rebuild when another file is returned.
+- `tests/test_mea_check.py`: the MEA check per route: each segment against the level in force at its airway's entry (a FIX/speed-level group) else the filed altitude, the worst segment's MEA, skipped airways, and cross-border routes checked up to the border.
+- `tests/test_airway_fixes.py`: `get_airway_fixes` and `load_airways`: both fixes required, flight order against sequence order, Hawaii and Alaska airways kept apart from federal ones, border points kept out of route fixes.
+- `tests/test_flight_info_mea.py`: `format_mea_lines`: the MEA warning headers and the dim "MEA not checked" lines.
 - `tests/test_weather_cache.py`: bbox freshness, "no METAR" negatives and the failures that are never cached.
 - `tests/test_refresh_weather.py`: the weather pass: traffic columns before weather, previous WIND/ALT kept until a box returns, per-box patches, failed versus omitted airports, fresh boxes first, a mid-pass refresh queuing one rerun, two-stage startup, the capped-box fallback, quit cancelling queued boxes, and patch failures logged.
 - `tests/test_tracked_airports.py`: Space and Enter pick a row in the Tracked Airports manager with the cursor kept in place, and `S` saves the picks (or the whole list when none) and invalidates the Go To results cache.

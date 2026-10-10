@@ -21,7 +21,7 @@ from backend import (
     haversine_distance_nm,
 )
 from backend.core.flights import get_nearest_airport_if_on_ground
-from backend.data.navaids import MeaViolation, get_max_mea_for_route
+from backend.data.navaids import MeaCheck, MeaViolation, get_max_mea_for_route
 from backend.data.vatsim_api import download_vatsim_data, get_member_stats
 from ui import config
 from ui.debug_logger import debug
@@ -30,6 +30,67 @@ from ui.modals.metar_info import _extract_flight_rules_weather, get_flight_categ
 # Cache for VFR alternate results: {origin_icao: {'result': [...], 'timestamp': datetime}}
 _VFR_ALTERNATES_CACHE: dict[str, dict[str, Any]] = {}
 _VFR_ALTERNATES_CACHE_DURATION = 60  # 60 seconds (matches METAR cache)
+
+
+def _parse_filed_altitude(filed_altitude: object) -> int:
+    """The filed altitude in feet, or 0 when it is not a plain number of feet."""
+    try:
+        return int(str(filed_altitude))
+    except ValueError:
+        return 0
+
+
+def _checked_level(violation: MeaViolation, filed_alt: int) -> int:
+    """The level a segment is flown at: the route's level at its airway, else the filed one."""
+    return violation.level_ft if violation.level_ft is not None else filed_alt
+
+
+def _mea_warning_lines(violations: list[MeaViolation], filed_alt: int) -> list[str]:
+    """The MEA warning for segments whose MEA is above their level, or no lines."""
+    exceeding = [v for v in violations if 0 < _checked_level(v, filed_alt) < v.mea]
+    if not exceeding:
+        return []
+    exceeding.sort(key=lambda v: v.mea, reverse=True)
+    worst = exceeding[0]
+    if worst.level_ft is None:
+        level_text = f"Filed altitude {filed_alt:,}"
+    else:
+        level_text = f"Filed level {worst.level_ft:,} on {worst.airway}"
+    lines = [
+        "[bold yellow]MEA WARNING[/bold yellow]",
+        f"  {level_text} < required MEA {worst.mea:,}",
+    ]
+    # Show segments that exceed their level (limit to 3, highest first)
+    lines.extend(
+        f"  [dim]{v.airway} ({v.segment_start}→{v.segment_end}) requires {v.mea:,}[/dim]"
+        for v in exceeding[:3]
+    )
+    return lines
+
+
+def format_mea_lines(check: MeaCheck, filed_altitude: object) -> list[str]:
+    """The flight info lines for a route's MEA check, ending in a blank line if any.
+
+    Each segment is compared with the level in force at its airway's entry, or
+    with the filed altitude when the route sets none there. The MEA warning
+    comes first, then one dim line per airway the check skipped because one
+    end of the flown stretch is not on it.
+
+    Args:
+        check: The route's MEA check
+        filed_altitude: The flight plan's altitude field (feet, e.g. "30000")
+
+    Returns:
+        The lines to show, or an empty list when there is nothing to show
+    """
+    lines = _mea_warning_lines(check.violations, _parse_filed_altitude(filed_altitude))
+    lines.extend(
+        f"[dim]MEA not checked: {s.airway} ({s.missing_fix} not on it)[/dim]"
+        for s in check.skipped
+    )
+    if lines:
+        lines.append("")
+    return lines
 
 
 class FlightInfoScreen(ModalScreen):
@@ -117,8 +178,8 @@ class FlightInfoScreen(ModalScreen):
         self.departure_alternates = None
         self.arrival_alternates = None
         self.alternates_searched = False  # Track if we've completed the search
-        # MEA warning: (max_mea, violations) or None if not yet loaded
-        self.mea_info: tuple[int | None, list[MeaViolation]] | None = None
+        # MEA check of the route, or None if not yet loaded
+        self.mea_info: MeaCheck | None = None
         self.mea_loading = False  # Only load for IFR flights with airways
         self._pending_tasks: list = []  # Track pending async tasks
         self._refresh_timer = None  # Timer for periodic refresh
@@ -361,7 +422,8 @@ class FlightInfoScreen(ModalScreen):
             self._update_display()
         except asyncio.CancelledError:
             return
-        except Exception:
+        except Exception as e:
+            debug(f"MEA check failed for route {route!r}: {e}")
             self.mea_loading = False
             self.mea_info = None
 
@@ -656,30 +718,11 @@ class FlightInfoScreen(ModalScreen):
                 lines.extend(f"  {route_line}" for route_line in route_lines)
                 lines.append("")
 
-            # MEA warning - show if IFR flight's altitude is below required MEA
+            # MEA warning - show if IFR flight's level on an airway is below its MEA
             if not self._is_vfr_flight() and self.mea_info is not None:
-                max_mea, violations = self.mea_info
-                if max_mea is not None and violations:
-                    # Get filed altitude as integer
-                    filed_alt_str = flight_plan.get("altitude", "")
-                    try:
-                        filed_alt = int(filed_alt_str)
-                    except (ValueError, TypeError):
-                        filed_alt = 0
-
-                    if filed_alt > 0 and filed_alt < max_mea:
-                        lines.append("[bold yellow]MEA WARNING[/bold yellow]")
-                        lines.append(
-                            f"  Filed altitude {filed_alt:,} < required MEA {max_mea:,}"
-                        )
-                        # Show segments that exceed filed altitude (limit to 3, highest first)
-                        exceeding = [v for v in violations if v.mea > filed_alt]
-                        exceeding.sort(key=lambda v: v.mea, reverse=True)
-                        lines.extend(
-                            f"  [dim]{v.airway} ({v.segment_start}→{v.segment_end}) requires {v.mea:,}[/dim]"
-                            for v in exceeding[:3]
-                        )
-                        lines.append("")
+                lines.extend(
+                    format_mea_lines(self.mea_info, flight_plan.get("altitude", ""))
+                )
             elif self.mea_loading:
                 lines.append("[dim]Checking MEA requirements...[/dim]")
                 lines.append("")

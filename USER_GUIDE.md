@@ -334,7 +334,7 @@ Displays comprehensive flight details:
 - Pilot and ATC hours (from VATSIM stats)
 
 **MEA Violation Warning:**
-For IFR flights, shows warnings if the aircraft is below the Minimum Enroute Altitude for any segment of their filed route.
+For IFR flights, shows warnings if the aircraft is below the Minimum Enroute Altitude for any segment of their filed route. Each segment is compared with the level in force at its airway's entry (a `FIX/N0450F350`-style group in the route), else the filed altitude, and the warning shows the worst segment's MEA. An airway that cannot be checked because one of its fixes is not on it gets a dim "MEA not checked" line.
 
 **VFR Weather Warning:**
 For VFR flights, shows warnings if departure or arrival has non-VFR conditions and suggests nearby VFR/MVFR alternate airports within 100nm.
