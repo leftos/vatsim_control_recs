@@ -62,6 +62,9 @@ _HINT_DROP_ORDER = ("Ctrl+D ", "E ", "F ", "Ctrl+S ", "Ctrl+Enter ")
 # Cap on the rows the list builds; a larger result set keeps only the first 100.
 _MAX_OPTIONS = 100
 
+# Query prefixes that narrow the results to one kind of row.
+_QUERY_PREFIXES = {"@": "airport", "#": "flight", "$": "grouping"}
+
 
 def _cap_hint(actions: list[str], tab: str, close: str) -> list[str]:
     """Fit the actions, the Tab item and the Esc item into HINT_MAX_ITEMS."""
@@ -70,6 +73,38 @@ def _cap_hint(actions: list[str], tab: str, close: str) -> list[str]:
             break
         actions = [action for action in actions if not action.startswith(prefix)]
     return [*actions, tab, close]
+
+
+def _split_query_prefix(query: str) -> tuple[str | None, str]:
+    """Split a leading @/#/$ off a query; return its row kind and the rest."""
+    for prefix, kind in _QUERY_PREFIXES.items():
+        if query.startswith(prefix):
+            return kind, query[1:].strip()
+    return None, query
+
+
+def _searchable_text(item_type: str, identifier: str, data: Any) -> str:
+    """Return the lower-case text one result row is matched against."""
+    searchable = identifier.lower()
+    if item_type == "airport" and data:
+        searchable += " " + data.lower()
+    elif item_type == "flight" and data:
+        fp = data.get("flight_plan") or {}
+        searchable += " " + (fp.get("departure") or "").lower()
+        searchable += " " + (fp.get("arrival") or "").lower()
+    return searchable
+
+
+def _matches_query(
+    item: tuple[str, str, Any], type_filter: str | None, query_lower: str
+) -> bool:
+    """True when a result row passes the kind filter and the query text."""
+    item_type, identifier, data = item
+    if type_filter and item_type != type_filter:
+        return False
+    if not query_lower:
+        return True
+    return query_lower in _searchable_text(item_type, identifier, data)
 
 
 class GoToScreen(ModalScreen):
@@ -539,41 +574,18 @@ class GoToScreen(ModalScreen):
 
     def _filter_results(self, query: str) -> None:
         """Filter all_results based on query string."""
-        type_filter = None
-        if query.startswith("@"):
-            type_filter = "airport"
-            query = query[1:].strip()
-        elif query.startswith("#"):
-            type_filter = "flight"
-            query = query[1:].strip()
-        elif query.startswith("$"):
-            type_filter = "grouping"
-            query = query[1:].strip()
-
+        type_filter, query = _split_query_prefix(query)
         query_lower = query.lower()
 
         if not query and not type_filter:
             self.filtered_results = list(self.all_results)
-        else:
-            self.filtered_results = []
-            for item_type, identifier, data in self.all_results:
-                if type_filter and item_type != type_filter:
-                    continue
+            return
 
-                if not query:
-                    self.filtered_results.append((item_type, identifier, data))
-                    continue
-
-                searchable = identifier.lower()
-                if item_type == "airport" and data:
-                    searchable += " " + data.lower()
-                elif item_type == "flight" and data:
-                    fp = data.get("flight_plan") or {}
-                    searchable += " " + (fp.get("departure") or "").lower()
-                    searchable += " " + (fp.get("arrival") or "").lower()
-
-                if query_lower in searchable:
-                    self.filtered_results.append((item_type, identifier, data))
+        self.filtered_results = [
+            item
+            for item in self.all_results
+            if _matches_query(item, type_filter, query_lower)
+        ]
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Filter results as user types"""
@@ -1141,19 +1153,27 @@ class GoToScreen(ModalScreen):
         self.dismiss()
 
         if self.callback:
-            if item_type == "grouping":
-                airport_list = list(
-                    resolve_grouping_recursively(identifier, self.all_groupings)
-                )
-                self.callback((identifier, airport_list))
-            elif item_type == "airport":
-                self.callback((identifier, [identifier]))
-            elif item_type == "flight":
-                self.callback(("flight", data))
-            else:
-                self.callback(None)
+            self._deliver_to_callback(item_type, identifier, data)
             return
 
+        self._open_picked_row(item_type, identifier, data)
+
+    def _deliver_to_callback(self, item_type: str, identifier: str, data: Any) -> None:
+        """Hand the picked row to the caller's callback in the shape it expects."""
+        if item_type == "grouping":
+            airports = list(
+                resolve_grouping_recursively(identifier, self.all_groupings)
+            )
+            self.callback((identifier, airports))
+        elif item_type == "airport":
+            self.callback((identifier, [identifier]))
+        elif item_type == "flight":
+            self.callback(("flight", data))
+        else:
+            self.callback(None)
+
+    def _open_picked_row(self, item_type: str, identifier: str, data: Any) -> None:
+        """Open the flight board or flight info for the picked row."""
         if item_type == "airport":
             self._open_airport(identifier)
         elif item_type == "grouping":

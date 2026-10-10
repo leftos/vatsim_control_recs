@@ -22,6 +22,7 @@ select = [
     "UP",   # pyupgrade
     "B",    # flake8-bugbear
     "C4",   # flake8-comprehensions
+    "C901", # mccabe complexity
     "SIM",  # flake8-simplify
     "PIE",  # flake8-pie
     "PERF", # perflint
@@ -47,11 +48,63 @@ ignore = [
 # those wrappers in every handler. S110 above still catches the real problem,
 # which is swallowing an exception without recording it.
 
+[lint.mccabe]
+# The repo's limit is a cyclomatic complexity of 8, which C901 enforces here.
+max-complexity = 8
+
 [lint.per-file-ignores]
+# C901 is a ratchet: every file below still holds a function over the complexity
+# limit, all of them predating the rule. Splitting a file's offenders takes its
+# entry off this list, and docs/plans/MAIN.md tracks the rest.
+"airport_disambiguator/__main__.py" = ["C901"]
+"airport_disambiguator/disambiguation_engine.py" = ["C901"]
+"airport_disambiguator/entity_extractor.py" = ["C901"]
+"airport_disambiguator/name_processor.py" = ["C901"]
+"backend/briefing/area_clustering.py" = ["C901"]
+"backend/briefing/taf_parsing.py" = ["C901"]
+"backend/cache/manager.py" = ["C901"]
+"backend/core/analysis.py" = ["C901"]
+"backend/core/calculations.py" = ["C901"]
+"backend/core/controllers.py" = ["C901"]
+"backend/core/diversions.py" = ["C901"]
+"backend/core/flights.py" = ["C901"]
+"backend/core/groupings.py" = ["C901"]
+"backend/core/route.py" = ["C901"]
+"backend/core/spatial.py" = ["C901"]
+"backend/data/atis_filter.py" = ["C901"]
+"backend/data/cifp.py" = ["C901"]
+"backend/data/datis_api.py" = ["C901"]
+"backend/data/loaders.py" = ["C901"]
+"backend/data/navaids.py" = ["C901"]
+"backend/data/runways.py" = ["C901"]
+"backend/data/statsim_api.py" = ["C901"]
+"backend/data/vatsim_api.py" = ["C901"]
+"backend/data/weather.py" = ["C901"]
+"backend/data/weather_parsing.py" = ["C901"]
 # The --help check exits before the heavy project imports, so they follow it.
 "main.py" = ["E402"]
 # Standalone script: project imports have to follow the sys.path setup above them.
 "scripts/generate_airport_names.py" = ["E402"]
+"scripts/weather_daemon/artcc_boundaries.py" = ["C901"]
+"scripts/weather_daemon/cli.py" = ["C901"]
+"scripts/weather_daemon/generator.py" = ["C901"]
+"scripts/weather_daemon/index_generator.py" = ["C901"]
+"scripts/weather_daemon/service/nginx_include.py" = ["C901"]
+"scripts/weather_daemon/simaware_boundaries.py" = ["C901"]
+"tests/test_cifp_index.py" = ["C901"]
+"ui/app.py" = ["C901"]
+"ui/modals/airport_tracking.py" = ["C901"]
+"ui/modals/diversion_modal.py" = ["C901"]
+"ui/modals/flight_board.py" = ["C901"]
+"ui/modals/flight_briefing.py" = ["C901"]
+"ui/modals/flight_info.py" = ["C901"]
+"ui/modals/historical_stats.py" = ["C901"]
+"ui/modals/metar_info.py" = ["C901"]
+"ui/modals/route_weather.py" = ["C901"]
+"ui/modals/tracked_airports.py" = ["C901"]
+"ui/modals/vfr_alternatives.py" = ["C901"]
+"ui/modals/weather_briefing.py" = ["C901"]
+"ui/utils.py" = ["C901"]
 
 [format]
 docstring-code-format = true
