@@ -17,10 +17,14 @@ repos:
       - id: check-toml
       - id: check-yaml
       - id: end-of-file-fixer
+        # Vendored Leaflet ships leaflet.js without a final newline; rewriting
+        # it would break its upstream sha256 (tests/test_weather_index_assets.py)
+        exclude: '^scripts/weather_daemon/assets/'
       - id: mixed-line-ending
         args: [--fix=lf]
         exclude: '\.(bat|cmd)$'
       - id: trailing-whitespace
+        exclude: '^scripts/weather_daemon/assets/'
 
   - repo: local
     hooks:

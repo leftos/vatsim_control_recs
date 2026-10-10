@@ -7,6 +7,7 @@ showing ARTCC boundaries that link to weather briefings.
 
 import json
 import math
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,10 @@ MARKER_COLORS = {
     "LIFR": "#ff00ff",  # Magenta
     "UNK": "#888888",  # Gray
 }
+
+# Vendored Leaflet distribution, copied into the output beside index.html
+LEAFLET_VERSION = "1.9.4"
+LEAFLET_ASSETS_DIR = Path(__file__).parent / "assets" / "leaflet" / LEAFLET_VERSION
 
 
 def build_airport_markers(
@@ -389,6 +394,19 @@ def add_buffer_to_polygon(
     return expanded
 
 
+def copy_leaflet_assets(output_dir: Path) -> Path:
+    """Copy the vendored Leaflet assets into the output directory.
+
+    The page references them relative to itself, so they live under
+    ``assets/leaflet/<version>/`` beside index.html. Replaces an existing copy,
+    so an upgrade ships with the next index run. Returns the directory copied to.
+    """
+    destination = output_dir / "assets" / "leaflet" / LEAFLET_VERSION
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(LEAFLET_ASSETS_DIR, destination, dirs_exist_ok=True)
+    return destination
+
+
 def generate_index_page(
     config: DaemonConfig,
     artcc_groupings: dict[str, list[dict[str, Any]]],
@@ -447,6 +465,9 @@ def generate_index_page(
         simaware_cache_dir=config.artcc_cache_dir,  # Reuse ARTCC cache dir for SimAware data
         airport_markers=airport_markers,
     )
+
+    # Leaflet ships with the page, so it loads no third-party JavaScript
+    copy_leaflet_assets(config.output_dir)
 
     # Write index file
     index_path = config.output_dir / "index.html"
@@ -779,7 +800,7 @@ def generate_html(
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>VATSIM Weather Briefings</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="assets/leaflet/{LEAFLET_VERSION}/leaflet.css" />
     <style>
         * {{
             box-sizing: border-box;
@@ -1427,7 +1448,7 @@ def generate_html(
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="assets/leaflet/{LEAFLET_VERSION}/leaflet.js"></script>
     <script>
         // Parse map state from URL query params
         const urlParams = new URLSearchParams(window.location.search);

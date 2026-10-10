@@ -60,9 +60,6 @@ Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `
 
 Items that share no files. Review: `code-review`. Verification: `uv run --group dev pytest -q` plus `ruff check`.
 
-- [ ] Serve Leaflet's JS and CSS from the weather output (pinned to 1.9.4, beside the pages or under `/weather/assets/`) instead of unpkg.com (`scripts/weather_daemon/index_generator.py:782`, `:1430`); map tiles stay on CARTO/OpenStreetMap with their attribution visible. Asked by leftos.dev, whose privacy policy promises no third-party JavaScript: send its inbox a note once the pages no longer load unpkg.
-
-  Settled (owner): `nginx-weather.conf` gets a long-cache `location` for `/weather/assets/`, whose path carries the version. Settled from the code: the files are vendored byte-identical under `scripts/weather_daemon/assets/leaflet/` with Leaflet's BSD-2-Clause `LICENSE` and its `images/`, referenced relative to the page (`assets/leaflet/…`, so LocalTest's `file://` keeps working), and `generate_index_page` copies them into the output on every index run.
 - [ ] Remove `--progressive-load` and `--progressive-chunk-size` and the dead progressive path: the flags are parsed (`main.py:54-64`) but never read, and nothing calls `populate(progressive=True)` (`ui/tables.py:34-41`, `:140-166`, `_populate_progressive` at `:194-208`). Settled (owner): remove, flags and code, with their docs (`CLAUDE.md:76`, `README.md:32-33`, `:59-62`, `USER_GUIDE.md:151-152`, `:694-703`, `:740`, `:800`, `docs/ARCHITECTURE.md:40`).
 - [ ] `common/logger.py` opens the log file and runs `cleanup_old_logs()` on the first log call (`:50`, `:72`), which happens at import time: `backend/data/statsim_api.py:42`, `:53` log while loading `.env`, reached through `import ui.modals` (`ui/modals/historical_stats.py:12`), so tests and tools write to and prune the user's real log folder; the repo-root `conftest.py` works around it.
 
