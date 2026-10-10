@@ -11,7 +11,6 @@ Design in [goto-ux-review.md](./goto-ux-review.md). Shared: `ui/modals/goto_moda
 
 Order (from the map of this wave): R3 removes the edit mode R4's wording would relabel, so R4 splits, its filters half first and its wording sweep last; the `_fill_option_list` split lands before R5, which edits the same hunks; R5 lands before R3.
 
-- [ ] The Tracked Airports Manager's S save (`ui/modals/tracked_airports.py` ~302) never calls `invalidate_goto_cache`, so a ★ grouping saved there does not appear in Go To until something else invalidates the cache.
 - [ ] Picking a row with Space in Go To's pick several rebuilds the list and moves the highlight back to the first row (`ui/modals/goto_modal.py`); keep it on the picked row.
 - [ ] Go To grouping builder (R3 in [goto-ux-review.md](./goto-ux-review.md)): a separate screen that adds any airport from the unified data, lists every member with its filter, removes or excludes members, and asks before overwriting or discarding; grouping file I/O moves into `backend/core/groupings.py`.
 

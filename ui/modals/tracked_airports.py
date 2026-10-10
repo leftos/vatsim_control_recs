@@ -1,6 +1,6 @@
 """Tracked Airports Management Modal Screen"""
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -11,9 +11,17 @@ from textual.widgets import Button, Label, ListItem, ListView, Static
 from .airport_tracking import AirportTrackingModal
 from .save_grouping import SaveGroupingModal
 
+if TYPE_CHECKING:
+    from ui.app import VATSIMControlApp
+
 
 class TrackedAirportsModal(ModalScreen):
     """Modal screen for viewing and managing all tracked airports"""
+
+    @property
+    def vatsim_app(self) -> "VATSIMControlApp":
+        """Return the app with proper type hint"""
+        return self.app  # type: ignore[return-value]
 
     CSS = """
     TrackedAirportsModal {
@@ -305,6 +313,8 @@ class TrackedAirportsModal(ModalScreen):
     def handle_save_grouping_result(self, result) -> None:
         """Handle result from save grouping modal"""
         if result:
+            # The Go To modal caches its results; a new ★ grouping must show up
+            self.vatsim_app.invalidate_goto_cache()
             status_widget = self.query_one("#tracked-status", Static)
             status_widget.update(
                 f"Saved '{result}' with {self._saved_airport_count} airports"

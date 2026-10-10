@@ -20,6 +20,14 @@ AIRPORTS = ["KSFO", "KOAK", "KSJC"]
 class TrackedHost(App):
     """The smallest app the modal can run under."""
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.invalidate_calls = 0
+
+    def invalidate_goto_cache(self) -> None:
+        """Count the Go To cache invalidations the modal asks for."""
+        self.invalidate_calls += 1
+
 
 @dataclass
 class Harness:
@@ -187,3 +195,23 @@ async def test_quick_add_of_nothing_new_keeps_the_highlighted_airport(
         await h.quick_add("+KSJC")
         assert h.list_view.index == h.index_of("KSJC")
         assert h.list_view.highlighted_child.name == "KSJC"
+
+
+async def test_s_save_invalidates_goto_cache(tracked_modal: TrackedFactory) -> None:
+    """A saved ★ grouping must show up in Go To, whose results are cached."""
+    async with tracked_modal() as h:
+        await h.save_as("Test")
+        assert h.saved_favorites() == {"Test": ["KOAK", "KSFO", "KSJC"]}
+        assert h.app.invalidate_calls == 1
+
+
+async def test_cancelled_s_save_leaves_goto_cache(
+    tracked_modal: TrackedFactory,
+) -> None:
+    async with tracked_modal() as h:
+        await h.pilot.press("s")
+        await h.pilot.pause()
+        await h.pilot.press("escape")
+        await h.pilot.pause()
+        assert not h.favorites_file.exists()
+        assert h.app.invalidate_calls == 0
