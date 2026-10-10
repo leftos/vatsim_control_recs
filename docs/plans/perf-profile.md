@@ -50,8 +50,6 @@ S3 loads completely: all 331 airport rows were on screen 137.8 s after process s
 
 With animations on (S2anim), the initial split-flap animation settled 1.7 s after the first rows. `_animate_cells` ran 70 frames for 27 ms in total (0.4 ms per frame, 2 ms at most).
 
-`analyze_flights_data` calls `get_full_names_batch`, not `get_pretty_names_batch` as `docs/ARCHITECTURE.md` (Data flow, step 3) says.
-
 ## One refresh cycle, steady state
 
 Measured by calling `action_refresh()` from the driver (the timer's own call), with the auto-refresh timer pushed out of the way, so each refresh ran alone.
@@ -96,7 +94,7 @@ In S2 and S3 the tables never update after startup. Each cancelled analysis keep
 
 Why each is slow:
 
-1. **CIFP lookups.** Each call reads and scans the whole 53 MB CIFP file line by line (`cifp.py:638-640`, `:732-734`): 371.8 M `str.startswith` calls in one S3 refresh, 0.16–0.22 s per call. The file holds FAA US data only (`SUSAP K…` records), yet every non-US SID or STAR still scans it to find nothing.
+1. **CIFP lookups.** Each call reads and scans the whole 53 MB CIFP file line by line (`cifp.py:638-640`, `:732-734`): 371.8 M `str.startswith` calls in one S3 refresh, 0.16–0.22 s per call. The lookups match only `SUSAP K…` records (the file also holds `SCANP` records for Alaska, Hawaii and the territories, which they never read), yet every non-US SID or STAR still scans it to find nothing.
 
    The caches are smaller than the working set: `lru_cache(maxsize=100)` on both functions, and `lru_cache(maxsize=512)` on `_get_parsed_route` (`backend/core/route_distance.py:55`) against about 950 routes in S3. So the S3 hit rate is zero on every refresh.
 
@@ -159,7 +157,7 @@ Peak RSS stayed between 275 and 306 MB in every run with a single refresh in fli
 5. **Stop refetching weather that is still fresh, and cache "no METAR".** In `get_weather_for_airports_bbox`, fetch boxes only for airports whose METAR cache entry is older than `METAR_CACHE_DURATION`. In `get_metar`, cache an empty result for the same duration. Skip the per-station fallback for airports a successful bbox call covered.
    - Expected gain (network): per S3 refresh, the 68–75 sequential station calls (28.8–50.0 s) and, on 3 refreshes in 4, the 106–115 bbox requests (7.5–15.5 s wall). Per S2/S1 refresh, 2–5 s of bbox wall on 3 in 4 refreshes, and the 2–3 s per slow station.
    - Size M. Files: `backend/data/weather.py` (`get_weather_for_airports_bbox`, `get_metar`), `backend/core/analysis.py:322-344`.
-   - Risks: a METAR that appears mid-minute shows up to 60 s later. A CONUS-sized bbox request returned exactly 400 stations, which suggests the API caps a response. If 10° boxes over dense areas hit that cap, some reporting stations are missing from the bbox results and today land in the per-station fallback. Check the cap before skipping that fallback for bbox-covered airports.
+   - Risks: a METAR that appears mid-minute shows up to 60 s later. The API caps a response at 400 entries ("Most endpoints return a maximum of 400 entries", aviationweather.gov/data/api), silently: a CONUS-sized box returned exactly 400, while a padded 10° box over the US northeast returned 136. A box that returns 400 may be missing reporting stations, so only a smaller response is trusted to cover the airports it omits.
 6. **Drop the full-scan fallback in `find_nearest` when a radius is given.** Return `None` when the 3×3 neighbourhood is empty and `max_distance_nm` is set (`backend/core/spatial.py:113-116`).
    - Expected gain (measured, identical results): S2 `get_nearest_airport_if_on_ground` for 256 flights falls from 0.78 s to 0.013 s, and S1 from 0.068 s to 0.010 s. This is pure-Python CPU, so it also adds to the GIL stalls.
    - Size S. Files: `backend/core/spatial.py`.
@@ -180,5 +178,4 @@ Together, fixes 2–4 and 6 remove almost all CPU from a refresh. Fix 5 removes 
 ## Pre-existing issues seen while measuring
 
 - At `run_test` teardown after the S2 auto-refresh run, the 0.25 s `update_time_displays` timer raised `NoMatches: '#status-bar'` from `update_status_bar` (`ui/app.py:472`, `:486`): the timer fired after the screen was torn down.
-- `docs/ARCHITECTURE.md` (Data flow, step 3) and the current-focus item in `docs/plans/MAIN.md` name `get_pretty_names_batch`; the code calls `get_full_names_batch` (`backend/core/analysis.py:350`, `ui/app.py:330`).
 - `--progressive-load` / `--progressive-chunk-size` are dead options (see above).

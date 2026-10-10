@@ -143,7 +143,7 @@ The global `backend.config.constants.WIND_SOURCE` controls which source is used.
 - `data/runways_metadata.txt` - Runway data metadata (AIRAC cycle info)
 - `data/preset_groupings/` - ARTCC-based preset groupings (23 ARTCCs: ZAB, ZAN, ZAU, ZBW, ZDC, ZDV, ZFW, ZHN, ZHU, ZID, ZJX, ZKC, ZLA, ZLC, ZMA, ZME, ZMP, ZNY, ZOA, ZOB, ZSE, ZSU, ZTL)
 - `data/simaware_boundaries/` - Facility boundary polygons for spatial matching (600+ facilities worldwide)
-- `data/cifp/` - CIFP data caches organized by AIRAC cycle
+- `cache/cifp/` in the user data directory (`get_user_cache_dir()` in `common/paths.py`, not `data/`) - CIFP data caches organized by AIRAC cycle
 - `data/test-vatsim-data.json` - Sample VATSIM API response for development (~2MB)
 
 ## VATSIM Data Structure
@@ -313,7 +313,7 @@ In edit mode a saved filter shows on an individually picked airport's row, and `
 
 ## Debugging
 
-Debug logs are written to `debug_logs/debug_YYYYMMDD.log`. Logs older than 7 days are automatically cleaned on startup. Use `ui.debug_logger.debug()` for UI debugging.
+Debug logs are written to `logs/` in the user data directory (`get_user_logs_dir()` in `common/paths.py`). Logs older than 10 days are cleaned on the first log call (`cleanup_old_logs()` in `common/logger.py`). Use `ui.debug_logger.debug()` for UI debugging.
 
 ## Weather Daemon
 
