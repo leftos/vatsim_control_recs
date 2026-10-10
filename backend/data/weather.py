@@ -339,7 +339,7 @@ def _fetch_metar_from_vatsim(airport_icao: str) -> tuple[str, bool]:
     return metar_text, True
 
 
-def get_metar(airport_icao: str) -> str:
+def get_metar(airport_icao: str, *, as_of: datetime | None = None) -> str:
     """
     Fetch current METAR with caching.
 
@@ -352,6 +352,8 @@ def get_metar(airport_icao: str) -> str:
 
     Args:
         airport_icao: The ICAO code of the airport
+        as_of: Judge cache freshness as of this moment (the refresh's box decision)
+            instead of now
 
     Returns:
         Full METAR string or empty string if unavailable
@@ -360,7 +362,7 @@ def get_metar(airport_icao: str) -> str:
     metar_lock = get_metar_cache_lock()
 
     with metar_lock:
-        cached = _cached_metar(airport_icao, datetime.now(timezone.utc))
+        cached = _cached_metar(airport_icao, _resolve_now(as_of))
     if cached is not None:
         return cached
 
@@ -403,26 +405,47 @@ def _has_fresh_negative(airport_icao: str, now: datetime) -> bool:
     return negative_time is not None and _is_fresh(negative_time, now)
 
 
+def _resolve_now(as_of: datetime | None) -> datetime:
+    """The moment freshness is judged at: the given as_of, else the current time."""
+    return as_of if as_of is not None else datetime.now(timezone.utc)
+
+
+def _usable_entry(airport_icao: str, now: datetime) -> dict[str, Any] | None:
+    """
+    The airport's METAR cache entry when it can answer a read without a fetch:
+    fresh, or stale while a fresh "no METAR" negative stands. Caller holds the
+    METAR lock. None means the entry is missing or must be refetched.
+    """
+    metar_data_cache, _metar_blacklist = get_metar_cache()
+    cache_entry = metar_data_cache.get(airport_icao)
+    if cache_entry is None:
+        return None
+    if _is_fresh(cache_entry["timestamp"], now) or _has_fresh_negative(
+        airport_icao, now
+    ):
+        return cache_entry
+    return None
+
+
 def _cached_metar(airport_icao: str, now: datetime) -> str | None:
     """
     Answer get_metar from the caches when they can. Caller holds the METAR lock.
 
-    A METAR entry, fresh or stale, always wins over a "no METAR" negative; the
-    negative is consulted only for airports with no METAR entry at all.
+    A fresh METAR entry is returned as is. A stale entry is returned without a
+    fetch while a fresh "no METAR" negative stands (a stale METAR keeps showing);
+    otherwise it is refetched. With no entry, a fresh negative answers "".
 
     Returns:
         The cached answer ("" for a blacklisted airport or a fresh negative), or
         None when the METAR must be fetched.
     """
-    metar_data_cache, metar_blacklist = get_metar_cache()
+    _metar_data_cache, metar_blacklist = get_metar_cache()
     if airport_icao in metar_blacklist:
         return ""
 
-    cache_entry = metar_data_cache.get(airport_icao)
-    if cache_entry is not None:
-        return (
-            cache_entry["metar"] if _is_fresh(cache_entry["timestamp"], now) else None
-        )
+    entry = _usable_entry(airport_icao, now)
+    if entry is not None:
+        return entry["metar"]
 
     return "" if _has_fresh_negative(airport_icao, now) else None
 
@@ -630,7 +653,7 @@ def _parse_wind_from_metar(metar: str) -> str:
     return ""
 
 
-def get_wind_from_metar(airport_icao: str) -> str:
+def get_wind_from_metar(airport_icao: str, *, as_of: datetime | None = None) -> str:
     """
     Extract wind information from METAR.
     Uses cached parsed wind if available to avoid redundant parsing.
@@ -639,6 +662,8 @@ def get_wind_from_metar(airport_icao: str) -> str:
 
     Args:
         airport_icao: The ICAO code of the airport
+        as_of: Judge cache freshness as of this moment (the refresh's box decision)
+            instead of now
 
     Returns:
         Wind string in format like "27005KT" or "27005G12KT" or "00000KT" or empty string if unavailable
@@ -648,16 +673,12 @@ def get_wind_from_metar(airport_icao: str) -> str:
 
     # Check if we have cached parsed wind data
     with metar_lock:
-        current_time = datetime.now(timezone.utc)
-        if airport_icao in metar_data_cache:
-            cache_entry = metar_data_cache[airport_icao]
-            time_since_cache = (current_time - cache_entry["timestamp"]).total_seconds()
-            if time_since_cache < METAR_CACHE_DURATION:
-                # Return cached parsed wind if available
-                return cache_entry.get("wind", "")
+        entry = _usable_entry(airport_icao, _resolve_now(as_of))
+        if entry is not None:
+            return entry.get("wind", "")
 
     # Cache miss or expired - fetch METAR (which will parse and cache wind)
-    metar = get_metar(airport_icao)
+    metar = get_metar(airport_icao, as_of=as_of)
     if not metar:
         return ""
 
@@ -1031,7 +1052,9 @@ def parse_altimeter_from_metar(metar: str) -> str | None:
     return None
 
 
-def get_altimeter_setting(airport_icao: str) -> str | None:
+def get_altimeter_setting(
+    airport_icao: str, *, as_of: datetime | None = None
+) -> str | None:
     """
     Get altimeter setting for an airport from its METAR.
     Uses cached parsed altimeter if available to avoid redundant parsing.
@@ -1040,6 +1063,8 @@ def get_altimeter_setting(airport_icao: str) -> str | None:
 
     Args:
         airport_icao: The ICAO code of the airport
+        as_of: Judge cache freshness as of this moment (the refresh's box decision)
+            instead of now
 
     Returns:
         Altimeter string (e.g., "A2992" or "Q1013") or None if unavailable
@@ -1049,16 +1074,12 @@ def get_altimeter_setting(airport_icao: str) -> str | None:
 
     # Check if we have cached parsed altimeter data
     with metar_lock:
-        current_time = datetime.now(timezone.utc)
-        if airport_icao in metar_data_cache:
-            cache_entry = metar_data_cache[airport_icao]
-            time_since_cache = (current_time - cache_entry["timestamp"]).total_seconds()
-            if time_since_cache < METAR_CACHE_DURATION:
-                # Return cached parsed altimeter if available
-                return cache_entry.get("altimeter")
+        entry = _usable_entry(airport_icao, _resolve_now(as_of))
+        if entry is not None:
+            return entry.get("altimeter")
 
     # Cache miss or expired - fetch METAR (which will parse and cache altimeter)
-    metar = get_metar(airport_icao)
+    metar = get_metar(airport_icao, as_of=as_of)
     if not metar:
         return None
 
@@ -1688,6 +1709,8 @@ def get_weather_for_airports_bbox(
     airports_data: dict[str, dict[str, Any]],
     max_workers: int = 5,
     progress_callback: Callable[[int, int], None] | None = None,
+    *,
+    as_of: datetime | None = None,
 ) -> dict[str, str]:
     """
     Fetch METAR data for airports using bbox queries.
@@ -1706,6 +1729,8 @@ def get_weather_for_airports_bbox(
         airports_data: Dictionary mapping ICAO codes to airport data with lat/lon
         max_workers: Maximum concurrent bbox fetches (default: 5)
         progress_callback: Optional callback(completed, total) called as requested bboxes complete
+        as_of: Judge cache freshness as of this moment (the refresh's box decision)
+            instead of now; also used for the returned METARs
 
     Returns:
         Dictionary mapping ICAO codes to METAR strings (empty string if unavailable)
@@ -1723,7 +1748,8 @@ def get_weather_for_airports_bbox(
         bbox_id: _airports_in_bbox(bbox, airport_icaos, airports_data)
         for bbox_id, bbox in bboxes.items()
     }
-    to_fetch = _bboxes_needing_fetch(bboxes, members, datetime.now(timezone.utc))
+    decision_time = _resolve_now(as_of)
+    to_fetch = _bboxes_needing_fetch(bboxes, members, decision_time)
     results = _fetch_bboxes(to_fetch, max_workers, progress_callback)
 
     # Populate the METAR cache so subsequent calls to get_wind_from_metar/get_altimeter_setting
@@ -1734,9 +1760,10 @@ def get_weather_for_airports_bbox(
         for bbox_id, fetch in results:
             _store_bbox_result(fetch, members[bbox_id], target_set, current_time)
 
-        # Ensure all requested airports have an entry (empty string if not found)
+        # Answer each airport as of the decision time: a box skipped as fresh and a
+        # stale entry under a fresh negative both keep their cached METAR.
         return {
-            icao: _fresh_cached_metar(icao.upper(), current_time)
+            icao: _cached_metar(icao.upper(), decision_time) or ""
             for icao in airport_icaos
         }
 
@@ -1766,15 +1793,6 @@ def _has_fresh_answer(airport_icao: str, now: datetime) -> bool:
     if cache_entry is not None and _is_fresh(cache_entry["timestamp"], now):
         return True
     return _has_fresh_negative(airport_icao, now)
-
-
-def _fresh_cached_metar(airport_icao: str, now: datetime) -> str:
-    """The airport's fresh cached METAR, or "". Caller holds the METAR lock."""
-    metar_data_cache, _metar_blacklist = get_metar_cache()
-    cache_entry = metar_data_cache.get(airport_icao)
-    if cache_entry is not None and _is_fresh(cache_entry["timestamp"], now):
-        return cache_entry["metar"]
-    return ""
 
 
 def _bboxes_needing_fetch(

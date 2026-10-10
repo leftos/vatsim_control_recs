@@ -5,6 +5,7 @@ Main analysis module for VATSIM flights and controller staffing.
 import os
 from collections import defaultdict
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from typing import Any
 
 from airport_disambiguator import AirportDisambiguator
@@ -336,25 +337,28 @@ def analyze_flights_data(
     # Fetch weather data using bbox API (more efficient than per-airport fetching)
     # This populates the METAR cache so wind and altimeter can be retrieved from cache
     airports_to_fetch = [apt["icao"] for apt in airports_to_display]
+    weather_as_of = datetime.now(timezone.utc)
     if airports_to_fetch:
         print(
             f"Fetching weather data for {len(airports_to_fetch)} active airports using bbox API..."
         )
         # Use bbox-based fetching which populates the METAR cache
-        get_weather_for_airports_bbox(airports_to_fetch, all_airports_data)
+        get_weather_for_airports_bbox(
+            airports_to_fetch, all_airports_data, as_of=weather_as_of
+        )
 
     # Get wind info from cache (populated by bbox fetch above)
     # Skip if hide_wind is enabled
     wind_info_batch = {}
     if airports_to_fetch and not hide_wind:
         for icao in airports_to_fetch:
-            wind_info_batch[icao] = get_wind_from_metar(icao)
+            wind_info_batch[icao] = get_wind_from_metar(icao, as_of=weather_as_of)
 
     # Get altimeter settings from cache (populated by bbox fetch above)
     altimeter_batch = {}
     if airports_to_fetch:
         for icao in airports_to_fetch:
-            result = get_altimeter_setting(icao)
+            result = get_altimeter_setting(icao, as_of=weather_as_of)
             altimeter_batch[icao] = result if result else ""
 
     if airports_to_fetch:

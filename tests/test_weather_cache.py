@@ -322,6 +322,85 @@ def test_negatives_are_not_persisted(
     assert "KQQQ" not in saved
 
 
+def test_slow_bbox_phase_does_not_expire_boxes_it_skipped(
+    net: FakeNet, clock: Clock
+) -> None:
+    airports = ["KJFK", "KBOS", "KLAX", "KSFO"]
+    weather.get_weather_for_airports_bbox(airports, AIRPORTS)
+    for icao in ("KJFK", "KBOS"):
+        _age_entry(icao, 50)
+    for icao in ("KLAX", "KSFO"):
+        _age_entry(icao, 61)
+
+    def slow_bbox(url: str) -> bytes:
+        clock.advance(20)
+        return net._bbox_from_stations(url)
+
+    net.bbox = slow_bbox
+    as_of = clock.now
+    result = weather.get_weather_for_airports_bbox(airports, AIRPORTS, as_of=as_of)
+    assert len(net.bbox_urls()) == 3
+    assert result["KJFK"]
+    assert result["KBOS"]
+
+    for icao in airports:
+        weather.get_wind_from_metar(icao, as_of=as_of)
+        weather.get_altimeter_setting(icao, as_of=as_of)
+
+    assert net.count("ids=") == 0
+
+
+def test_reads_without_as_of_still_refetch_a_stale_entry(
+    net: FakeNet, clock: Clock
+) -> None:
+    net.ids = lambda url: b"KQQQ 101251Z 27005KT 10SM CLR 15/05 A2992"
+    weather.get_metar("KQQQ")
+    _age_entry("KQQQ", 61)
+
+    before = net.count("ids=")
+    wind = weather.get_wind_from_metar("KQQQ")
+
+    assert wind == "27005KT"
+    assert net.count("ids=") == before + 1
+
+
+def test_clean_empty_with_stale_entry_is_fetched_once(
+    net: FakeNet, clock: Clock
+) -> None:
+    net.ids = lambda url: b"KQQQ 101251Z 27005KT 10SM CLR 15/05 A2992"
+    assert weather.get_metar("KQQQ") == "KQQQ 101251Z 27005KT 10SM CLR 15/05 A2992"
+    _age_entry("KQQQ", 61)
+    net.urls.clear()
+
+    net.ids = lambda url: b""
+    net.vatsim = lambda url: b""
+
+    wind = weather.get_wind_from_metar("KQQQ")
+    altimeter = weather.get_altimeter_setting("KQQQ")
+
+    assert net.count("ids=") == 1
+    assert wind == "27005KT"
+    assert altimeter == "A2992"
+
+
+def test_reader_fast_path_honours_negative_on_stale_entry(
+    net: FakeNet, clock: Clock
+) -> None:
+    metar_data_cache, _blacklist = manager.get_metar_cache()
+    metar_data_cache["KXYZ"] = {
+        "metar": STALE_METAR,
+        "wind": "27005KT",
+        "altimeter": "A2992",
+        "timestamp": clock.now - timedelta(seconds=120),
+    }
+    manager.get_metar_negative_cache()["KXYZ"] = clock.now
+
+    wind = weather.get_wind_from_metar("KXYZ")
+
+    assert wind == "27005KT"
+    assert net.count("ids=") == 0
+
+
 def test_bbox_http_error_is_logged(
     net: FakeNet, clock: Clock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
