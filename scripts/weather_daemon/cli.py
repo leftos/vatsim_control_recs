@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from common.logger import setup_file_logging
 from scripts.weather_daemon.config import DaemonConfig
+from scripts.weather_daemon.env_file import load_carto_basemap_key
 from scripts.weather_daemon.generator import acquire_lock, generate
 
 # Valid stages for --stages argument
@@ -199,6 +200,7 @@ Examples:
     # Set up logging
     setup_logging(log_dir, verbose=args.verbose)
     setup_file_logging()
+    load_carto_basemap_key(project_root)
 
     if args.output:
         config.output_dir = args.output

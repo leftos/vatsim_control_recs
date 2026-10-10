@@ -39,6 +39,7 @@ Declared in `pyproject.toml`:
 ### Environment Variables
 
 - `STATSIM_API_KEY` - API key from statsim.net for historical flight statistics feature (optional, stored in `.env` file)
+- `CARTO_BASEMAP_KEY` - domain-locked CARTO key for the weather index's basemap (`https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?key=<key>`). The daemon CLI reads it from the environment, else from the untracked repo-root `.env` (`scripts/weather_daemon/env_file.py`). The production key (leftos.dev, www.leftos.dev) lives in the server's `/opt/vatsim-weather-daemon/.env` (root:www-data, mode 640); `LocalTest.ps1` uses a localhost key from the local `.env`. With no key or an invalid one the page renders without a basemap and the log says so. Background: `docs/research/2026-10-10-basemap-tiles.md`
 
 ### Running the Application
 
@@ -317,7 +318,9 @@ Debug logs are written to `logs/` in the user data directory (`get_user_logs_dir
 
 The weather daemon generates weather briefing pages for the website at `https://leftos.dev/weather/`. It runs on a Linux server and is managed via PowerShell scripts from Windows.
 
-The pages load no third-party JavaScript: Leaflet is vendored under `scripts/weather_daemon/assets/leaflet/<version>/` and the index stage copies it into the output beside `index.html`; only the CARTO/OpenStreetMap map tiles come from outside. Upgrading Leaflet means a new version folder and `LEAFLET_VERSION` in `index_generator.py` (the folder's `README.md` has the steps), and a changed `nginx-weather.conf` has to be applied by hand on the server (then `nginx -t` and a reload): nginx loads `/etc/nginx/sites-enabled/leftos.dev`, a regular file rather than a symlink, so edit it and keep `/etc/nginx/sites-available/leftos.dev` the same; `setup.sh` edits only the `sites-available` file and inserts the weather block only when it has no `/weather` location yet. The server is the DigitalOcean droplet `leftos-dev-droplet-1`; the deploy scripts read its address from `WEATHER_SERVER_IP` in the untracked repo-root `.env`.
+The pages load no third-party JavaScript: Leaflet is vendored under `scripts/weather_daemon/assets/leaflet/<version>/` and the index stage copies it into the output beside `index.html`; only the CARTO/OpenStreetMap map tiles come from outside.
+
+The index stage runs before the tile stage, so a run killed in the tile stage still writes `index.html`. The tile stage writes each tile atomically (temp file, then `os.replace`), skips polygons whose bounding box cannot reach a tile, and writes `tiles/version.txt` (the run's start time) after all tiles; the page's tile `?v=` is that last completed version, falling back to the run's start time. The systemd unit is oneshot with `TimeoutStartSec=300` on a 1-vCPU droplet, so time a tile-stage change against that limit. Upgrading Leaflet means a new version folder and `LEAFLET_VERSION` in `index_generator.py` (the folder's `README.md` has the steps), and a changed `nginx-weather.conf` has to be applied by hand on the server (then `nginx -t` and a reload): nginx loads `/etc/nginx/sites-enabled/leftos.dev`, a regular file rather than a symlink, so edit it and keep `/etc/nginx/sites-available/leftos.dev` the same; `setup.sh` edits only the `sites-available` file and inserts the weather block only when it has no `/weather` location yet. The server is the DigitalOcean droplet `leftos-dev-droplet-1`; the deploy scripts read its address from `WEATHER_SERVER_IP` in the untracked repo-root `.env`.
 
 ### PowerShell Scripts (`scripts/weather_daemon/service/`)
 
@@ -326,7 +329,7 @@ The pages load no third-party JavaScript: Leaflet is vendored under `scripts/wea
   - `.\LocalTest.ps1` - Full generation (all stages)
   - `.\LocalTest.ps1 index` - Index page only (fastest for UI changes)
   - `.\LocalTest.ps1 tiles,index` - Tiles and index only
-  - Output goes to `test_output/`
+  - Output goes to `test_output/`, served at `http://localhost:8765/index.html` (the localhost key needs a Referer, which a `file://` page does not send); the script checks the server answers and stops it when Enter is pressed
 
 **Deployment to server:**
 - `QuickDeploy.ps1` - Git pull on server and regenerate (requires changes to be pushed first)

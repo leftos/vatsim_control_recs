@@ -9,6 +9,10 @@
 #   .\LocalTest.ps1 tiles,index        # Tiles and index only (use cached weather)
 #   .\LocalTest.ps1 tiles              # Tiles only
 #   .\LocalTest.ps1 index              # Index only
+#
+# The page is served at http://localhost:8765/index.html (the CARTO basemap key is
+# locked to localhost and needs the Referer a file:// page does not send).
+# Press Enter in this window to stop the server.
 
 param(
     [string]$Stages = ""
@@ -79,11 +83,41 @@ try {
         Write-Host "=== Generation Complete! ===" -ForegroundColor Green
         Write-Host "Output: $OutputDir" -ForegroundColor Cyan
 
-        # Open in browser
+        # Serve over HTTP on localhost and open in browser
         $IndexPath = "$OutputDir\index.html"
         if (Test-Path $IndexPath) {
-            Write-Host "Opening in browser..." -ForegroundColor Yellow
-            Start-Process $IndexPath
+            $Port = 8765
+            $Url = "http://localhost:$Port/index.html"
+            Write-Host "Serving $OutputDir at $Url" -ForegroundColor Yellow
+            $Server = Start-Process -FilePath "uv" -PassThru -WindowStyle Hidden -ArgumentList @(
+                "run", "python", "-m", "http.server", "$Port",
+                "--bind", "127.0.0.1", "--directory", "`"$OutputDir`""
+            )
+            try {
+                # Wait up to ~10 s for the server to answer
+                $Ready = $false
+                for ($i = 0; $i -lt 20 -and -not $Server.HasExited; $i++) {
+                    try {
+                        Invoke-WebRequest -Uri "http://localhost:$Port/" -UseBasicParsing -TimeoutSec 1 | Out-Null
+                        $Ready = $true
+                        break
+                    } catch {
+                        Start-Sleep -Milliseconds 500
+                    }
+                }
+                if (-not $Ready) {
+                    $Reason = if ($Server.HasExited) { "exited with code $($Server.ExitCode)" } else { "did not answer within 10 s" }
+                    Write-Host "Error: the HTTP server on port $Port $Reason (is the port in use?)" -ForegroundColor Red
+                    exit 1
+                }
+                Start-Process $Url
+                Read-Host "Press Enter to stop the server"
+            } finally {
+                if (-not $Server.HasExited) {
+                    # /T also stops the python process uv started
+                    taskkill /PID $Server.Id /T /F 2>&1 | Out-Null
+                }
+            }
         }
     } else {
         Write-Host "Generation failed with exit code $LASTEXITCODE" -ForegroundColor Red

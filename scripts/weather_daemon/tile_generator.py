@@ -9,6 +9,8 @@ Memory-optimized with KD-tree spatial indexing for low-memory servers.
 
 import logging
 import math
+import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from io import BytesIO
@@ -98,6 +100,76 @@ def points_in_polygon(
     return inside
 
 
+def polygon_box(
+    polygon: list[tuple[float, float]],
+) -> tuple[float, float, float, float] | None:
+    """A polygon's (min_lat, max_lat, min_lon, max_lon), or None when it has under 3 points."""
+    if len(polygon) < 3:
+        return None
+    lats = [lat for lat, _ in polygon]
+    lons = [lon for _, lon in polygon]
+    return min(lats), max(lats), min(lons), max(lons)
+
+
+def write_file_atomically(path: Path, data: bytes) -> None:
+    """Write ``data`` to a temp file beside ``path``, then replace ``path`` with it.
+
+    A reader (nginx) or a run killed mid-write sees either the old file or the new
+    one, never a truncated one. The temp file is removed if the write fails.
+    """
+    temp_path = path.with_name(
+        f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+    )
+    try:
+        temp_path.write_bytes(data)
+        os.replace(temp_path, path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+# Written into the tiles directory after a run's last tile, so the index page can
+# version the tile URLs by the newest complete tile set
+TILE_VERSION_FILE = "version.txt"
+
+
+def write_tile_version(tiles_dir: Path, version: int) -> None:
+    """Record ``version`` as the newest complete tile set in ``tiles_dir``."""
+    write_file_atomically(tiles_dir / TILE_VERSION_FILE, f"{version}\n".encode())
+
+
+def read_tile_version(tiles_dir: Path, fallback: int) -> int:
+    """The newest complete tile set's version, or ``fallback`` (logged) when there is none."""
+    version_path = tiles_dir / TILE_VERSION_FILE
+    try:
+        return int(version_path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError) as e:
+        logger.info(
+            f"No tile version in {version_path} ({e}); using the run's start time {fallback}"
+        )
+        return fallback
+
+
+def encode_tile_png(valid_mask: np.ndarray, pixel_categories: np.ndarray) -> bytes:
+    """Colour each valid pixel by its category index and encode the tile as PNG."""
+    rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
+
+    for cat_name, cat_idx in CATEGORY_INDEX.items():
+        cat_mask = valid_mask & (pixel_categories == cat_idx)
+        if np.any(cat_mask):
+            rgba[cat_mask] = CATEGORY_RGBA[cat_name]
+
+    img = Image.fromarray(rgba, "RGBA")
+    buffer = BytesIO()
+    img.save(buffer, "PNG", optimize=True)
+    return buffer.getvalue()
+
+
+# Pixel coordinates are float32, so a tile's edge pixels can sit a few millionths of a
+# degree outside its float64 bounds; the margin keeps a polygon whose box ends exactly
+# on a tile edge.
+REACH_MARGIN_DEG = 1e-3
+
+
 class WeatherTileGenerator:
     """
     Memory-efficient weather tile generator using KD-tree spatial indexing.
@@ -129,6 +201,12 @@ class WeatherTileGenerator:
         for artcc, polys in artcc_boundaries.items():
             if artcc in conus_artccs:
                 self.all_boundaries.extend(polys)
+
+        # Each polygon's (min_lat, max_lat, min_lon, max_lon), same order as all_boundaries;
+        # None for a polygon too short to enclose anything
+        self.boundary_boxes: list[tuple[float, float, float, float] | None] = [
+            polygon_box(polygon) for polygon in self.all_boundaries
+        ]
 
         # Calculate bounding box of all regions
         self.bounds = self._calculate_bounds(artcc_boundaries, conus_artccs)
@@ -191,6 +269,28 @@ class WeatherTileGenerator:
             lat_to_tile_y(self.bounds.south, zoom),
         )
 
+    def _polygons_reaching(
+        self, tile_bounds: TileBounds
+    ) -> list[list[tuple[float, float]]]:
+        """The polygons whose bounding box meets the tile's bounds (widened by the margin)."""
+        south = tile_bounds.south - REACH_MARGIN_DEG
+        north = tile_bounds.north + REACH_MARGIN_DEG
+        west = tile_bounds.west - REACH_MARGIN_DEG
+        east = tile_bounds.east + REACH_MARGIN_DEG
+        reaching = []
+        for polygon, box in zip(self.all_boundaries, self.boundary_boxes, strict=True):
+            if box is None:
+                continue
+            min_lat, max_lat, min_lon, max_lon = box
+            if (
+                max_lat >= south
+                and min_lat <= north
+                and max_lon >= west
+                and min_lon <= east
+            ):
+                reaching.append(polygon)
+        return reaching
+
     def _generate_tile(self, tile_x: int, tile_y: int, zoom: int) -> bytes | None:
         """
         Generate a single tile using per-pixel cosine-corrected distance calculations.
@@ -212,6 +312,11 @@ class WeatherTileGenerator:
         ):
             return None
 
+        # A pixel outside a polygon's box cannot be inside the polygon
+        reaching = self._polygons_reaching(tile_bounds)
+        if not reaching:
+            return None
+
         # Create coordinate grids for the tile
         n = 2**zoom
         px = np.arange(TILE_SIZE, dtype=np.float32)
@@ -227,9 +332,8 @@ class WeatherTileGenerator:
 
         # Check which pixels are inside any ARTCC boundary
         inside_any = np.zeros((TILE_SIZE, TILE_SIZE), dtype=bool)
-        for polygon in self.all_boundaries:
-            if len(polygon) >= 3:
-                inside_any |= points_in_polygon(lats, lons, polygon)
+        for polygon in reaching:
+            inside_any |= points_in_polygon(lats, lons, polygon)
 
         if not np.any(inside_any):
             return None
@@ -269,19 +373,19 @@ class WeatherTileGenerator:
         if not np.any(valid_mask):
             return None
 
-        # Create RGBA image
-        rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
+        return encode_tile_png(valid_mask, pixel_categories)
 
-        for cat_name, cat_idx in CATEGORY_INDEX.items():
-            cat_mask = valid_mask & (pixel_categories == cat_idx)
-            if np.any(cat_mask):
-                rgba[cat_mask] = CATEGORY_RGBA[cat_name]
-
-        # Convert to PNG bytes
-        img = Image.fromarray(rgba, "RGBA")
-        buffer = BytesIO()
-        img.save(buffer, "PNG", optimize=True)
-        return buffer.getvalue()
+    def _all_tile_coords(self) -> list[tuple[int, int, int]]:
+        """Every (x, y, zoom) in the region's tile range at each zoom level."""
+        all_tiles = []
+        for zoom in self.zoom_levels:
+            min_x, max_x, min_y, max_y = self._get_tile_range(zoom)
+            all_tiles.extend(
+                (x, y, zoom)
+                for x in range(min_x, max_x + 1)
+                for y in range(min_y, max_y + 1)
+            )
+        return all_tiles
 
     def generate_all(self, max_workers: int = 2) -> dict[int, int]:
         """
@@ -295,16 +399,7 @@ class WeatherTileGenerator:
             print("    WARNING: No airports with valid weather data")
             return {}
 
-        # Collect all tile coordinates
-        all_tiles = []
-        for zoom in self.zoom_levels:
-            min_x, max_x, min_y, max_y = self._get_tile_range(zoom)
-            all_tiles.extend(
-                (x, y, zoom)
-                for x in range(min_x, max_x + 1)
-                for y in range(min_y, max_y + 1)
-            )
-
+        all_tiles = self._all_tile_coords()
         total_potential = len(all_tiles)
         print(
             f"    Processing {total_potential} potential tiles with {max_workers} workers..."
@@ -322,9 +417,7 @@ class WeatherTileGenerator:
             if png_bytes:
                 tile_dir = self.output_dir / str(zoom) / str(x)
                 tile_dir.mkdir(parents=True, exist_ok=True)
-                tile_path = tile_dir / f"{y}.png"
-                with open(tile_path, "wb") as f:
-                    f.write(png_bytes)
+                write_file_atomically(tile_dir / f"{y}.png", png_bytes)
                 return zoom
             return None
 

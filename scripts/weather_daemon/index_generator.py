@@ -6,15 +6,30 @@ showing ARTCC boundaries that link to weather briefings.
 """
 
 import json
+import logging
 import math
+import os
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.weather_daemon.env_file import CARTO_KEY_ENV
+from scripts.weather_daemon.tile_generator import read_tile_version
+
 from .artcc_boundaries import get_artcc_boundaries
 from .config import ARTCC_NAMES, DaemonConfig
 from .simaware_boundaries import get_all_grouping_boundaries
+
+logger = logging.getLogger("weather_daemon")
+
+# CARTO dark basemap; CARTO serves its raster tiles only with a key
+CARTO_BASEMAP_URL = (
+    "https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png"
+)
+# The key is written into a JavaScript string, so only token characters are accepted
+CARTO_KEY_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
 # Facilities to display on the map
 # Note: ZUA (Guam) excluded - positive longitude (+145E) breaks tile bounding box calculation
@@ -407,10 +422,33 @@ def copy_leaflet_assets(output_dir: Path) -> Path:
     return destination
 
 
+def carto_basemap_url() -> str:
+    """The basemap tile URL, with ``?key=`` from ``CARTO_BASEMAP_KEY`` when it is valid.
+
+    A missing key logs a warning and an invalid one an error; either way the URL
+    goes out without a key, so the page works but CARTO refuses its tiles.
+    """
+    key = os.environ.get(CARTO_KEY_ENV, "")
+    if not key:
+        logger.warning(
+            "CARTO_BASEMAP_KEY is not set; the map's basemap tiles will be refused"
+        )
+        return CARTO_BASEMAP_URL
+    if not CARTO_KEY_PATTERN.fullmatch(key):
+        logger.error(
+            "CARTO_BASEMAP_KEY is not a valid key (letters, digits, '_' and '-' only); "
+            "omitting it, so the map's basemap tiles will be refused"
+        )
+        return CARTO_BASEMAP_URL
+    return f"{CARTO_BASEMAP_URL}?key={key}"
+
+
 def generate_index_page(
     config: DaemonConfig,
     artcc_groupings: dict[str, list[dict[str, Any]]],
     unified_airport_data: dict[str, Any] | None = None,
+    *,
+    fallback_tile_version: int,
 ) -> Path | None:
     """
     Generate the interactive index page with ARTCC map.
@@ -419,6 +457,8 @@ def generate_index_page(
         config: Daemon configuration
         artcc_groupings: Dict mapping ARTCC codes to lists of grouping info dicts
         unified_airport_data: Optional airport data for augmenting weather coverage
+        fallback_tile_version: The run's start time, the tiles' cache-busting ``?v=``
+            when ``tiles/version.txt`` records no completed tile set
 
     Returns:
         Path to generated index file, or None on error
@@ -445,10 +485,11 @@ def generate_index_page(
                 artcc_stats[artcc][cat] = artcc_stats[artcc].get(cat, 0) + count
                 artcc_stats[artcc]["total"] += count
 
-    # Generate timestamp and version for cache busting
+    # Generation timestamp shown on the page
     now = datetime.now(timezone.utc)
     timestamp = now.strftime("%Y-%m-%d %H:%M:%SZ")
-    tile_version = int(now.timestamp())  # Used to version tiles with this generation
+    # The newest complete tile set; this run's tiles are written after the index
+    tile_version = read_tile_version(config.output_dir / "tiles", fallback_tile_version)
 
     # Build airport marker data for the map
     airport_markers = build_airport_markers(artcc_groupings, unified_airport_data)
@@ -464,6 +505,7 @@ def generate_index_page(
         unified_airport_data=unified_airport_data,
         simaware_cache_dir=config.artcc_cache_dir,  # Reuse ARTCC cache dir for SimAware data
         airport_markers=airport_markers,
+        basemap_url=carto_basemap_url(),
     )
 
     # Leaflet ships with the page, so it loads no third-party JavaScript
@@ -505,6 +547,8 @@ def generate_html(
     use_tile_layer: bool = True,
     simaware_cache_dir: Path | None = None,
     airport_markers: list[dict[str, Any]] | None = None,
+    *,
+    basemap_url: str,
 ) -> str:
     """Generate the complete HTML content."""
 
@@ -1497,7 +1541,7 @@ def generate_html(
         map.on('moveend', updateMapStateInUrl);
 
         // Dark tile layer
-        L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+        L.tileLayer('{basemap_url}', {{
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
             subdomains: 'abcd',
             maxZoom: 20

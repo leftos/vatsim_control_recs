@@ -29,7 +29,9 @@ def index_page(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, s
         index_generator, "get_all_grouping_boundaries", lambda *args, **kwargs: {}
     )
     config = DaemonConfig(output_dir=tmp_path, artcc_cache_dir=tmp_path / "cache")
-    index_path = index_generator.generate_index_page(config, {}, None)
+    index_path = index_generator.generate_index_page(
+        config, {}, None, fallback_tile_version=1700000000
+    )
     assert index_path == tmp_path / "index.html"
     return tmp_path, index_path.read_text(encoding="utf-8")
 

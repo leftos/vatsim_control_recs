@@ -438,7 +438,7 @@ from common.logger import setup_file_logging  # noqa: E402
 
 from .artcc_boundaries import get_artcc_boundaries  # noqa: E402
 from .config import ARTCC_NAMES, CATEGORY_COLORS, DaemonConfig  # noqa: E402
-from .tile_generator import generate_weather_tiles  # noqa: E402
+from .tile_generator import generate_weather_tiles, write_tile_version  # noqa: E402
 
 
 def get_artcc_bboxes(
@@ -1542,6 +1542,23 @@ def generate(config: DaemonConfig) -> dict[str, str]:
             generated_files=generated_files,
         )
 
+    # Version of this run's tile set, recorded once all its tiles are written
+    run_tile_version = int(start_time.timestamp())
+
+    # Generate index if enabled. It runs before the slow tile stage, so a run killed
+    # there still publishes a fresh index, pointing at the last complete tile set.
+    if config.generate_index:
+        from .index_generator import generate_index_page
+
+        index_path = generate_index_page(
+            config,
+            artcc_groupings_map,
+            unified_airport_data,
+            fallback_tile_version=run_tile_version,
+        )
+        if index_path:
+            generated_files[str(index_path)] = "Index"
+
     # Generate weather overlay tiles (if enabled)
     if config.generate_tiles:
         print("  Generating weather overlay tiles...")
@@ -1610,6 +1627,7 @@ def generate(config: DaemonConfig) -> dict[str, str]:
                 zoom_levels=(4, 5, 6, 7),
                 max_workers=config.tile_max_workers,
             )
+            write_tile_version(tiles_dir, run_tile_version)
 
             total_tiles = sum(tile_results.values())
             print(f"    Generated {total_tiles} weather tiles")
@@ -1619,16 +1637,6 @@ def generate(config: DaemonConfig) -> dict[str, str]:
     else:
         print("  Skipping tile generation (--no-tiles)")
         logger.info("Skipping tile generation (--no-tiles)")
-
-    # Generate index if enabled
-    if config.generate_index:
-        from .index_generator import generate_index_page
-
-        index_path = generate_index_page(
-            config, artcc_groupings_map, unified_airport_data
-        )
-        if index_path:
-            generated_files[str(index_path)] = "Index"
 
     # Final summary
     total_time = (datetime.now(timezone.utc) - start_time).total_seconds()
