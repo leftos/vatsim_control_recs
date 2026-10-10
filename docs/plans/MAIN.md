@@ -14,9 +14,6 @@ Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is th
 - [ ] Never start a refresh while one is running, and never cancel one under way: with the US filter or no filter every 15 s tick cancels the running analysis and starts another, so no refresh ever lands and cancelled analyses pile up (`ui/app.py:416-438`, `exclusive=True` at `:609`). Perf fix 1.
 
   Settled (owner): the Ctrl+R binding is removed entirely (`ui/app.py:151`, with its help, command-palette and docs entries), so only the timer and the app's own triggers refresh. The status bar's "Last refresh" counts from the last refresh that landed and adds "· Refreshing…" while one runs.
-- [ ] Index CIFP SID/STAR records once instead of rescanning the 53 MB file per lookup, and skip airports CIFP cannot hold (`backend/data/cifp.py:606`, `:703`): 86–100 s of CPU per unfiltered refresh. Perf fix 2.
-
-  Settled (owner): approaches (`get_approaches_for_airport`, `cifp.py:452`) go into the same index. Settled from the code: matches stay exactly today's (`SUSAP K…`, airport ident `line[6:10]`, `startswith` on the procedure, file order kept); the index is built lazily under a lock and rebuilt, with `clear_route_cache`, when `ensure_cifp_data` returns another path; `_get_parsed_route` gets `maxsize=4096`.
 - [ ] Stop refetching still-fresh bbox weather each refresh and cache "no METAR" results (`backend/data/weather.py`, `get_weather_for_airports_bbox`, `get_metar`). Perf fix 5.
 
   Settled (owner): only a clean empty (a successful response with no METAR) is cached as "no METAR" for 60 s, never a timeout or 429; a stale METAR already in cache keeps showing, as today. Settled from the code: the API caps a response at 400 entries (aviationweather.gov/data/api), so a bbox call is trusted for absent airports only when it succeeded with fewer than 400; negatives live apart from the METAR cache and are never persisted; a box is skipped only when all its airports are fresh.

@@ -9,14 +9,16 @@ CIFP data is downloaded once per AIRAC cycle (28 days) and cached locally.
 
 import io
 import re
+import threading
 import urllib.error
 import urllib.request
 import zipfile
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from functools import lru_cache
 from pathlib import Path
 
+from common import logger as debug_logger
 from common.paths import get_cifp_cache_dir
 
 # AIRAC epoch: Cycle 2501 effective date
@@ -449,7 +451,6 @@ def parse_approach_record(line: str) -> CifpApproachFix | None:
 # --- High-Level API ---
 
 
-@lru_cache(maxsize=100)
 def get_approaches_for_airport(airport: str) -> dict[str, CifpApproach]:
     """Get all approach procedures for an airport.
 
@@ -459,43 +460,26 @@ def get_approaches_for_airport(airport: str) -> dict[str, CifpApproach]:
     Returns:
         Dict mapping approach_id to CifpApproach objects
     """
-    cifp_path = ensure_cifp_data(quiet=True)
-    if not cifp_path:
+    if not _ensure_index():
         return {}
 
-    # Normalize airport code - handle both "KSFO" and "SFO"
-    airport = airport.upper()
-    if airport.startswith("K") and len(airport) == 4:
-        airport_code = airport[1:]  # Strip K for CONUS airports
-    else:
-        airport_code = airport
-
-    search_prefix = f"SUSAP K{airport_code}"
+    approach_index = _approach_index
+    airport_code = _airport_code(airport)
 
     approaches: dict[str, CifpApproach] = {}
 
-    try:
-        with open(cifp_path, encoding="latin-1") as f:
-            for line in f:
-                if not line.startswith(search_prefix):
-                    continue
+    for fixes in _iter_airport_records(approach_index, f"K{airport_code}"):
+        for fix in fixes:
+            # Create approach if not exists
+            if fix.approach_id not in approaches:
+                approaches[fix.approach_id] = CifpApproach(
+                    airport=airport_code,
+                    approach_id=fix.approach_id,
+                    approach_type=_parse_approach_type(fix.approach_id),
+                    runway=_parse_runway_from_approach_id(fix.approach_id),
+                )
 
-                fix = parse_approach_record(line)
-                if not fix:
-                    continue
-
-                # Create approach if not exists
-                if fix.approach_id not in approaches:
-                    approaches[fix.approach_id] = CifpApproach(
-                        airport=airport_code,
-                        approach_id=fix.approach_id,
-                        approach_type=_parse_approach_type(fix.approach_id),
-                        runway=_parse_runway_from_approach_id(fix.approach_id),
-                    )
-
-                approaches[fix.approach_id].fixes.append(fix)
-    except OSError:
-        return {}
+            approaches[fix.approach_id].fixes.append(fix)
 
     return approaches
 
@@ -603,7 +587,155 @@ def parse_star_record(line: str) -> tuple[str, str, str, int] | None:
     return (star_id, transition, fix_identifier, sequence)
 
 
-@lru_cache(maxsize=100)
+# --- Record Index ---
+
+# One pass over the CIFP file indexes its SID, STAR and approach records by
+# airport ident, so a lookup answers without rescanning the whole file. Each
+# per-airport list stays in file order, and the index is rebuilt when the AIRAC
+# cycle hands ensure_cifp_data a different file to read.
+_cifp_index_lock = threading.Lock()
+_cifp_index_path: Path | None = None
+_dp_index: dict[str, list[tuple[str, str, str, int]]] = {}
+_star_index: dict[str, list[tuple[str, str, str, int]]] = {}
+_approach_index: dict[str, list[CifpApproachFix]] = {}
+
+
+def _airport_code(airport: str) -> str:
+    """Normalize an airport code the way the lookups always did.
+
+    Args:
+        airport: Airport code (e.g., "OAK", "KOAK")
+
+    Returns:
+        The code with the leading K of a 4-character CONUS ICAO stripped
+    """
+    airport = airport.upper()
+    if airport.startswith("K") and len(airport) == 4:
+        return airport[1:]
+    return airport
+
+
+def _iter_airport_records(index: dict, ident_prefix: str) -> Iterator[list]:
+    """Yield the record lists of every airport whose ident matches a prefix.
+
+    A 3-character code matches one airport; a shorter one matches every airport
+    whose ident starts with it, as the old prefix scans did. Idents come back
+    in the order they first appear in the file, which is the order the records
+    of a prefix spanning several airports were scanned in.
+    """
+    for ident, records in index.items():
+        if ident.startswith(ident_prefix):
+            yield records
+
+
+def _gather_records(
+    index: dict[str, list[tuple[str, str, str, int]]],
+    ident_prefix: str,
+    name_prefix: str,
+) -> dict[str, list[tuple[str, int]]]:
+    """Collect a procedure's fixes by transition, in CIFP file order.
+
+    Args:
+        index: The SID or STAR index to read
+        ident_prefix: The airport ident to match (e.g., "KOAK")
+        name_prefix: Procedure id prefix a record's id must start with
+
+    Returns:
+        Dict mapping transition to its (fix, sequence) records
+    """
+    records: dict[str, list[tuple[str, int]]] = {}
+
+    for entries in _iter_airport_records(index, ident_prefix):
+        for proc_id, transition, fix_id, sequence in entries:
+            if not proc_id.startswith(name_prefix):
+                continue
+            records.setdefault(transition, []).append((fix_id, sequence))
+
+    return records
+
+
+def _build_cifp_index(path: Path) -> None:
+    """Index the SID, STAR and approach records of a CIFP file by ident.
+
+    Only records the lookups can match are indexed: the scans always required a
+    SUSAP record whose airport ident starts with K, so the SCANP records of
+    Alaska, Hawaii, the territories and Canada, and the SUSAP records with a
+    non-K ident, stay out.
+
+    Args:
+        path: Path to the CIFP file
+    """
+    dp_index: dict[str, list[tuple[str, str, str, int]]] = {}
+    star_index: dict[str, list[tuple[str, str, str, int]]] = {}
+    approach_index: dict[str, list[CifpApproachFix]] = {}
+
+    with open(path, encoding="latin-1") as f:
+        for line in f:
+            if not line.startswith("SUSAP K"):
+                continue
+            ident = line[6:10]
+            dp_record = parse_dp_record(line)
+            if dp_record:
+                dp_index.setdefault(ident, []).append(dp_record)
+                continue
+            star_record = parse_star_record(line)
+            if star_record:
+                star_index.setdefault(ident, []).append(star_record)
+                continue
+            fix = parse_approach_record(line)
+            if fix:
+                approach_index.setdefault(ident, []).append(fix)
+
+    # Publish the new index at once, so a lookup never sees a partial one
+    global _cifp_index_path, _dp_index, _star_index, _approach_index
+    _cifp_index_path = path
+    _dp_index = dp_index
+    _star_index = star_index
+    _approach_index = approach_index
+
+
+def _clear_route_cache() -> None:
+    """Drop the parsed-route cache, whose entries embedded CIFP lookups."""
+    from backend.core.route_distance import clear_route_cache
+
+    clear_route_cache()
+
+
+def _load_cifp_index(path: Path) -> bool:
+    """Index path when it is not the indexed file yet.
+
+    Args:
+        path: Path to the CIFP file
+
+    Returns:
+        True when the index for path is ready, False when the file cannot be
+        read, which leaves the lookups returning an empty result as before
+    """
+    with _cifp_index_lock:
+        if _cifp_index_path == path:
+            return True
+        try:
+            _build_cifp_index(path)
+        except OSError as e:
+            debug_logger.warning(f"Cannot read CIFP data at {path}: {e}")
+            return False
+        _clear_route_cache()
+        return True
+
+
+def _ensure_index() -> bool:
+    """Make the index match the file ensure_cifp_data provides.
+
+    Returns:
+        True when a lookup can answer from the index, False when there is no
+        CIFP file to read
+    """
+    cifp_path = ensure_cifp_data(quiet=True)
+    if cifp_path is None:
+        return False
+    return _load_cifp_index(cifp_path)
+
+
 def get_dp_data(airport: str, dp_name: str) -> CifpDP | None:
     """Get DP (departure procedure) common route waypoints from CIFP.
 
@@ -614,47 +746,17 @@ def get_dp_data(airport: str, dp_name: str) -> CifpDP | None:
     Returns:
         CifpDP with common route waypoints, or None if not found
     """
-    cifp_path = ensure_cifp_data(quiet=True)
-    if not cifp_path:
+    if not _ensure_index():
         return None
 
-    airport = airport.upper()
-    if airport.startswith("K") and len(airport) == 4:
-        airport_code = airport[1:]
-    else:
-        airport_code = airport
+    dp_index = _dp_index
+    airport_code = _airport_code(airport)
 
-    dp_name = dp_name.upper().strip()
+    # A CIFP record can carry a variant digit past its 6-character procedure
+    # id, so the filed name is matched against a record's id by prefix
+    dp_id_prefix = dp_name.upper().strip()
 
-    # Extract base procedure ID: "CNDEL5" -> prefix "CNDEL5"
-    # CIFP records may have extra chars (e.g., "CNDEL54" for variant)
-    dp_id_prefix = dp_name
-
-    search_prefix = f"SUSAP K{airport_code}"
-
-    dp_records: dict[str, list[tuple[str, int]]] = {}
-
-    try:
-        with open(cifp_path, encoding="latin-1") as f:
-            for line in f:
-                if not line.startswith(search_prefix):
-                    continue
-
-                result = parse_dp_record(line)
-                if not result:
-                    continue
-
-                dp_id, transition, fix_id, sequence = result
-
-                if not dp_id.startswith(dp_id_prefix):
-                    continue
-
-                if transition not in dp_records:
-                    dp_records[transition] = []
-                dp_records[transition].append((fix_id, sequence))
-    except OSError:
-        return None
-
+    dp_records = _gather_records(dp_index, f"K{airport_code}", dp_id_prefix)
     if not dp_records:
         return None
 
@@ -700,7 +802,6 @@ def get_dp_data(airport: str, dp_name: str) -> CifpDP | None:
     return CifpDP(identifier=dp_id_prefix, waypoints=all_waypoints)
 
 
-@lru_cache(maxsize=100)
 def get_star_data(airport: str, star_name: str) -> CifpSTAR | None:
     """Get STAR common route waypoints from CIFP.
 
@@ -711,44 +812,15 @@ def get_star_data(airport: str, star_name: str) -> CifpSTAR | None:
     Returns:
         CifpSTAR with common route waypoints, or None if not found
     """
-    cifp_path = ensure_cifp_data(quiet=True)
-    if not cifp_path:
+    if not _ensure_index():
         return None
 
-    airport = airport.upper()
-    if airport.startswith("K") and len(airport) == 4:
-        airport_code = airport[1:]
-    else:
-        airport_code = airport
+    star_index = _star_index
+    airport_code = _airport_code(airport)
 
-    star_name = star_name.upper().strip()
-    star_id_prefix = star_name
+    star_id_prefix = star_name.upper().strip()
 
-    search_prefix = f"SUSAP K{airport_code}"
-
-    star_records: dict[str, list[tuple[str, int]]] = {}
-
-    try:
-        with open(cifp_path, encoding="latin-1") as f:
-            for line in f:
-                if not line.startswith(search_prefix):
-                    continue
-
-                result = parse_star_record(line)
-                if not result:
-                    continue
-
-                star_id, transition, fix_id, sequence = result
-
-                if not star_id.startswith(star_id_prefix):
-                    continue
-
-                if transition not in star_records:
-                    star_records[transition] = []
-                star_records[transition].append((fix_id, sequence))
-    except OSError:
-        return None
-
+    star_records = _gather_records(star_index, f"K{airport_code}", star_id_prefix)
     if not star_records:
         return None
 
@@ -793,10 +865,14 @@ def get_star_data(airport: str, star_name: str) -> CifpSTAR | None:
 
 
 def clear_cifp_cache() -> None:
-    """Clear the LRU caches for CIFP lookups.
+    """Drop the record index, so the next lookup reads the file again.
 
     Useful when CIFP data is updated.
     """
-    get_approaches_for_airport.cache_clear()
-    get_dp_data.cache_clear()
-    get_star_data.cache_clear()
+    global _cifp_index_path, _dp_index, _star_index, _approach_index
+
+    with _cifp_index_lock:
+        _cifp_index_path = None
+        _dp_index = {}
+        _star_index = {}
+        _approach_index = {}

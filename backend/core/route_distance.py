@@ -52,7 +52,7 @@ def get_route_remaining_distance(
     )
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=4096)
 def _get_parsed_route(
     route_string: str,
     departure: str | None = None,
