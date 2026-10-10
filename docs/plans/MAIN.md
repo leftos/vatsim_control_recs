@@ -8,6 +8,5 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ## Backlog
 
-- [ ] Escape the Go To multi-select marker: `ui/modals/goto_modal.py:406-408` builds `"[x] ..."` in an `OptionList` prompt, which Textual parses as markup, so selected items show no checkbox.
 
 - [ ] Add `docs/README.md` as the docs' start page, linking `docs/ARCHITECTURE.md`, `docs/atis-filtering-and-runway-extraction.md`, `USER_GUIDE.md`, `CLAUDE.md` and this plan: the repo has no docs index, so the architecture entry point is reachable only from `CLAUDE.md` (line 83).

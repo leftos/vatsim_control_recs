@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
+from textual.content import Content
 from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
@@ -440,7 +441,10 @@ class GoToScreen(ModalScreen):
                 break
 
             label = self._format_label(item_type, identifier, data)
-            option_list.add_option(Option(label, id=f"{item_type}:{identifier}"))
+            # Plain Content: a "[x]" checkbox or a bracketed name would otherwise parse as markup
+            option_list.add_option(
+                Option(Content(label), id=f"{item_type}:{identifier}")
+            )
             self._display_items.append((item_type, identifier, data))
             count += 1
 
@@ -457,7 +461,7 @@ class GoToScreen(ModalScreen):
                     if count >= 100:
                         break
                     sub_label = self._format_label("sub", icao, None)
-                    option_list.add_option(Option(sub_label, id=f"sub:{icao}"))
+                    option_list.add_option(Option(Content(sub_label), id=f"sub:{icao}"))
                     self._display_items.append(("sub", icao, None))
                     count += 1
 
