@@ -63,6 +63,15 @@ class Harness:
         await self.pilot.press("enter")
         await self.pilot.pause()
 
+    async def quick_add(self, text: str) -> None:
+        """Press A, type into the quick add box, then press Enter."""
+        await self.pilot.press("a")
+        await self.pilot.pause()
+        self.app.screen.query_one("#tracking-input", Input).value = text
+        await self.pilot.press("enter")
+        await self.pilot.pause()
+        await self.pilot.pause()
+
     def saved_favorites(self) -> dict:
         return json.loads(self.favorites_file.read_text(encoding="utf-8"))
 
@@ -128,3 +137,53 @@ async def test_s_with_nothing_picked_saves_the_whole_list(
         await h.save_as("All")
         assert h.saved_favorites() == {"All": ["KOAK", "KSFO", "KSJC"]}
         assert h.status == "Saved 'All' with 3 airports"
+
+
+async def test_opens_with_first_row_highlighted(
+    tracked_modal: TrackedFactory,
+) -> None:
+    async with tracked_modal() as h:
+        assert h.list_view.index == 0
+        assert h.list_view.highlighted_child is not None
+        assert h.list_view.highlighted_child.name == "KOAK"
+
+
+async def test_removal_highlights_the_row_that_takes_its_place(
+    tracked_modal: TrackedFactory,
+) -> None:
+    async with tracked_modal() as h:
+        await h.highlight("KSFO")  # index 1, a middle row
+        await h.pilot.press("space")
+        await h.pilot.pause()
+        await h.pilot.press("delete")
+        await h.pilot.pause()
+        assert h.list_view.index == 1
+        assert h.list_view.highlighted_child.name == "KSJC"
+
+    async with tracked_modal() as h:
+        await h.highlight("KSJC")  # index 2, the last row
+        await h.pilot.press("space")
+        await h.pilot.pause()
+        await h.pilot.press("delete")
+        await h.pilot.pause()
+        assert h.list_view.index == 1
+        assert h.list_view.highlighted_child.name == "KSFO"
+
+
+async def test_quick_add_highlights_first_added_airport(
+    tracked_modal: TrackedFactory,
+) -> None:
+    async with tracked_modal() as h:
+        await h.quick_add("+KSLC +KSEA")
+        assert h.list_view.index == h.index_of("KSEA")
+        assert h.list_view.highlighted_child.name == "KSEA"
+
+
+async def test_quick_add_of_nothing_new_keeps_the_highlighted_airport(
+    tracked_modal: TrackedFactory,
+) -> None:
+    async with tracked_modal() as h:
+        await h.highlight("KSJC")
+        await h.quick_add("+KSJC")
+        assert h.list_view.index == h.index_of("KSJC")
+        assert h.list_view.highlighted_child.name == "KSJC"

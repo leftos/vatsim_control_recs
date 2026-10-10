@@ -121,27 +121,36 @@ class TrackedAirportsModal(ModalScreen):
             )
             yield Static("", id="tracked-status")
 
-    def on_mount(self) -> None:
-        """Populate the list when mounted"""
-        self.populate_list()
+    async def on_mount(self) -> None:
+        """Populate the list when mounted, highlighting the first row."""
         list_view = self.query_one("#tracked-list", ListView)
         list_view.focus()
+        await self.populate_list(0)
 
-    def populate_list(self) -> None:
-        """Populate the list with tracked airports"""
+    async def populate_list(self, highlight_index: int | None = None) -> None:
+        """Rebuild the list and highlight the row at ``highlight_index``.
+
+        ``clear`` and ``extend`` mount their items asynchronously, so the index
+        is set only once the rows are in place; the ListView then clamps it to
+        the last row and leaves it ``None`` when the list is empty.
+        """
         list_view = self.query_one("#tracked-list", ListView)
-        list_view.clear()
+        await list_view.clear()
 
         if not self.airport_allowlist:
-            list_view.append(
+            await list_view.append(
                 ListItem(
                     Label("No specific airports tracked (showing all with activity)")
                 )
             )
             return
 
-        for icao in self.airport_allowlist:
-            list_view.append(ListItem(Label(self._display_text(icao)), name=icao))
+        await list_view.extend(
+            ListItem(Label(self._display_text(icao)), name=icao)
+            for icao in self.airport_allowlist
+        )
+        if highlight_index is not None:
+            list_view.index = highlight_index
 
     def _display_text(self, icao: str) -> str:
         """The row text for one airport, marked when it is picked."""
@@ -152,6 +161,11 @@ class TrackedAirportsModal(ModalScreen):
         if icao in self.selected_airports:
             display_text = f"[✓] {display_text}"
         return display_text
+
+    def _highlighted_icao(self) -> str | None:
+        """The ICAO of the highlighted row, or None when nothing is highlighted."""
+        item = self.query_one("#tracked-list", ListView).highlighted_child
+        return item.name if item is not None else None
 
     def _toggle_airport(self, item: ListItem) -> None:
         """Flip one row's picked state and redraw that row alone.
@@ -185,12 +199,12 @@ class TrackedAirportsModal(ModalScreen):
         """Enter: toggle the selected airport, leaving the cursor on its row."""
         self._toggle_airport(event.item)
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses"""
         if event.button.id == "add-button":
             self.action_add_airports()
         elif event.button.id == "remove-button":
-            self.action_remove_selected()
+            await self.action_remove_selected()
         elif event.button.id == "save-button":
             self.action_save_as_grouping()
         elif event.button.id == "close-button":
@@ -202,12 +216,15 @@ class TrackedAirportsModal(ModalScreen):
             AirportTrackingModal(), callback=self.handle_quick_tracking_result
         )
 
-    def handle_quick_tracking_result(self, result) -> None:
+    async def handle_quick_tracking_result(self, result) -> None:
         """Handle result from quick tracking modal"""
         if result is None:
             return
 
         airports_to_add, airports_to_remove = result
+        previous_icao = self._highlighted_icao()
+        previous_index = self.query_one("#tracked-list", ListView).index
+        newly_added: list[str] = []
 
         # Update the airport allowlist
         if airports_to_add:
@@ -219,6 +236,7 @@ class TrackedAirportsModal(ModalScreen):
                 for icao in airports_to_add:
                     if icao not in self.airport_allowlist:
                         self.airport_allowlist.append(icao)
+                        newly_added.append(icao)
                 self.airport_allowlist.sort()
 
         if airports_to_remove:
@@ -228,8 +246,17 @@ class TrackedAirportsModal(ModalScreen):
                 if icao in self.selected_airports:
                     self.selected_airports.remove(icao)
 
+        # Highlight the first airport added, in list order; when nothing was
+        # added, keep the highlighted airport where it was.
+        if newly_added:
+            highlight = min(self.airport_allowlist.index(icao) for icao in newly_added)
+        elif previous_icao is not None and previous_icao in self.airport_allowlist:
+            highlight = self.airport_allowlist.index(previous_icao)
+        else:
+            highlight = previous_index
+
         # Update the display
-        self.populate_list()
+        await self.populate_list(highlight)
         info_widget = self.query_one("#tracked-info", Static)
         tracking_mode = (
             "Tracking specific airports"
@@ -239,17 +266,19 @@ class TrackedAirportsModal(ModalScreen):
         airport_count = len(self.airport_allowlist) if self.airport_allowlist else "all"
         info_widget.update(f"{tracking_mode} ({airport_count} airports)")
 
-    def action_remove_selected(self) -> None:
+    async def action_remove_selected(self) -> None:
         """Remove selected airports from tracking"""
         if not self.selected_airports:
             return
+
+        previous_index = self.query_one("#tracked-list", ListView).index
 
         for icao in self.selected_airports:
             if icao in self.airport_allowlist:
                 self.airport_allowlist.remove(icao)
 
         self.selected_airports.clear()
-        self.populate_list()
+        await self.populate_list(previous_index)
 
         # Update the info display
         info_widget = self.query_one("#tracked-info", Static)

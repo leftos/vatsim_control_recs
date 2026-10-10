@@ -29,9 +29,6 @@ Order (from the map of this wave): R3 removes the edit mode R4's wording would r
 - [ ] Split `GoToScreen._filter_results` (complexity 11) and `_execute_selected` (10) in `ui/modals/goto_modal.py`, then enable ruff's `C901` with `max-complexity = 8` in `ruff.toml` (no complexity rule is enforced today) and split whatever else it reports or backlog it.
 
   Settled (owner): a ratchet. Enable `C901` at 8 with a `per-file-ignores` list in `ruff.toml` naming every other file that still has an offender (98 functions in 44 files when measured), and **add** a backlog item to split them and shrink the list; no source file outside `goto_modal.py` changes.
-- [ ] Tracked Airports manager opens with no highlighted row (`on_mount` calls `populate_list()`, whose `ListView.clear()` sets `index` to `None`, `ui/modals/tracked_airports.py`), and the highlight drops again after a removal or a quick-add (`action_remove_selected`, `handle_quick_tracking_result` rebuild through `populate_list()`).
-
-  Settled (owner): the first row is highlighted on open; after a removal, the row that takes its place (clamped to the last); after a quick-add, the first airport just added (nothing new added: the previous airport stays highlighted).
 - [ ] Go To list hygiene (R5 in [goto-ux-review.md](./goto-ux-review.md)): ★ groupings first with section headers, a "showing 100 of N" row, collapsed members for selected groupings, the "Selected: …" summary line (it repeats the title's pick counts and stays visible after Tab back to browse), and the dead `filter_type="$"` path removed (`ui/app.py` `_build_goto_results`, `ui/modals/goto_modal.py`).
 
   Settled (owner): a picked grouping shows one collapsed "▸ N airports (→ to expand)" row, and → expands it to member rows, where `F` works per member. The "Selected: …" line is replaced, in pick several only, by one dim line naming the picks, truncated ("Picked: Bay Area Arrivals, KLAX, +2").
