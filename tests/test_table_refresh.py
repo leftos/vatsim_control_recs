@@ -7,6 +7,7 @@ and rebuilt, so the cursor stays where it was.
 """
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -96,6 +97,28 @@ async def _wait_for_fades(manager: TableManager, pilot: Pilot) -> None:
     await pilot.pause()
 
 
+def _hold_tail_removal(
+    monkeypatch: pytest.MonkeyPatch, table: SplitFlapDataTable
+) -> Callable[[], None]:
+    """Hold every tail-row removal until the returned release is called.
+
+    The rows still flap to blank and the widget still marks them as leaving;
+    only the future that reports them blank is left unresolved, so the removal
+    task waits and a test can read the mid-fade state however fast the fade
+    itself runs. The widget keeps its own say: a table clear still cancels that
+    future, as it does in production, so a held removal does not outlive the
+    rows it was to remove.
+    """
+    real_resolve = table._resolve_blank_waiters
+    monkeypatch.setattr(table, "_resolve_blank_waiters", lambda: None)
+
+    def release() -> None:
+        monkeypatch.setattr(table, "_resolve_blank_waiters", real_resolve)
+        real_resolve()
+
+    return release
+
+
 def _cells_at_or_below(table: SplitFlapDataTable, first_row: int) -> list:
     """Index-keyed cell state the table still holds for rows >= ``first_row``."""
     return [
@@ -139,6 +162,7 @@ async def test_shrinking_table_fades_then_removes_tail_rows(
         table, manager = await _populated_table(pilot, 25)
         keys_before = list(table.rows)
         _forbid_clear(monkeypatch)
+        release = _hold_tail_removal(monkeypatch, table)
 
         await _land(manager, pilot, 12)
 
@@ -146,6 +170,7 @@ async def test_shrinking_table_fades_then_removes_tail_rows(
         for row in range(12, 25):
             for col in range(len(table.columns)):
                 assert table.animated_cells[(row, col)].target_value.strip() == ""
+        release()
 
         await _wait_for_fades(manager, pilot)
 
@@ -403,6 +428,7 @@ async def test_populate_tables_cancels_the_old_managers_updates(
         table = app.query_one("#airports-table", SplitFlapDataTable)
         old_manager = app.airports_manager
         assert old_manager is not None
+        _hold_tail_removal(monkeypatch, table)
         await _land(old_manager, pilot, 12)
         assert old_manager._pending_removal is not None, "a fade is pending"
         old_manager.populate(_rows(12))  # scheduled, not yet run
@@ -418,10 +444,13 @@ async def test_populate_tables_cancels_the_old_managers_updates(
         assert app.airports_row_keys == list(table.rows)
 
 
-async def test_clear_during_fade_does_not_truncate_the_next_update() -> None:
+async def test_clear_during_fade_does_not_truncate_the_next_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async with _TableHost(animations=True).run_test(size=(180, 50)) as pilot:
         table, manager = await _populated_table(pilot, 25)
         await _wait_for_animations(table, pilot)
+        _hold_tail_removal(monkeypatch, table)
         await _land(manager, pilot, 12)
         assert manager._pending_removal is not None, "a fade is pending"
 

@@ -5,16 +5,6 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ## Current focus
 
-### Wave 1: Refresh performance
-
-The refresh's cost structure and how to measure it are in [performance.md](../performance.md). Shared: `backend/data/weather.py`, `backend/core/analysis.py`, `ui/tables.py`. Review: `code-review`.
-
-Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is the command; the human check is a run with `--countries US` and an unfiltered run, measured as performance.md's "Measuring" section gives.
-
-- [ ] `tests/test_table_refresh.py::test_shrinking_table_fades_then_removes_tail_rows` failed once in a heavy-slot full suite ("assert 12 == 25, the tail rows go only after their fade") and passed in isolation and on later full runs: a load-sensitive timing wait in a Pilot test (`ui/tables.py` fade). Make it wait on the fade's completion, not elapsed time. CI's "Run tests" step failed on it in Build & Release runs 38073339824 and 38080890631 (Linux) and 38073816672 (macOS), the same assertion: the fade finished before the mid-fade check ran.
-
-## Next up
-
 ### Wave 2: Go To and groupings
 
 Design in [goto-ux-review.md](./goto-ux-review.md). Shared: `ui/modals/goto_modal.py`, `ui/app.py` (`_build_goto_results`, the flight-board open path, `_open_weather_briefing_callback`), `ui/modals/tracked_airports.py`, grouping file I/O. Review: `code-review` plus a UI look at each screen. Verification: Pilot tests in `tests/` are the command; the human check is screenshots of each mode from a filtered run (`--groupings O90`, the Bay TRACON preset).
