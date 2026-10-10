@@ -7,6 +7,7 @@ NASR data is downloaded once per 28-day cycle and cached locally.
 """
 
 import io
+import itertools
 import math
 import re
 import urllib.error
@@ -17,6 +18,7 @@ from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 
+from backend.core.calculations import calculate_bearing
 from common import logger as debug_logger
 from common.paths import get_nasr_cache_dir
 
@@ -90,13 +92,17 @@ class AirwaySegmentRestriction:
     """MEA/MOCA altitude restrictions for an airway segment.
 
     Each segment is identified by its sequence number: the record at sequence
-    N describes the segment from point N to the next point of the airway.
+    N describes the segment from point N to the next point of the airway. A
+    segment with an opposite MEA has one MEA per direction of flight, each
+    named by the octant it is bound for ("NE" for the "NE BND" text).
     """
 
     airway: str  # e.g., "V23", "J80"
     sequence: int  # Links to AirwayFix sequence (segment leaves this point)
     mea: int | None  # Minimum Enroute Altitude in feet (e.g., 5000)
-    mea_opposite: int | None  # MEA for opposite direction (may differ)
+    mea_direction: str | None  # Octant mea applies to, e.g. "NE"; None when blank
+    mea_opposite: int | None  # MEA for the opposite direction, None when blank
+    mea_opposite_direction: str | None  # Octant mea_opposite applies to, e.g. "SW"
     moca: int | None  # Minimum Obstruction Clearance Altitude in feet
 
 
@@ -475,7 +481,11 @@ def _parse_awy1_record(
     - Position 9: Airway type (blank = federal, "A" = Alaska, "H" = Hawaii)
     - Positions 10-15: Sequence number of the point the segment leaves
     - Positions 74-79: MEA (5 digits, right-justified, e.g., "05000")
+    - Positions 79-85: Direction the MEA applies to ("NE BND", "E BND "), blank
+      when the segment has one MEA for both directions
     - Positions 85-90: MEA opposite direction (may be blank)
+    - Positions 90-96: Direction the opposite MEA applies to ("SW BND"); blank,
+      or a bare "BND" that names no direction, when there is no opposite MEA
     - Positions 101-106: MOCA (5 digits or blank)
 
     Args:
@@ -529,13 +539,21 @@ def _parse_awy1_record(
                 airway=airway,
                 sequence=sequence,
                 mea=mea,
+                mea_direction=_awy1_direction(line[79:85]),
                 mea_opposite=mea_opposite,
+                mea_opposite_direction=_awy1_direction(line[90:96]),
                 moca=moca,
             ),
         )
 
     except (IndexError, ValueError):
         return None
+
+
+def _awy1_direction(text: str) -> str | None:
+    """The octant of an AWY1 direction text: "NE BND" gives "NE"; blank or a bare "BND" gives None."""
+    octant = text.strip().removesuffix("BND").strip()
+    return octant or None
 
 
 # Pattern: digits-digits-digits.decimals + N/S or E/W
@@ -896,6 +914,85 @@ def _find_airway_stretch(
     return SkippedAirway(airway=airway, missing_fix=missing_fix)
 
 
+def _shared_fixes(
+    points_a: list[AirwayPoint], points_b: list[AirwayPoint]
+) -> list[str]:
+    """Identifiers of the positioned fixes on both point lists, in the order of the first."""
+    on_b = {point.identifier for point in points_b if isinstance(point, AirwayFix)}
+    return list(
+        dict.fromkeys(
+            point.identifier
+            for point in points_a
+            if isinstance(point, AirwayFix) and point.identifier in on_b
+        )
+    )
+
+
+def _airway_junction(airway_a: str, airway_b: str, from_fix: str) -> str | None:
+    """The fix where a route turns from one airway onto the next one it names.
+
+    Federal, Alaska and Hawaii airways can share a designation, so the pair is
+    matched type by type: first on the airway type whose airway_a holds
+    from_fix (where the route joins airway_a), then on the first type
+    (federal, Alaska, Hawaii) on which the two share exactly one fix. Border
+    points are never a junction. Logs (at debug) when no type gives one.
+
+    Returns:
+        The identifier of the one fix both airways hold; None when no airway
+        type gives exactly one
+    """
+    airways = load_airways()
+    shared = {
+        airway_type: _shared_fixes(
+            airways.get((airway_a, airway_type), []),
+            airways.get((airway_b, airway_type), []),
+        )
+        for airway_type in _AIRWAY_TYPES
+    }
+    entry_types = [
+        airway_type
+        for airway_type in _AIRWAY_TYPES
+        if _point_index(airways.get((airway_a, airway_type), []), from_fix) is not None
+    ]
+    for airway_type in [*entry_types, *_AIRWAY_TYPES]:
+        if len(shared[airway_type]) == 1:
+            return shared[airway_type][0]
+    counts = ", ".join(f"{t or 'federal'} {len(fixes)}" for t, fixes in shared.items())
+    debug_logger.debug(
+        f"Airways {airway_a} and {airway_b} share no single fix ({counts}): no junction"
+    )
+    return None
+
+
+def _airway_run_legs(
+    airways: list[str], entry_fix: str, exit_fix: str
+) -> list[tuple[str, str, str]] | None:
+    """The (airway, from fix, to fix) legs of consecutive airways a route flies.
+
+    An airway named twice in a row is one airway. The first airway is flown
+    from the entry fix and the last to the exit fix; each adjacent pair meets
+    at its junction, looked up from the fix where the route joins the first of
+    the pair. A lone airway is one leg from the entry fix to the exit fix.
+
+    Returns:
+        One leg per airway in route order; None, logged at debug, when any
+        adjacent pair has no single junction
+    """
+    airways = [airway for airway, _ in itertools.groupby(airways)]
+    ends = [entry_fix]
+    for airway_a, airway_b in itertools.pairwise(airways):
+        junction = _airway_junction(airway_a, airway_b, ends[-1])
+        if junction is None:
+            debug_logger.debug(
+                f"Airways {' '.join(airways)} not placed: no junction of"
+                f" {airway_a} and {airway_b} ({entry_fix} to {exit_fix})"
+            )
+            return None
+        ends.append(junction)
+    ends.append(exit_fix)
+    return [(airway, ends[k], ends[k + 1]) for k, airway in enumerate(airways)]
+
+
 def get_airway_fixes(airway: str, entry_fix: str, exit_fix: str) -> list[AirwayFix]:
     """Get the fixes along an airway between a route's entry and exit fixes.
 
@@ -1076,6 +1173,101 @@ def _expand_sid_star(
             seen_identifiers.add(wp_name)
 
 
+def _airway_run_ahead(
+    parts: list[str], start: int, airports: dict[str, tuple[float, float]]
+) -> tuple[list[tuple[int, str]], str | None]:
+    """The run of consecutive airways from parts[start] and the fix after it.
+
+    Speed/level groups, DCT and SID/STAR names between them are passed over.
+
+    Returns:
+        The (index in parts, airway) of each airway of the run, the first at
+        start; and the identifier of the exit fix, None when the route ends
+        without one
+    """
+    run = [(start, _split_route_token(parts[start])[0])]
+    for index in range(start + 1, len(parts)):
+        token, _ = _split_route_token(parts[index])
+        if _AIRWAY_RE.match(token):
+            run.append((index, token))
+        elif _is_route_endpoint(token):
+            return run, _get_fix_identifier(token, airports)
+    return run, None
+
+
+def _append_airway_fixes(
+    airway_fixes: list[AirwayFix],
+    entry_fix: str,
+    waypoints: list[Waypoint],
+    seen_identifiers: set,
+) -> None:
+    """Append an airway's fixes to the route, except its entry fix and any already on it."""
+    for awy_fix in airway_fixes:
+        if awy_fix.identifier in seen_identifiers or awy_fix.identifier == entry_fix:
+            continue
+        waypoints.append(
+            Waypoint(
+                identifier=awy_fix.identifier,
+                latitude=awy_fix.latitude,
+                longitude=awy_fix.longitude,
+                waypoint_type="airway_fix",
+            )
+        )
+        seen_identifiers.add(awy_fix.identifier)
+
+
+def _expand_airways_between(
+    airways: list[str],
+    entry_fix: str,
+    exit_fix: str,
+    waypoints: list[Waypoint],
+    seen_identifiers: set,
+) -> None:
+    """Append the fixes of consecutive airways flown from entry_fix to exit_fix.
+
+    Each airway is expanded between its junctions, and every junction is kept
+    even when the airway before it expands nothing. When a pair has no single
+    junction, each airway is expanded from the last waypoint to the exit fix.
+    """
+    legs = _airway_run_legs(airways, entry_fix, exit_fix)
+    if legs is None:
+        for airway in airways:
+            leg_start = waypoints[-1].identifier
+            fixes = get_airway_fixes(airway, leg_start, exit_fix)
+            _append_airway_fixes(fixes, leg_start, waypoints, seen_identifiers)
+        return
+    for airway, leg_start, leg_end in legs:
+        fixes = get_airway_fixes(airway, leg_start, leg_end)
+        _append_airway_fixes(fixes, entry_fix, waypoints, seen_identifiers)
+
+
+def _expand_airway_run(
+    parts: list[str],
+    start: int,
+    airports: dict[str, tuple[float, float]],
+    waypoints: list[Waypoint],
+    seen_identifiers: set,
+) -> int:
+    """Append the fixes of the airways from parts[start] up to the next fix.
+
+    The run is entered at the last waypoint and left at the next fix; adjacent
+    airways turn at their one shared fix. When a pair has no single junction,
+    each airway is expanded from the last waypoint to the next fix, which
+    expands none whose ends are not both on it.
+
+    Returns:
+        The index in parts just past the run's last airway
+    """
+    run, exit_fix = _airway_run_ahead(parts, start, airports)
+    airways = [airway for _, airway in run]
+    entry_fix = waypoints[-1].identifier if waypoints else None
+    if entry_fix and exit_fix:
+        _expand_airways_between(
+            airways, entry_fix, exit_fix, waypoints, seen_identifiers
+        )
+    return run[-1][0] + 1
+
+
 def parse_route_string(
     route: str,
     airports: dict[str, tuple[float, float]] | None = None,
@@ -1120,57 +1312,10 @@ def parse_route_string(
             i += 1
             continue
 
-        # Check if this is an airway (V##, J##, T##, Q##)
-        if re.match(r"^[VJTQ]\d+$", part):
-            # Find entry fix (previous waypoint) and exit fix (next non-airway part)
-            entry_fix = waypoints[-1].identifier if waypoints else None
-
-            # Look ahead to find exit fix
-            exit_fix = None
-            j = i + 1
-            while j < len(parts):
-                # Strip speed/level groups and skip standalone ones here too
-                next_part, _ = _split_route_token(parts[j])
-                if not next_part:
-                    j += 1
-                    continue
-                # Skip consecutive airways
-                if re.match(r"^[VJTQ]\d+$", next_part):
-                    j += 1
-                    continue
-                # Skip DCT
-                if next_part == "DCT":
-                    j += 1
-                    continue
-                # Skip SID/STAR names
-                if re.match(r"^[A-Z]+\d+[A-Z]*$", next_part) and len(next_part) > 5:
-                    j += 1
-                    continue
-                # Found a potential exit fix
-                exit_fix = _get_fix_identifier(next_part, airports)
-                break
-
-            # Get airway fixes between entry and exit
-            if entry_fix and exit_fix:
-                airway_fixes = get_airway_fixes(part, entry_fix, exit_fix)
-
-                # Add intermediate fixes (skip entry since it's already added)
-                for awy_fix in airway_fixes:
-                    if awy_fix.identifier not in seen_identifiers:
-                        # Skip if this is the entry fix (already in waypoints)
-                        if entry_fix and awy_fix.identifier == entry_fix:
-                            continue
-                        waypoints.append(
-                            Waypoint(
-                                identifier=awy_fix.identifier,
-                                latitude=awy_fix.latitude,
-                                longitude=awy_fix.longitude,
-                                waypoint_type="airway_fix",
-                            )
-                        )
-                        seen_identifiers.add(awy_fix.identifier)
-
-            i += 1
+        # Check if this is an airway (V##, J##, T##, Q##), with any airways
+        # following it before the next fix
+        if _AIRWAY_RE.match(part):
+            i = _expand_airway_run(parts, i, airports, waypoints, seen_identifiers)
             continue
 
         # Expand SID/STAR names via CIFP if airport context is available
@@ -1253,8 +1398,8 @@ class MeaViolation:
     """The MEA of one airway segment a route flies."""
 
     airway: str  # e.g., "V23"
-    segment_start: str  # Fix identifier of the point the segment leaves
-    segment_end: str  # Fix identifier of the next point along the airway
+    segment_start: str  # Identifier of the point the route flies the segment from
+    segment_end: str  # Identifier of the point the route flies the segment to
     mea: int  # Required MEA in feet
     # Level in feet in force where the route joins the airway, from the last
     # FIX/<speed><level> group at or before the entry fix; None when there is none
@@ -1329,29 +1474,114 @@ def _level_at(levels: list[int | None], index: int) -> int | None:
     )
 
 
+# Bearing in degrees of each octant an AWY1 direction text can name
+_OCTANT_BEARINGS = {
+    "N": 0.0,
+    "NE": 45.0,
+    "E": 90.0,
+    "SE": 135.0,
+    "S": 180.0,
+    "SW": 225.0,
+    "W": 270.0,
+    "NW": 315.0,
+}
+
+
+def _angle_off(course: float, bearing: float) -> float:
+    """The angle in degrees (0-180) between a course and a bearing."""
+    difference = abs(course - bearing) % 360
+    return min(difference, 360 - difference)
+
+
+def _flown_course(start: AirwayPoint, end: AirwayPoint) -> float | None:
+    """The initial true course from start to end, None when either has no position."""
+    if not isinstance(start, AirwayFix) or not isinstance(end, AirwayFix):
+        return None
+    return calculate_bearing(
+        start.latitude, start.longitude, end.latitude, end.longitude
+    )
+
+
+def _flown_mea(
+    restriction: AirwaySegmentRestriction, start: AirwayPoint, end: AirwayPoint
+) -> int | None:
+    """The MEA of a segment flown from start to end, None when it has no MEA.
+
+    With an opposite MEA, the MEA whose direction octant lies nearest the
+    course flown; the higher of the two when the course is unknown (an end
+    without a position), a direction is not an octant, or both are as near.
+    """
+    mea, opposite = restriction.mea, restriction.mea_opposite
+    if mea is None or opposite is None:
+        return mea
+    course = _flown_course(start, end)
+    bearing = _OCTANT_BEARINGS.get(restriction.mea_direction or "")
+    opposite_bearing = _OCTANT_BEARINGS.get(restriction.mea_opposite_direction or "")
+    if course is None or bearing is None or opposite_bearing is None:
+        return max(mea, opposite)
+    off = _angle_off(course, bearing)
+    opposite_off = _angle_off(course, opposite_bearing)
+    if off == opposite_off:
+        return max(mea, opposite)
+    return mea if off < opposite_off else opposite
+
+
 def _stretch_segments(
     stretch: _AirwayStretch,
     restrictions: dict[tuple[str, str], dict[int, AirwaySegmentRestriction]],
     level_ft: int | None,
 ) -> list[MeaViolation]:
-    """The segments of a stretch that have an MEA, each from the AWY1 record of the point it leaves."""
+    """The segments of a stretch that have an MEA, each from the AWY1 record of the point it leaves.
+
+    Each segment is named in the direction the route flies it, from the
+    stretch's entry toward its exit, and a segment with an MEA per direction
+    takes the one for that direction. The segments stay in sequence order.
+    """
     segment_restrictions = restrictions.get((stretch.airway, stretch.airway_type), {})
+    increasing = stretch.entry_index <= stretch.exit_index
     segments: list[MeaViolation] = []
     for index in range(stretch.first, stretch.last):
-        start = stretch.points[index]
+        start, end = stretch.points[index], stretch.points[index + 1]
         restriction = segment_restrictions.get(start.sequence)
-        if restriction is None or restriction.mea is None:
+        if restriction is None:
+            continue
+        flown_from, flown_to = (start, end) if increasing else (end, start)
+        mea = _flown_mea(restriction, flown_from, flown_to)
+        if mea is None:
             continue
         segments.append(
             MeaViolation(
                 airway=stretch.airway,
-                segment_start=start.identifier,
-                segment_end=stretch.points[index + 1].identifier,
-                mea=restriction.mea,
+                segment_start=flown_from.identifier,
+                segment_end=flown_to.identifier,
+                mea=mea,
                 level_ft=level_ft,
             )
         )
     return segments
+
+
+def _airway_run_check(
+    airways: list[str],
+    entry_fix: str,
+    exit_fix: str,
+    restrictions: dict[tuple[str, str], dict[int, AirwaySegmentRestriction]],
+    level_ft: int | None,
+) -> tuple[list[MeaViolation], list[SkippedAirway]]:
+    """The checked segments and skipped airways of consecutive airways between two fixes.
+
+    Nothing is checked or reported, only logged, when two adjacent airways
+    have no single junction.
+    """
+    violations: list[MeaViolation] = []
+    skipped: list[SkippedAirway] = []
+    for airway, start, end in _airway_run_legs(airways, entry_fix, exit_fix) or []:
+        stretch = _find_airway_stretch(airway, start, end)
+        if isinstance(stretch, _AirwayStretch):
+            violations.extend(_stretch_segments(stretch, restrictions, level_ft))
+        elif stretch is not None:
+            skipped.append(stretch)
+    return violations, skipped
 
 
 def get_max_mea_for_route(route: str) -> MeaCheck:
@@ -1361,11 +1591,15 @@ def get_max_mea_for_route(route: str) -> MeaCheck:
     before and after it, with any speed/level group stripped. The airway type
     (federal, Alaska or Hawaii) whose points hold both is walked from one to
     the other, and each segment's MEA comes from the AWY1 record of the point
-    the segment leaves. Each segment carries the level in force at the
-    airway's entry, from the last FIX/<speed><level> group at or before the
-    entry fix (Item 15). An airway with only one end on it is skipped and
-    reported; one with neither end on it, or with no fix before or after it in
-    the route, is skipped and only logged.
+    the segment leaves, for the direction flown when it has one per direction.
+    Consecutive airways with no fix between them (ENTRY A1 A2 EXIT) are flown
+    from one to the next at the one fix each adjacent pair shares; when a pair
+    shares none or several, none of them is checked and that is only logged.
+    Each segment carries the level in force at the airway's entry, from the
+    last FIX/<speed><level> group at or before the entry fix (Item 15). An
+    airway with only one end on it is skipped and reported; one with neither
+    end on it, or with no fix before or after it in the route, is skipped and
+    only logged.
 
     Args:
         route: Filed route string (e.g., "KSFO V25 SAC J80 RNO KRNO")
@@ -1385,21 +1619,25 @@ def get_max_mea_for_route(route: str) -> MeaCheck:
     violations: list[MeaViolation] = []
     skipped: list[SkippedAirway] = []
 
-    for index, airway in enumerate(fixes):
-        if not _AIRWAY_RE.match(airway):
+    index = 0
+    while index < len(fixes):
+        if not _AIRWAY_RE.match(fixes[index]):
+            index += 1
             continue
         entry = _find_endpoint(fixes, range(index - 1, -1, -1))
         exit_ = _find_endpoint(fixes, range(index + 1, len(fixes)))
         if entry is None or exit_ is None:
             side = "before" if entry is None else "after"
-            debug_logger.debug(f"MEA check skipped {airway}: no fix {side} it")
+            debug_logger.debug(f"MEA check skipped {fixes[index]}: no fix {side} it")
+            index += 1
             continue
-        stretch = _find_airway_stretch(airway, fixes[entry], fixes[exit_])
-        if isinstance(stretch, _AirwayStretch):
-            level_ft = _level_at(levels, entry)
-            violations.extend(_stretch_segments(stretch, restrictions, level_ft))
-        elif stretch is not None:
-            skipped.append(stretch)
+        run = [token for token in fixes[index:exit_] if _AIRWAY_RE.match(token)]
+        run_violations, run_skipped = _airway_run_check(
+            run, fixes[entry], fixes[exit_], restrictions, _level_at(levels, entry)
+        )
+        violations.extend(run_violations)
+        skipped.extend(run_skipped)
+        index = exit_
 
     # An airway listed twice in the route yields the same segments twice
     violations = list(dict.fromkeys(violations))

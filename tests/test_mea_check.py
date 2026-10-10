@@ -19,13 +19,46 @@ from backend.data import navaids
 from ui.modals.flight_info import FlightInfoScreen
 
 
+def _bound_text(octant: str) -> str:
+    """An AWY1 direction text as the real record pads it: "NE BND", "E BND " or blank."""
+    return f"{octant + ' BND' if octant else '':<6}"
+
+
 def awy1(
-    designation: str, sequence: int, mea: int | None, airway_type: str = " "
+    designation: str,
+    sequence: int,
+    mea: int | None,
+    airway_type: str = " ",
+    *,
+    direction: str = "",
+    mea_opposite: int | None = None,
+    opposite_direction: str = "",
 ) -> str:
-    """One AWY1 (segment) record: designation 4-8, type 9, sequence 10-14, MEA at 74-78 (blank if None)."""
+    """One AWY1 (segment) record: designation 4-8, type 9, sequence 10-14.
+
+    MEA at 74-78 and its direction at 79-84, the opposite MEA at 85-89 and its
+    direction at 90-95; each blank when None or empty.
+    """
     head = f"AWY1{designation:<5}{airway_type}{sequence:>5}09/03/2026"
     mea_text = "" if mea is None else f"{mea:05d}"
-    return f"{head:<74}{mea_text}".ljust(315)
+    opposite_text = "" if mea_opposite is None else f"{mea_opposite:05d}"
+    return (
+        f"{head:<74}{mea_text:<5}{_bound_text(direction)}"
+        f"{opposite_text:<5}{_bound_text(opposite_direction)}"
+    ).ljust(315)
+
+
+def dms(latitude: float, longitude: float) -> tuple[str, str]:
+    """A decimal position as AWY.txt's degrees-minutes-seconds texts."""
+
+    def text(value: float, width: int, hemispheres: str) -> str:
+        hundredths = round(abs(value) * 360000)
+        degrees, rest = divmod(hundredths, 360000)
+        minutes, seconds = divmod(rest, 6000)
+        hemisphere = hemispheres[1] if value < 0 else hemispheres[0]
+        return f"{degrees:0{width}d}-{minutes:02d}-{seconds / 100:05.2f}{hemisphere}"
+
+    return text(latitude, 2, "NS"), text(longitude, 3, "EW")
 
 
 def awy2(
@@ -139,6 +172,73 @@ FIXTURE_LINES = [
     ),
     awy1("J5", 220, 18000),
     awy2_border("J5", 220, "U.S. CANADIAN BORDER"),
+    # V1 near Myrtle Beach: 2,100 northeast-bound and 5,000 southwest-bound
+    awy1("V1", 160, 2100, direction="NE", mea_opposite=5000, opposite_direction="SW"),
+    awy2("V1", 160, "INLET", dms(33.3927, -79.3318)),
+    awy1("V1", 170, 2100, direction="NE", mea_opposite=5000, opposite_direction="SW"),
+    awy2("V1", 170, "PLANN", dms(33.5584, -79.0941)),
+    awy1("V1", 180, 5000, direction="NE", mea_opposite=2000, opposite_direction="SW"),
+    awy2("V1", 180, "CRE", dms(33.8138, -78.7245)),
+    # V2's first MEA is the westbound one, against its increasing sequence
+    awy1("V2", 360, 9700, direction="W", mea_opposite=7000, opposite_direction="E"),
+    awy2("V2", 360, "REEPO", dms(45.7596, -109.5269)),
+    awy2("V2", 370, "COLUS", dms(45.7836, -109.0997)),
+    awy1("V4", 310, 8000, direction="E", mea_opposite=9500, opposite_direction="W"),
+    awy2("V4", 310, "ALKAL", dms(43.0162, -115.3281)),
+    awy2("V4", 320, "GOODE", dms(42.8397, -114.7498)),
+    # Synthetic: a southbound segment to the Mexican border, whose course is unknown
+    awy1("V600", 10, 5000, direction="S", mea_opposite=7000, opposite_direction="N"),
+    awy2("V600", 10, "SOUTH", dms(32.9, -115.0)),
+    awy2_border("V600", 20, "U.S. MEXICAN BORDER"),
+    # V165 and V208 meet at OCN only
+    awy1("V165", 30, 2500),
+    awy2("V165", 30, "REDIN", dms(32.9511, -117.3997)),
+    awy2("V165", 40, "OCN", dms(33.2406, -117.4177)),
+    awy1("V208", 70, 3100),
+    awy2("V208", 70, "OCN", dms(33.2406, -117.4177)),
+    awy1("V208", 80, 8000),
+    awy2("V208", 80, "VISTA", dms(33.2191, -117.2345)),
+    # Synthetic: V903 leaves V208 at VISTA
+    awy1("V903", 10, 4000),
+    awy2("V903", 10, "VISTA", dms(33.2191, -117.2345)),
+    awy2("V903", 20, "ENDCC", dms(33.4, -116.9)),
+    # Synthetic: V901 and V902 share two fixes, SHRAA and SHRBB
+    *airway(
+        "V901",
+        [
+            (10, "STRTA", dms(34.0, -118.0), 5000),
+            (20, "SHRAA", dms(34.1, -117.9), 5000),
+            (30, "SHRBB", dms(34.2, -117.8), 5000),
+        ],
+    ),
+    *airway(
+        "V902",
+        [
+            (10, "SHRAA", dms(34.1, -117.9), 6000),
+            (20, "SHRBB", dms(34.2, -117.8), 6000),
+            (30, "ENDBB", dms(34.3, -117.7), 6000),
+        ],
+    ),
+    # Synthetic: V904 meets federal V12 at PMD and V12 H at LEANE
+    *airway(
+        "V904",
+        [
+            (10, "PMD", ("34-37-53.034N", "118-03-49.761W"), 5000),
+            (20, "FEDXX", dms(34.8, -117.8), 5000),
+        ],
+    ),
+    *airway(
+        "V904",
+        [
+            (10, "LEANE", ("21-16-00.00N", "157-57-00.00W"), 7000),
+            (20, "HENDX", dms(21.4, -157.8), 7000),
+        ],
+        airway_type="H",
+    ),
+    # Synthetic: NORTA to NORTB is a course of about 349, just west of north
+    awy1("V905", 10, 3000, direction="N", mea_opposite=6000, opposite_direction="S"),
+    awy2("V905", 10, "NORTA", dms(40.0, -100.0)),
+    awy2("V905", 20, "NORTB", dms(40.5, -100.13)),
 ]
 
 
@@ -175,10 +275,10 @@ def test_mea_is_read_for_the_segment_leaving_each_point() -> None:
 
     assert max_mea == 18000
     assert _segments("MLF J107 BLD") == {
-        ("BLD", "OVETO"): 18000,
-        ("OVETO", "NORRA"): 18000,
-        ("NORRA", "BERYL"): 18000,
-        ("BERYL", "MLF"): 18000,
+        ("OVETO", "BLD"): 18000,
+        ("NORRA", "OVETO"): 18000,
+        ("BERYL", "NORRA"): 18000,
+        ("MLF", "BERYL"): 18000,
     }
 
 
@@ -285,8 +385,8 @@ def test_two_border_candidates_pick_the_one_toward_the_missing_fix(
     monkeypatch.setattr(navaids, "get_waypoint_coordinates", POSITIONS.get)
 
     assert _segment_order("CFDCT J5 EPSOP") == [
-        ("U.S. CANADIAN BORDER", "CFJCC"),
-        ("CFJCC", "CFDCT"),
+        ("CFJCC", "U.S. CANADIAN BORDER"),
+        ("CFDCT", "CFJCC"),
     ]
     assert _segment_order("CFJCC J5 NORTHX") == [
         ("CFJCC", "CFDCT"),
@@ -367,3 +467,142 @@ def test_route_parser_strips_every_speed_level_group(group: str) -> None:
         "OVETO",
         "BLD",
     ]
+
+
+def test_awy1_record_keeps_opposite_mea_and_directions() -> None:
+    """V1 seq 160 is 2,100 northeast-bound and 5,000 southwest-bound; a bare "BND" is no direction."""
+    line = awy1(
+        "V1", 160, 2100, direction="NE", mea_opposite=5000, opposite_direction="SW"
+    )
+    no_opposite = awy1("V1", 10, 4000)
+    no_opposite = f"{no_opposite[:90]}   BND{no_opposite[96:]}"
+
+    parsed = navaids._parse_awy1_record(line)
+    bare = navaids._parse_awy1_record(no_opposite)
+
+    assert parsed is not None
+    assert parsed[1] == navaids.AirwaySegmentRestriction(
+        airway="V1",
+        sequence=160,
+        mea=2100,
+        mea_direction="NE",
+        mea_opposite=5000,
+        mea_opposite_direction="SW",
+        moca=None,
+    )
+    assert bare is not None
+    assert (bare[1].mea_direction, bare[1].mea_opposite_direction) == (None, None)
+
+
+def test_opposite_direction_mea_follows_the_course_flown() -> None:
+    """INLET to PLANN flies northeast at 2,100; PLANN to INLET flies southwest at 5,000."""
+    assert _segments("INLET V1 PLANN") == {("INLET", "PLANN"): 2100}
+    assert _segments("PLANN V1 INLET") == {("PLANN", "INLET"): 5000}
+
+
+def test_direction_text_not_increasing_sequence_picks_the_mea() -> None:
+    """V2's first MEA (9,700) is westbound: REEPO to COLUS, east, is 7,000."""
+    assert _segments("REEPO V2 COLUS") == {("REEPO", "COLUS"): 7000}
+    assert _segments("COLUS V2 REEPO") == {("COLUS", "REEPO"): 9700}
+
+
+def test_record_without_an_opposite_mea_is_unchanged() -> None:
+    """ABQ to OTO has one MEA, 12,000, whichever way it is flown."""
+    assert _segments("ABQ V12 OTO") == {("ABQ", "OTO"): 12000}
+    assert _segments("OTO V12 ABQ") == {("OTO", "ABQ"): 12000}
+
+
+def test_unplaceable_course_takes_the_higher_mea() -> None:
+    """The border point has no position, so SOUTH to it takes the higher of 5,000 and 7,000."""
+    assert _segments("SOUTH V600 NOWHERE") == {("SOUTH", "U.S. MEXICAN BORDER"): 7000}
+
+
+def test_false_warning_not_raised_for_the_low_direction() -> None:
+    """V4 ALKAL-GOODE is 8,000 eastbound and 9,500 westbound; filed 9,000 warns only westbound."""
+    eastbound = _flight_info_text("ALKAL V4 GOODE", "9000")
+    westbound = _flight_info_text("GOODE V4 ALKAL", "9000")
+
+    assert "MEA WARNING" not in eastbound
+    assert "MEA WARNING" in westbound
+    assert "9,500" in westbound
+
+
+def test_adjacent_airways_use_their_shared_fix_as_the_junction() -> None:
+    """REDIN V165 V208 VISTA turns from V165 to V208 at OCN, the one fix both hold."""
+    check = navaids.get_max_mea_for_route("REDIN V165 V208 VISTA")
+
+    assert _segments("REDIN V165 V208 VISTA") == {
+        ("REDIN", "OCN"): 2500,
+        ("OCN", "VISTA"): 3100,
+    }
+    assert check.skipped == []
+
+
+def test_adjacent_airways_with_no_shared_fix_are_only_logged() -> None:
+    """V12 and J107 share no fix: neither is checked and neither is reported skipped."""
+    assert navaids.get_max_mea_for_route("ABQ V12 J107 BLD") == navaids.MeaCheck(
+        max_mea=None, violations=[], skipped=[]
+    )
+
+
+def test_adjacent_airways_sharing_two_fixes_are_only_logged() -> None:
+    """V901 and V902 share SHRAA and SHRBB, so the junction is unknown: nothing is shown."""
+    assert navaids.get_max_mea_for_route("STRTA V901 V902 ENDBB") == navaids.MeaCheck(
+        max_mea=None, violations=[], skipped=[]
+    )
+
+
+def test_three_adjacent_airways_pair_junction_by_junction() -> None:
+    """V165 meets V208 at OCN and V208 meets V903 at VISTA."""
+    check = navaids.get_max_mea_for_route("REDIN V165 V208 V903 ENDCC")
+
+    assert _segments("REDIN V165 V208 V903 ENDCC") == {
+        ("REDIN", "OCN"): 2500,
+        ("OCN", "VISTA"): 3100,
+        ("VISTA", "ENDCC"): 4000,
+    }
+    assert check.skipped == []
+
+
+def test_adjacent_airways_pick_the_junction_on_the_entry_fixs_airway_type() -> None:
+    """KATHS is on V12 H, which meets V904 H at LEANE; federal V12 and V904 meet at PMD."""
+    check = navaids.get_max_mea_for_route("KATHS V12 V904 HENDX")
+
+    assert _segments("KATHS V12 V904 HENDX") == {
+        ("KATHS", "NONNI"): 29000,
+        ("NONNI", "LEANE"): 29000,
+        ("LEANE", "HENDX"): 7000,
+    }
+    assert check.skipped == []
+
+
+def test_repeated_airway_is_checked_once() -> None:
+    """ABQ V12 V12 OTO flies V12 from ABQ to OTO."""
+    check = navaids.get_max_mea_for_route("ABQ V12 V12 OTO")
+
+    assert check == navaids.MeaCheck(
+        max_mea=12000,
+        violations=[
+            navaids.MeaViolation(
+                airway="V12",
+                segment_start="ABQ",
+                segment_end="OTO",
+                mea=12000,
+                level_ft=None,
+            )
+        ],
+        skipped=[],
+    )
+
+
+def test_course_just_west_of_north_takes_the_northbound_mea() -> None:
+    """NORTA to NORTB, about 349, is 10 degrees off N and 170 off S: 3,000; back south, 6,000."""
+    assert _segments("NORTA V905 NORTB") == {("NORTA", "NORTB"): 3000}
+    assert _segments("NORTB V905 NORTA") == {("NORTB", "NORTA"): 6000}
+
+
+def test_airways_meeting_only_at_border_points_have_no_junction() -> None:
+    """J5 and J70 both name a "U.S. CANADIAN BORDER" point; a border point is never a junction."""
+    assert navaids.get_max_mea_for_route("SEA J5 J70 JHW") == navaids.MeaCheck(
+        max_mea=None, violations=[], skipped=[]
+    )

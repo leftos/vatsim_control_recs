@@ -23,6 +23,7 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **ARTCC**: an air route traffic control center; the app builds automatic groupings from them.
 - **`as_of`**: the one freshness time a refresh or weather pass takes, passed to every METAR cache read so a slow bbox phase cannot expire entries it skipped.
 - **bbox / box**: one weather bounding-box request to aviationweather.gov; `calculate_airport_bboxes` packs the tracked airports into as few boxes of at most 10° per axis as it can (first fit, in longitude order).
+- **BND**: the AWY1 direction text, an octant plus " BND" ("NE BND"), naming which direction a segment's MEA applies to; `_parse_awy1_record` keeps the octant.
 - **border point**: an FAA airway point named "U.S. CANADIAN BORDER" or "U.S. MEXICAN BORDER"; the MEA check runs up to it on a route that leaves or enters the US, and it never becomes a route fix (`backend/data/navaids.py`).
 - **cap row**: the last, dim and disabled row of the Go To list, "showing 100 of N — type to narrow", shown when more than 100 rows match.
 - **CIFP**: Coded Instrument Flight Procedures, the FAA file the SID, STAR and approach lookups read (`backend/data/cifp.py`).
@@ -33,10 +34,11 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **D-ATIS**: digital ATIS, the airport information text fetched from VATSIM and real-world sources.
 - **enroute transition**: the leg of a SID or STAR that joins the common route to an enroute fix or airway; `get_dp_data` uses the first one when a SID has no common route.
 - **GIL**: Python's global interpreter lock; CPU-bound Python on a worker thread starves the UI thread (see `performance.md`).
-- **MEA**: minimum enroute altitude; the flight info screen warns when an IFR flight is below it on a segment of its filed route, comparing each segment with the level in force at its airway's entry, else the filed altitude.
+- **MEA**: minimum enroute altitude; the flight info screen warns when an IFR flight is below it on a segment of its filed route, comparing each segment with the level in force at its airway's entry, else the filed altitude, using the MEA for the direction flown.
 - **my groupings** (★ grouping): a grouping the user saved in `favorites.json`; the code calls it a favorite.
 - **NASR**: the FAA's National Airspace System Resources data, the source of navaids and fixes for route parsing (`backend/data/navaids.py`).
 - **NASR coverage**: the US and its territories, the airports `is_us_airport` accepts by ICAO prefix; route idents are resolved only against NASR, so a route with an end outside it uses the great circle for ETA.
+- **opposite-direction MEA**: the second MEA an AWY1 segment carries for the reverse direction; the check picks the MEA whose octant is nearest the course flown, else the higher of the two.
 - **ratchet**: the `C901` complexity ignores per file in `ruff.toml`; a file's entry is removed when its over-limit functions are split, so the list only shrinks.
 - **runway transition**: the leg of a SID from one runway to where the routes join, coded in CIFP with a transition name starting `RW`.
 - **SCANP / SPACP / SLAMP / SUSAP**: CIFP customer areas; SUSAP is the continental US (K idents), SCANP is Alaska's, SPACP Hawaii's and the Pacific territories', SLAMP Puerto Rico's and the US Virgin Islands'.

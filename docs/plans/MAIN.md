@@ -39,13 +39,7 @@ Order (from the map of this wave): R3 removes the edit mode R4's wording would r
 
 Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `backend/core/`. Review: `code-review` with an aviation read of each verdict. Verification: each item first reproduces on fixture or live data; a confirmed defect gets a red test before its fix.
 
-- [ ] 854 AWY1 segment records carry a different MEA for the opposite direction (V1 sequence 160: 2,100 ft one way, 5,000 the other); `get_max_mea_for_route` always reads the first value. Read the direction of travel: `_stretch_segments` (`backend/data/navaids.py`) reads `restriction.mea` only, while `_AirwayStretch` already keeps `entry_index`/`exit_index`. Map and measurements: `.tmp/map-mea-direction.md` (index order matches the first MEA's text in only 420 of 794 segments, so the course decides).
-
-  Settled (owner): the MEA whose "xx BND" octant is nearest the segment's course flown; `max(mea, mea_opposite)` when no course can be computed (an unpositioned or border end) or the text is blank. Settled from the code and map: `_parse_awy1_record` also reads the direction octants (columns 79-85 and 90-96) into `AirwaySegmentRestriction` as the octant ("NE"), None when blank; `MeaViolation` gains no required field. Lands on main (owner: no feature branch).
-- [ ] Adjacent airways with no fix between them (`ABC J1 J2 DEF`) use ABC and DEF as both airways' endpoints, so the MEA check shows "MEA not checked: J2 (ABC not on it)" naming the wrong fix (`backend/data/navaids.py` `_find_airway_stretch`). Use the one point both airways share as the junction; with none or several, log only. No such pair in the 1,914 IFR routes of `data/test-vatsim-data.json`.
-
-  Settled (owner): one helper finds the junction, used by `get_max_mea_for_route` and by `parse_route_string`'s airway look-ahead, which today drops every fix of both airways (`REDIN V165 V208 VISTA` parses to REDIN, VISTA); none or several shared fixes log only and show nothing. Settled from the map: three or more adjacent airways pair up junction by junction, logging when any pair fails.
-- [ ] `parse_route_string` treats only names longer than 5 characters as SIDs or STARs (`backend/data/navaids.py` ~1177, and the airway look-ahead ~1146), skipping 284 of 2,029 SIDs (TURN8, ANCH1, MKK5); the STAR count is unmeasured. After the MEA branch lands (same file).
+- [ ] `parse_route_string` treats only names longer than 5 characters as SIDs or STARs (`backend/data/navaids.py`: `_is_route_endpoint`, which the airway-run look-ahead `_airway_run_ahead` shares, and the main loop's "Expand SID/STAR names" branch), skipping 284 of 2,029 SIDs (TURN8, ANCH1, MKK5); the STAR count is unmeasured.
 
 ## Backlog
 
