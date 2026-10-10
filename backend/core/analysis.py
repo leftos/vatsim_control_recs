@@ -4,6 +4,7 @@ Main analysis module for VATSIM flights and controller staffing.
 
 import os
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import Any
 
 from airport_disambiguator import AirportDisambiguator
@@ -55,6 +56,27 @@ def load_airport_data(
                 "country_code": info.get("country", ""),
             }
     return airports
+
+
+def filter_airports_by_allowlist(
+    all_airports_data: dict[str, dict],
+    airport_allowlist: Iterable[str] | None,
+) -> dict[str, dict]:
+    """
+    Keep only the airports named by the allowlist.
+
+    Args:
+        all_airports_data: Airport data keyed by ICAO code
+        airport_allowlist: ICAO codes to keep, or None/empty to keep every airport
+
+    Returns:
+        The filtered airport data, or ``all_airports_data`` itself when the
+        allowlist is empty or None
+    """
+    if not airport_allowlist:
+        return all_airports_data
+    allowed = set(airport_allowlist)
+    return {icao: data for icao, data in all_airports_data.items() if icao in allowed}
 
 
 def analyze_flights_data(
@@ -175,15 +197,7 @@ def analyze_flights_data(
     else:
         display_custom_groupings = {}
 
-    # Filter airports based on allowlist - simple and clean
-    if airport_allowlist:
-        airports = {
-            icao: data
-            for icao, data in all_airports_data.items()
-            if icao in airport_allowlist
-        }
-    else:
-        airports = all_airports_data
+    airports = filter_airports_by_allowlist(all_airports_data, airport_allowlist)
 
     # Download VATSIM data
     print("Downloading live flight data...")

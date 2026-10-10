@@ -227,13 +227,15 @@ def get_airport_flight_details(
     else:
         airport_icao_list = list(airport_icao_or_list)
 
+    airport_icao_set = set(airport_icao_list)
+
     debug_logger.debug(f"[BACKEND] airport_icao_list: {airport_icao_list}")
 
     # Create airports dict for the specified airports
     airports = {
         icao: data
         for icao, data in all_airports_data.items()
-        if icao in airport_icao_list
+        if icao in airport_icao_set
     }
     debug_logger.debug(f"[BACKEND] Created airports dict with {len(airports)} airports")
 
@@ -277,7 +279,7 @@ def get_airport_flight_details(
         is_local_flight = departure and arrival and departure == arrival
 
         # Check if this is a departure (on ground at departure airport)
-        if departure and departure in airport_icao_list:
+        if departure and departure in airport_icao_set:
             if nearest_airport_if_on_ground == departure and _should_show(
                 departure, "dep"
             ):
@@ -341,7 +343,7 @@ def get_airport_flight_details(
             not departure
             and arrival
             and nearest_airport_if_on_ground
-            and nearest_airport_if_on_ground in airport_icao_list
+            and nearest_airport_if_on_ground in airport_icao_set
             and nearest_airport_if_on_ground != arrival
             and _should_show(nearest_airport_if_on_ground, "dep")
         ):
@@ -374,7 +376,7 @@ def get_airport_flight_details(
             )
 
         # Check if this is an arrival (either on ground at arrival or flying nearby)
-        if arrival and arrival in airport_icao_list and _should_show(arrival, "arr"):
+        if arrival and arrival in airport_icao_set and _should_show(arrival, "arr"):
             # Skip if departure == arrival and aircraft is on ground (already added as departure)
             if is_local_flight and nearest_airport_if_on_ground == arrival:
                 pass  # Already handled as departure above
@@ -535,7 +537,7 @@ def get_airport_flight_details(
             not departure
             and not arrival
             and nearest_airport_if_on_ground
-            and nearest_airport_if_on_ground in airport_icao_list
+            and nearest_airport_if_on_ground in airport_icao_set
             and _should_show(nearest_airport_if_on_ground, "dep")
         ):
             # Count as departure with unknown destination
