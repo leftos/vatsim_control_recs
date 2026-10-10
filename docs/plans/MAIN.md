@@ -39,7 +39,9 @@ Order (from the map of this wave): R3 removes the edit mode R4's wording would r
 
 Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `backend/core/`. Review: `code-review` with an aviation read of each verdict. Verification: each item first reproduces on fixture or live data; a confirmed defect gets a red test before its fix.
 
-- [ ] `parse_route_string` treats only names longer than 5 characters as SIDs or STARs (`backend/data/navaids.py`: `_is_route_endpoint`, which the airway-run look-ahead `_airway_run_ahead` shares, and the main loop's "Expand SID/STAR names" branch), skipping 284 of 2,029 SIDs (TURN8, ANCH1, MKK5); the STAR count is unmeasured.
+- [ ] `parse_route_string` treats only names longer than 5 characters as SIDs or STARs (`backend/data/navaids.py`: `_is_route_endpoint`, which the airway-run look-ahead `_airway_run_ahead` shares, and the main loop's "Expand SID/STAR names" branch, a second copy of the regex), skipping 247 of 1,967 SIDs and 71 of 1,750 STARs on cycle 2610 (MKK5, TURN8, DPK3); every short id is 3-4 letters plus one digit. Map: `.tmp/map-short-procs.md` (16 of the test data's flights expand a real procedure, 0 MEA results change, HAL70's route distance becomes accepted).
+
+  Settled (owner): one helper decides "procedure name" for the main loop, `_is_route_endpoint` and `_airway_run_ahead`: `_PROCEDURE_RE` and longer than 5 characters, or `^[A-Z]{3,4}\d$` and not a fix, navaid or airport ident (0 collisions with NASR's 70,129 fixes); a short name whose lookup finds no procedure falls through to the normal lookup. Lands on main (owner: no feature branch).
 
 ## Backlog
 
