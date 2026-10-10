@@ -5,24 +5,58 @@ This module provides logging to a debug file for tracking issues.
 It is designed to be imported by both backend and ui modules without
 causing circular imports.
 
-Logging is lazily initialized to avoid permission errors when imported
-by processes that don't need file logging (e.g., the weather daemon).
+File logging starts only when an entry point calls setup_file_logging();
+importing a module never creates a log file or prunes an existing one. Until
+then records are kept in an in-memory buffer holding the most recent 1000, and
+setup_file_logging() writes them out ahead of the records that follow.
 """
 
+import collections
 import logging
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+# Records the pre-setup buffer keeps before dropping the oldest
+BUFFER_CAPACITY = 1000
 
 # Lazy-initialized paths (set on first use)
 _LOGS_DIR: str | None = None
 _LOG_FILE: str | None = None
 _initialized = False
 
-# Configure logger (starts with NullHandler until file logging is set up)
 _logger = logging.getLogger("vatsim_debug")
 _logger.setLevel(logging.DEBUG)
 _logger.addHandler(logging.NullHandler())
+
+
+class _BufferHandler(logging.Handler):
+    """Hold the most recent records until file logging starts."""
+
+    def __init__(self, capacity: int) -> None:
+        super().__init__(logging.DEBUG)
+        self.capacity = capacity
+        self.records: collections.deque[logging.LogRecord] = collections.deque(
+            maxlen=capacity
+        )
+        self.dropped = 0
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if len(self.records) == self.capacity:
+            self.dropped += 1
+        # Freeze the record: it may outlive the objects its args and traceback
+        # point at, and the file formatter prints exc_text on its own.
+        record.msg = record.getMessage()
+        record.args = None
+        if record.exc_info:
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+            record.exc_info = None
+        self.records.append(record)
+
+
+_buffer_handler = _BufferHandler(BUFFER_CAPACITY)
+_logger.addHandler(_buffer_handler)
 
 
 def _get_logs_dir() -> str:
@@ -47,22 +81,20 @@ def _get_log_file() -> str:
     return _LOG_FILE
 
 
-def _init_file_logging() -> bool:
-    """Initialize file logging if not already done.
+def setup_file_logging() -> None:
+    """Start writing records to the dated debug log file.
 
-    Returns:
-        True if file logging was successfully initialized, False otherwise.
+    Creates the logs directory, prunes log files past the retention window and
+    attaches the file handler, then writes out the records buffered since
+    import and clears the buffer. A second call is a no-op.
+
+    When the logs directory or file cannot be created the failure is reported
+    on stderr naming the path and the error, and logging stays in memory only.
     """
     global _initialized
 
     if _initialized:
-        return True
-
-    # Check if we already have a file handler
-    for handler in _logger.handlers:
-        if isinstance(handler, logging.FileHandler):
-            _initialized = True
-            return True
+        return
 
     try:
         logs_dir = _get_logs_dir()
@@ -82,16 +114,36 @@ def _init_file_logging() -> bool:
             datefmt="%H:%M:%S",
         )
         file_handler.setFormatter(formatter)
-
-        # Add handler to logger
-        _logger.addHandler(file_handler)
-        _initialized = True
-        return True
-
-    except (OSError, PermissionError):
+    except (OSError, PermissionError) as exc:
         # Can't create log directory or file - continue without file logging
         _initialized = True  # Mark as initialized to avoid repeated attempts
-        return False
+        print(
+            f"vatsim_debug: cannot write log file {_get_log_file()}: {exc}",
+            file=sys.stderr,
+        )
+        return
+
+    # Snapshot under the handler's lock, so a record logged from another thread
+    # cannot slip into the buffer between the snapshot and the clear.
+    _buffer_handler.acquire()
+    try:
+        _logger.removeHandler(_buffer_handler)
+        records = list(_buffer_handler.records)
+        dropped = _buffer_handler.dropped
+        _buffer_handler.records.clear()
+    finally:
+        _buffer_handler.release()
+
+    _logger.addHandler(file_handler)
+    for record in records:
+        file_handler.handle(record)
+    if dropped:
+        _logger.warning(
+            f"{dropped} log records from before file logging"
+            f" started were dropped (buffer cap {BUFFER_CAPACITY})"
+        )
+
+    _initialized = True
 
 
 def cleanup_old_logs(days_to_keep: int = 10) -> None:
@@ -121,19 +173,16 @@ def cleanup_old_logs(days_to_keep: int = 10) -> None:
 
 def debug(message: str) -> None:
     """Log a debug message."""
-    _init_file_logging()
     _logger.debug(message)
 
 
 def info(message: str) -> None:
     """Log an info message."""
-    _init_file_logging()
     _logger.info(message)
 
 
 def warning(message: str) -> None:
     """Log a warning message."""
-    _init_file_logging()
     _logger.warning(message)
 
 
@@ -144,7 +193,6 @@ def error(message: str, exc_info: bool = False) -> None:
         message: The error message to log.
         exc_info: If True, include exception traceback information.
     """
-    _init_file_logging()
     _logger.error(message, exc_info=exc_info)
 
 

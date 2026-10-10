@@ -6,6 +6,7 @@ import re
 import sys
 
 from backend.data.loaders import load_unified_airport_data
+from common.logger import setup_file_logging
 
 from .disambiguator import AirportDisambiguator
 
@@ -125,6 +126,8 @@ def verbose_trace_disambiguation(
 
 def main():
     """Main entry point for command-line usage."""
+    setup_file_logging()
+
     parser = argparse.ArgumentParser(
         description="Test airport name disambiguation with provided ICAO codes.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

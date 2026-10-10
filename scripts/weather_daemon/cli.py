@@ -15,6 +15,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from common.logger import setup_file_logging
 from scripts.weather_daemon.config import DaemonConfig
 from scripts.weather_daemon.generator import acquire_lock, generate
 
@@ -197,6 +198,7 @@ Examples:
 
     # Set up logging
     setup_logging(log_dir, verbose=args.verbose)
+    setup_file_logging()
 
     if args.output:
         config.output_dir = args.output

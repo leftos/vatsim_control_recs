@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.data.loaders import load_unified_airport_data
+from common.logger import setup_file_logging
 
 
 def build_spatial_grid(airports_data: dict) -> dict:
@@ -82,6 +83,8 @@ def build_heuristic_metar_candidates(airports_data: dict) -> set:
 
 
 def main():
+    setup_file_logging()
+
     # Paths
     script_dir = Path(__file__).parent
     project_root = script_dir.parent

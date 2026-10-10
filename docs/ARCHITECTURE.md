@@ -28,6 +28,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 | Change split-flap animation or flap character sets | `ui/config.py` → `widgets/split_flap_datatable.py` → `ui/tables.py` | none |
 | Change historical statistics | `backend/data/statsim_api.py` → `ui/modals/historical_stats.py` | none |
 | Change the weather daemon or its deployment | `scripts/weather_daemon/cli.py` → `scripts/weather_daemon/generator.py` → `scripts/weather_daemon/config.py` → `scripts/weather_daemon/service/` | none |
+| Change logging or log-file start-up | `common/logger.py` (`setup_file_logging`, the pre-setup buffer) → `common/paths.py` (`get_user_logs_dir`) → `main.py` (`main`) and the other entry points that call it (`scripts/weather_daemon/cli.py`, `scripts/weather_daemon/generator.py`, `scripts/generate_airport_names.py`, `scripts/precalculate_airport_spatial_data.py`, `airport_disambiguator/__main__.py`) → `conftest.py` → `tests/test_logger.py`, `tests/test_isolation.py` | none |
 | Regenerate reference data | `scripts/generate_preset_groupings.py`, `scripts/generate_simaware_boundaries.py`, `scripts/precalculate_airport_spatial_data.py` → the matching file under `data/` | none |
 
 ## Layers
@@ -40,7 +41,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - **`airport_disambiguator/`**: owns ICAO-to-display-name resolution (`disambiguator.py` public API, `disambiguation_engine.py`, `entity_extractor.py`, `name_processor.py`, `data_manager.py`); checks `data/airport_names.csv` first, then falls back to spaCy. References `backend/data`; never `ui`.
 - **`ui/`**: owns the `VATSIMControlApp` (`app.py`, which refreshes on a `set_interval` timer, 15 seconds by default via `--refresh-interval`), table config and management (`tables.py`, `config.py`) and the screens in `ui/modals/`. References `backend`, `widgets`, `common`.
 - **`widgets/`** (`split_flap_datatable.py`): owns the animated DataTable. References `ui.debug_logger` only.
-- **`common/`**: owns path resolution (`paths.py`) and logging (`logger.py`). References only itself.
+- **`common/`**: owns path resolution (`paths.py`) and logging (`logger.py`). References only itself. Importing a module opens no log file: records logged before an entry point calls `setup_file_logging()` are buffered and flushed to the file when it runs.
 - **`scripts/`**: owns the generators for `data/` files and `scripts/weather_daemon/` (staged `weather`, `briefings`, `tiles`, `index` generation, systemd unit and timer, nginx config, PowerShell deployment scripts). References `backend` and `airport_disambiguator`; nothing references `scripts`.
 
 ## Data flow
@@ -80,7 +81,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 
 `tests/`, run with `uv run --group dev pytest -q` (the `dev` dependency group; pytest settings are in `pyproject.toml`). The tests are headless Textual Pilot tests on fixture data and never use the network.
 
-- `conftest.py` (repo root): points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a session temp dir before any project import, since importing `backend` logs and the first log call opens the log file in the user data dir; it also blanks `STATSIM_API_KEY` so `.env` is not read. `tests/test_isolation.py` checks this.
+- `conftest.py` (repo root): points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a session temp dir before any project import, so caches, favorites and any log file a test starts through `setup_file_logging()` land in the temp dir, not the user's; it also blanks `STATSIM_API_KEY` so `.env` is not read. `tests/test_isolation.py` checks this.
 - `tests/conftest.py`: the fixture that mounts `GoToScreen` on fixture airports, groupings and favorites.
 - `tests/test_goto_edit_filters.py`: saved per-airport filters when editing a favorite.
 - `tests/test_goto_r1.py`: Go To modal titles, hints, focus moves, and warning and error toasts.

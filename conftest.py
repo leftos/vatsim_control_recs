@@ -1,10 +1,10 @@
 """Keep the test session out of the real user data directory.
 
 This runs when pytest loads the root conftest, before tests/conftest.py imports
-the app. Some modules log at import time (backend/data/statsim_api.py), and the
-logger caches the user logs directory on its first call, prunes old logs there
-and opens a log file. Every variable common/paths.py derives that directory from
-therefore points at one session temp dir before any project module is imported.
+the app. Writable state a test touches - caches, favorites and any log file a
+test starts through setup_file_logging() - must not reach the real user data
+directory, so every variable common/paths.py derives that directory from points
+at one session temp dir before any project module is imported.
 """
 
 import os

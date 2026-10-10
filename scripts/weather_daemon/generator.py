@@ -434,6 +434,7 @@ from backend.data.weather_parsing import (  # noqa: E402
     parse_visibility_sm,
     parse_weather_phenomena,
 )
+from common.logger import setup_file_logging  # noqa: E402
 
 from .artcc_boundaries import get_artcc_boundaries  # noqa: E402
 from .config import ARTCC_NAMES, CATEGORY_COLORS, DaemonConfig  # noqa: E402
@@ -1674,5 +1675,6 @@ Use generate() with appropriate config flags instead.
 
 if __name__ == "__main__":
     # Simple test run
+    setup_file_logging()
     config = DaemonConfig(output_dir=Path("./test_output"))
     generate(config)

@@ -1,6 +1,5 @@
 """The test session never resolves the real user data directory."""
 
-import logging
 import os
 from pathlib import Path
 
@@ -25,13 +24,3 @@ def test_user_data_dir_is_the_session_dir() -> None:
 
 def test_logger_writes_under_the_session_dir() -> None:
     _assert_isolated(logger.get_log_file_path())
-    assert logger._LOGS_DIR is not None
-    _assert_isolated(logger._LOGS_DIR)
-
-    file_handlers = [
-        handler
-        for handler in logger._logger.handlers
-        if isinstance(handler, logging.FileHandler)
-    ]
-    for handler in file_handlers:
-        _assert_isolated(handler.baseFilename)

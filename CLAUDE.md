@@ -20,7 +20,7 @@ uv run --group dev pytest -q
 
 Tests live under `tests/` and run in the `dev` dependency group (`pytest`, `pytest-asyncio`, pinned in `pyproject.toml`). They are headless Textual Pilot tests on fixture data and never touch the network. CI runs them in the "Run tests" step of `.github/workflows/build-release.yml` before the PyInstaller build.
 
-Tests isolate the user data directory for the whole session: the repo-root `conftest.py` points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a temp dir before any project import (module imports log, and the first log call opens the log file there), and blanks `STATSIM_API_KEY` so `.env` is not read. `tests/test_isolation.py` checks it.
+Tests isolate the user data directory for the whole session: the repo-root `conftest.py` points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a temp dir before any project import (it also covers caches, favorites and any log file a test starts through `setup_file_logging()`), and blanks `STATSIM_API_KEY` so `.env` is not read. `tests/test_isolation.py` checks it.
 
 ### Dependencies
 
@@ -311,7 +311,7 @@ In edit mode a saved filter shows on an individually picked airport's row, and `
 
 ## Debugging
 
-Debug logs are written to `logs/` in the user data directory (`get_user_logs_dir()` in `common/paths.py`). Logs older than 10 days are cleaned on the first log call (`cleanup_old_logs()` in `common/logger.py`). Use `ui.debug_logger.debug()` for UI debugging.
+Debug logs are written to `logs/` in the user data directory (`get_user_logs_dir()` in `common/paths.py`). Logs older than 10 days are cleaned when file logging starts (`cleanup_old_logs()` in `common/logger.py`). Importing a module does not start file logging: each entry point calls `setup_file_logging()` from `common.logger`, and records logged before that are buffered (newest 1000) and written in order when it runs. Use `ui.debug_logger.debug()` for UI debugging.
 
 ## Weather Daemon
 

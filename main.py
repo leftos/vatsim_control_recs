@@ -98,10 +98,11 @@ from backend.core.groupings import (
     load_all_groupings,
     resolve_grouping_recursively,
 )
+from common.logger import setup_file_logging
 from common.paths import ensure_user_directories
 from ui import (
     VATSIMControlApp,
-    debug_logger,  # Import to trigger log cleanup on bootup
+    debug_logger,
     expand_countries_to_airports,
 )
 from ui import config as ui_config
@@ -241,11 +242,11 @@ def main():
     ensure_user_directories()
 
     args = build_arg_parser().parse_args()
+    setup_file_logging()
 
     # Set the global wind source from command-line argument
     backend_constants.WIND_SOURCE = args.wind_source
 
-    # Log cleanup happens automatically when debug_logger is imported
     debug_logger.info("Application starting")
 
     load_reference_data()

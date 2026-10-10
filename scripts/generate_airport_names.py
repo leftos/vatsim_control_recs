@@ -22,6 +22,7 @@ sys.path.insert(0, project_root)
 
 from airport_disambiguator import AirportDisambiguator
 from backend.data.loaders import load_unified_airport_data
+from common.logger import setup_file_logging
 
 
 def title_case_name(name: str) -> str:
@@ -49,6 +50,8 @@ def load_existing_csv(path: str) -> dict[str, str]:
 
 
 def main():
+    setup_file_logging()
+
     parser = argparse.ArgumentParser(
         description="Generate data/airport_names.csv from the disambiguator."
     )

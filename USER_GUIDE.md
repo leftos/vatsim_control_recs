@@ -776,7 +776,7 @@ If the app reports that the spaCy model `en_core_web_sm` is missing, run `uv syn
 1. Check internet connectivity
 2. VATSIM API may be temporarily unavailable
 3. Check that auto-refresh is not paused (`Ctrl+P` toggles it), then wait for the next refresh
-4. Check debug logs in `debug_logs/` directory
+4. Check the debug logs in the `logs` folder of the user data directory (see Debug Logs below)
 
 ### Slow Performance
 
@@ -786,7 +786,7 @@ If the app reports that the spaCy model `en_core_web_sm` is missing, run `uv syn
 
 ### Debug Logs
 
-Debug information is written to `debug_logs/debug_YYYYMMDD.log`. Logs older than 7 days are automatically cleaned on startup.
+Debug information is written to `debug_YYYYMMDD.log` in the `logs` folder of the user data directory: `%LOCALAPPDATA%\VATSIMControlRecs\logs` on Windows, `~/Library/Application Support/VATSIMControlRecs/logs` on macOS, `~/.local/share/VATSIMControlRecs/logs` on Linux. Logs older than 10 days are automatically cleaned when the app starts. `--help` or an invalid argument creates no log folder. If the log file cannot be created, the app keeps running and prints `vatsim_debug: cannot write log file <path>: <error>` to stderr.
 
 ---
 
