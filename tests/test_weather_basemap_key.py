@@ -15,7 +15,6 @@ from scripts.weather_daemon.config import DaemonConfig
 from scripts.weather_daemon.env_file import (
     CARTO_KEY_ENV,
     load_carto_basemap_key,
-    read_env_value,
 )
 
 KEY = "abc_DEF-123"
@@ -115,24 +114,6 @@ def test_key_from_the_project_env_file_is_used(
     assert f"rastertiles/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png?key={KEY}'" in html
 
 
-@pytest.mark.parametrize(
-    ("line", "value"),
-    [
-        ("CARTO_BASEMAP_KEY=abc123  # localhost-locked", "abc123"),
-        ("CARTO_BASEMAP_KEY=abc123\t# tab before the comment", "abc123"),
-        ("CARTO_BASEMAP_KEY=abc#123", "abc#123"),
-        ('CARTO_BASEMAP_KEY="abc #123"  # quoted', "abc #123"),
-        ("CARTO_BASEMAP_KEY='abc #123'", "abc #123"),
-    ],
-)
-def test_inline_comment_ends_an_unquoted_value_only(
-    tmp_path: Path, line: str, value: str
-) -> None:
-    env_path = tmp_path / ".env"
-    env_path.write_text(line + "\n", encoding="utf-8")
-    assert read_env_value(env_path, CARTO_KEY_ENV) == value
-
-
 def test_key_already_in_the_environment_wins_over_the_env_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -153,18 +134,3 @@ def test_no_env_file_leaves_the_key_unset_and_the_page_warns(
         html = render_index(tmp_path, monkeypatch)
     assert "?key=" not in html
     assert warnings_and_errors(caplog) == [(logging.WARNING, MISSING_KEY_WARNING)]
-
-
-@pytest.mark.usefixtures("no_key")
-def test_unreadable_env_file_logs_one_warning_naming_it(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    env_path = tmp_path / ".env"
-    env_path.mkdir()
-    with caplog.at_level(logging.WARNING, logger="weather_daemon"):
-        load_carto_basemap_key(tmp_path)
-    logged = warnings_and_errors(caplog)
-    assert len(logged) == 1
-    level, message = logged[0]
-    assert level == logging.WARNING
-    assert str(env_path) in message

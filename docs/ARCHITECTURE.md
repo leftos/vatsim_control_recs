@@ -29,6 +29,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 | Change how the airport, grouping or flight-board tables update on refresh, or restore cursor and scroll | `ui/app.py` (`_apply_refresh_data`, `_populate_tables_and_wait`, `_restore_table_position`) → `ui/tables.py` (`TableManager.populate`, `_update_efficiently`, `_remove_tail_rows`, `_drop_tail_rows`) → `widgets/split_flap_datatable.py` (`blank_rows`, `truncate_rows`, `recompute_column_widths`) → `tests/test_table_refresh.py` | none |
 | Change historical statistics | `backend/data/statsim_api.py` → `ui/modals/historical_stats.py` | none |
 | Change the weather daemon or its deployment | `scripts/weather_daemon/cli.py` → `scripts/weather_daemon/generator.py` → `scripts/weather_daemon/config.py` → `scripts/weather_daemon/service/` | none |
+| Read a value from the repo-root `.env` | `common/env_file.py` (`read_env_value`) → `backend/data/statsim_api.py` (`_resolve_api_key`) → `scripts/weather_daemon/env_file.py` (`load_carto_basemap_key`) → `scripts/weather_daemon/service/_Env.ps1` (the PowerShell reader of `WEATHER_SERVER_IP`) → `conftest.py` → `tests/test_env_file.py`, `tests/test_weather_basemap_key.py` | none |
 | Change logging or log-file start-up | `common/logger.py` (`setup_file_logging`, the pre-setup buffer) → `common/paths.py` (`get_user_logs_dir`) → `main.py` (`main`) and the other entry points that call it (`scripts/weather_daemon/cli.py`, `scripts/weather_daemon/generator.py`, `scripts/generate_airport_names.py`, `scripts/precalculate_airport_spatial_data.py`, `airport_disambiguator/__main__.py`) → `conftest.py` → `tests/test_logger.py`, `tests/test_isolation.py` | none |
 | Profile or speed up a refresh | `ui/app.py` (`auto_refresh_callback`, `refresh_worker`) → `backend/core/analysis.py` → `backend/data/weather.py` (`get_weather_for_airports_bbox`) → `backend/data/cifp.py` (`_build_cifp_index`) → `backend/core/spatial.py` (`find_nearest`) | [`performance.md`](performance.md) |
 | Regenerate reference data | `scripts/generate_preset_groupings.py`, `scripts/generate_simaware_boundaries.py`, `scripts/precalculate_airport_spatial_data.py` → the matching file under `data/` | none |
@@ -43,8 +44,8 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - **`airport_disambiguator/`**: owns ICAO-to-display-name resolution (`disambiguator.py` public API, `disambiguation_engine.py`, `entity_extractor.py`, `name_processor.py`, `data_manager.py`); checks `data/airport_names.csv` first, then falls back to spaCy. References `backend/data`; never `ui`.
 - **`ui/`**: owns the `VATSIMControlApp` (`app.py`, which refreshes on a `set_interval` timer, 15 seconds by default via `--refresh-interval`), table config and management (`tables.py`, `config.py`) and the screens in `ui/modals/`. References `backend`, `widgets`, `common`.
 - **`widgets/`** (`split_flap_datatable.py`): owns the animated DataTable. References `ui.debug_logger` only.
-- **`common/`**: owns path resolution (`paths.py`) and logging (`logger.py`). References only itself. Importing a module opens no log file: records logged before an entry point calls `setup_file_logging()` are buffered and flushed to the file when it runs.
-- **`scripts/`**: owns the generators for `data/` files and `scripts/weather_daemon/` (staged `weather`, `briefings`, `tiles`, `index` generation, systemd unit and timer, nginx config, PowerShell deployment scripts). References `backend` and `airport_disambiguator`; nothing references `scripts`.
+- **`common/`**: owns path resolution (`paths.py`), logging (`logger.py`) and the one dotenv reader (`env_file.py`, `read_env_value`). References only itself. Importing a module opens no log file: records logged before an entry point calls `setup_file_logging()` are buffered and flushed to the file when it runs.
+- **`scripts/`**: owns the generators for `data/` files and `scripts/weather_daemon/` (staged `weather`, `briefings`, `tiles`, `index` generation, systemd unit and timer, nginx config, PowerShell deployment scripts). References `backend`, `airport_disambiguator` and `common` (the weather daemon uses `common.logger` and `common.env_file`); nothing references `scripts`.
 
 ## Data flow
 
@@ -85,7 +86,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 
 `tests/`, run with `uv run --group dev pytest -q` (the `dev` dependency group; pytest settings are in `pyproject.toml`). The tests are headless Textual Pilot tests on fixture data and never use the network.
 
-- `conftest.py` (repo root): points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a session temp dir before any project import, so caches, favorites and any log file a test starts through `setup_file_logging()` land in the temp dir, not the user's; it also blanks `STATSIM_API_KEY` so `.env` is not read. `tests/test_isolation.py` checks this.
+- `conftest.py` (repo root): points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a session temp dir before any project import, so caches, favorites and any log file a test starts through `setup_file_logging()` land in the temp dir, not the user's; it also blanks `STATSIM_API_KEY`, the only key the app reads from `.env` and only when the environment lacks it, so tests never read `.env` through statsim. `tests/test_isolation.py` checks this.
 - `tests/conftest.py`: the fixture that mounts `GoToScreen` on fixture airports, groupings and favorites.
 - `tests/test_goto_edit_filters.py`: saved per-airport filters when editing a favorite.
 - `tests/test_goto_r1.py`: Go To modal titles, hints, focus moves, and warning and error toasts.
@@ -97,6 +98,12 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_cli_options.py`: the CLI parser rejects the removed progressive flags.
 - `tests/test_table_refresh.py`: a refresh that changes the row count updates the tables in place (rows keep their slots, extra rows flap to blank then go, new rows append), the cursor and scroll stay on the same row, and column widths grow and shrink with the values.
 - `tests/test_refresh_overlap.py`: refreshes never overlap or cancel, the one queued follow-up, a failed analysis keeping the app running, and the status bar's "Refreshing…" text.
+- `tests/test_weather_stage_order.py`: the index page is written even when the tile stage dies.
+- `tests/test_weather_tile_version.py`: the index page versions its tiles by the last completed tile set (falling back to the run start), and a tile write is atomic.
+- `tests/test_weather_basemap_key.py`: the CARTO key from the environment or the `.env` file goes into the basemap URL, the environment wins, and a missing or unsafe key is omitted with a log message.
+- `tests/test_weather_index_assets.py`: the index page loads Leaflet from its own copied tree and no remote scripts or stylesheets.
+- `tests/test_weather_tile_polygon_reach.py`: a weather tile ray-casts only the boundary polygons whose box reaches it, with output unchanged.
+- `tests/test_env_file.py`: `read_env_value` cases (quotes, inline comments, the unreadable-file warning) and the statsim key rules (the environment wins even when empty, `.env` only when absent, nothing written to the environment).
 
 CI runs the suite in the "Run tests" step of `.github/workflows/build-release.yml`, before the PyInstaller build. Outside `tests/`, behavior is checked by running `uv run main.py` against live data or `data/test-vatsim-data.json` (a sample VATSIM response), and the weather daemon by `scripts/weather_daemon/service/LocalTest.ps1`.
 

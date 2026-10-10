@@ -33,8 +33,8 @@ def _isolate_user_dirs() -> None:
     for variable in ("LOCALAPPDATA", "XDG_DATA_HOME", "HOME"):
         os.environ[variable] = str(session_dir)
 
-    # statsim_api loads the repo's .env at import time, but only for keys that
-    # are not already set
+    # statsim_api reads only STATSIM_API_KEY from the repo's .env, and only
+    # when the environment lacks it, so the blank value keeps .env out
     os.environ.setdefault("STATSIM_API_KEY", "")
 
 

@@ -20,7 +20,7 @@ uv run --group dev pytest -q
 
 Tests live under `tests/` and run in the `dev` dependency group (`pytest`, `pytest-asyncio`, pinned in `pyproject.toml`). They are headless Textual Pilot tests on fixture data and never touch the network. CI runs them in the "Run tests" step of `.github/workflows/build-release.yml` before the PyInstaller build.
 
-Tests isolate the user data directory for the whole session: the repo-root `conftest.py` points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a temp dir before any project import (it also covers caches, favorites and any log file a test starts through `setup_file_logging()`), and blanks `STATSIM_API_KEY` so `.env` is not read. `tests/test_isolation.py` checks it.
+Tests isolate the user data directory for the whole session: the repo-root `conftest.py` points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a temp dir before any project import (it also covers caches, favorites and any log file a test starts through `setup_file_logging()`), and blanks `STATSIM_API_KEY`, the only key the app reads from `.env` and only when the environment lacks it, so tests never read `.env` through statsim. `tests/test_isolation.py` checks it.
 
 ### Dependencies
 
@@ -38,7 +38,7 @@ Declared in `pyproject.toml`:
 
 ### Environment Variables
 
-- `STATSIM_API_KEY` - API key from statsim.net for historical flight statistics feature (optional, stored in `.env` file)
+- `STATSIM_API_KEY` - API key from statsim.net for historical flight statistics feature (optional; read from the environment, else from the repo-root `.env`, and never copied into the environment)
 - `CARTO_BASEMAP_KEY` - domain-locked CARTO key for the weather index's basemap (`https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?key=<key>`). The daemon CLI reads it from the environment, else from the untracked repo-root `.env` (`scripts/weather_daemon/env_file.py`). The production key (leftos.dev, www.leftos.dev) lives in the server's `/opt/vatsim-weather-daemon/.env` (root:www-data, mode 640); `LocalTest.ps1` uses a localhost key from the local `.env`. With no key or an invalid one the page renders without a basemap and the log says so. Background: `docs/research/2026-10-10-basemap-tiles.md`
 
 ### Running the Application

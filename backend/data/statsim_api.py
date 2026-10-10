@@ -9,42 +9,30 @@ import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 import requests
 
 from common import logger as log
+from common.env_file import read_env_value
 from common.paths import get_project_root
 
 
-def _load_env_file() -> None:
-    """Load key=value pairs from .env file next to main.py into os.environ."""
-    env_path = get_project_root() / ".env"
-    log.debug(f"Statsim: looking for .env at {env_path}")
-    if not env_path.is_file():
-        log.debug("Statsim: .env file not found")
-        return
-    loaded = []
-    with open(env_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            key, _, value = line.partition("=")
-            key = key.strip()
-            value = value.strip().strip("\"'")
-            if key and key not in os.environ:
-                os.environ[key] = value
-                loaded.append(key)
-    log.info(f"Statsim: loaded {len(loaded)} keys from .env: {loaded}")
+def _resolve_api_key(env_path: Path) -> str:
+    """The statsim API key from the environment, else from the dotenv file, else blank.
 
+    An empty environment value counts as set, so ``.env`` is not consulted.
+    """
+    if "STATSIM_API_KEY" in os.environ:
+        return os.environ["STATSIM_API_KEY"]
+    return read_env_value(env_path, "STATSIM_API_KEY") or ""
 
-_load_env_file()
 
 # API configuration
 STATSIM_API_BASE_URL = "https://api.statsim.net"
 STATSIM_API_TIMEOUT = 60  # seconds per request
-STATSIM_API_KEY = os.environ.get("STATSIM_API_KEY", "")
+STATSIM_API_KEY = _resolve_api_key(get_project_root() / ".env")
 STATSIM_MAX_DAYS_PER_QUERY = 30  # API has ~30 day limit per query
 STATSIM_DEFAULT_DAYS_BACK = (
     90  # Total days to query (in chunks of STATSIM_MAX_DAYS_PER_QUERY)
