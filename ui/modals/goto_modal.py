@@ -1136,13 +1136,10 @@ class GoToScreen(ModalScreen):
             if self.vatsim_app.args
             else True
         )
-        max_eta = self.vatsim_app.args.max_eta_hours if self.vatsim_app.args else 1.0
-
         self.vatsim_app.flight_board_open = True
         flight_board = FlightBoardScreen(
             title,
             list(all_airports),
-            max_eta,
             self.vatsim_app.refresh_interval,
             config.DISAMBIGUATOR,
             enable_anims,
@@ -1376,13 +1373,10 @@ class GoToScreen(ModalScreen):
             if self.vatsim_app.args
             else True
         )
-        max_eta = self.vatsim_app.args.max_eta_hours if self.vatsim_app.args else 1.0
-
         self.vatsim_app.flight_board_open = True
         flight_board = FlightBoardScreen(
             title,
             icao,
-            max_eta,
             self.vatsim_app.refresh_interval,
             config.DISAMBIGUATOR,
             enable_anims,

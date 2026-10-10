@@ -169,7 +169,6 @@ class FlightBoardScreen(ModalScreen):
         self,
         title: str,
         airport_icao_or_list,
-        max_eta_hours: float,
         refresh_interval: int = 15,
         disambiguator=None,
         enable_animations: bool = True,
@@ -178,7 +177,6 @@ class FlightBoardScreen(ModalScreen):
         super().__init__()
         self.title = title
         self.airport_icao_or_list = airport_icao_or_list
-        self.max_eta_hours = max_eta_hours
         self.disambiguator = disambiguator
         # Filters as saved by the caller. The F key overrides them for this board
         # only; the underlying favorite is never rewritten.
@@ -401,7 +399,6 @@ class FlightBoardScreen(ModalScreen):
 
                 result = get_airport_flight_details(
                     self.airport_icao_or_list,
-                    0,  # Always show all arrivals on the flight board
                     disambiguator_to_use,
                     unified_data_to_use,
                     aircraft_speeds_to_use,

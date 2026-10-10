@@ -87,64 +87,97 @@ def get_nearest_airport_if_on_ground(
     )
 
 
-def is_flight_flying_near_arrival(
-    flight: dict[str, Any],
-    airports: dict[str, dict[str, Any]],
-    max_eta_hours: float = 1.0,
-    min_groundspeed: float = 40,
-) -> bool:
+_MIN_GROUNDSPEED = 40
+_APPROACH_DISTANCE_NM = 5.0
+
+
+def _great_circle_to_arrival(
+    flight: dict[str, Any], airports: dict[str, dict[str, Any]]
+) -> float | None:
     """
-    Determine if a flight is within specified hours of arriving at the arrival airport.
-    Based on distance and groundspeed.
+    Return the remaining great-circle distance to the arrival airport, in nm.
+
+    None unless the flight is an airborne inbound: groundspeed at or above the
+    minimum, a filed arrival with coordinates among airports, and valid
+    coordinates on both sides.
 
     Args:
         flight: Flight data dictionary
         airports: Dictionary of airport data
-        max_eta_hours: Maximum ETA in hours to consider "near arrival" (default: 1.0)
-        min_groundspeed: Minimum groundspeed in knots to consider "in flight" (default: 40)
 
     Returns:
-        True if flight is within max_eta_hours of arrival, False otherwise
+        Distance in nautical miles, or None when the flight is not an airborne inbound
     """
     # Use .get() for defensive access to potentially missing fields
+    if flight.get("groundspeed", 0) < _MIN_GROUNDSPEED:
+        return None
+
+    arrival_airport = airports.get(flight.get("arrival"))
+    if not arrival_airport:
+        return None
+
+    # Validate flight and airport coordinates
+    flight_lat = flight.get("latitude")
+    flight_lon = flight.get("longitude")
+    airport_lat = arrival_airport.get("latitude")
+    airport_lon = arrival_airport.get("longitude")
+
+    if None in (flight_lat, flight_lon, airport_lat, airport_lon):
+        return None
+
+    try:
+        return haversine_distance_nm(
+            cast(float, flight_lat),
+            cast(float, flight_lon),
+            cast(float, airport_lat),
+            cast(float, airport_lon),
+        )
+    except ValueError:
+        # Invalid coordinates
+        return None
+
+
+def arrival_eta_in_window(
+    flight: dict[str, Any],
+    airports: dict[str, dict[str, Any]],
+    aircraft_approach_speeds: dict[str, int] | None,
+    max_eta_hours: float,
+) -> tuple[str, str, float] | None:
+    """
+    Return an airborne inbound's calculate_eta result when it is inside the window.
+
+    The overview's ARR column and the flight board share this one predicate, so
+    both count a flight exactly when the ETA the board displays is within
+    max_eta_hours. With max_eta_hours == 0 the window is off and every airborne
+    inbound is returned, which is what the board lists.
+
+    Args:
+        flight: Flight data dictionary
+        airports: Dictionary of airport data with coordinates and elevation
+        aircraft_approach_speeds: Dictionary of aircraft approach speeds (optional)
+        max_eta_hours: Maximum ETA in hours to count as an arrival (0 turns the window off)
+
+    Returns:
+        calculate_eta's (eta_display, eta_local_time, eta_hours) when the flight is an
+        airborne inbound whose ETA is inside the window, None otherwise
+    """
+    distance = _great_circle_to_arrival(flight, airports)
+    if distance is None:
+        return None
+
+    if max_eta_hours == 0:
+        return calculate_eta(flight, airports, aircraft_approach_speeds)
+
+    # (great circle - the final approach) / groundspeed is a sound lower bound on
+    # calculate_eta, so a flight already past the window costs no call
     groundspeed = flight.get("groundspeed", 0)
-    if groundspeed < min_groundspeed:
-        return False
+    if (distance - _APPROACH_DISTANCE_NM) / groundspeed > max_eta_hours:
+        return None
 
-    # For flights with arrival airport in flight plan
-    flight_arrival = flight.get("arrival")
-    if flight_arrival and flight_arrival in airports:
-        arrival_airport = airports.get(flight_arrival)
-        if not arrival_airport:
-            return False
-
-        # Validate flight and airport coordinates
-        flight_lat = flight.get("latitude")
-        flight_lon = flight.get("longitude")
-        airport_lat = arrival_airport.get("latitude")
-        airport_lon = arrival_airport.get("longitude")
-
-        if None in (flight_lat, flight_lon, airport_lat, airport_lon):
-            return False
-
-        # Calculate distance to arrival airport
-        try:
-            distance = haversine_distance_nm(
-                cast(float, flight_lat),
-                cast(float, flight_lon),
-                cast(float, airport_lat),
-                cast(float, airport_lon),
-            )
-        except ValueError:
-            # Invalid coordinates
-            return False
-
-        # Calculate estimated time of arrival (in hours)
-        if groundspeed > 0:
-            eta_hours = distance / groundspeed
-            return max_eta_hours == 0 or eta_hours <= max_eta_hours
-
-    return False
+    eta = calculate_eta(flight, airports, aircraft_approach_speeds)
+    if eta[2] <= max_eta_hours:
+        return eta
+    return None
 
 
 def find_nearest_airport(
@@ -180,7 +213,6 @@ def find_nearest_airport(
 
 def get_airport_flight_details(
     airport_icao_or_list,
-    max_eta_hours: float = 1.0,
     disambiguator=None,
     all_airports_data: dict[str, dict[str, Any]] | None = None,
     aircraft_approach_speeds: dict[str, int] | None = None,
@@ -193,7 +225,6 @@ def get_airport_flight_details(
 
     Args:
         airport_icao_or_list: Either a single ICAO code (str) or a list of ICAO codes
-        max_eta_hours: Maximum ETA in hours for arrival filter (default: 1.0)
         disambiguator: An AirportDisambiguator instance for pretty names
         all_airports_data: Dictionary of all airport data (required)
         aircraft_approach_speeds: Dictionary of aircraft approach speeds (optional)
@@ -208,7 +239,7 @@ def get_airport_flight_details(
     from ui import debug_logger
 
     debug_logger.debug(
-        f"[BACKEND] get_airport_flight_details called with airport={airport_icao_or_list}, max_eta={max_eta_hours}"
+        f"[BACKEND] get_airport_flight_details called with airport={airport_icao_or_list}"
     )
 
     if all_airports_data is None or vatsim_data is None:
@@ -427,39 +458,35 @@ def get_airport_flight_details(
                             ),
                         )
                     )
-            # For in-flight arrivals, check if it's an arrival first, then calculate ETA
-            # is_flight_flying_near_arrival uses max_eta_hours=0 to check ALL arrivals
-            elif is_flight_flying_near_arrival(
-                flight, all_airports_data, max_eta_hours=0
-            ):
+            # For in-flight arrivals the window is off: the board lists every
+            # airborne inbound, and the helper returns the ETA its row shows
+            elif (
+                eta := arrival_eta_in_window(
+                    flight, all_airports_data, aircraft_approach_speeds, 0
+                )
+            ) is not None:
                 arrival_airport_icao = arrival
                 pretty_arrival_airport = (
                     disambiguator.get_pretty_name(arrival_airport_icao)
                     if disambiguator
                     else arrival_airport_icao
                 )
+                eta_display, eta_local_time, _ = eta
 
                 if is_local_flight:
                     # Local flight in the air - show LOCAL for name and ---- for ICAO
-                    eta_display, eta_local_time, eta_hours = calculate_eta(
-                        flight, all_airports_data, aircraft_approach_speeds
-                    )
-                    # Add to list if it meets the original max_eta_hours criteria
-                    if max_eta_hours == 0 or eta_hours <= max_eta_hours:
-                        arrivals_list.append(
-                            ArrivalInfo(
-                                callsign=callsign,
-                                origin=AirportInfo(
-                                    pretty_name="LOCAL", icao_code="----"
-                                ),
-                                eta_display=eta_display,
-                                eta_local_time=eta_local_time,
-                                arrival=AirportInfo(
-                                    pretty_name=pretty_arrival_airport,
-                                    icao_code=arrival_airport_icao,
-                                ),
-                            )
+                    arrivals_list.append(
+                        ArrivalInfo(
+                            callsign=callsign,
+                            origin=AirportInfo(pretty_name="LOCAL", icao_code="----"),
+                            eta_display=eta_display,
+                            eta_local_time=eta_local_time,
+                            arrival=AirportInfo(
+                                pretty_name=pretty_arrival_airport,
+                                icao_code=arrival_airport_icao,
+                            ),
                         )
+                    )
                 else:
                     origin = departure if departure else "----"
                     pretty_origin = (
@@ -467,25 +494,20 @@ def get_airport_flight_details(
                         if disambiguator
                         else origin
                     )
-                    eta_display, eta_local_time, eta_hours = calculate_eta(
-                        flight, all_airports_data, aircraft_approach_speeds
-                    )
-                    # Add to list if it meets the original max_eta_hours criteria
-                    if max_eta_hours == 0 or eta_hours <= max_eta_hours:
-                        arrivals_list.append(
-                            ArrivalInfo(
-                                callsign=callsign,
-                                origin=AirportInfo(
-                                    pretty_name=pretty_origin, icao_code=origin
-                                ),
-                                eta_display=eta_display,
-                                eta_local_time=eta_local_time,
-                                arrival=AirportInfo(
-                                    pretty_name=pretty_arrival_airport,
-                                    icao_code=arrival_airport_icao,
-                                ),
-                            )
+                    arrivals_list.append(
+                        ArrivalInfo(
+                            callsign=callsign,
+                            origin=AirportInfo(
+                                pretty_name=pretty_origin, icao_code=origin
+                            ),
+                            eta_display=eta_display,
+                            eta_local_time=eta_local_time,
+                            arrival=AirportInfo(
+                                pretty_name=pretty_arrival_airport,
+                                icao_code=arrival_airport_icao,
+                            ),
                         )
+                    )
             else:
                 # Flight has arrival filed but is on ground (not at arrival airport, likely at departure)
                 # Show with ETA="----" to indicate they haven't departed yet

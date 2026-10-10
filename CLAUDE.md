@@ -107,11 +107,11 @@ The global `backend.config.constants.WIND_SOURCE` controls which source is used.
 3. Aircraft-specific approach speed for final 5nm (from `aircraft_data.csv`)
 4. Glide slope clamping with 3-degree model below 10,000ft
 
-NEXT ETA is the earliest ETA among the flights the ARR column counts, so a flight beyond `max_eta_hours` or still on the ground at its departure never feeds it.
+NEXT ETA is the earliest ETA among the flights the ARR column counts, so it never exceeds `max_eta_hours` and a flight still on the ground at its departure never feeds it. The overview and the flight board use the same `calculate_eta` (`load_airport_data` keeps airport elevation for the glide-slope clamp), so their ETAs match.
 
 **Flight Categorization**:
 - Departure: On ground at departure airport (groundspeed <= 40kt)
-- Arrival: On ground at arrival airport OR in-flight within `max_eta_hours` of arrival
+- Arrival: On ground at arrival airport OR airborne (groundspeed >= 40kt) with the ETA the flight board shows (`calculate_eta`) within `max_eta_hours`, decided by `arrival_eta_in_window` in `backend/core/flights.py`; `max_eta_hours` 0 turns the window off, which is how the board lists every airborne inbound
 - Flights on ground without flight plan: Counted as departure at nearest airport
 
 **Dual Arrival Counting** (with `--include-all-arriving`):

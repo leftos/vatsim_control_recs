@@ -200,8 +200,8 @@ Shows all tracked airports with columns:
 - **Airport**: ICAO code
 - **Name**: Human-readable airport name
 - **Dep**: Number of departures (aircraft on ground)
-- **Arr**: Number of arrivals (inbound aircraft within ETA window)
-- **Next ETA**: Time until next arrival (e.g. `45m`, `1h30m`, `LANDED`), counting only the arrivals in the Arr column
+- **Arr**: Number of arrivals (aircraft on the ground at the airport, or airborne inbound whose ETA, the one the flight board shows, is within `--max-eta-hours`)
+- **Next ETA**: Time until next arrival (e.g. `45m`, `1h30m`, `LANDED`), counting only the arrivals in the Arr column, so it never exceeds `--max-eta-hours` and matches the flight board
 - **Wind**: Current wind conditions (direction/speed, gusts if present)
 - **Altim**: Current altimeter setting (inches Hg)
 - **Positions**: Staffed ATC positions
@@ -289,7 +289,7 @@ When viewing weather information, airports are color-coded by flight category:
 
 The flight board shows two columns:
 - **Departures**: Aircraft on the ground at the airport
-- **Arrivals**: Aircraft inbound to the airport
+- **Arrivals**: Every aircraft inbound to the airport, however far out (`--max-eta-hours` limits only the Arr count on the Individual Airports tab), including aircraft not yet departed, which show `----` for ETA
 
 Each flight displays:
 - Callsign (e.g., `AAL123`)

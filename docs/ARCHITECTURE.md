@@ -10,7 +10,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 
 | Task | Files, in order | Deep doc |
 |---|---|---|
-| Change ETA, arrival or departure categorization | `backend/core/flights.py` → `backend/core/calculations.py` → `backend/core/route_distance.py` → `backend/data/navaids.py` → `backend/data/cifp.py` → `backend/core/analysis.py` | none |
+| Change ETA, arrival or departure categorization | `backend/core/flights.py` (`arrival_eta_in_window`) → `backend/core/calculations.py` → `backend/core/route_distance.py` → `backend/data/navaids.py` → `backend/data/cifp.py` → `backend/core/analysis.py` → `tests/test_arrival_window.py`, `tests/test_next_eta_window.py` | none |
 | Change SID/STAR lookup, CIFP caching or the route cache behind ETA | `backend/core/calculations.py` (`calculate_eta`) → `backend/core/route_distance.py` (`_get_parsed_route`, `clear_route_cache`) → `backend/data/navaids.py` (`parse_route_string`, `_expand_sid_star`) → `backend/data/cifp.py` (the index, `ensure_cifp_data`) → `tests/test_cifp_index.py`, `tests/test_cifp_dp_runway_only.py` | none |
 | Change how route distance affects ETA (coverage, bounds, non-US routes) | `backend/core/calculations.py` (`calculate_eta`, `_route_or_great_circle`, `is_us_airport`) → `backend/core/route_distance.py` → `backend/data/navaids.py` (`parse_route_string`, `load_navaids`, `load_fixes`, the NASR download) → callers `backend/core/flights.py`, `backend/core/analysis.py`, `ui/modals/flight_info.py` → `tests/test_route_distance_coverage.py`, `tests/test_mea_check.py` (the NASR offline patch pattern), `tests/test_next_eta_window.py` | none |
 | Add a column to the airport or grouping table | `backend/core/models.py` → `backend/core/analysis.py` → `ui/config.py` → `ui/tables.py` | none |
@@ -41,7 +41,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 
 ## Layers
 
-- **`backend/core/`**: owns the analysis pipeline (`analysis.py` `analyze_flights_data()`), flight, ETA, controller, grouping, route, spatial and diversion logic, and the `AirportStats` / `GroupingStats` models. References `backend/data`, `backend/cache`, `backend/config`, `common.paths` and `airport_disambiguator`; never `ui`, except the lazy `from ui import debug_logger` in `backend/core/flights.py` (line 208).
+- **`backend/core/`**: owns the analysis pipeline (`analysis.py` `analyze_flights_data()`), flight, ETA, controller, grouping, route, spatial and diversion logic, and the `AirportStats` / `GroupingStats` models. References `backend/data`, `backend/cache`, `backend/config`, `common.paths` and `airport_disambiguator`; never `ui`, except the lazy `from ui import debug_logger` in `backend/core/flights.py` (in `get_airport_flight_details`).
 - **`backend/data/`**: owns everything fetched or loaded from outside: VATSIM, D-ATIS, StatsIM, weather, ATIS parsing, navaids, CIFP, runways and the unified airport loader (`loaders.py`). References `backend/cache`, `backend/config`, `common.paths`, and `backend/core/calculations.py` (`weather.py` only, for distance and bearing).
 - **`backend/briefing/`**: owns weather-briefing helpers (`area_clustering.py`, `taf_parsing.py`). References `backend/core` and `backend/data`.
 - **`backend/cache/`** (`manager.py`): owns the wind, METAR and TAF caches, the aircraft-speeds and ARTCC-grouping caches, and the weather cache save/load. References `backend/config` and `common.paths`.
@@ -55,7 +55,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 ## Data flow
 
 1. `main.py` parses arguments (`build_arg_parser`), loads the unified airport data with `load_unified_airport_data` only when countries or groupings must be expanded, expands them to the tracked airport list (`resolve_airport_allowlist`), then calls `analyze_flights_data()` and hands the result to the app, which shows traffic with blank WIND/ALT until the weather pass fills them.
-2. `analyze_flights_data()` in `backend/core/analysis.py` loads the unified airport data itself if `main.py` did not pass it (`data/raw/APT_BASE.csv`, `data/raw/airports.json`, `data/raw/iata-icao.csv`), downloads VATSIM data (`download_vatsim_data`), extracts staffed positions, filters flights to the tracked airports and splits them into departures and arrivals by ground position and ETA.
+2. `analyze_flights_data()` in `backend/core/analysis.py` loads the unified airport data itself if `main.py` did not pass it (`data/raw/APT_BASE.csv`, `data/raw/airports.json`, `data/raw/iata-icao.csv`), downloads VATSIM data (`download_vatsim_data`), extracts staffed positions, filters flights to the tracked airports and splits them into departures and arrivals: on the ground at an airport, or airborne with the flight board's `calculate_eta` within `max_eta_hours` (`arrival_eta_in_window` in `backend/core/flights.py`, which the board also calls with a window of 0).
 3. It fetches no weather: `AirportStats` come back with empty `wind` and `altimeter`, so the first paint never waits on the network.
 
    Display names come from one `get_full_names_batch` call on the disambiguator. It returns `AirportStats` and `GroupingStats` lists, sorted.
@@ -113,6 +113,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_weather_briefing_callback.py`: the weather-briefing picker routes a flight, a single airport and a grouping to their briefings.
 - `tests/test_grouping_board_filters.py`: a ★ grouping's saved dep/arr filters apply when its board opens from the Groupings tab or Go To; a preset opens unfiltered.
 - `tests/test_next_eta_window.py`: NEXT ETA comes only from the inbound flights the ARR column counts: blank when the only inbound is beyond `max_eta_hours`, taken from the one inside the window, and every airborne inbound counts when the window is 0.
+- `tests/test_arrival_window.py`: the ARR column counts an airborne inbound exactly when the ETA the flight board shows is within `max_eta_hours`, NEXT ETA matches the board at a high-elevation field, and `arrival_eta_in_window` skips `calculate_eta` for a flight past its distance lower bound.
 - `tests/test_cli_options.py`: the CLI parser rejects the removed progressive flags.
 - `tests/test_table_refresh.py`: a refresh that changes the row count updates the tables in place (rows keep their slots, extra rows flap to blank then go, new rows append), the cursor and scroll stay on the same row, and column widths grow and shrink with the values.
 - `tests/test_refresh_overlap.py`: refreshes never overlap or cancel, the one queued follow-up, a failed analysis keeping the app running, and the status bar's "Refreshing…" text.

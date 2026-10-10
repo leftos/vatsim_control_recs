@@ -11,11 +11,11 @@ from typing import Any
 
 from airport_disambiguator import AirportDisambiguator
 from backend.cache.manager import load_aircraft_approach_speeds
-from backend.core.calculations import calculate_eta, format_eta_display
+from backend.core.calculations import format_eta_display
 from backend.core.controllers import get_staffed_positions
 from backend.core.flights import (
+    arrival_eta_in_window,
     get_nearest_airport_if_on_ground,
-    is_flight_flying_near_arrival,
 )
 from backend.core.groupings import (
     find_grouping_case_insensitive,
@@ -48,7 +48,7 @@ def load_airport_data(
         unified_data: Unified airport data dictionary
 
     Returns:
-        Dictionary mapping ICAO codes to coordinate/country data
+        Dictionary mapping ICAO codes to coordinate, country and elevation data
     """
     airports = {}
     for code, info in unified_data.items():
@@ -57,6 +57,7 @@ def load_airport_data(
                 "latitude": info["latitude"],
                 "longitude": info["longitude"],
                 "country_code": info.get("country", ""),
+                "elevation": info.get("elevation"),
             }
     return airports
 
@@ -324,13 +325,18 @@ def analyze_flights_data(
         ):
             # For flights on ground without flight plans, count them as a departure at the nearest airport
             departure_counts[nearest_airport_if_on_ground] += 1
-        elif is_flight_flying_near_arrival(flight, airports, max_eta_hours):
-            # Count as arrival if within the specified ETA hours of arrival airport,
-            # and take its ETA so NEXT ETA comes only from the counted flights
+        elif (
+            eta_in_window := arrival_eta_in_window(
+                flight, airports, aircraft_approach_speeds, max_eta_hours
+            )
+        ) is not None:
+            # Count as arrival if the ETA the flight board shows is within the
+            # specified hours of the arrival airport, and take that ETA so NEXT
+            # ETA comes only from the counted flights
             arrival_counts[flight_arrival] += 1
             arrival_counts_all[flight_arrival] += 1
             arrivals_in_flight[flight_arrival] += 1
-            _, _, eta_hours = calculate_eta(flight, airports, aircraft_approach_speeds)
+            _, _, eta_hours = eta_in_window
             if eta_hours < earliest_arrival_eta[flight_arrival]:
                 earliest_arrival_eta[flight_arrival] = eta_hours
         elif flight_arrival and flight_arrival in airports:

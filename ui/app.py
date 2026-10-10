@@ -1089,7 +1089,6 @@ class VATSIMControlApp(App):
         flight_board = FlightBoardScreen(
             name,
             airport_list,
-            self.args.max_eta_hours if self.args else 1.0,
             self.refresh_interval,
             config.DISAMBIGUATOR,
             enable_anims,
@@ -1140,7 +1139,6 @@ class VATSIMControlApp(App):
                     flight_board = FlightBoardScreen(
                         title,
                         icao,
-                        self.args.max_eta_hours if self.args else 1.0,
                         self.refresh_interval,
                         config.DISAMBIGUATOR,
                         enable_anims,
