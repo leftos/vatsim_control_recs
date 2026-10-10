@@ -365,16 +365,21 @@ Unified search modal for quickly navigating to:
 - `#` - Search flights only (e.g., `#AAL123`)
 - `$` - Search groupings only (e.g., `$Bay`)
 
+**Result Sections:**
+The list groups its rows under dim headers, shown only when the section has rows: "★ MY GROUPINGS", "AIRPORTS (tracked only)", "GROUPINGS" and "FLIGHTS". A prefix shows only its own kind; `$` shows both grouping sections. The highlight skips the headers, and `Up` from the first row or `Down` from the last returns to the search box.
+
+With more than 100 matching rows the list ends with a dim "showing 100 of N — type to narrow" row; type more to narrow the results.
+
 **Title and Hint Line:**
 The title names the current mode: "Go To" while browsing, "Go To · Pick several · 3 picked → 12 airports" while picking several (the picks and the airports they resolve to), and "Go To · Editing ★ Name" while editing a favorite. When Go To is opened to choose an airport for another screen, it keeps that screen's title.
 
-A hint line under the results lists only the keys that work right now, for the current mode, focus and highlighted row (for example "Enter open · E edit · Ctrl+D delete · Tab pick several · Esc close"). It shows at most six items; `Tab` and `Esc` are always among them.
+A hint line under the results lists only the keys that work right now, for the current mode, focus and highlighted row (for example "Enter open · E edit · Ctrl+D delete · Tab pick several · Esc close"). It shows at most six items; `Tab` and `Esc` are always among them, and the `←` and `→` hints are the first to give way when there are more.
 
 **Keyboard Focus:**
 
 `Tab` toggles pick several and, when it switches it on, moves focus to the results list. With the list focused, typing a letter or other character jumps back to the search box and adds it to your search. While picking several, `E`, `F` and `Space` keep their jobs in the list; while browsing, only `E` does. `Up` and `Down` move between the search box and the list.
 
-If a key cannot do anything (for example `E` on a preset, `F` on a row that is not picked, `Enter` with no highlighted result, or `Ctrl+Enter` with nothing picked), a warning message tells you why.
+If a key cannot do anything (for example `E` on a preset, `F` on a row that is not picked, `Enter` or `Space` on a section header or the "showing 100 of N" row, `→` on a row that is not a picked grouping, or `Ctrl+Enter` with nothing picked), a warning message tells you why.
 
 **Multi-Select Mode ("Pick several"):**
 Press `Tab` to toggle multi-select mode, which allows selecting multiple airports/groupings to open at once:
@@ -384,8 +389,13 @@ Press `Tab` to toggle multi-select mode, which allows selecting multiple airport
 - `Tab` - Back to browsing
 - `Esc` - Close; while editing a favorite, this discards the edit
 
+A line under the search box, "Picked: name, name, +N", lists your picks in the order you picked them, with "+N" for those that do not fit; it is hidden when nothing is picked.
+
+**Picked Groupings:**
+A picked grouping's airports show as one row, "▸ N airports (→ to expand)". Press `→` to list its airports as separate rows (the highlight lands on the first), and `←` on the grouping row or any of its airports to collapse them again. The expanded state stays while you search or switch with `Tab`, and resets when you unpick the grouping, start editing a favorite or save.
+
 **Per-Airport Filtering:**
-In multi-select mode, press `F` in the results list on a picked item to cycle its filter:
+In multi-select mode, press `F` in the results list on a picked airport to cycle its filter (for an airport inside a picked grouping, expand the grouping with `→` first):
 - `[  ]` - Both departures and arrivals (default)
 - `[D>]` - Departures only
 - `[<A]` - Arrivals only
@@ -394,7 +404,7 @@ This filtering is preserved when saving as a favorite.
 
 **Favorite Management:**
 - Favorites appear with a star prefix in the results list
-- `E` - Edit an existing favorite from the results list (loads its airports and their saved filters into multi-select; `F` on a picked airport changes the filter that is saved)
+- `E` - Edit an existing favorite from the results list (loads its airports and their saved filters into multi-select; `F` on a picked airport, or on a grouping's airport after `→`, changes the filter that is saved)
 - `Ctrl+D` - Delete a favorite (with confirmation)
 - If a delete fails, an error message names the favorite and the cause; if a rename saves the new name but cannot remove the old one, a message says so
 

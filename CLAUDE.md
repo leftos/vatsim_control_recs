@@ -62,7 +62,7 @@ uv run main.py --countries US DE
 
 Track custom groupings (recursively expanded to include all airports and sub-groupings):
 ```bash
-uv run main.py --groupings "Bay Area" "California"
+uv run main.py --groupings O90 FAT
 ```
 
 Additional useful options:
@@ -260,20 +260,28 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 | `Ctrl+S` | Save the picks as a grouping; while editing a favorite, save it |
 | `Ctrl+D` | Delete the highlighted ★ favorite (not in picker mode) |
 | `E` | Edit the highlighted ★ favorite (list focused) |
-| `F` | Cycle the dep/arr filter of a picked row (pick several, list focused; both -> dep -> arr) |
+| `F` | Cycle the dep/arr filter of a picked airport row (pick several, list focused; both -> dep -> arr); a picked grouping's members need `→` first, then `F` works per member |
+| `→` | Expand a picked grouping's collapsed row into its member rows (pick several, list focused); the highlight lands on the first member |
+| `←` | Collapse the grouping's members (from its row or any member); the highlight returns to the grouping row |
 | `Esc` | Close; while editing a favorite, this discards the edit |
 | `@` prefix | Search airports only |
 | `#` prefix | Search flights only |
 | `$` prefix | Search groupings only |
 
+The list has dim upper-case section headers, each shown once and only when its section has rows, in this order: "★ MY GROUPINGS", "AIRPORTS (tracked only)", "GROUPINGS", "FLIGHTS" (results are stable-sorted by section). A `@`, `#` or `$` prefix shows only its own kind; `$` shows both "★ MY GROUPINGS" and "GROUPINGS". The highlight skips headers and the cap row; `Up` from the first result row and `Down` from the last return to the search box, and `Down`/`Up` from the search box do nothing when no row can be highlighted. Reaching the first or last result row scrolls the list to its top or bottom.
+
+Past 100 result rows (`_MAX_OPTIONS`) the last row is the dim, disabled cap row, "showing 100 of N — type to narrow", where N counts the matching rows after prefix and flight hiding (headers, collapsed rows and member rows excluded).
+
+In pick several, a picked grouping's members show as one collapsed row, "▸ N airports (→ to expand)"; a grouping that resolves to 0 airports gets none. The expanded state is kept across queries and `Tab` and dropped on unpick, on starting an edit and on save. Pick several also shows one dim "Picked: name, name, +N" line under the search box, names in pick order, fitted to the modal's width with "+N" for the rest; it is hidden with no picks and in browse.
+
 The modal is 96 columns wide. The title names the mode: "Go To", "Go To · Pick several · {n} picked → {m} airports", or "Go To · Editing ★ {name}"; the picker (callback) mode keeps its caller's title.
 
-A context hint line under the list shows only the keys that act in the current mode, focus and row, joined by " · ", at most six items; when more apply, Ctrl+D, E, F, Ctrl+S and Ctrl+Enter give way in that order, and Tab and Esc always show (e.g. a picked row: "Space pick · F dep/arr/both · Ctrl+Enter open · Ctrl+S save · Tab browse · Esc close").
+A context hint line under the list shows only the keys that act in the current mode, focus and row, joined by " · ", at most six items; when more apply, `←`, `→`, Ctrl+D, E, F, Ctrl+S and Ctrl+Enter give way in that order (`_HINT_DROP_ORDER` in `ui/modals/goto_modal.py`), and Tab and Esc always show. A collapsed grouping row hints "→ expand" and a member row "← collapse" (e.g. a member row: "F dep/arr/both · ← collapse · Ctrl+Enter open · Ctrl+S save · Tab browse · Esc close").
 
-Focus: with the list focused, a printable key moves focus to the search box and is appended to the query. In pick several, `E`, `F` and `Space` act on the list instead; in browse only `E` does; in picker (callback) or grouping-only mode all three are typed. The search box does not select its text on focus.
+Focus: with the list focused, a printable key moves focus to the search box and is appended to the query. In pick several, `E`, `F` and `Space` act on the list instead; in browse only `E` does; in picker (callback) mode all three are typed. The search box does not select its text on focus.
 
-A key that cannot act (for example `E` on a preset, `F` on an unpicked row, `Ctrl+D` in picker mode, `Enter` or `Space` with no highlighted row, `Ctrl+Enter` with no picks) shows a warning toast saying why. A failed favorite delete shows an error toast, and a rename whose old entry cannot be removed says the new one was saved.
-In edit mode a saved filter shows on an individually picked airport's row, and `F` there changes what is saved.
+A key that cannot act (for example `E` on a preset, `F` on an unpicked row, `Ctrl+D` in picker mode, `Enter` ("Enter can't open this row; …") or `Space` ("Space can't pick this row; …") on a header, the cap row or with no highlighted row, `E`, `Ctrl+D` or `F` on a header, the cap row or a collapsed row, `→` on a row that is not a picked grouping ("→ expands a picked grouping's members; …"), `←` on a row outside an expanded grouping ("← collapses a picked grouping's members; …"), `Ctrl+Enter` with no picks) shows a warning toast saying why. `→` on an already expanded grouping and `←` on a collapsed one are silent. A failed favorite delete shows an error toast, and a rename whose old entry cannot be removed says the new one was saved.
+In edit mode a saved filter shows on an individually picked airport's row, and on a grouping member's row after `→`; `F` there changes what is saved.
 
 ### Weather Briefing
 

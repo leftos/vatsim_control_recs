@@ -38,6 +38,9 @@ EDIT_FAVORITE: list[Step] = [
     ("press", "e"),
 ]
 
+# A picked grouping's members show collapsed; → on its row expands them
+EXPAND_BAY_AREA: list[Step] = [("row", "grouping:Bay Area"), ("press", "right")]
+
 
 def _ignore_pick(_result: Any) -> None:
     """Picker-mode callback; these tests never complete a pick."""
@@ -157,11 +160,13 @@ async def test_hint_multi_select_on_member_row(goto_modal: GoToFactory) -> None:
                 ("query", "Bay Area"),
                 ("row", "grouping:Bay Area"),
                 ("press", "space"),
-                ("row", "sub:KOAK"),
+                *EXPAND_BAY_AREA,
+                ("row", "sub:Bay Area/KOAK"),
             ],
         )
         assert h.hint == (
-            "F dep/arr/both · Ctrl+Enter open · Ctrl+S save · Tab browse · Esc close"
+            "F dep/arr/both · ← collapse · Ctrl+Enter open · Ctrl+S save"
+            " · Tab browse · Esc close"
         )
 
 
@@ -203,7 +208,10 @@ async def test_letter_typed_in_the_list_goes_to_the_search(
 
         assert h.search.has_focus
         assert h.search.value == "ks"
-        assert h.option_list.get_option_at_index(0).id == "airport:KSAN"
+        # The first row under the AIRPORTS header, where the highlight rests
+        highlighted = h.option_list.highlighted
+        assert highlighted is not None
+        assert h.option_list.get_option_at_index(highlighted).id == "airport:KSAN"
 
 
 async def test_f_and_space_in_the_browse_list_go_to_the_search(
@@ -290,7 +298,8 @@ TOAST_CASES: list[tuple[str, list[Step], str]] = [
             ("query", "Bay Area"),
             ("row", "grouping:Bay Area"),
             ("press", "space"),
-            ("row", "sub:KOAK"),
+            *EXPAND_BAY_AREA,
+            ("row", "sub:Bay Area/KOAK"),
             ("press", "space"),
         ],
         "Space can't pick a member row; pick or unpick its grouping",

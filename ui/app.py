@@ -47,6 +47,7 @@ from .modals import (
     WeatherBriefingScreen,
     WindInfoScreen,
 )
+from .modals.goto_modal import order_goto_results
 from .tables import (
     TableManager,
     create_airports_table_config,
@@ -390,7 +391,6 @@ class VATSIMControlApp(App):
         """Build the Go To results list (runs in thread executor)."""
         from . import config
 
-        results: list[tuple[str, str, Any]] = []
         tracked_airports = list(self.airport_allowlist or [])
 
         # Pre-warm disambiguator for all tracked airports at once (batch is more efficient)
@@ -399,23 +399,23 @@ class VATSIMControlApp(App):
         else:
             airport_names = {}
 
-        # Add airports with their pre-fetched names
-        for icao in sorted(tracked_airports):
-            pretty_name = airport_names.get(icao, icao)
-            results.append(("airport", icao, pretty_name))
+        # Airports with their pre-fetched names
+        airports = [
+            ("airport", icao, airport_names.get(icao, icao))
+            for icao in sorted(tracked_airports)
+        ]
 
-        # Add all available groupings
-        results.extend(
-            ("grouping", name, None) for name in sorted(self.cached_groupings)
-        )
-
-        # Add flights (sorted by callsign)
+        # Flights (sorted by callsign)
+        flights: list[tuple[str, str, Any]] = []
         for pilot in sorted(self.cached_pilots, key=lambda p: p.get("callsign", "")):
             callsign = pilot.get("callsign", "")
             if callsign:
-                results.append(("flight", callsign, pilot))
+                flights.append(("flight", callsign, pilot))
 
-        self.cached_goto_results = results
+        # ★ groupings first; saving or deleting one invalidates this cache
+        self.cached_goto_results = order_goto_results(
+            airports, self.cached_groupings, get_user_favorite_names(), flights
+        )
         self.goto_cache_ready = True
 
     def invalidate_goto_cache(self) -> None:

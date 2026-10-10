@@ -27,8 +27,12 @@ async def test_edit_shows_saved_filter_on_grouping_member(
         await _edit_favorite(h)
 
         await h.type_query("Bay Area")
-        assert h.row_label("sub:KOAK").strip().startswith("[◂A] @ KOAK")
-        assert h.row_label("sub:KSFO").strip().startswith("[  ] @ KSFO")
+        # Members show collapsed under their grouping until → expands them
+        await h.focus_row("grouping:Bay Area")
+        await h.pilot.press("right")
+        await h.pilot.pause()
+        assert h.row_label("sub:Bay Area/KOAK").strip().startswith("[◂A] @ KOAK")
+        assert h.row_label("sub:Bay Area/KSFO").strip().startswith("[  ] @ KSFO")
 
 
 async def test_f_on_edited_airport_changes_the_saved_filter(

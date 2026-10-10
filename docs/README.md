@@ -23,8 +23,10 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **ARTCC**: an air route traffic control center; the app builds automatic groupings from them.
 - **`as_of`**: the one freshness time a refresh or weather pass takes, passed to every METAR cache read so a slow bbox phase cannot expire entries it skipped.
 - **bbox / box**: one weather bounding-box request to aviationweather.gov; `calculate_airport_bboxes` makes one per occupied grid cell of tracked airports.
+- **cap row**: the last, dim and disabled row of the Go To list, "showing 100 of N — type to narrow", shown when more than 100 rows match.
 - **CIFP**: Coded Instrument Flight Procedures, the FAA file the SID, STAR and approach lookups read (`backend/data/cifp.py`).
 - **clean empty / negative cache**: a cached "no METAR" answer for an airport, kept 60 seconds and stored only when both METAR sources (aviationweather.gov and metar.vatsim.net) answered with no report; failures are never cached.
+- **collapsed row**: in Go To's pick several, the one row "▸ N airports (→ to expand)" that stands for a picked grouping's members until `→` expands them.
 - **CONUS**: the contiguous United States; a CONUS-sized weather box hits the API's 400-entry cap.
 - **D-ATIS**: digital ATIS, the airport information text fetched from VATSIM and real-world sources.
 - **GIL**: Python's global interpreter lock; CPU-bound Python on a worker thread starves the UI thread (see `performance.md`).

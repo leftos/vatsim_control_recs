@@ -3,7 +3,7 @@
 import asyncio
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from textual import events
@@ -57,13 +57,72 @@ _FILTER_CYCLE = {None: "dep", "dep": "arr", "arr": None}
 
 # Actions dropped from an over-long hint, lowest priority first. Picking,
 # opening and saving outrank the per-row keys; Tab and Esc are never dropped.
-_HINT_DROP_ORDER = ("Ctrl+D ", "E ", "F ", "Ctrl+S ", "Ctrl+Enter ")
+_HINT_DROP_ORDER = ("← ", "→ ", "Ctrl+D ", "E ", "F ", "Ctrl+S ", "Ctrl+Enter ")
 
-# Cap on the rows the list builds; a larger result set keeps only the first 100.
+# Cap on the result rows the list builds; a larger result set keeps the first
+# 100 and ends with the cap row. Headers and member rows do not count.
 _MAX_OPTIONS = 100
+_CAP_ROW = "showing {shown} of {total} — type to narrow"
 
 # Query prefixes that narrow the results to one kind of row.
 _QUERY_PREFIXES = {"@": "airport", "#": "flight", "$": "grouping"}
+
+# Section headers, in list order; "favorite" is the ★ groupings' section.
+_SECTION_HEADERS = {
+    "favorite": "★ MY GROUPINGS",
+    "airport": "AIRPORTS (tracked only)",
+    "grouping": "GROUPINGS",
+    "flight": "FLIGHTS",
+}
+_SECTION_RANK = {section: rank for rank, section in enumerate(_SECTION_HEADERS)}
+
+# The row a picked grouping's members collapse into, until → expands them
+_COLLAPSED_MEMBERS = "     ▸ {count} airports (→ to expand)"
+
+# Rows that are not results: why a key cannot act on each kind
+_INERT_ROW_REASONS = {
+    "header": "the highlighted row is a section header",
+    "cap": "the highlighted row is the row count; type to narrow",
+    "members": (
+        "the highlighted row is a grouping's collapsed members; → expands them"
+    ),
+}
+
+# Result rows, the ones Enter opens and Space picks
+_RESULT_ROW_TYPES = ("airport", "grouping", "flight")
+
+# Pick-several hint items for the rows that expand or collapse members
+_MEMBERS_HINT_ITEMS = {"members": ["→ expand"], "sub": ["← collapse"]}
+
+# The Picked line's width before layout: the modal's 90 content columns
+_PICKED_LINE_WIDTH = 90
+
+
+def order_goto_results(
+    airports: list[tuple[str, str, Any]],
+    grouping_names: Iterable[str],
+    favorite_names: set[str],
+    flights: list[tuple[str, str, Any]],
+) -> list[tuple[str, str, Any]]:
+    """Order Go To rows by section: ★ groupings, airports, other groupings, flights."""
+    names = sorted(grouping_names)
+    starred = [("grouping", name, None) for name in names if name in favorite_names]
+    others = [("grouping", name, None) for name in names if name not in favorite_names]
+    return [*starred, *airports, *others, *flights]
+
+
+def _picked_line(names: list[str], width: int) -> str:
+    """Name the picks in width columns; names that do not fit become a "+N" count."""
+    if not names:
+        return ""
+    shown = list(names)
+    while True:
+        hidden = len(names) - len(shown)
+        parts = [*shown, f"+{hidden}"] if hidden else shown
+        text = "Picked: " + ", ".join(parts)
+        if len(text) <= width or len(shown) == 1:
+            return text
+        shown.pop()
 
 
 def _cap_hint(actions: list[str], tab: str, close: str) -> list[str]:
@@ -107,6 +166,19 @@ def _matches_query(
     return query_lower in _searchable_text(item_type, identifier, data)
 
 
+def _is_result_row(item: tuple[str, str, Any] | None) -> bool:
+    """True for an airport, grouping or flight row: one Enter opens and Space picks."""
+    return item is not None and item[0] in _RESULT_ROW_TYPES
+
+
+def _enabled_bounds(option_list: OptionList) -> tuple[int, int] | None:
+    """Return the indexes of the first and last rows the cursor can rest on."""
+    enabled = [
+        index for index, option in enumerate(option_list.options) if not option.disabled
+    ]
+    return (enabled[0], enabled[-1]) if enabled else None
+
+
 class GoToScreen(ModalScreen):
     """Unified Go To modal for navigating to airports, groupings, and flights"""
 
@@ -141,14 +213,11 @@ class GoToScreen(ModalScreen):
         margin-bottom: 1;
     }
 
-    #goto-selection-summary {
+    #goto-picked {
         color: $text-muted;
         margin-bottom: 1;
-        display: none;
-    }
-
-    #goto-selection-summary.has-selection {
-        display: block;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
     }
 
     #goto-list {
@@ -170,7 +239,6 @@ class GoToScreen(ModalScreen):
 
     def __init__(
         self,
-        filter_type: str | None = None,
         callback: Callable[[tuple[str, list[str]] | None], None] | None = None,
         title: str = "Go To",
     ):
@@ -178,13 +246,11 @@ class GoToScreen(ModalScreen):
         Initialize the GoTo modal.
 
         Args:
-            filter_type: If "$", only show groupings (hide airports and flights)
             callback: If provided, call with (name, airports_list) tuple on selection
                      instead of navigating. Pass None if cancelled.
             title: Custom title for the modal (e.g., "Select Grouping")
         """
         super().__init__()
-        self.filter_type = filter_type
         self.callback = callback
         self.custom_title = title
         self.tracked_airports: list[str] = []
@@ -211,23 +277,25 @@ class GoToScreen(ModalScreen):
         # User grouping names for star prefix
         self.user_grouping_names: set[str] = set()
 
+        # Picked groupings whose member rows show; the others show collapsed
+        self._expanded_groupings: set[str] = set()
+
         # Display items list — maps 1:1 with OptionList entries.
-        # Each entry is (item_type, identifier, data) where item_type
-        # can be "sub" for expanded grouping sub-items.
+        # Each entry is (item_type, identifier, data) where item_type can also
+        # be "sub" for an expanded member (data names its grouping), "members"
+        # for collapsed members, "header" for a section header and "cap" for
+        # the row count; keys act on the last three only to explain why not.
         self._display_items: list[tuple[str, str, Any]] = []
 
     def compose(self) -> ComposeResult:
-        if self.filter_type == "$":
-            placeholder = "Search groupings..."
-        else:
-            placeholder = "Search... (@airport, #flight, $grouping)"
+        placeholder = "Search... (@airport, #flight, $grouping)"
 
         with Container(id="goto-container"):
             yield Static(Content(self.custom_title), id="goto-title")
             # No select-all on focus: a letter typed in the list is appended to
             # the query, and the next letter must not replace the whole query
             yield Input(placeholder=placeholder, id="goto-input", select_on_focus=False)
-            yield Static("", id="goto-selection-summary")
+            yield Static("", id="goto-picked")
             yield OptionList(Option("Loading...", disabled=True), id="goto-list")
             yield Static("", id="goto-hint")
 
@@ -238,8 +306,8 @@ class GoToScreen(ModalScreen):
         self._load_worker = self.run_worker(self._load_data(), exclusive=True)
 
     def _can_multi_select(self) -> bool:
-        """Multi-select is disabled in callback mode and grouping-only filter."""
-        return self.callback is None and self.filter_type is None
+        """Multi-select is disabled in callback (picker) mode."""
+        return self.callback is None
 
     def on_key(self, event: events.Key) -> None:
         """Dispatch the modal's keys; the hint line mirrors these handlers."""
@@ -276,38 +344,47 @@ class GoToScreen(ModalScreen):
         if self._can_multi_select() and event.key == "e":
             self._edit_favorite()
             return True
-        if self.multi_select_mode and event.key in ("f", "space"):
-            if event.key == "f":
-                self._cycle_filter_on_highlighted()
-            else:
-                self._toggle_highlighted("Space")
+        if self.multi_select_mode and event.key in ("f", "space", "right", "left"):
+            self._handle_pick_list_key(event.key)
             return True
         if event.is_printable and event.character:
             self._type_into_search(event.character)
             return True
         return False
 
+    def _handle_pick_list_key(self, key: str) -> None:
+        """F, Space, → and ← on the highlighted row while picking several."""
+        actions = {
+            "f": self._cycle_filter_on_highlighted,
+            "space": lambda: self._toggle_highlighted("Space"),
+            "right": lambda: self._set_highlighted_expanded(True),
+            "left": lambda: self._set_highlighted_expanded(False),
+        }
+        actions[key]()
+
     def _handle_focus_move(self, key: str) -> bool:
-        """Move focus between the input and the list with Up and Down."""
+        """Move focus between the input and the list with Up and Down.
+
+        The list's first and last rows are its first and last result rows:
+        the highlight never rests on a section header or the cap row.
+        """
+        if key not in ("down", "up"):
+            return False
         option_list = self.query_one("#goto-list", OptionList)
         input_widget = self.query_one("#goto-input", Input)
+        bounds = _enabled_bounds(option_list)
 
         if input_widget.has_focus:
-            if option_list.option_count == 0 or key not in ("down", "up"):
+            if bounds is None:
                 return False
             option_list.focus()
-            option_list.highlighted = (
-                0 if key == "down" else option_list.option_count - 1
-            )
+            option_list.highlighted = bounds[0] if key == "down" else bounds[1]
             return True
 
-        if option_list.has_focus and (
-            (key == "up" and option_list.highlighted == 0)
-            or (
-                key == "down"
-                and option_list.highlighted == option_list.option_count - 1
-            )
-        ):
+        if not option_list.has_focus:
+            return False
+        edge = None if bounds is None else bounds[0 if key == "up" else 1]
+        if edge is None or option_list.highlighted == edge:
             input_widget.focus()
             return True
         return False
@@ -334,9 +411,29 @@ class GoToScreen(ModalScreen):
         self._update_hint_text()
 
     def on_option_list_option_highlighted(
-        self, _event: OptionList.OptionHighlighted
+        self, event: OptionList.OptionHighlighted
     ) -> None:
+        # A rebuild highlights the first row and then restores the old one;
+        # the first row's event arrives late and must not scroll the list home
+        if event.option_index == event.option_list.highlighted:
+            self._reveal_list_ends(event.option_list, event.option_index)
         self._update_hint_text()
+
+    @staticmethod
+    def _reveal_list_ends(option_list: OptionList, index: int) -> None:
+        """Keep the first header and the cap row in view at the list's ends.
+
+        The highlight never rests on them, so scrolling to the highlight alone
+        would leave the header above the first row and the cap row below the
+        last one out of sight.
+        """
+        bounds = _enabled_bounds(option_list)
+        if bounds is None:
+            return
+        if index == bounds[0]:
+            option_list.scroll_home(animate=False, immediate=True)
+        elif index == bounds[1]:
+            option_list.scroll_end(animate=False, immediate=True)
 
     def on_unmount(self) -> None:
         """Cancel any pending workers when modal is closed"""
@@ -356,17 +453,7 @@ class GoToScreen(ModalScreen):
             self.all_groupings = self.vatsim_app.cached_groupings
             self.tracked_airports = list(self.vatsim_app.airport_allowlist or [])
             self.pilots = self.vatsim_app.cached_pilots
-
-            if self.filter_type is None:
-                self.all_results = list(self.vatsim_app.cached_goto_results)
-            else:
-                self.all_results = [
-                    (item_type, identifier, data)
-                    for item_type, identifier, data in self.vatsim_app.cached_goto_results
-                    if item_type == self.filter_type
-                    or (self.filter_type == "$" and item_type == "grouping")
-                ]
-
+            self.all_results = list(self.vatsim_app.cached_goto_results)
             self.data_loaded = True
             self._apply_current_filter()
             return
@@ -402,26 +489,25 @@ class GoToScreen(ModalScreen):
         self._apply_current_filter()
 
     def _build_all_results(self) -> None:
-        """Build the complete results list, respecting filter_type if set"""
-        self.all_results = []
+        """Build the complete results list, in the app cache's section order."""
+        airports: list[tuple[str, str, Any]] = []
+        for icao in sorted(self.tracked_airports):
+            pretty_name = (
+                config.DISAMBIGUATOR.get_full_name(icao)
+                if config.DISAMBIGUATOR
+                else icao
+            )
+            airports.append(("airport", icao, pretty_name))
 
-        if self.filter_type != "$":
-            for icao in sorted(self.tracked_airports):
-                pretty_name = (
-                    config.DISAMBIGUATOR.get_full_name(icao)
-                    if config.DISAMBIGUATOR
-                    else icao
-                )
-                self.all_results.append(("airport", icao, pretty_name))
+        flights: list[tuple[str, str, Any]] = []
+        for pilot in sorted(self.pilots, key=lambda p: p.get("callsign", "")):
+            callsign = pilot.get("callsign", "")
+            if callsign:
+                flights.append(("flight", callsign, pilot))
 
-        for name in sorted(self.all_groupings.keys()):
-            self.all_results.append(("grouping", name, None))
-
-        if self.filter_type != "$":
-            for pilot in sorted(self.pilots, key=lambda p: p.get("callsign", "")):
-                callsign = pilot.get("callsign", "")
-                if callsign:
-                    self.all_results.append(("flight", callsign, pilot))
+        self.all_results = order_goto_results(
+            airports, self.all_groupings, self.user_grouping_names, flights
+        )
 
     def _get_filter_indicator(self, key: str) -> str:
         """Get the filter indicator string for a given filter key."""
@@ -487,8 +573,9 @@ class GoToScreen(ModalScreen):
     def _fill_option_list(self) -> None:
         """Fill the option list with current filtered results.
 
-        In multi-select mode, inserts expanded sub-items for selected
-        groupings immediately after the grouping entry.
+        Each section's rows follow its header. In multi-select mode a picked
+        grouping's members follow it, collapsed or expanded. Past the cap the
+        list ends with a row counting the results it leaves out.
         """
         option_list = self.query_one("#goto-list", OptionList)
         option_list.clear_options()
@@ -500,28 +587,46 @@ class GoToScreen(ModalScreen):
             option_list.add_option(placeholder)
             return
 
-        count = 0
-        for item_type, identifier, data in results:
-            if count >= _MAX_OPTIONS:
-                break
-
-            self._add_row(option_list, item_type, identifier, data)
-            count += 1
-
-            # In multi-select mode, expand selected groupings
+        section = None
+        for item_type, identifier, data in results[:_MAX_OPTIONS]:
+            row_section = self._section_of(item_type, identifier)
+            if row_section != section:
+                section = row_section
+                self._add_inert_row(option_list, "header", _SECTION_HEADERS[section])
+            item = (item_type, identifier, data)
+            self._add_row(option_list, item, f"{item_type}:{identifier}")
             if self._is_selected_grouping(item_type, identifier):
-                count += self._add_member_rows(
-                    option_list, identifier, _MAX_OPTIONS - count
-                )
+                self._add_member_rows(option_list, identifier)
 
-        if option_list.option_count > 0:
-            option_list.highlighted = 0
+        if len(results) > _MAX_OPTIONS:
+            cap = _CAP_ROW.format(shown=_MAX_OPTIONS, total=len(results))
+            self._add_inert_row(option_list, "cap", cap)
+
+        bounds = _enabled_bounds(option_list)
+        if bounds is not None:
+            option_list.highlighted = bounds[0]
+
+    def _section_of(self, item_type: str, identifier: str) -> str:
+        """Name the section a result row belongs to; ★ groupings have their own."""
+        if item_type == "grouping" and identifier in self.user_grouping_names:
+            return "favorite"
+        return item_type
 
     def _visible_results(self) -> list[tuple[str, str, Any]]:
-        """Return the results to show; flights are hidden while picking."""
-        if not self.multi_select_mode:
-            return list(self.filtered_results)
-        return [r for r in self.filtered_results if r[0] != "flight"]
+        """Return the results to show in section order; flights hide while picking.
+
+        The app cache is already in section order; sorting again (stable, so
+        each section keeps its order) covers a stale cache, such as a ★ grouping
+        saved elsewhere under a preset's name, so each header shows once.
+        """
+        results = [
+            r
+            for r in self.filtered_results
+            if not (self.multi_select_mode and r[0] == "flight")
+        ]
+        return sorted(
+            results, key=lambda r: _SECTION_RANK[self._section_of(r[0], r[1])]
+        )
 
     def _empty_state_option(self, results: list[tuple[str, str, Any]]) -> Option | None:
         """Return the disabled placeholder row for an empty list, else None."""
@@ -540,26 +645,78 @@ class GoToScreen(ModalScreen):
         )
 
     def _add_row(
-        self, option_list: OptionList, item_type: str, identifier: str, data: Any
+        self, option_list: OptionList, item: tuple[str, str, Any], option_id: str
     ) -> None:
         """Add one option row and its matching _display_items entry."""
-        label = self._format_label(item_type, identifier, data)
+        label = self._format_label(*item)
         # Plain Content: a "[x]" checkbox or a bracketed name would otherwise parse as markup
-        option_list.add_option(Option(Content(label), id=f"{item_type}:{identifier}"))
-        self._display_items.append((item_type, identifier, data))
+        option_list.add_option(Option(Content(label), id=option_id))
+        self._display_items.append(item)
 
-    def _add_member_rows(
-        self, option_list: OptionList, identifier: str, budget: int
-    ) -> int:
-        """Add a selected grouping's member rows, up to budget; return the count."""
+    def _add_inert_row(self, option_list: OptionList, kind: str, text: str) -> None:
+        """Add a dim row the cursor skips: a section header or the cap row."""
+        option_list.add_option(Option(Content.styled(text, "dim"), disabled=True))
+        self._display_items.append((kind, text, None))
+
+    def _add_member_rows(self, option_list: OptionList, identifier: str) -> None:
+        """Add a picked grouping's members: one collapsed row, or a row each."""
         resolved = sorted(resolve_grouping_recursively(identifier, self.all_groupings))
-        added = 0
+        if not resolved:
+            return
+        if identifier not in self._expanded_groupings:
+            label = _COLLAPSED_MEMBERS.format(count=len(resolved))
+            option_list.add_option(Option(Content(label), id=f"members:{identifier}"))
+            self._display_items.append(("members", identifier, len(resolved)))
+            return
+        # Two expanded groupings can share an airport: the option id names the
+        # grouping, while the filter key stays per ICAO ("sub:KSFO")
         for icao in resolved:
-            if added >= budget:
-                break
-            self._add_row(option_list, "sub", icao, None)
-            added += 1
-        return added
+            self._add_row(
+                option_list, ("sub", icao, identifier), f"sub:{identifier}/{icao}"
+            )
+
+    def _members_owner(self, item: tuple[str, str, Any] | None) -> str | None:
+        """Name the picked grouping whose members this row shows, or None."""
+        if item is None:
+            return None
+        item_type, identifier, data = item
+        if item_type == "members":
+            return identifier
+        if item_type == "sub":
+            return data
+        if self._is_selected_grouping(item_type, identifier):
+            return identifier
+        return None
+
+    def _set_highlighted_expanded(self, expanded: bool) -> None:
+        """→ expands, ← collapses the members of the highlighted picked grouping."""
+        item = self._get_highlighted_item()
+        owner = self._members_owner(item)
+        if owner is None:
+            key, action = ("→", "expands") if expanded else ("←", "collapses")
+            self._warn(
+                f"{key} {action} a picked grouping's members; {self._describe_row(item)}"
+            )
+            return
+
+        option_list = self.query_one("#goto-list", OptionList)
+        saved_pos = option_list.highlighted or 0
+        if expanded:
+            self._expanded_groupings.add(owner)
+        else:
+            self._expanded_groupings.discard(owner)
+        self._update_option_list()
+        # Expanding keeps the highlight in place, so the collapsed row's
+        # place becomes the first member; collapsing returns to the grouping
+        option_list.highlighted = (
+            saved_pos if expanded else option_list.get_option_index(f"grouping:{owner}")
+        )
+
+    def _describe_row(self, item: tuple[str, str, Any] | None) -> str:
+        """Say what the highlighted row is, when a key needs a picked grouping."""
+        if item is not None and item[0] == "grouping":
+            return f"{self._row_name(item)} isn't picked"
+        return self._describe_non_favorite(item)
 
     def _apply_current_filter(self) -> None:
         """Apply filtering based on current input text. Called after data loads."""
@@ -626,6 +783,12 @@ class GoToScreen(ModalScreen):
 
         item_type, identifier, data = item
 
+        if item_type in _INERT_ROW_REASONS:
+            self._warn(
+                f"{key_name} can't pick this row; {_INERT_ROW_REASONS[item_type]}"
+            )
+            return
+
         # Sub-items are not toggleable (they belong to their parent grouping)
         if item_type == "sub":
             self._warn(
@@ -647,6 +810,7 @@ class GoToScreen(ModalScreen):
             self.selected_filters.pop(key, None)
             # Clean up sub-item filters if it was a grouping
             if item_type == "grouping":
+                self._expanded_groupings.discard(identifier)
                 resolved = resolve_grouping_recursively(identifier, self.all_groupings)
                 for icao in resolved:
                     self.selected_filters.pop(f"sub:{icao}", None)
@@ -654,7 +818,6 @@ class GoToScreen(ModalScreen):
             self.selected_identifiers.add(key)
             self.selected_items.append((item_type, identifier, data))
 
-        self._update_selection_summary()
         self._update_option_list()
 
     def _filter_blocked_reason(self, item: tuple[str, str, Any] | None) -> str | None:
@@ -665,6 +828,8 @@ class GoToScreen(ModalScreen):
         if item is None:
             return "no row is highlighted"
         item_type, identifier, _data = item
+        if item_type in _INERT_ROW_REASONS:
+            return _INERT_ROW_REASONS[item_type]
         if (
             item_type == "sub"
             or f"{item_type}:{identifier}" in self.selected_identifiers
@@ -736,6 +901,8 @@ class GoToScreen(ModalScreen):
         """Say what the highlighted row is, when E or Ctrl+D needs a ★ row."""
         if item is None:
             return "no row is highlighted"
+        if item[0] in _INERT_ROW_REASONS:
+            return _INERT_ROW_REASONS[item[0]]
         kinds = {
             "grouping": "a preset",
             "airport": "an airport",
@@ -759,6 +926,7 @@ class GoToScreen(ModalScreen):
         self.selected_items.clear()
         self.selected_identifiers.clear()
         self.selected_filters.clear()
+        self._expanded_groupings.clear()
 
         # Load the favorite's stored items (grouping refs + individual airports)
         items_in_favorite = self.all_groupings.get(identifier, [])
@@ -790,7 +958,6 @@ class GoToScreen(ModalScreen):
             else:
                 self.selected_filters[f"sub:{icao}"] = mode
 
-        self._update_selection_summary()
         self._update_option_list()
 
     def _picked_airports(self) -> set[str]:
@@ -805,37 +972,28 @@ class GoToScreen(ModalScreen):
                 )
         return airports
 
-    def _update_selection_summary(self) -> None:
-        """Update the selection summary widget text."""
-        summary_widget = self.query_one("#goto-selection-summary", Static)
+    def on_resize(self, _event: events.Resize) -> None:
+        """Refit the Picked line once the new width is laid out."""
+        self.call_after_refresh(self._update_picked_line)
 
-        if not self.selected_items:
-            summary_widget.update("")
-            summary_widget.remove_class("has-selection")
-            return
-
-        # Build display names
-        names = []
-        for item_type, identifier, _data in self.selected_items:
-            if item_type == "airport" or item_type == "grouping":
-                names.append(identifier)
-
-        all_airports = self._picked_airports()
-
-        # Build text with truncation for >3 items
-        if len(names) <= 3:
-            items_text = ", ".join(names)
-        else:
-            items_text = ", ".join(names[:3]) + f" + {len(names) - 3} more"
-
-        summary_widget.update(
-            f"Selected: {items_text} ({len(all_airports)} airports total)"
+    def _update_picked_line(self) -> None:
+        """Name the picks on one dim line, shown only while picking several."""
+        names = [identifier for _type, identifier, _data in self.selected_items]
+        # The line spans the container's content; before layout that is 0
+        width = self.query_one("#goto-container", Container).content_region.width
+        text = (
+            _picked_line(names, width or _PICKED_LINE_WIDTH)
+            if self.multi_select_mode
+            else ""
         )
-        summary_widget.add_class("has-selection")
+        picked_line = self.query_one("#goto-picked", Static)
+        picked_line.update(Content(text))
+        picked_line.display = bool(text)
 
     def _refresh_chrome(self) -> None:
-        """Bring the title and the hint line up to date with the state."""
+        """Bring the title, the Picked line and the hint up to date with the state."""
         self._update_title()
+        self._update_picked_line()
         self._update_hint_text()
 
     def _update_title(self) -> None:
@@ -855,7 +1013,7 @@ class GoToScreen(ModalScreen):
         item = self._get_highlighted_item()
         if not self._can_multi_select():
             enter = "Enter select" if self.callback else "Enter open"
-            items = [enter, "Esc close"] if item is not None else ["Esc close"]
+            items = [enter, "Esc close"] if _is_result_row(item) else ["Esc close"]
         elif self.multi_select_mode:
             editing = self._editing_favorite_name is not None
             close = "Esc close (discard edit)" if editing else "Esc close"
@@ -867,7 +1025,7 @@ class GoToScreen(ModalScreen):
         self.query_one("#goto-hint", Static).update(Content(HINT_SEPARATOR.join(items)))
 
     def _browse_hint_actions(self, item: tuple[str, str, Any] | None) -> list[str]:
-        actions = ["Enter open"] if item is not None else []
+        actions = ["Enter open"] if _is_result_row(item) else []
         return [*actions, *self._favorite_hint_items(item)]
 
     def _multi_select_hint_actions(
@@ -875,10 +1033,12 @@ class GoToScreen(ModalScreen):
     ) -> list[str]:
         list_focused = self.query_one("#goto-list", OptionList).has_focus
         actions: list[str] = []
-        if item is not None and item[0] != "sub":
+        if _is_result_row(item):
             actions.append("Space pick" if list_focused else "Enter pick")
         if list_focused and self._filter_blocked_reason(item) is None:
             actions.append("F dep/arr/both")
+        if list_focused and item is not None:
+            actions.extend(_MEMBERS_HINT_ITEMS.get(item[0], []))
         if self._picked_airports():
             actions.append("Ctrl+Enter open")
         if self.selected_items:
@@ -1034,7 +1194,7 @@ class GoToScreen(ModalScreen):
 
         # Inject the new favorite into local state so it's visible immediately
         self.all_groupings[saved_name] = saved_items
-        # Only add if not already in results
+        # Only add if not already in results; the list sorts it into the ★ section
         if not any(r[0] == "grouping" and r[1] == saved_name for r in self.all_results):
             self.all_results.append(("grouping", saved_name, None))
 
@@ -1043,8 +1203,8 @@ class GoToScreen(ModalScreen):
         self.selected_items.clear()
         self.selected_identifiers.clear()
         self.selected_filters.clear()
+        self._expanded_groupings.clear()
         self._editing_favorite_name = None
-        self._update_selection_summary()
 
         input_widget = self.query_one("#goto-input", Input)
         input_widget.value = saved_name
@@ -1145,6 +1305,10 @@ class GoToScreen(ModalScreen):
             return
 
         item_type, identifier, data = item
+
+        if item_type in _INERT_ROW_REASONS:
+            self._warn(f"Enter can't open this row; {_INERT_ROW_REASONS[item_type]}")
+            return
 
         # Sub-items in single-select mode shouldn't happen, but handle gracefully
         if item_type == "sub":
