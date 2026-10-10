@@ -84,8 +84,8 @@ class DaemonConfig:
     # If None, uses UTC
     display_timezone: str | None = None
 
-    # Skip regeneration if weather data hasn't changed since last run
-    # Uses a hash of METAR/TAF data to detect changes
+    # Skip the tile stage when the weather and the daemon's code are unchanged
+    # since the last completed tile stage (--force clears this)
     skip_if_unchanged: bool = True
 
     # Lock file path (prevents concurrent runs)

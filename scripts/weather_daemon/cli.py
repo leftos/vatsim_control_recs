@@ -85,7 +85,7 @@ Examples:
   # Tiles and index only (use cached weather)
   python -m scripts.weather_daemon.cli --stages tiles,index
 
-  # Force regeneration even if weather unchanged
+  # Force the tile stage even if weather and code are unchanged
   python -m scripts.weather_daemon.cli --force
 
   # Run without lock file (allow concurrent runs)
@@ -176,7 +176,7 @@ Examples:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Force regeneration even if weather hasn't changed",
+        help="Force the tile stage even if weather and code are unchanged",
     )
 
     args = parser.parse_args()

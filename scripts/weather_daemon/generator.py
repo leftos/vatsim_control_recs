@@ -217,8 +217,7 @@ def compute_weather_hash(metars: dict[str, str], tafs: dict[str, str]) -> str:
     """
     Compute a hash of weather data to detect changes.
 
-    Only hashes METARs and TAFs (not ATIS, which changes frequently
-    and doesn't affect the visual presentation much).
+    Only hashes METARs and TAFs, not ATIS.
 
     Args:
         metars: Dict of ICAO -> METAR string
@@ -235,7 +234,7 @@ def compute_weather_hash(metars: dict[str, str], tafs: dict[str, str]) -> str:
 
 
 def load_weather_hash(cache_dir: Path) -> str | None:
-    """Load the previously saved weather hash."""
+    """Load the skip key the last completed tile stage saved (see compute_skip_key)."""
     hash_file = cache_dir / "weather_hash.txt"
     if hash_file.exists():
         try:
@@ -245,14 +244,14 @@ def load_weather_hash(cache_dir: Path) -> str | None:
     return None
 
 
-def save_weather_hash(cache_dir: Path, weather_hash: str) -> None:
-    """Save the current weather hash."""
+def save_weather_hash(cache_dir: Path, skip_key: str) -> None:
+    """Save the skip key of a completed tile stage (see compute_skip_key)."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     hash_file = cache_dir / "weather_hash.txt"
     try:
-        hash_file.write_text(weather_hash)
+        hash_file.write_text(skip_key)
     except Exception as e:
-        logger.warning(f"Failed to save weather hash: {e}")
+        logger.warning(f"Failed to save the tile skip key: {e}")
 
 
 def _save_weather_cache(
@@ -439,6 +438,70 @@ from common.logger import setup_file_logging  # noqa: E402
 from .artcc_boundaries import get_artcc_boundaries  # noqa: E402
 from .config import ARTCC_NAMES, CATEGORY_COLORS, DaemonConfig  # noqa: E402
 from .tile_generator import generate_weather_tiles, write_tile_version  # noqa: E402
+
+
+def compute_code_version(daemon_dir: Path | None = None) -> str:
+    """
+    Hash the daemon's own code, so a deploy regenerates with unchanged weather.
+
+    Covered are every ``*.py`` file under ``daemon_dir``, recursive and sorted by
+    POSIX relative path, hashing each relative path and then its bytes. The git
+    sha is no use here: rsync deploy targets have no ``.git`` and LocalTest runs
+    uncommitted edits.
+
+    Args:
+        daemon_dir: Directory to hash; the daemon package when omitted
+
+    Returns:
+        First 16 hex characters of the SHA256 digest
+    """
+    root = daemon_dir if daemon_dir is not None else Path(__file__).parent
+    files = sorted(
+        root.rglob("*.py"), key=lambda path: path.relative_to(root).as_posix()
+    )
+    digest = hashlib.sha256()
+    for path in files:
+        digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def compute_skip_key(metars: dict[str, str], tafs: dict[str, str]) -> str:
+    """
+    The key the last completed tile stage wrote to ``weather_hash.txt``.
+
+    The weather hash and the code version joined by ``:``; any difference from
+    the stored key counts as changed.
+
+    Args:
+        metars: Dict of ICAO -> METAR string
+        tafs: Dict of ICAO -> TAF string
+
+    Returns:
+        ``"<weather hash>:<code version>"``
+    """
+    return f"{compute_weather_hash(metars, tafs)}:{compute_code_version()}"
+
+
+def should_skip_tile_stage(config: DaemonConfig, skip_key: str | None) -> bool:
+    """
+    Whether this run may skip the tile stage because nothing it draws has changed.
+
+    Only a run that fetched fresh weather considers the skip, and only while
+    ``skip_if_unchanged`` holds (``--force`` clears it): a run from cached weather
+    is an explicit regeneration. The stored key comes from the last completed tile
+    stage, so a run killed inside one regenerates on the next tick.
+
+    Args:
+        config: Daemon configuration
+        skip_key: This run's key, or None when there is no weather to hash
+
+    Returns:
+        True when the stored key matches this run's
+    """
+    if not (config.fetch_fresh_weather and config.skip_if_unchanged and skip_key):
+        return False
+    return load_weather_hash(config.weather_cache_dir) == skip_key
 
 
 def get_artcc_bboxes(
@@ -1371,39 +1434,10 @@ def generate(config: DaemonConfig) -> dict[str, str]:
         # Cache weather data for next run
         _save_weather_cache(config.weather_cache_dir, metars, tafs, atis_data)
 
-    # Check if weather has changed since last run
-    weather_changed = True
-    if config.skip_if_unchanged and metars:
-        new_hash = compute_weather_hash(metars, tafs)
-        old_hash = load_weather_hash(config.weather_cache_dir)
-
-        if old_hash == new_hash:
-            weather_changed = False
-            print(
-                f"  Weather unchanged (hash: {new_hash[:8]}...), skipping regeneration"
-            )
-            logger.info(f"Weather unchanged (hash: {new_hash}), skipping regeneration")
-        else:
-            print(
-                f"  Weather changed (old: {old_hash[:8] if old_hash else 'none'}... -> new: {new_hash[:8]}...)"
-            )
-            logger.info(f"Weather changed from {old_hash} to {new_hash}")
-            save_weather_hash(config.weather_cache_dir, new_hash)
-
-    # If weather hasn't changed, skip briefings and tiles but still update index timestamp
-    if not weather_changed:
-        # Only regenerate index if enabled (to update timestamp)
-        if config.generate_index:
-            # We need to load existing data for the index
-            # For now, just update the timestamp in the index by regenerating it
-            pass
-        else:
-            # Nothing to do
-            total_time = (datetime.now(timezone.utc) - start_time).total_seconds()
-            end_timestamp = datetime.now(timezone.utc).strftime("%H:%M:%SZ")
-            print(f"[{end_timestamp}] Skipped (no changes) in {total_time:.1f}s")
-            logger.info(f"Skipped (no changes) in {total_time:.1f}s")
-            return {}
+    # The tile stage may skip: the key compares this run's weather and code against
+    # the key the last completed tile stage wrote. Briefings and the index always run.
+    skip_key = compute_skip_key(metars, tafs) if metars else None
+    skip_tiles = should_skip_tile_stage(config, skip_key)
 
     num_groupings = len(groupings_to_process)
     print(f"  Generating {num_groupings} briefings...")
@@ -1559,8 +1593,10 @@ def generate(config: DaemonConfig) -> dict[str, str]:
         if index_path:
             generated_files[str(index_path)] = "Index"
 
-    # Generate weather overlay tiles (if enabled)
-    if config.generate_tiles:
+    # Generate weather overlay tiles (if enabled). A run whose weather and code are
+    # unchanged since the last completed tile stage leaves the tiles and
+    # version.txt alone, so the page's ?v= does not churn.
+    if config.generate_tiles and not skip_tiles:
         print("  Generating weather overlay tiles...")
         logger.info("Generating weather overlay tiles")
 
@@ -1628,12 +1664,19 @@ def generate(config: DaemonConfig) -> dict[str, str]:
                 max_workers=config.tile_max_workers,
             )
             write_tile_version(tiles_dir, run_tile_version)
+            # Saved only now: a run killed in this stage leaves the old key, so the
+            # next run regenerates the tiles it never finished.
+            if skip_key is not None:
+                save_weather_hash(config.weather_cache_dir, skip_key)
 
             total_tiles = sum(tile_results.values())
             print(f"    Generated {total_tiles} weather tiles")
             logger.info(
                 f"Generated {total_tiles} weather tiles across {len(tile_results)} zoom levels"
             )
+    elif config.generate_tiles:
+        print("  Tile stage skipped: weather and code unchanged")
+        logger.info("Tile stage skipped: weather and code unchanged")
     else:
         print("  Skipping tile generation (--no-tiles)")
         logger.info("Skipping tile generation (--no-tiles)")
