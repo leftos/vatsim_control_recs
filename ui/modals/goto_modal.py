@@ -356,7 +356,7 @@ class GoToScreen(ModalScreen):
         """F, Space, → and ← on the highlighted row while picking several."""
         actions = {
             "f": self._cycle_filter_on_highlighted,
-            "space": lambda: self._toggle_highlighted("Space"),
+            "space": lambda: self._toggle_highlighted("Space", keep_highlight=True),
             "right": lambda: self._set_highlighted_expanded(True),
             "left": lambda: self._set_highlighted_expanded(False),
         }
@@ -769,12 +769,16 @@ class GoToScreen(ModalScreen):
         else:
             await self._execute_selected()
 
-    def _toggle_highlighted(self, key_name: str) -> None:
+    def _toggle_highlighted(
+        self, key_name: str, *, keep_highlight: bool = False
+    ) -> None:
         """Toggle selection of the currently highlighted item.
 
         Args:
             key_name: The key that asked for the toggle, named in the warning
                 when there is no row to pick or the row cannot be picked.
+            keep_highlight: Whether the picked row keeps the highlight, which
+                the list rebuild would otherwise send back to the first row.
         """
         item = self._get_highlighted_item()
         if item is None:
@@ -796,7 +800,24 @@ class GoToScreen(ModalScreen):
             )
             return
 
+        anchor = f"{item_type}:{identifier}"
         self._toggle_selection(item_type, identifier, data)
+        if keep_highlight:
+            self._restore_highlight(anchor)
+
+    def _restore_highlight(self, option_id: str) -> None:
+        """Put the highlight back on the row a list rebuild sent to the top.
+
+        A pick or unpick never removes the toggled row (only flights hide while
+        picking, and a flight cannot be picked), so the option id is always
+        there to find; a missing one is a bug and is left to surface as it is.
+        """
+        option_list = self.query_one("#goto-list", OptionList)
+        option_list.highlighted = option_list.get_option_index(option_id)
+        self._update_hint_text()
+        # The first pick shows or hides the Picked line, which resizes the list
+        # after the scroll above was computed, so scroll again on the new layout
+        self.call_after_refresh(option_list.scroll_to_highlight)
 
     def _toggle_selection(self, item_type: str, identifier: str, data: Any) -> None:
         """Add or remove an item from the multi-select selection."""

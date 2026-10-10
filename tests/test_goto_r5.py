@@ -474,3 +474,75 @@ async def test_key_on_header_warns(
 
         assert h.app.screen is h.screen
         assert h.notifications() == [("warning", message) for message in warnings]
+
+
+# --- Space keeps the highlight -----------------------------------------------
+
+
+async def test_space_pick_keeps_highlight_on_picked_row(
+    goto_modal: GoToFactory,
+) -> None:
+    async with goto_modal() as h:
+        await h.pilot.press("tab")
+        # KSJC is not the first result row, where a rebuild would drop it
+        await h.focus_row("airport:KSJC")
+        await h.pilot.press("space")
+        await h.pilot.pause()
+
+        assert _highlighted_id(h) == "airport:KSJC"
+        assert "airport:KSJC" in h.screen.selected_identifiers
+        # The hint describes the row the highlight stayed on, not the first row
+        assert h.hint == (
+            "Space pick · F dep/arr/both · Ctrl+Enter open · Ctrl+S save"
+            " · Tab browse · Esc close"
+        )
+
+
+async def test_space_unpick_keeps_highlight_on_row(goto_modal: GoToFactory) -> None:
+    async with goto_modal() as h:
+        await h.pilot.press("tab")
+        await h.focus_row("airport:KSJC")
+        await h.pilot.press("space")
+        await h.pilot.pause()
+        await h.pilot.press("space")
+        await h.pilot.pause()
+
+        assert _highlighted_id(h) == "airport:KSJC"
+        assert h.screen.selected_identifiers == set()
+
+
+async def test_space_pick_of_grouping_keeps_highlight_on_grouping(
+    goto_modal: GoToFactory,
+) -> None:
+    async with goto_modal() as h:
+        await h.pilot.press("tab")
+        await h.focus_row("grouping:Bay Area")
+        await h.pilot.press("space")
+        await h.pilot.pause()
+
+        # The pick adds the grouping's collapsed member row right below it
+        assert h.option_list.get_option("members:Bay Area") is not None
+        assert _highlighted_id(h) == "grouping:Bay Area"
+
+
+async def test_space_pick_below_the_fold_keeps_row_in_view(
+    goto_modal: GoToFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    many = {f"G{n:03}": ["KSFO"] for n in range(80)}
+    monkeypatch.setattr(conftest, "PRESET_GROUPINGS", {**PRESET_GROUPINGS, **many})
+    async with goto_modal() as h:
+        await h.pilot.press("tab")
+        # A first pick puts the Picked line up, so the list keeps its height here
+        await _pick(h, "Bay Area", "grouping:Bay Area")
+        await h.type_query("")
+
+        # G070 sits far below the rows in view before the list is scrolled
+        target = h.option_list.get_option_index("grouping:G070")
+        assert target >= h.option_list.scrollable_content_region.height
+
+        await h.focus_row("grouping:G070")
+        await h.pilot.press("space")
+        await h.pilot.pause()
+
+        assert _highlighted_id(h) == "grouping:G070"
+        assert _in_view(h), f"scroll_y={h.option_list.scroll_y} index={target}"

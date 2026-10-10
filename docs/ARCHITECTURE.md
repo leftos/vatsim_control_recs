@@ -98,7 +98,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/conftest.py`: the fixture that mounts `GoToScreen` on fixture airports, groupings and favorites.
 - `tests/test_goto_edit_filters.py`: saved per-airport filters when editing a favorite.
 - `tests/test_goto_r1.py`: Go To modal titles, hints, focus moves, and warning and error toasts.
-- `tests/test_goto_r5.py`: Go To section headers, the cap row, collapsed and expanded grouping rows, the "Picked:" line, hint drop order, and highlight skipping.
+- `tests/test_goto_r5.py`: Go To section headers, the cap row, collapsed and expanded grouping rows, the "Picked:" line, hint drop order, highlight skipping, and the highlight staying on the row `Space` picks or unpicks.
 - `tests/test_cifp_index.py`: CIFP SID, STAR and approach lookups on a small fixture file: matches, the single file pass, and the index and route-cache rebuild when another file is returned.
 - `tests/test_weather_cache.py`: bbox freshness, "no METAR" negatives and the failures that are never cached.
 - `tests/test_refresh_weather.py`: the weather pass: traffic columns before weather, previous WIND/ALT kept until a box returns, per-box patches, failed versus omitted airports, fresh boxes first, a mid-pass refresh queuing one rerun, two-stage startup, the capped-box fallback, quit cancelling queued boxes, and patch failures logged.

@@ -257,7 +257,7 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 |----------|--------|
 | `Tab` | Toggle "pick several" (multi-select) mode; entering it moves focus to the list |
 | `Enter` | Open the highlighted item (browse), or pick it (pick several) |
-| `Space` | Pick or unpick the highlighted row (pick several, list focused) |
+| `Space` | Pick or unpick the highlighted row, which keeps the highlight (pick several, list focused) |
 | `Ctrl+Enter` | Open the board for the picks (pick several) |
 | `Ctrl+S` | Save the picks as a grouping; while editing a favorite, save it |
 | `Ctrl+D` | Delete the highlighted ★ favorite (not in picker mode) |

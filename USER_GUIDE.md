@@ -383,7 +383,7 @@ If a key cannot do anything (for example `E` on a preset, `F` on a row that is n
 
 **Multi-Select Mode ("Pick several"):**
 Press `Tab` to toggle multi-select mode, which allows selecting multiple airports/groupings to open at once:
-- `Enter` (search box) or `Space` (results list) - Pick or unpick the highlighted item
+- `Enter` (search box) or `Space` (results list) - Pick or unpick the highlighted item; with `Space` the highlight stays on that item
 - `Ctrl+Enter` - Open all picked items
 - `Ctrl+S` - Save the picks as a favorite (see [Favorites](#favorites)); while editing a favorite it saves that favorite
 - `Tab` - Back to browsing
