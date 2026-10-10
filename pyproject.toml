@@ -30,7 +30,11 @@ dependencies = [
 
 [dependency-groups]
 build = ["pyinstaller==6.22.3"]
-dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.16.1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
