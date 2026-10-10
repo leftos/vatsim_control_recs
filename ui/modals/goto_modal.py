@@ -59,6 +59,9 @@ _FILTER_CYCLE = {None: "dep", "dep": "arr", "arr": None}
 # opening and saving outrank the per-row keys; Tab and Esc are never dropped.
 _HINT_DROP_ORDER = ("Ctrl+D ", "E ", "F ", "Ctrl+S ", "Ctrl+Enter ")
 
+# Cap on the rows the list builds; a larger result set keeps only the first 100.
+_MAX_OPTIONS = 100
+
 
 def _cap_hint(actions: list[str], tab: str, close: str) -> list[str]:
     """Fit the actions, the Tab item and the Esc item into HINT_MAX_ITEMS."""
@@ -456,51 +459,72 @@ class GoToScreen(ModalScreen):
         option_list.clear_options()
         self._display_items = []
 
-        if not self.data_loaded:
-            option_list.add_option(Option("Loading...", disabled=True))
-            return
-
-        # In multi-select mode, filter out flights
-        results = self.filtered_results
-        if self.multi_select_mode:
-            results = [r for r in results if r[0] != "flight"]
-
-        if not results:
-            option_list.add_option(Option("No results found", disabled=True))
+        results = self._visible_results()
+        placeholder = self._empty_state_option(results)
+        if placeholder is not None:
+            option_list.add_option(placeholder)
             return
 
         count = 0
         for item_type, identifier, data in results:
-            if count >= 100:
+            if count >= _MAX_OPTIONS:
                 break
 
-            label = self._format_label(item_type, identifier, data)
-            # Plain Content: a "[x]" checkbox or a bracketed name would otherwise parse as markup
-            option_list.add_option(
-                Option(Content(label), id=f"{item_type}:{identifier}")
-            )
-            self._display_items.append((item_type, identifier, data))
+            self._add_row(option_list, item_type, identifier, data)
             count += 1
 
             # In multi-select mode, expand selected groupings
-            if (
-                self.multi_select_mode
-                and item_type == "grouping"
-                and f"grouping:{identifier}" in self.selected_identifiers
-            ):
-                resolved = sorted(
-                    resolve_grouping_recursively(identifier, self.all_groupings)
+            if self._is_selected_grouping(item_type, identifier):
+                count += self._add_member_rows(
+                    option_list, identifier, _MAX_OPTIONS - count
                 )
-                for icao in resolved:
-                    if count >= 100:
-                        break
-                    sub_label = self._format_label("sub", icao, None)
-                    option_list.add_option(Option(Content(sub_label), id=f"sub:{icao}"))
-                    self._display_items.append(("sub", icao, None))
-                    count += 1
 
         if option_list.option_count > 0:
             option_list.highlighted = 0
+
+    def _visible_results(self) -> list[tuple[str, str, Any]]:
+        """Return the results to show; flights are hidden while picking."""
+        if not self.multi_select_mode:
+            return list(self.filtered_results)
+        return [r for r in self.filtered_results if r[0] != "flight"]
+
+    def _empty_state_option(self, results: list[tuple[str, str, Any]]) -> Option | None:
+        """Return the disabled placeholder row for an empty list, else None."""
+        if not self.data_loaded:
+            return Option("Loading...", disabled=True)
+        if not results:
+            return Option("No results found", disabled=True)
+        return None
+
+    def _is_selected_grouping(self, item_type: str, identifier: str) -> bool:
+        """True for a picked grouping row, which expands to its member airports."""
+        return (
+            self.multi_select_mode
+            and item_type == "grouping"
+            and f"grouping:{identifier}" in self.selected_identifiers
+        )
+
+    def _add_row(
+        self, option_list: OptionList, item_type: str, identifier: str, data: Any
+    ) -> None:
+        """Add one option row and its matching _display_items entry."""
+        label = self._format_label(item_type, identifier, data)
+        # Plain Content: a "[x]" checkbox or a bracketed name would otherwise parse as markup
+        option_list.add_option(Option(Content(label), id=f"{item_type}:{identifier}"))
+        self._display_items.append((item_type, identifier, data))
+
+    def _add_member_rows(
+        self, option_list: OptionList, identifier: str, budget: int
+    ) -> int:
+        """Add a selected grouping's member rows, up to budget; return the count."""
+        resolved = sorted(resolve_grouping_recursively(identifier, self.all_groupings))
+        added = 0
+        for icao in resolved:
+            if added >= budget:
+                break
+            self._add_row(option_list, "sub", icao, None)
+            added += 1
+        return added
 
     def _apply_current_filter(self) -> None:
         """Apply filtering based on current input text. Called after data loads."""
