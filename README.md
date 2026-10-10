@@ -18,7 +18,7 @@ uv run main.py
 
 On first run, `uv run` fetches Python 3.13 if needed, creates `.venv` and installs the locked dependencies from `uv.lock`, including the spaCy language model. Subsequent launches start immediately.
 
-See the [User Guide](USER_GUIDE.md) for detailed usage instructions.
+See the [User Guide](USER_GUIDE.md) for detailed usage instructions, and [`docs/README.md`](docs/README.md) for the developer docs and a glossary of the project's terms.
 
 ## Usage
 

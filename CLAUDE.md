@@ -79,7 +79,7 @@ uv run main.py --help                   # All available options
 
 ## Architecture
 
-The architecture entry point is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): Task Index, layers, integration footguns, test locations and the deep docs.
+The architecture entry point is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): Task Index, layers, integration footguns, test locations and the deep docs. The docs' start page, with every doc listed and a glossary of the project's terms, is [`docs/README.md`](docs/README.md).
 
 ## Important Conventions
 
