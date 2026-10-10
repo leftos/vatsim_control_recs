@@ -60,6 +60,7 @@ Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `
 
 Items that share no files. Review: `code-review`. Verification: `uv run --group dev pytest -q` plus `ruff check`.
 
+- [ ] Deploy the self-hosted Leaflet (f4e8083): push, run `scripts/weather_daemon/service/QuickDeploy.ps1`, reinstall `nginx-weather.conf` on the server (`setup.sh`), check `https://leftos.dev/weather/assets/leaflet/1.9.4/leaflet.js` returns 200 with the long `Cache-Control`, then send leftos.dev's inbox the "deployed" note so its policy can drop the unpkg line. Needs the owner's go-ahead (it changes the live site).
 - [ ] Remove `--progressive-load` and `--progressive-chunk-size` and the dead progressive path: the flags are parsed (`main.py:54-64`) but never read, and nothing calls `populate(progressive=True)` (`ui/tables.py:34-41`, `:140-166`, `_populate_progressive` at `:194-208`). Settled (owner): remove, flags and code, with their docs (`CLAUDE.md:76`, `README.md:32-33`, `:59-62`, `USER_GUIDE.md:151-152`, `:694-703`, `:740`, `:800`, `docs/ARCHITECTURE.md:40`).
 - [ ] `common/logger.py` opens the log file and runs `cleanup_old_logs()` on the first log call (`:50`, `:72`), which happens at import time: `backend/data/statsim_api.py:42`, `:53` log while loading `.env`, reached through `import ui.modals` (`ui/modals/historical_stats.py:12`), so tests and tools write to and prune the user's real log folder; the repo-root `conftest.py` works around it.
 
