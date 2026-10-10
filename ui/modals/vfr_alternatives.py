@@ -187,7 +187,8 @@ class VfrAlternativesScreen(ModalScreen):
             return
 
         if origin_metar:
-            category, color = get_flight_category(origin_metar)
+            category = get_flight_category(origin_metar)
+            color = config.CATEGORY_COLORS.get(category, "white")
             vis_str, ceil_str = _extract_flight_rules_weather(origin_metar)
             details = self._format_weather_details(vis_str, ceil_str)
             header_lines.append(
@@ -244,9 +245,10 @@ class VfrAlternativesScreen(ModalScreen):
             if not metar:
                 continue
 
-            category, color = get_flight_category(metar)
+            category = get_flight_category(metar)
             if category not in ("VFR", "MVFR"):
                 continue
+            color = config.CATEGORY_COLORS.get(category, "white")
 
             # Get weather details
             vis_str, ceil_str = _extract_flight_rules_weather(metar)

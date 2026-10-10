@@ -379,7 +379,8 @@ class FlightInfoScreen(ModalScreen):
         try:
             metar = get_metar(icao)
             if metar:
-                category, color = get_flight_category(metar)
+                category = get_flight_category(metar)
+                color = config.CATEGORY_COLORS.get(category, "white")
                 visibility_str, ceiling_str = _extract_flight_rules_weather(metar)
                 return (category, color, visibility_str, ceiling_str)
         except Exception as e:
@@ -465,9 +466,10 @@ class FlightInfoScreen(ModalScreen):
             if not metar:
                 continue
 
-            category, color = get_flight_category(metar)
+            category = get_flight_category(metar)
             if category not in ("VFR", "MVFR"):
                 continue
+            color = config.CATEGORY_COLORS.get(category, "white")
 
             # Calculate distance and direction
             apt_data = config.UNIFIED_AIRPORT_DATA.get(icao, {})

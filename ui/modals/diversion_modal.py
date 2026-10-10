@@ -421,7 +421,7 @@ class DiversionModal(ModalScreen):
         # Process results
         for icao, metar in metars.items():
             if metar:
-                category, _ = get_flight_category(metar)
+                category = get_flight_category(metar)
                 vis_str, ceil_str = _extract_flight_rules_weather(metar)
                 details = f"{vis_str or ''} {ceil_str or ''}".strip()
                 self._weather_data[icao] = (category, details)

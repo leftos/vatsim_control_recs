@@ -8,7 +8,6 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ## Backlog
 
-- [ ] Fix callers that still unpack `get_flight_category()` as `(category, color)`: it returns a plain `str` (`backend/data/weather_parsing.py:617`), so `ui/modals/vfr_alternatives.py:190` and `:247` raise `ValueError` (the VFR Alternatives finder shows nothing), `ui/modals/diversion_modal.py:424` leaves the Wx column stuck at "...", and `ui/modals/flight_info.py:382` and `:468` break the VFR-flight weather warning.
 - [ ] Pass the VATSIM feed to the diversion finder: `ui/modals/flight_info.py:1027` reads `getattr(self.app, "vatsim_data", None)`, but `VATSIMControlApp` (`ui/app.py`) never sets `vatsim_data`, so `DiversionModal` (`ui/modals/diversion_modal.py:225`) always gets `None` and its ATC column and "ATC Online" filter are empty.
 - [ ] Escape the Go To multi-select marker: `ui/modals/goto_modal.py:406-408` builds `"[x] ..."` in an `OptionList` prompt, which Textual parses as markup, so selected items show no checkbox.
 
