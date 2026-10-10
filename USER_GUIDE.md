@@ -211,7 +211,7 @@ Shows all tracked airports with columns:
 When `--include-all-arriving` is used, the Arr column shows `arr/arr_all` format when the counts differ (e.g., `3/  7` means 3 within the ETA window, 7 total filed). The Total column behaves similarly.
 
 #### Custom Groupings Tab
-Shows configured airport groupings with aggregated statistics.
+Shows configured airport groupings with aggregated statistics. Enter opens the selected grouping's flight board; a ★ grouping opens with its saved per-airport dep/arr filters, as it does from Go To.
 
 ### Status Bar
 

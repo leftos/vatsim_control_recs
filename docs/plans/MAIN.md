@@ -21,7 +21,6 @@ Design in [goto-ux-review.md](./goto-ux-review.md). Shared: `ui/modals/goto_moda
 
 Order (from the map of this wave): R3 removes the edit mode R4's wording would relabel, so R4 splits, its filters half first and its wording sweep last; the `_fill_option_list` split lands before R5, which edits the same hunks; R5 lands before R3.
 
-- [ ] Saved dep/arr filters follow a ★ grouping wherever it opens (R4's filters half, [goto-ux-review.md](./goto-ux-review.md)): Enter on the Custom Groupings tab (`ui/app.py:937-1010`, `FlightBoardScreen` at `:999`) passes no `airport_filters`, while Go To's `_open_grouping` (`ui/modals/goto_modal.py:1164-1192`) does; one shared `open_grouping_board(name)` serves both and drops the nested resolver copy at `ui/app.py:966-989`.
 - [ ] Split `GoToScreen._filter_results` (complexity 11) and `_execute_selected` (10) in `ui/modals/goto_modal.py`, then enable ruff's `C901` with `max-complexity = 8` in `ruff.toml` (no complexity rule is enforced today) and split whatever else it reports or backlog it.
 - [ ] Remove the dead `name == "airports"` branch of `_open_weather_briefing_callback` (`ui/app.py:1207-1209`): Go To's callback sends only `(grouping, airports)`, `(icao, [icao])` and `("flight", data)` (`ui/modals/goto_modal.py:1119-1130`), so typed ICAO lists never reach it; the picker title at `:1195` still promises "Enter airports".
 

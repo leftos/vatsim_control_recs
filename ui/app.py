@@ -18,7 +18,12 @@ from textual.events import Key
 from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
 from backend import analyze_flights_data
-from backend.core.groupings import load_all_groupings
+from backend.core.groupings import (
+    get_user_favorite_names,
+    load_all_groupings,
+    load_favorite_filters,
+    resolve_grouping_recursively,
+)
 from widgets.split_flap_datatable import SplitFlapDataTable
 
 from .debug_logger import debug, error
@@ -881,6 +886,50 @@ class VATSIMControlApp(App):
 
         self.populate_tables()
 
+    def open_grouping_board(self, name: str) -> None:
+        """Open the flight board for a grouping.
+
+        A ★ grouping's saved per-airport dep/arr filters open with it, so they
+        follow the grouping whichever way it is opened (the Custom Groupings tab
+        or Go To). Presets and the other non-★ groupings open unfiltered.
+
+        Args:
+            name: The grouping name, as the groupings loader lists it.
+        """
+        from . import config
+
+        groupings = self.cached_groupings
+        if name not in groupings:
+            # The cache is cold, or the grouping was saved after it was loaded;
+            # read the sources from disk rather than open an empty board
+            script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            groupings = load_all_groupings(
+                os.path.join(script_dir, "data", "custom_groupings.json"),
+                config.UNIFIED_AIRPORT_DATA or {},
+            )
+
+        airport_list = list(resolve_grouping_recursively(name, groupings))
+
+        airport_filters = None
+        if name in get_user_favorite_names():
+            saved_filters = load_favorite_filters(name)
+            if saved_filters:
+                airport_filters = saved_filters
+
+        enable_anims = not self.args.disable_animations if self.args else True
+        self.flight_board_open = True
+        flight_board = FlightBoardScreen(
+            name,
+            airport_list,
+            self.args.max_eta_hours if self.args else 1.0,
+            self.refresh_interval,
+            config.DISAMBIGUATOR,
+            enable_anims,
+            airport_filters=airport_filters,
+        )
+        self.active_flight_board = flight_board
+        self.push_screen(flight_board)
+
     def action_open_flight_board(self) -> None:
         """Open the flight board for the selected airport or grouping"""
         # Don't allow opening flight board during search or if a flight board is already open
@@ -940,7 +989,6 @@ class VATSIMControlApp(App):
                 try:
                     # Get the grouping name from the backend data, but account for table sorting
                     # The table sorts by airport_grouping_sort_key, so we need to sort our data the same way
-                    from . import config
                     from .utils import airport_grouping_sort_key
 
                     # Sort groupings_data the same way the table does
@@ -950,62 +998,7 @@ class VATSIMControlApp(App):
 
                     # Now we can safely index with cursor_row
                     grouping_name = sorted_groupings[groupings_table.cursor_row].name
-
-                    # Get the list of airports in this grouping
-                    # Load all groupings (custom + ARTCC) to get the airport list
-                    script_dir = os.path.dirname(
-                        os.path.dirname(os.path.abspath(__file__))
-                    )
-                    all_groupings = load_all_groupings(
-                        os.path.join(script_dir, "data", "custom_groupings.json"),
-                        config.UNIFIED_AIRPORT_DATA or {},
-                    )
-
-                    if grouping_name in all_groupings:
-                        # Recursively resolve the grouping to actual airports (handles nested groupings)
-                        def resolve_grouping_recursively(gname, visited=None):
-                            """Recursively resolve a grouping name to its individual airports."""
-                            if visited is None:
-                                visited = set()
-
-                            if gname in visited:
-                                return set()
-                            visited.add(gname)
-
-                            if gname not in all_groupings:
-                                return set()
-
-                            airports = set()
-                            items = all_groupings[gname]
-
-                            for item in items:
-                                if item in all_groupings:
-                                    airports.update(
-                                        resolve_grouping_recursively(item, visited)
-                                    )
-                                else:
-                                    airports.add(item)
-
-                            return airports
-
-                        airport_list = list(resolve_grouping_recursively(grouping_name))
-                        title = grouping_name
-
-                        # Open the flight board and store reference
-                        self.flight_board_open = True
-                        enable_anims = (
-                            not self.args.disable_animations if self.args else True
-                        )
-                        flight_board = FlightBoardScreen(
-                            title,
-                            airport_list,
-                            self.args.max_eta_hours if self.args else 1.0,
-                            self.refresh_interval,
-                            config.DISAMBIGUATOR,
-                            enable_anims,
-                        )
-                        self.active_flight_board = flight_board
-                        self.push_screen(flight_board)
+                    self.open_grouping_board(grouping_name)
                 except Exception as e:
                     debug(f"Could not open flight board for selected row: {e}")
 

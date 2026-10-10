@@ -1186,34 +1186,8 @@ class GoToScreen(ModalScreen):
         self.vatsim_app.push_screen(flight_board)
 
     def _open_grouping(self, name: str) -> None:
-        """Open flight board for a grouping, loading saved filters for favorites."""
-        airport_list = list(resolve_grouping_recursively(name, self.all_groupings))
-        enable_anims = (
-            not self.vatsim_app.args.disable_animations
-            if self.vatsim_app.args
-            else True
-        )
-        max_eta = self.vatsim_app.args.max_eta_hours if self.vatsim_app.args else 1.0
-
-        # Load saved filters for favorites
-        airport_filters = None
-        if name in self.user_grouping_names:
-            saved_filters = load_favorite_filters(name)
-            if saved_filters:
-                airport_filters = saved_filters
-
-        self.vatsim_app.flight_board_open = True
-        flight_board = FlightBoardScreen(
-            name,
-            airport_list,
-            max_eta,
-            self.vatsim_app.refresh_interval,
-            config.DISAMBIGUATOR,
-            enable_anims,
-            airport_filters=airport_filters,
-        )
-        self.vatsim_app.active_flight_board = flight_board
-        self.vatsim_app.push_screen(flight_board)
+        """Open the flight board for a grouping, with its ★ filters when it is one."""
+        self.vatsim_app.open_grouping_board(name)
 
     def action_close(self) -> None:
         """Close the modal"""

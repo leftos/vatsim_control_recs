@@ -81,6 +81,11 @@ class GoToHost(App):
         self.invalidate_calls += 1
         self.goto_cache_ready = False
 
+    def open_grouping_board(self, name: str) -> None:
+        """Open a grouping board the way the real app does."""
+        # The host carries every attribute the helper reads
+        VATSIMControlApp.open_grouping_board(self, name)  # type: ignore[arg-type]
+
     def notify(
         self,
         message: str,
