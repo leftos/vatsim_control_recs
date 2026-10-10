@@ -16,16 +16,9 @@ Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is th
   Settled (owner, lane B of the [refresh mock](https://claude.ai/artifact/NswGm7DKtQdjXRBZifXVo5)): the traffic columns update as soon as traffic is ready; each region's WIND and ALT keep their previous values until that region's box returns, and an airport new this refresh shows them blank until then. No dimming or pending marker. It builds on the in-place table refresh (`ui/app.py` `_apply_refresh_data`, `ui/tables.py`).
 
   Settled (owner): lands on `main`. A failed box (timeout, 429) keeps its airports' previous WIND/ALT; an airport a successful box omits goes blank. Fresh (cached) boxes are delivered by the weather pass's first callback, just after the traffic update. Startup is two-stage too: the first paint shows traffic with blank WIND/ALT, then fills them in. The second VATSIM download and the Go To rebuild stay before the table update.
+- [ ] `tests/test_table_refresh.py::test_shrinking_table_fades_then_removes_tail_rows` failed once in a heavy-slot full suite ("assert 12 == 25, the tail rows go only after their fade") and passed in isolation and on later full runs: a load-sensitive timing wait in a Pilot test (`ui/tables.py` fade). Make it wait on the fade's completion, not elapsed time.
 
 ## Next up
-
-### Weather site (leftos.dev/weather)
-
-Follow-ups to the stale-index and CARTO-key fixes (30836ea). Shared: `scripts/weather_daemon/` and the droplet `leftos-dev-droplet-1`. Verification: `scripts/weather_daemon/service/LocalTest.ps1`, then the live page after `QuickDeploy.ps1`.
-
-- [ ] `setup.sh` never updates an existing weather nginx config: it inserts its own inline copy of the `/weather/` block only when `/etc/nginx/sites-available/leftos.dev` has no `/weather` location (`scripts/weather_daemon/service/setup.sh:92-119`), and nginx loads `/etc/nginx/sites-enabled/leftos.dev`, which on the droplet is a separate regular file, not a symlink, so setup.sh's edit would not reach the live config at all; so a change to `nginx-weather.conf` (the `^~ /weather/assets/` block, afab8e7) reaches the server only by hand, and the inline copy can drift from the file. Make it install or update the blocks from `nginx-weather.conf`.
-
-  Settled (owner): a snippet include. `nginx-weather.conf` is installed as `/etc/nginx/snippets/weather.conf`; `setup.sh` puts one `include snippets/weather.conf;` into the `leftos.dev` server block of both `sites-available` and `sites-enabled` when absent, removing the legacy inline `/weather/` block once. Every deploy (`QuickDeploy.ps1`, `Deploy.ps1`, `deploy.sh`, `setup.sh`) copies the snippet, runs `nginx -t` and reloads only on success. The setup.sh sed also matches every column-0 `}`, not just one server block.
 
 ### Wave 2: Go To and groupings
 
@@ -34,7 +27,11 @@ Design in [goto-ux-review.md](./goto-ux-review.md). Shared: `ui/modals/goto_moda
 Order (from the map of this wave): R3 removes the edit mode R4's wording would relabel, so R4 splits, its filters half first and its wording sweep last; the `_fill_option_list` split lands before R5, which edits the same hunks; R5 lands before R3.
 
 - [ ] Split `GoToScreen._filter_results` (complexity 11) and `_execute_selected` (10) in `ui/modals/goto_modal.py`, then enable ruff's `C901` with `max-complexity = 8` in `ruff.toml` (no complexity rule is enforced today) and split whatever else it reports or backlog it.
+
+  Settled (owner): a ratchet. Enable `C901` at 8 with a `per-file-ignores` list in `ruff.toml` naming every other file that still has an offender (98 functions in 44 files when measured), and **add** a backlog item to split them and shrink the list; no source file outside `goto_modal.py` changes.
 - [ ] Tracked Airports manager opens with no highlighted row (`on_mount` calls `populate_list()`, whose `ListView.clear()` sets `index` to `None`, `ui/modals/tracked_airports.py`), and the highlight drops again after a removal or a quick-add (`action_remove_selected`, `handle_quick_tracking_result` rebuild through `populate_list()`).
+
+  Settled (owner): the first row is highlighted on open; after a removal, the row that takes its place (clamped to the last); after a quick-add, the first airport just added (nothing new added: the previous airport stays highlighted).
 - [ ] Go To list hygiene (R5 in [goto-ux-review.md](./goto-ux-review.md)): ★ groupings first with section headers, a "showing 100 of N" row, collapsed members for selected groupings, the "Selected: …" summary line (it repeats the title's pick counts and stays visible after Tab back to browse), and the dead `filter_type="$"` path removed (`ui/app.py` `_build_goto_results`, `ui/modals/goto_modal.py`).
 
   Settled (owner): a picked grouping shows one collapsed "▸ N airports (→ to expand)" row, and → expands it to member rows, where `F` works per member. The "Selected: …" line is replaced, in pick several only, by one dim line naming the picks, truncated ("Picked: Bay Area Arrivals, KLAX, +2").

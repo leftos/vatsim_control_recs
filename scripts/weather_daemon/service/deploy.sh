@@ -112,6 +112,13 @@ echo -e "${YELLOW}Restarting weather daemon timer...${NC}"
 ssh "$USER@$SERVER_IP" "systemctl enable weather-daemon.timer && systemctl start weather-daemon.timer"
 echo -e "${CYAN}Timer restarted${NC}"
 
+echo -e "${YELLOW}Installing nginx snippet...${NC}"
+if ! ssh "$USER@$SERVER_IP" "cd $REMOTE_PATH && bash scripts/weather_daemon/service/install-nginx.sh"; then
+    echo -e "${RED}nginx config not updated; the previous config is still live${NC}"
+    exit 1
+fi
+echo -e "${CYAN}nginx config updated${NC}"
+
 echo ""
 echo -e "${GREEN}=== Deployment Complete! ===${NC}"
 echo -e "${CYAN}Weather briefings updated at https://leftos.dev/weather/${NC}"

@@ -35,6 +35,13 @@ Write-Host "Restarting weather daemon timer..." -ForegroundColor Yellow
 ssh "$User@$ServerIP" "systemctl enable weather-daemon.timer && systemctl start weather-daemon.timer"
 Write-Host "Timer restarted" -ForegroundColor Cyan
 
+Write-Host "Installing nginx snippet..." -ForegroundColor Yellow
+ssh "$User@$ServerIP" "cd $RemotePath && bash scripts/weather_daemon/service/install-nginx.sh"
+if ($LASTEXITCODE -ne 0) {
+    throw "nginx config not updated; the previous config is still live (install-nginx.sh exit $LASTEXITCODE)"
+}
+Write-Host "nginx config updated" -ForegroundColor Cyan
+
 Write-Host ""
 Write-Host "=== Quick Deploy Complete! ===" -ForegroundColor Green
 Write-Host "Weather briefings updated at https://leftos.dev/weather/" -ForegroundColor Cyan

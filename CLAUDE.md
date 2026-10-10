@@ -324,7 +324,9 @@ The index stage runs before the tile stage, so a run killed in the tile stage st
 
 A run that fetched fresh weather with `skip_if_unchanged` on skips only the tile stage when its skip key matches the stored one, so briefings, ARTCC briefings and the index still regenerate and `tiles/version.txt` stays as it was. The key is `<weather hash>:<code version>`: the hash is a sha256 of METARs and TAFs (not ATIS), the code version a sha256 over every `*.py` under `scripts/weather_daemon/` (not the git sha, since rsync deploys have no `.git`). It lives in `cache/weather/weather_hash.txt` and is written only after the tile stage completes, so a run killed in the tile stage regenerates on the next run. Runs from cached weather (`--stages` without `weather`) never skip, and `--force` forces the tile stage.
 
-The systemd unit is oneshot with `TimeoutStartSec=300` on a 1-vCPU droplet, so time a tile-stage change against that limit. Upgrading Leaflet means a new version folder and `LEAFLET_VERSION` in `index_generator.py` (the folder's `README.md` has the steps), and a changed `nginx-weather.conf` has to be applied by hand on the server (then `nginx -t` and a reload): nginx loads `/etc/nginx/sites-enabled/leftos.dev`, a regular file rather than a symlink, so edit it and keep `/etc/nginx/sites-available/leftos.dev` the same; `setup.sh` edits only the `sites-available` file and inserts the weather block only when it has no `/weather` location yet. The server is the DigitalOcean droplet `leftos-dev-droplet-1`; the deploy scripts read its address from `WEATHER_SERVER_IP` in the untracked repo-root `.env`.
+The systemd unit is oneshot with `TimeoutStartSec=300` on a 1-vCPU droplet, so time a tile-stage change against that limit. Upgrading Leaflet means a new version folder and `LEAFLET_VERSION` in `index_generator.py` (the folder's `README.md` has the steps), and every deploy installs `nginx-weather.conf` as `/etc/nginx/snippets/weather.conf` through `install-nginx.sh`, which reloads nginx after `nginx -t`.
+
+nginx loads `/etc/nginx/sites-enabled/leftos.dev`, a regular file rather than a symlink, and it differs from `/etc/nginx/sites-available/leftos.dev` (which lacks the port-80 blocks); `nginx_include.py` removes the legacy inline `/weather/` blocks from the TLS server block of each and ensures one `include snippets/weather.conf;` line. The server is the DigitalOcean droplet `leftos-dev-droplet-1`; the deploy scripts read its address from `WEATHER_SERVER_IP` in the untracked repo-root `.env`.
 
 ### PowerShell Scripts (`scripts/weather_daemon/service/`)
 
@@ -339,6 +341,7 @@ The systemd unit is oneshot with `TimeoutStartSec=300` on a 1-vCPU droplet, so t
 - `QuickDeploy.ps1` - Git pull on server and regenerate (requires changes to be pushed first)
 - `Deploy.ps1` - Full deployment via rsync (for Linux/WSL only, uses bash)
 - `sync-deps.sh` - Runs on the server: installs uv into `/usr/local/bin` if it is missing, then the locked dependencies with `uv sync --frozen` into a Python the `www-data` daemon user can read; `setup.sh` and every deploy script call it, and a deploy stops if it fails
+- `install-nginx.sh` - Runs on the server as root: installs `nginx-weather.conf` as the `/etc/nginx/snippets/weather.conf` snippet, runs `nginx_include.py` on both `leftos.dev` site files, then `nginx -t` and `systemctl reload nginx`; backups go to `/etc/nginx/weather-backup/` and are restored when `nginx -t` fails. `setup.sh` and the last ssh step of `QuickDeploy.ps1`, `Deploy.ps1` and `deploy.sh` (after the timer restart) call it; a failure prints that the previous nginx config is still live and exits nonzero with the daemon running
 
 **Server management:**
 - `Status.ps1` - Check daemon status and recent logs
