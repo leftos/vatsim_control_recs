@@ -13,7 +13,9 @@ Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is th
 
 - [ ] A refresh's table update waits for its slowest weather box (18–20 s per slow box in the re-measure, `backend/core/analysis.py:349-358`).
 
-  Settled (owner, lane B of the [refresh mock](https://claude.ai/artifact/NswGm7DKtQdjXRBZifXVo5)): the traffic columns update as soon as traffic is ready; each region's WIND and ALT keep their previous values until that region's box returns, and an airport new this refresh shows them blank until then. No dimming or pending marker. It builds on the in-place table refresh (`ui/app.py` `_apply_refresh_data`, `ui/tables.py`); its map is `.tmp/map-table-rebuild.md` if still present.
+  Settled (owner, lane B of the [refresh mock](https://claude.ai/artifact/NswGm7DKtQdjXRBZifXVo5)): the traffic columns update as soon as traffic is ready; each region's WIND and ALT keep their previous values until that region's box returns, and an airport new this refresh shows them blank until then. No dimming or pending marker. It builds on the in-place table refresh (`ui/app.py` `_apply_refresh_data`, `ui/tables.py`).
+
+  Settled (owner): lands on `main`. A failed box (timeout, 429) keeps its airports' previous WIND/ALT; an airport a successful box omits goes blank. Fresh (cached) boxes are delivered by the weather pass's first callback, just after the traffic update. Startup is two-stage too: the first paint shows traffic with blank WIND/ALT, then fills them in. The second VATSIM download and the Go To rebuild stay before the table update.
 
 ## Next up
 
@@ -22,9 +24,13 @@ Verification: `uv run --group dev pytest -q` (Pilot tests on fixture data) is th
 Follow-ups to the stale-index and CARTO-key fixes (30836ea). Shared: `scripts/weather_daemon/` and the droplet `leftos-dev-droplet-1`. Verification: `scripts/weather_daemon/service/LocalTest.ps1`, then the live page after `QuickDeploy.ps1`.
 
 - [ ] The daemon regenerates everything when the weather has not changed: the `if not weather_changed:` branch logs "Weather unchanged … skipping regeneration" and falls through (`scripts/weather_daemon/generator.py:1394-1399`), so 138 of 257 runs on 2026-10-09 rebuilt briefings and tiles for nothing on the 1-vCPU droplet. Make it skip what the unchanged weather cannot change.
+
+  Settled (owner): an unchanged run skips the tile stage only (and leaves `tiles/version.txt` alone); briefings and the index still regenerate. The stored state is the weather hash plus a code version, and a changed code version counts as changed weather, so a deploy rebuilds without `--force`. Settled from the code: the hash is saved after the run succeeds, not before the stages (a run killed mid-tile must not leave its hash behind). The code version is a hash of the daemon's own source files rather than the git sha, so rsync deploys (no `.git`) and LocalTest's uncommitted edits count too.
 - [ ] No test checks that `generate()` writes `tiles/version.txt` after a successful tile stage (`scripts/weather_daemon/generator.py`, the line after `generate_weather_tiles` returns; the reader and writer are tested in `tests/test_weather_tile_version.py`). Add one to `tests/test_weather_stage_order.py`.
 - [ ] Two dotenv readers parse the repo-root `.env` differently: `backend/data/statsim_api.py` `_load_env_file` (loads every key into `os.environ` at import, strips quotes with `strip("\"'")`, no BOM or `export` handling) and `scripts/weather_daemon/env_file.py` (one key, BOM, `export`, quotes, inline comments; landing with the weather-site fix). Move one reader into `common/` and use it from both.
 - [ ] `setup.sh` never updates an existing weather nginx config: it inserts its own inline copy of the `/weather/` block only when `/etc/nginx/sites-available/leftos.dev` has no `/weather` location (`scripts/weather_daemon/service/setup.sh:92-119`), and nginx loads `/etc/nginx/sites-enabled/leftos.dev`, which on the droplet is a separate regular file, not a symlink, so setup.sh's edit would not reach the live config at all; so a change to `nginx-weather.conf` (the `^~ /weather/assets/` block, afab8e7) reaches the server only by hand, and the inline copy can drift from the file. Make it install or update the blocks from `nginx-weather.conf`.
+
+  Settled (owner): a snippet include. `nginx-weather.conf` is installed as `/etc/nginx/snippets/weather.conf`; `setup.sh` puts one `include snippets/weather.conf;` into the `leftos.dev` server block of both `sites-available` and `sites-enabled` when absent, removing the legacy inline `/weather/` block once. Every deploy (`QuickDeploy.ps1`, `Deploy.ps1`, `deploy.sh`, `setup.sh`) copies the snippet, runs `nginx -t` and reloads only on success. The setup.sh sed also matches every column-0 `}`, not just one server block.
 
 ### Wave 2: Go To and groupings
 
