@@ -114,9 +114,27 @@ class AirportSearchIndex:
             Up to limit hits, ordered by match tier, then tracked before
             untracked, then ident. An empty or blank query gives no hits.
         """
+        return self.search_with_total(query, tracked, limit)[0]
+
+    def search_with_total(
+        self, query: str, tracked: frozenset[str], limit: int
+    ) -> tuple[list[AirportHit], int]:
+        """Search the indexed airports and count every match.
+
+        Only the returned hits are built, so a short limit stays cheap however
+        many rows match.
+
+        Args:
+            query: The raw query; case-insensitive, stripped.
+            tracked: The idents to rank ahead of the rest.
+            limit: The most hits to return.
+
+        Returns:
+            The hits `search` returns, and how many rows matched in all.
+        """
         needle = query.strip().lower()
         if not needle:
-            return []
+            return [], 0
 
         ranked: list[tuple[int, bool, str, _Row]] = []
         for row in self._rows:
@@ -128,7 +146,7 @@ class AirportSearchIndex:
             limit, ranked, key=lambda item: (item[0], item[1], item[2])
         )
 
-        return [
+        hits = [
             AirportHit(
                 ident=row.ident,
                 name=row.name,
@@ -138,3 +156,4 @@ class AirportSearchIndex:
             )
             for _, _, _, row in best
         ]
+        return hits, len(ranked)

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from backend.core.airport_search import AirportSearchIndex
 from backend.core.groupings import (
     UserGrouping,
+    check_grouping_name,
     rename_user_grouping,
     save_user_grouping,
 )
@@ -163,13 +164,14 @@ class GroupingDraft:
 
         Args:
             context: What the draft reads but does not own.
-            items: The member refs in order (airport idents and grouping names).
+            items: The member refs in order (airport idents and grouping names);
+                a repeated ref is kept once, at its first position.
             filters: Airport ident to "dep" or "arr".
             name: The name in the Name field.
             original_name: The ★ grouping being edited, or None for a new one.
         """
         self.context = context
-        self.items = list(items)
+        self.items = list(dict.fromkeys(items))
         self.filters = dict(filters)
         self.name = name
         self.original_name = original_name
@@ -234,7 +236,7 @@ class GroupingDraft:
             raise DraftError(f"'{group_ref}' is not in this grouping")
         if group_ref not in self.context.groupings:
             raise DraftError("only a grouping's members can be excluded")
-        members = self._flatten(group_ref)
+        members = self.airports_of(group_ref)
         if icao not in members:
             raise DraftError(f"'{icao}' is not in '{group_ref}'")
 
@@ -318,6 +320,26 @@ class GroupingDraft:
             },
         )
 
+    def check_name(self) -> None:
+        """Apply the backend's name rules ahead of a write, as the write would.
+
+        The rules skip a name that matches, case-insensitively, the name being
+        edited or one of my groupings: the write then renames that entry or
+        asks to overwrite it.
+
+        Raises:
+            GroupingNameError: The name is blank, a preset's, or an airport ident.
+        """
+        name = self.name.strip()
+        stored = {*self.context.user_names, self.original_name or ""}
+        if name and any(name.lower() == other.lower() for other in stored if other):
+            return
+        check_grouping_name(
+            name,
+            preset_names=self.context.preset_names,
+            airport_idents=self.context.airport_idents,
+        )
+
     def save_plan(self) -> SavePlan:
         """What the screen must do next when the user saves."""
         if self.context.search_index is None:
@@ -395,11 +417,15 @@ class GroupingDraft:
         others: set[str] = set()
         for item in self.items:
             if item != group_ref:
-                others.update(self._flatten(item))
+                others.update(self.airports_of(item))
         return others
 
-    def _flatten(self, ref: str) -> list[str]:
-        """The airports a ref resolves to, in order, without duplicates."""
+    def airports_of(self, ref: str) -> list[str]:
+        """The airports one ref resolves to, in order, without duplicates.
+
+        A grouping name gives its airports in the grouping's own order; an
+        airport ident gives itself when the unified data knows it.
+        """
         airports: list[str] = []
         self._walk(ref, set(), set(), airports)
         return airports

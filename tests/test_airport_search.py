@@ -154,3 +154,21 @@ def test_a_query_matching_more_rows_than_the_limit_returns_exactly_the_limit(
     hits = index.search("k", frozenset(), 2)
 
     assert len(hits) == 2
+
+
+def test_search_with_total_counts_every_match_beyond_the_limit(
+    index: AirportSearchIndex,
+) -> None:
+    every_hit = index.search("k", frozenset(), 1000)
+
+    hits, total = index.search_with_total("k", frozenset(), 2)
+
+    assert hits == every_hit[:2]
+    assert total == len(every_hit)
+    assert total > 2
+
+
+def test_search_with_total_of_a_blank_query_is_nothing(
+    index: AirportSearchIndex,
+) -> None:
+    assert index.search_with_total("  ", frozenset(), 50) == ([], 0)

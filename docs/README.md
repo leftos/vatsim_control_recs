@@ -34,6 +34,7 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **D-ATIS**: digital ATIS, the airport information text fetched from VATSIM and real-world sources.
 - **enroute transition**: the leg of a SID or STAR that joins the common route to an enroute fix or airway; `get_dp_data` uses the first one when a SID has no common route.
 - **GIL**: Python's global interpreter lock; CPU-bound Python on a worker thread starves the UI thread (see `performance.md`).
+- **grouping builder**: the screen that builds or edits a ★ grouping: an Add search over every airport and grouping, the member list with filters, and the save flow (`ui/modals/grouping_builder.py`).
 - **MEA**: minimum enroute altitude; the flight info screen warns when an IFR flight is below it on a segment of its filed route, comparing each segment with the level in force at its airway's entry, else the filed altitude, using the MEA for the direction flown.
 - **my groupings** (★ grouping): a grouping the user saved in `favorites.json`; the code calls it a favorite.
 - **NASR**: the FAA's National Airspace System Resources data, the source of navaids and fixes for route parsing (`backend/data/navaids.py`).

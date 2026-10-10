@@ -505,8 +505,18 @@ def _entry_for(grouping: UserGrouping) -> list[str] | dict[str, Any]:
     return items
 
 
-def _check_name(name: str, preset_names: set[str], idents: set[str]) -> None:
+def check_grouping_name(
+    name: str, *, preset_names: AbstractSet[str], airport_idents: AbstractSet[str]
+) -> None:
     """Refuse a blank name, a preset's name, or an airport ident.
+
+    The writers below apply this only to a name no stored entry matches; a
+    caller checking ahead of a write must skip it the same way.
+
+    Args:
+        name: The stripped name to check.
+        preset_names: Grouping names owned by a preset source.
+        airport_idents: Airport idents, upper-cased, a name may not equal.
 
     Raises:
         GroupingNameError: The name is blank, equal case-insensitively to a
@@ -517,7 +527,7 @@ def _check_name(name: str, preset_names: set[str], idents: set[str]) -> None:
         raise GroupingNameError("a name is required")
     if any(preset.lower() == name.lower() for preset in preset_names):
         raise GroupingNameError("that name belongs to a preset")
-    if name.upper() in idents:
+    if name.upper() in airport_idents:
         raise GroupingNameError("that name is an airport ident")
 
 
@@ -633,7 +643,9 @@ def save_user_grouping(
 
     stored = find_grouping_case_insensitive(name, data)
     if stored is None:
-        _check_name(name, preset_names, airport_idents)
+        check_grouping_name(
+            name, preset_names=preset_names, airport_idents=airport_idents
+        )
     elif not overwrite:
         raise GroupingExistsError(f"'{name}' is already one of my groupings")
 
@@ -706,7 +718,9 @@ def rename_user_grouping(
                 )
             del data[new_stored]
         else:
-            _check_name(new_name, preset_names, airport_idents)
+            check_grouping_name(
+                new_name, preset_names=preset_names, airport_idents=airport_idents
+            )
 
     _replace_key(data, old_stored, new_name, _entry_for(new_grouping))
     _write_atomic(data)

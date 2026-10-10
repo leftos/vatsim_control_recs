@@ -14,6 +14,7 @@ from .flight_briefing import FlightWeatherBriefingScreen
 from .flight_info import FlightInfoScreen
 from .flight_lookup import FlightLookupScreen
 from .goto_modal import GoToScreen
+from .grouping_builder import GroupingBuilderScreen
 from .help_modal import HelpScreen
 from .historical_stats import HistoricalStatsScreen
 from .metar_info import MetarInfoScreen
@@ -35,6 +36,7 @@ __all__ = [
     "FlightLookupScreen",
     "FlightWeatherBriefingScreen",
     "GoToScreen",
+    "GroupingBuilderScreen",
     "HelpScreen",
     "HistoricalStatsScreen",
     "MetarInfoScreen",

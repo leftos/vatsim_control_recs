@@ -14,7 +14,11 @@ import pytest
 
 import ui.modals.grouping_draft as grouping_draft_module
 from backend.core.airport_search import AirportSearchIndex
-from backend.core.groupings import GroupingExistsError, UserGrouping
+from backend.core.groupings import (
+    GroupingExistsError,
+    GroupingNameError,
+    UserGrouping,
+)
 from ui.modals.grouping_draft import (
     ASK_TRACK,
     DATA_NOT_LOADED,
@@ -85,6 +89,48 @@ def record_writes(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
     monkeypatch.setattr(grouping_draft_module, "save_user_grouping", fake_save)
     monkeypatch.setattr(grouping_draft_module, "rename_user_grouping", fake_rename)
     return calls
+
+
+# --- the starting members ----------------------------------------------------
+
+
+def test_init_drops_duplicate_refs_keeping_the_first() -> None:
+    draft = make_draft(items=("KSFO", "O90", "KSFO", "KOAK", "O90"))
+
+    assert draft.items == ["KSFO", "O90", "KOAK"]
+    assert draft.changed is False
+
+
+# --- check_name --------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "message"),
+    [
+        ("   ", "a name is required"),
+        ("bay area", "that name belongs to a preset"),
+        ("ksfo", "that name is an airport ident"),
+    ],
+)
+def test_check_name_refuses_a_blank_preset_or_ident_name(
+    name: str, message: str
+) -> None:
+    draft = make_draft(name=name, preset_names={"Bay Area"})
+
+    with pytest.raises(GroupingNameError, match=message):
+        draft.check_name()
+
+
+def test_check_name_lets_a_stored_or_edited_name_through() -> None:
+    edited = make_draft(
+        name="bay area", original_name="Bay Area", preset_names={"Bay Area"}
+    )
+    stored = make_draft(
+        name="BAY AREA", user_names={"Bay Area"}, preset_names={"Bay Area"}
+    )
+
+    edited.check_name()
+    stored.check_name()
 
 
 # --- add ---------------------------------------------------------------------
