@@ -386,6 +386,11 @@ class VATSIMControlApp(App):
         airports_table = self.query_one("#airports-table", SplitFlapDataTable)
         groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
 
+        # The old managers share these tables and row key lists: stop their pending updates
+        for old_manager in (self.airports_manager, self.groupings_manager):
+            if old_manager is not None:
+                old_manager.cancel_pending_tasks()
+
         # Clear tables and recreate managers (needed when columns change, e.g., on first load)
         airports_table.clear(columns=True)
         self.airports_row_keys.clear()
@@ -694,9 +699,17 @@ class VATSIMControlApp(App):
             # Rebuild Go To results in background to keep cache warm
             await loop.run_in_executor(None, self._build_goto_results)
 
-        if airport_data is not None:
-            self._disable_activity_watching()  # Temporarily disable user activity tracking
+        if airport_data is None:
+            try:
+                status_bar = self.query_one("#status-bar", Static)
+                refresh_status = "PAUSED - " if self.refresh_paused else ""
+                status_bar.update(f"{refresh_status}Failed to refresh data from VATSIM")
+            except Exception as e:
+                debug(f"Could not update status bar after failed refresh: {e}")
+            return
 
+        self._disable_activity_watching()  # Temporarily disable user activity tracking
+        try:
             self.original_airport_data = list(airport_data)
             self.airport_data = list(airport_data)
             self.groupings_data = list(groupings_data) if groupings_data else []
@@ -704,26 +717,11 @@ class VATSIMControlApp(App):
 
             # If search is active, reapply the filter to the new data before updating table
             if self.search_active:
-                search_input = self.query_one("#search-input", Input)
-                search_text = search_input.value
-                if search_text:
-                    search_text = search_text.upper()
-                    self.airport_data = [
-                        row
-                        for row in self.original_airport_data
-                        if search_text in row.icao.upper()
-                        or search_text in row.name.upper()
-                        or search_text in row.staffed.upper()
-                    ]
-                else:
-                    self.airport_data = self.original_airport_data
+                self._reapply_search_filter(
+                    self.query_one("#search-input", Input).value
+                )
 
-            # Update tables using TableManagers
-            if self.airports_manager:
-                self.airports_manager.populate(self.airport_data)
-
-            if self.groupings_manager and self.groupings_data:
-                self.groupings_manager.populate(self.groupings_data)
+            await self._populate_tables_and_wait()
 
             self._restore_table_position(
                 current_tab,
@@ -736,15 +734,36 @@ class VATSIMControlApp(App):
             # "Last refresh" counts from the landing, not the start of the analysis
             self.last_refresh_time = datetime.now(timezone.utc)
             self.update_status_bar()
+        finally:
+            # Also when the update fails or a table rebuild cancels it
+            self._enable_activity_watching()
 
-            self._enable_activity_watching()  # Re-enable user activity tracking
-        else:
-            try:
-                status_bar = self.query_one("#status-bar", Static)
-                refresh_status = "PAUSED - " if self.refresh_paused else ""
-                status_bar.update(f"{refresh_status}Failed to refresh data from VATSIM")
-            except Exception as e:
-                debug(f"Could not update status bar after failed refresh: {e}")
+    def _reapply_search_filter(self, search_text: str) -> None:
+        """Filter the airports by search text: ICAO, name or staffed positions contain it."""
+        if not search_text:
+            self.airport_data = self.original_airport_data
+            return
+        search_text = search_text.upper()
+        self.airport_data = [
+            row
+            for row in self.original_airport_data
+            if search_text in row.icao.upper()
+            or search_text in row.name.upper()
+            or search_text in row.staffed.upper()
+        ]
+
+    async def _populate_tables_and_wait(self) -> None:
+        """Hand the new data to the table managers and wait for their updates to land.
+
+        The cursor restore reads and moves the updated tables, so it runs
+        after this returns; an update that fails raises here.
+        """
+        updates = []
+        if self.airports_manager:
+            updates.append(self.airports_manager.populate(self.airport_data))
+        if self.groupings_manager and self.groupings_data:
+            updates.append(self.groupings_manager.populate(self.groupings_data))
+        await asyncio.gather(*(task for task in updates if task is not None))
 
     def _restore_table_position(
         self,
@@ -872,18 +891,7 @@ class VATSIMControlApp(App):
 
     def filter_airports(self, search_text: str) -> None:
         """Filter airports table based on search text."""
-        if not search_text:
-            self.airport_data = self.original_airport_data
-        else:
-            search_text = search_text.upper()
-            self.airport_data = [
-                row
-                for row in self.original_airport_data
-                if search_text in row.icao.upper()
-                or search_text in row.name.upper()
-                or search_text in row.staffed.upper()
-            ]
-
+        self._reapply_search_filter(search_text)
         self.populate_tables()
 
     def open_grouping_board(self, name: str) -> None:

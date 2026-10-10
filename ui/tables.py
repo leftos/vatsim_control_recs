@@ -36,8 +36,10 @@ class TableManager:
         self.config = config
         self.row_keys = row_keys
         self.is_first_load = True
-        self.pending_removal_tasks = []  # Track pending async removal tasks
         self._active_tasks: set = set()  # Track all active async tasks for cleanup
+        self._cached_data: list[tuple] = []  # Rows as last shown, for the cell diff
+        # Tail rows still flapping to blank: the task that removes them, and the rows that stay
+        self._pending_removal: tuple[asyncio.Task, int] | None = None
 
     def _create_tracked_task(self, coro) -> asyncio.Task:
         """Create a task and track it for cleanup."""
@@ -46,83 +48,11 @@ class TableManager:
         task.add_done_callback(self._active_tasks.discard)
         return task
 
-    async def cancel_pending_tasks(self) -> None:
-        """Cancel all pending tasks."""
-        for task in self._active_tasks:
-            if not task.done():
-                task.cancel()
-        if self._active_tasks:
-            await asyncio.gather(*self._active_tasks, return_exceptions=True)
-        self._active_tasks.clear()
-
-    async def _wait_and_remove_row(self, row_key) -> None:
-        """Wait for the clearing animation to complete, then actually remove the row"""
-        debug(f"_wait_and_remove_row: Waiting for animations on row_key={row_key}")
-        # Wait for animations to complete
-        while True:
-            await asyncio.sleep(0.1)
-
-            # Check if row still exists
-            if row_key not in self.table.rows:
-                debug(
-                    f"_wait_and_remove_row: Row {row_key} no longer exists in table, exiting"
-                )
-                break
-
-            row_keys = list(self.table.rows.keys())
-            if row_key not in row_keys:
-                break
-
-            row_idx = row_keys.index(row_key)
-
-            # Check all cells in this row to see if any are still animating
-            still_animating = False
-            for col_idx in range(len(self.table.columns)):
-                cell_key = (row_idx, col_idx)
-                if (
-                    cell_key in self.table.animated_cells
-                    and self.table.animated_cells[cell_key].animating
-                ):
-                    still_animating = True
-                    break
-
-            if not still_animating:
-                debug(
-                    f"_wait_and_remove_row: Animations complete for row_key={row_key}"
-                )
-                break
-
-        # Animation complete - now actually remove the row from the datatable
-        if row_key in self.table.rows:
-            debug(
-                f"_wait_and_remove_row: Actually removing row_key={row_key} from datatable"
-            )
-            # Remove from the _empty_rows set if present
-            if row_key in self.table._empty_rows:
-                self.table._empty_rows.remove(row_key)
-
-            # Get row index for cleaning up animated cells
-            row_keys = list(self.table.rows.keys())
-            if row_key in row_keys:
-                row_idx = row_keys.index(row_key)
-
-                # Clean up animated cells for this row
-                cells_to_remove = [
-                    (r, c) for (r, c) in self.table.animated_cells if r == row_idx
-                ]
-                for cell_key in cells_to_remove:
-                    del self.table.animated_cells[cell_key]
-
-            # Actually remove the row using parent's method
-            super(SplitFlapDataTable, self.table).remove_row(row_key)
-            debug(f"_wait_and_remove_row: Row {row_key} physically removed from table")
-
-            # Remove from row_keys list
-            if row_key in self.row_keys:
-                self.row_keys.remove(row_key)
-                debug(
-                    f"_wait_and_remove_row: Row {row_key} removed from row_keys. Remaining rows: {len(self.row_keys)}"
-                )
+    def cancel_pending_tasks(self) -> None:
+        """Cancel every pending update and tail removal; a cancelled one leaves the table alone."""
+        for task in list(self._active_tasks):
+            task.cancel()
+        self._pending_removal = None
 
     def setup_columns(self) -> None:
         """Set up table columns if they don't exist"""
@@ -134,12 +64,17 @@ class TableManager:
                     content_align=col_config.content_align,
                 )
 
-    def populate(self, data: list[Any]) -> None:
+    def populate(self, data: list[Any]) -> asyncio.Task | None:
         """
         Populate table with data, applying sorting and animations.
 
         Args:
             data: List of AirportStats, GroupingStats, or tuple objects
+
+        Returns:
+            The task that updates the table in place, or None on the first
+            load, which fills the table before returning. Await the task
+            before reading or moving the cursor.
         """
 
         # Apply sorting if configured (works with both objects and tuples)
@@ -154,16 +89,15 @@ class TableManager:
             # First load: clear table and animate from blank
             self.table.clear()
             self.row_keys.clear()
-            self._add_rows_to_table(data, column_keys)
+            rows = [self._to_tuple(row_obj) for row_obj in data]
+            self._add_rows_to_table(rows)
+            self._cached_data = rows
             self.is_first_load = False
-        else:
-            # Subsequent updates: efficiently update existing rows
-            # Run as async task to await pending removals
-            self._create_tracked_task(
-                self._update_efficiently_async(data, column_keys, sorted_data=data)
-            )
+            return None
+        # Subsequent updates: update the existing rows in place
+        return self._create_tracked_task(self._update_async(data, column_keys))
 
-    def _add_rows_to_table(self, data: list[Any], column_keys: list) -> None:
+    def _add_rows_to_table(self, data: list[Any]) -> None:
         """Add rows to table with animations"""
         # Signal start of bulk update for optimized staggering
         self.table.begin_bulk_update()
@@ -206,113 +140,110 @@ class TableManager:
             # Already a tuple
             return row_obj
 
-    async def _update_efficiently_async(
-        self,
-        new_data: list[Any],
-        column_keys: list,
-        sorted_data: list[Any] | None = None,
-    ) -> None:
-        """Async wrapper that waits for pending removals before updating"""
-        # CRITICAL: Wait for any pending row removals to complete before proceeding
-        if self.pending_removal_tasks:
-            debug(
-                f"_update_efficiently_async: Waiting for {len(self.pending_removal_tasks)} pending removal tasks to complete"
-            )
-            await asyncio.gather(*self.pending_removal_tasks, return_exceptions=True)
-            self.pending_removal_tasks.clear()
-            debug("_update_efficiently_async: All pending removals completed")
-
-        # Use sorted_data if provided, otherwise use new_data
-        data_to_use = sorted_data if sorted_data is not None else new_data
-
-        # Now proceed with the synchronous update
-        self._update_efficiently(data_to_use, column_keys)
+    async def _update_async(self, new_data: list[Any], column_keys: list) -> None:
+        """Run the in-place update as a task, so ``populate`` hands it back to await."""
+        self._update_efficiently(new_data, column_keys)
 
     def _update_efficiently(self, new_data: list[Any], column_keys: list) -> None:
-        """Efficiently update table by modifying existing rows and adding/removing as needed"""
-        current_row_count = len(self.row_keys)
-        new_row_count = len(new_data)
+        """
+        Update the table in place, row by row in position.
 
+        The rows both lists share get only their changed cells flapped, extra
+        rows are appended, and rows past the new count fade out. Textual has
+        no insert-at and the widget's animation state is keyed by row index,
+        so rows stay positional.
+        """
+        self._finish_pending_removal()
+        current_row_count = len(self.row_keys)
+        new_rows = [self._to_tuple(row_obj) for row_obj in new_data]
         debug(
-            f"_update_efficiently: START - current_rows={current_row_count}, new_rows={new_row_count}, empty_rows={len(self.table._empty_rows)}"
+            f"_update_efficiently: current_rows={current_row_count}, new_rows={len(new_rows)}"
         )
 
-        # Track if we cached the old data for comparison
-        if not hasattr(self, "_cached_data"):
-            self._cached_data = []
-
-        # Check if row order has changed (due to sorting)
-        # If so, we need to rebuild the table to maintain correct row order
-        rows_reordered = False
-        if current_row_count == new_row_count:
-            # Check if the order of rows has changed
-            table_row_keys = list(self.table.rows.keys())
-            if table_row_keys != self.row_keys:
-                rows_reordered = True
-                debug("_update_efficiently: Row order has changed, rebuilding table")
-
-        if rows_reordered or new_row_count != current_row_count:
-            # Rebuild the table with rows in the correct order
-            debug(
-                f"_update_efficiently: Rebuilding table (reordered={rows_reordered}, count_changed={new_row_count != current_row_count})"
+        for i, row_data in enumerate(new_rows[:current_row_count]):
+            old_row_data = self._cached_data[i] if i < len(self._cached_data) else None
+            self._update_row_cells(
+                self.row_keys[i], row_data, old_row_data, column_keys
             )
 
-            # Clear the table but keep the rows
-            self.table.clear(columns=False)
-            self.row_keys.clear()
+        if len(new_rows) > current_row_count:
+            self._add_rows_to_table(new_rows[current_row_count:])
+        elif len(new_rows) < current_row_count:
+            self._remove_tail_rows(len(new_rows))
 
-            # Signal start of bulk update for optimized staggering
-            self.table.begin_bulk_update()
+        self._cached_data = new_rows
 
-            # Re-add all rows in the correct sorted order using efficient animate=True
-            for row_obj in new_data:
-                row_data = self._to_tuple(row_obj)
-                row_key = self.table.add_row(*row_data, animate=True)
-                self.row_keys.append(row_key)
+    def _update_row_cells(
+        self,
+        row_key: Any,
+        row_data: tuple,
+        old_row_data: tuple | None,
+        column_keys: list,
+    ) -> None:
+        """Flap the cells of one row whose value differs from what the row showed."""
+        for col_idx, cell_value in enumerate(row_data[: len(column_keys)]):
+            if (
+                old_row_data is not None
+                and col_idx < len(old_row_data)
+                and str(old_row_data[col_idx]) == str(cell_value)
+            ):
+                continue
+            col_config = (
+                self.config.columns[col_idx]
+                if col_idx < len(self.config.columns)
+                else None
+            )
+            self.table.update_cell_animated(
+                row_key,
+                column_keys[col_idx],
+                cell_value,
+                update_width=col_config.update_width if col_config else False,
+            )
 
-            # Signal end of bulk update to start animations
-            self.table.end_bulk_update()
-        else:
-            # Rows are in the same order, just update cell values
-            cells_updated = 0
-            cells_skipped = 0
+    def _remove_tail_rows(self, keep: int) -> None:
+        """Flap the rows past ``keep`` to blank, then remove them; at once without animations."""
+        if not self.table.enable_animations:
+            self._drop_tail_rows(keep)
+            return
+        blanked = self.table.blank_rows(self.row_keys[keep:])
+        task = self._create_tracked_task(self._drop_tail_rows_when_blank(blanked, keep))
+        self._pending_removal = (task, keep)
 
-            for i in range(min(current_row_count, new_row_count)):
-                row_obj = new_data[i]
-                row_data = self._to_tuple(row_obj)
-                old_row_data = (
-                    self._cached_data[i] if i < len(self._cached_data) else None
-                )
+    async def _drop_tail_rows_when_blank(
+        self, blanked: asyncio.Future[None], keep: int
+    ) -> None:
+        """Remove the faded tail rows once the widget reports them blank.
 
-                if i < len(self.row_keys):
-                    for col_idx, cell_value in enumerate(row_data):
-                        if col_idx < len(column_keys):
-                            # Only update if value actually changed
-                            if (
-                                old_row_data is None
-                                or col_idx >= len(old_row_data)
-                                or str(old_row_data[col_idx]) != str(cell_value)
-                            ):
-                                col_config = (
-                                    self.config.columns[col_idx]
-                                    if col_idx < len(self.config.columns)
-                                    else None
-                                )
-                                update_width = (
-                                    col_config.update_width if col_config else False
-                                )
-                                self.table.update_cell_animated(
-                                    self.row_keys[i],
-                                    column_keys[col_idx],
-                                    cell_value,
-                                    update_width=update_width,
-                                )
-                                cells_updated += 1
-                            else:
-                                cells_skipped += 1
+        A cancelled wait (the task, or the future by a table clear) removes nothing.
+        """
+        try:
+            await blanked
+        finally:
+            if (
+                self._pending_removal is not None
+                and self._pending_removal[0] is asyncio.current_task()
+            ):
+                self._pending_removal = None
+        self._drop_tail_rows(keep)
 
-        # Cache the new data for next comparison (convert to tuples)
-        self._cached_data = [self._to_tuple(row) for row in new_data]
+    def _finish_pending_removal(self) -> None:
+        """Cut short a tail still fading out, so an update starts on the rows that stay."""
+        if self._pending_removal is None:
+            return
+        task, keep = self._pending_removal
+        self._pending_removal = None
+        task.cancel()
+        self._drop_tail_rows(keep)
+
+    def _drop_tail_rows(self, keep: int) -> None:
+        """Remove the rows past ``keep`` from the table and from ``row_keys``."""
+        width_columns = [
+            col_idx
+            for col_idx, col_config in enumerate(self.config.columns)
+            if col_config.update_width
+        ]
+        self.table.truncate_rows(keep, settle_columns=width_columns)
+        del self.row_keys[keep:]
 
 
 # Table configuration constants

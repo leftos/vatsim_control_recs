@@ -4,14 +4,22 @@ Split-Flap DataTable Widget for Textual
 A reusable DataTable widget with split-flap animation effects
 """
 
+import asyncio
 import os
 import sys
 from collections.abc import Callable
 from typing import Any, Literal
 
+from rich.cells import cell_len
 from rich.text import Text
+from textual.render import measure
 from textual.widgets import DataTable
-from textual.widgets._data_table import ColumnKey, RowKey
+from textual.widgets._data_table import (
+    Column,
+    ColumnKey,
+    RowKey,
+    default_cell_formatter,
+)
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -42,6 +50,8 @@ class AnimatedCell:
         # Now normalize the initial value after flap_chars is set
         self.target_value = self._normalize_to_flap_chars(initial_value)
         self.current_value = self._normalize_to_flap_chars(initial_value)
+        # The target without the padding that lines it up with the old value
+        self.final_value = self.target_value
 
     def _build_char_index(self):
         """Build a dictionary for fast character index lookups"""
@@ -87,15 +97,20 @@ class AnimatedCell:
         """
         # Normalize the new value to use available flap characters
         new_value = self._normalize_to_flap_chars(new_value)
+        self.final_value = new_value
 
         # Handle length differences - pad both to the longer length
         max_len = max(len(new_value), len(self.current_value))
         new_value = new_value.ljust(max_len)
         self.current_value = self.current_value.ljust(max_len)
 
-        # Skip if already at target
+        # Already showing the new value: drop any flap still heading to an older one.
+        # A frame still padded runs one more step, which ends it on the unpadded value.
         if new_value == self.current_value:
-            return False
+            self.target_value = new_value
+            self.delay_frames = 0
+            self.animating = self.current_value != self.final_value
+            return self.animating
 
         if new_value != self.target_value:
             self.target_value = new_value
@@ -121,7 +136,6 @@ class AnimatedCell:
 
         # Build display with current animation state
         display = list(self.current_value)
-        all_complete = True
         changed = False
 
         # Animate all characters simultaneously
@@ -130,7 +144,6 @@ class AnimatedCell:
             target_char = self.target_value[i]
 
             if current_char != target_char:
-                all_complete = False
                 changed = True
 
                 # Check if target character exists in flap_chars, if not add it
@@ -150,22 +163,26 @@ class AnimatedCell:
                 next_idx = (current_idx + 1) % len(self.flap_chars)
                 display[i] = self.flap_chars[next_idx]
 
-        # Only update if something changed
         if not changed:
-            # If nothing changed and we're at target, mark animation as complete
-            if all_complete:
-                self.animating = False
-            return all_complete, None
+            # Every character reached its target: end on the value without its padding
+            padded = self.current_value
+            final = self.finish()
+            return False, (final if final != padded else None)
 
         # Update current value
         self.current_value = "".join(display)
+        return True, self.current_value
 
-        # Check if animation is complete
-        if all_complete:
-            self.animating = False
-            self.current_value = self.target_value
+    def finish(self) -> str:
+        """
+        End the animation at once on the new value, without its padding.
 
-        return self.animating or not all_complete, self.current_value
+        Returns:
+            The value the cell now shows
+        """
+        self.animating = False
+        self.current_value = self.final_value
+        return self.current_value
 
 
 class SplitFlapDataTable(DataTable):
@@ -217,15 +234,17 @@ class SplitFlapDataTable(DataTable):
         self.column_alignment: dict[
             int, Literal["left", "center", "right"]
         ] = {}  # Map column index to alignment
-        self.cells_need_width_update: dict[
-            tuple[int, int], bool
-        ] = {}  # Track which cells need width updates
+        # Columns to re-measure once the current updates settle, by index
+        self._columns_to_settle: set[int] = set()
+        self._settle_scheduled = False
         self._animation_timer = None
         self._update_counter = 0  # Counter for staggering animations
-        self._empty_rows: set[RowKey] = set()  # Track rows that are cleared to empty
-        self._empty_row_widths: dict[
-            RowKey, dict[int, int]
-        ] = {}  # Store cell widths for empty rows
+        # Rows flapping to blank before their removal; the cursor skips them
+        self._empty_rows: set[RowKey] = set()
+        # Cells of blanked rows, with the future to resolve once none of them animates
+        self._blank_waiters: list[
+            tuple[set[tuple[int, int]], asyncio.Future[None]]
+        ] = []
         # Performance optimization: track actively animating cells
         self._animating_cells: set[tuple[int, int]] = set()
         # Cache for row/column key lookups
@@ -331,7 +350,6 @@ class SplitFlapDataTable(DataTable):
     def add_row(self, *cells: Any, animate: bool = False, **kwargs) -> RowKey:
         """
         Add a row and initialize animated cells.
-        Reuses empty rows if available.
 
         Args:
             *cells: Cell values for the row
@@ -341,39 +359,6 @@ class SplitFlapDataTable(DataTable):
         Returns:
             The RowKey for the new row
         """
-        # Check if we have any empty rows to reuse
-        if self._empty_rows:
-            # Reuse the first empty row
-            row_key = self._empty_rows.pop()
-            debug(
-                f"SplitFlapDataTable.add_row: Reusing empty row_key={row_key}. Remaining empty rows: {len(self._empty_rows)}"
-            )
-
-            # Get the row index using cache
-            row_idx = self._get_row_idx_fast(row_key)
-            if row_idx is None:
-                # Fallback if not in cache
-                row_idx = list(self.rows.keys()).index(row_key)
-
-            # Update cells with animation from empty to new content
-            self._rebuild_cache()
-            col_keys = self._cached_col_keys
-            for col_idx, (cell_value, col_key) in enumerate(
-                zip(cells, col_keys, strict=False)
-            ):
-                if col_idx < len(col_keys):
-                    # Animate from current (empty) to new value
-                    self.update_cell_animated(
-                        row_key, col_key, cell_value, update_width=True
-                    )
-
-            # Clear the stored widths for this row
-            if row_key in self._empty_row_widths:
-                del self._empty_row_widths[row_key]
-
-            return row_key
-
-        # No empty rows, create a new one
         # Check if we should actually animate (respects enable_animations setting)
         should_animate = animate and self.enable_animations
 
@@ -386,6 +371,7 @@ class SplitFlapDataTable(DataTable):
             # Initialize animated cells with empty values and set targets directly
             # This is more efficient than calling update_cell_animated for each cell
             row_idx = len(self.rows) - 1
+            columns = list(self.columns.values())
             for col_idx, cell_value in enumerate(cells):
                 flap_chars = self.column_flap_chars.get(
                     col_idx, self.default_flap_chars
@@ -401,8 +387,9 @@ class SplitFlapDataTable(DataTable):
                 if animated_cell.set_target(str(cell_value), delay_frames=delay):
                     self._animating_cells.add(cell_key)
 
-                # Track width updates needed
-                self.cells_need_width_update[cell_key] = True
+                # Frames never re-measure, so fit the column to the final text now
+                # (Textual's add_row has rejected more cells than columns)
+                self._grow_column(columns[col_idx], col_idx, cell_value)
         else:
             # Add row normally without animation
             # Normalize cells to uppercase for consistency with animation behavior
@@ -442,63 +429,78 @@ class SplitFlapDataTable(DataTable):
 
         return row_key
 
-    def remove_row(self, row_key: RowKey | str) -> None:
+    def blank_rows(self, row_keys: list[RowKey]) -> asyncio.Future[None]:
         """
-        Remove a row by clearing it to empty spaces with animation.
-        The empty row is kept and can be reused for future additions.
+        Flap every cell of the given rows to blank and mark the rows as leaving.
+
+        The cursor skips leaving rows. The caller removes them for real once
+        the returned future resolves (see ``truncate_rows``).
 
         Args:
-            row_key: The key or label identifying the row to remove
+            row_keys: The rows to blank
+
+        Returns:
+            A future resolved once none of the rows' cells is animating
         """
-        try:
-            # Find row index using cache
-            if isinstance(row_key, str):
-                row_idx = self._get_row_index(row_key)
-                # Get the actual row key from cache
-                self._rebuild_cache()
-                row_key = self._cached_row_keys[row_idx]
-            else:
-                row_idx = self._get_row_idx_fast(row_key)
-                if row_idx is None:
-                    row_idx = list(self.rows.keys()).index(row_key)
-
-            debug(
-                f"SplitFlapDataTable.remove_row: row_key={row_key}, row_idx={row_idx}"
-            )
-        except (ValueError, KeyError):
-            # Row not found, nothing to do
-            debug(f"SplitFlapDataTable.remove_row: Row not found - row_key={row_key}")
-            return
-
-        # Store the widths of each cell before clearing
+        blanked: asyncio.Future[None] = asyncio.get_running_loop().create_future()
         self._rebuild_cache()
-        col_keys = self._cached_col_keys
-        widths: dict[int, int] = {}
+        cells: set[tuple[int, int]] = set()
+        for row_key in row_keys:
+            self._empty_rows.add(row_key)
+            row_idx = self._row_key_to_idx[row_key]
+            for col_idx, col_key in enumerate(self._cached_col_keys):
+                self.update_cell_animated(row_key, col_key, "")
+                cells.add((row_idx, col_idx))
+        self._blank_waiters.append((cells, blanked))
+        self._resolve_blank_waiters()
+        return blanked
 
-        for col_idx in range(len(col_keys)):
-            cell_key = (row_idx, col_idx)
-            if cell_key in self.animated_cells:
-                # Get current value length (without trailing spaces for accurate width)
-                current_value = self.animated_cells[cell_key].current_value.rstrip()
-                widths[col_idx] = len(current_value) if current_value else 1
+    def truncate_rows(self, keep: int, settle_columns: list[int]) -> list[RowKey]:
+        """
+        Remove every row past the first ``keep`` and forget their per-cell state.
 
-        # Store widths for this row
-        self._empty_row_widths[row_key] = widths
+        Args:
+            keep: How many rows, counted from the top, stay in the table
+            settle_columns: Indices of the columns to re-measure once the
+                updates settle, since a removed row may have held their widest cell
 
-        # Animate each cell to empty spaces matching the stored width
-        for col_idx, col_key in enumerate(col_keys):
-            if col_idx in widths:
-                # Create empty string with same width as last content
-                empty_value = " " * widths[col_idx]
-                self.update_cell_animated(
-                    row_key, col_key, empty_value, update_width=False
-                )
+        Returns:
+            The keys of the removed rows
+        """
+        self._rebuild_cache()
+        removed = self._cached_row_keys[keep:]
+        for row_key in reversed(removed):
+            self.remove_row(row_key)
+            self._empty_rows.discard(row_key)
+        self._forget_cells_from_row(keep)
+        self._invalidate_cache()
+        if removed:
+            self._queue_column_settle(settle_columns)
+        return removed
 
-        # Mark this row as empty (hidden)
-        debug(
-            f"SplitFlapDataTable.remove_row: Marking row_key={row_key} as empty. Total empty rows: {len(self._empty_rows) + 1}"
-        )
-        self._empty_rows.add(row_key)
+    def _forget_cells_from_row(self, first_row: int) -> None:
+        """Drop the index-keyed state of every cell at row ``first_row`` or below."""
+        for cell_key in [key for key in self.animated_cells if key[0] >= first_row]:
+            del self.animated_cells[cell_key]
+        self._animating_cells = {
+            key for key in self._animating_cells if key[0] < first_row
+        }
+        for cells, blanked in self._blank_waiters:
+            if any(row_idx >= first_row for row_idx, _ in cells):
+                blanked.cancel()
+        self._resolve_blank_waiters()
+
+    def _resolve_blank_waiters(self) -> None:
+        """Resolve the future of each blanked row set whose cells all stopped animating."""
+        waiting = []
+        for cells, blanked in self._blank_waiters:
+            if blanked.done():
+                continue
+            if cells & self._animating_cells:
+                waiting.append((cells, blanked))
+            else:
+                blanked.set_result(None)
+        self._blank_waiters = waiting
 
     def update_cell_animated(
         self,
@@ -517,78 +519,156 @@ class SplitFlapDataTable(DataTable):
             value: The new value for the cell
             update_width: Whether to update column width to fit new content
         """
-        # Convert string keys to actual keys and unmark if empty
-        actual_row_key: RowKey | None = None
-        if isinstance(row_key, str):
-            try:
-                row_idx = self._get_row_index(row_key)
-                self._rebuild_cache()
-                actual_row_key = self._cached_row_keys[row_idx]
-            except (ValueError, KeyError, IndexError):
-                pass
-        else:
-            actual_row_key = row_key
-
-        # If this row is marked as empty, unmark it since we're adding content
-        if actual_row_key is not None and actual_row_key in self._empty_rows:
-            self._empty_rows.remove(actual_row_key)
-            # Also clear the stored widths
-            if actual_row_key in self._empty_row_widths:
-                del self._empty_row_widths[actual_row_key]
-
         # If animations are disabled, update instantly with alignment
         if not self.enable_animations:
-            # Find column index for alignment using fast lookup
-            try:
-                if isinstance(column_key, str):
-                    col_idx = self._get_column_index(column_key)
-                else:
-                    col_idx = self._get_col_idx_fast(column_key)
-                    if col_idx is None:
-                        col_idx = list(self.columns.keys()).index(column_key)
-                # Normalize to uppercase (consistent with animation flap_chars behavior)
-                normalized_value = self._normalize_for_display(value, col_idx)
-                # Apply alignment
-                aligned_value = self._apply_alignment(normalized_value, col_idx)
-                self.update_cell(
-                    row_key, column_key, aligned_value, update_width=update_width
-                )
-            except (ValueError, KeyError):
-                # If we can't find the column, just update normally
-                self.update_cell(row_key, column_key, value, update_width=update_width)
+            self._update_cell_instantly(row_key, column_key, value, update_width)
             return
 
         # Find row and column indices using fast cache lookups
         try:
-            if isinstance(row_key, str):
-                row_idx = self._get_row_index(row_key)
-            else:
-                row_idx = self._get_row_idx_fast(row_key)
-                if row_idx is None:
-                    row_idx = list(self.rows.keys()).index(row_key)
-
-            if isinstance(column_key, str):
-                col_idx = self._get_column_index(column_key)
-            else:
-                col_idx = self._get_col_idx_fast(column_key)
-                if col_idx is None:
-                    col_idx = list(self.columns.keys()).index(column_key)
+            cell_key = (
+                self._resolve_row_idx(row_key),
+                self._resolve_col_idx(column_key),
+            )
         except (ValueError, KeyError):
             # If we can't find the row/column, just update normally
             self.update_cell(row_key, column_key, value, update_width=update_width)
             return
 
-        # Get or create animated cell
-        cell_key = (row_idx, col_idx)
+        self._set_cell_target(cell_key, value, update_width)
+
+    def _resolve_row_idx(self, row_key: RowKey | str) -> int:
+        """Row index of a key or label; raises ValueError or KeyError when there is none."""
+        if isinstance(row_key, str):
+            return self._get_row_index(row_key)
+        row_idx = self._get_row_idx_fast(row_key)
+        if row_idx is None:
+            row_idx = list(self.rows.keys()).index(row_key)
+        return row_idx
+
+    def _resolve_col_idx(self, column_key: ColumnKey | str) -> int:
+        """Column index of a key or label; raises ValueError or KeyError when there is none."""
+        if isinstance(column_key, str):
+            return self._get_column_index(column_key)
+        col_idx = self._get_col_idx_fast(column_key)
+        if col_idx is None:
+            col_idx = list(self.columns.keys()).index(column_key)
+        return col_idx
+
+    def _update_cell_instantly(
+        self,
+        row_key: RowKey | str,
+        column_key: ColumnKey | str,
+        value: Any,
+        update_width: bool,
+    ) -> None:
+        """Show a cell's new value at once, normalized and aligned as an animation would."""
+        try:
+            col_idx = self._resolve_col_idx(column_key)
+        except (ValueError, KeyError):
+            # If we can't find the column, just update normally
+            self.update_cell(row_key, column_key, value, update_width=update_width)
+            return
+        # Normalize to uppercase (consistent with animation flap_chars behavior)
+        normalized_value = self._normalize_for_display(value, col_idx)
+        aligned_value = self._apply_alignment(normalized_value, col_idx)
+        self.update_cell(row_key, column_key, aligned_value)
+        self._fit_column(col_idx, value, update_width)
+
+    def _fit_column(self, col_idx: int, value: Any, update_width: bool) -> None:
+        """
+        Widen a column now if the value needs it; every column grows.
+
+        Args:
+            col_idx: The column index
+            value: The value the column is about to show
+            update_width: Whether to also re-measure the column once updates
+                settle, so it can shrink
+        """
+        columns = list(self.columns.values())
+        if col_idx < len(columns):
+            self._grow_column(columns[col_idx], col_idx, value)
+        if update_width:
+            self._queue_column_settle([col_idx])
+
+    def _queue_column_settle(self, col_indices: list[int]) -> None:
+        """Re-measure these columns once the current updates settle."""
+        self._columns_to_settle.update(col_indices)
+        if not self._settle_scheduled:
+            self._settle_scheduled = True
+            self.call_later(self._settle_if_idle)
+
+    def _grow_column(self, column: Column, col_idx: int, value: Any) -> None:
+        """Widen a column at once if a value it is about to show would not fit."""
+        width = cell_len(self._normalize_for_display(value, col_idx))
+        if width > column.content_width:
+            column.content_width = width
+            self._require_update_dimensions = True
+            self.check_idle()
+
+    def _settle_if_idle(self) -> None:
+        """Re-measure the changed columns, unless animations will do it when they end."""
+        self._settle_scheduled = False
+        if not self._animating_cells:
+            self._settle_column_widths()
+
+    def _settle_column_widths(self) -> None:
+        """Re-measure, once, every column whose cells changed since the last settle."""
+        if not self._columns_to_settle:
+            return
+        self._rebuild_cache()
+        column_keys = [
+            self._cached_col_keys[col_idx]
+            for col_idx in sorted(self._columns_to_settle)
+            if col_idx < len(self._cached_col_keys)
+        ]
+        self._columns_to_settle.clear()
+        self.recompute_column_widths(column_keys)
+
+    def recompute_column_widths(self, column_keys: list[ColumnKey]) -> None:
+        """
+        Fit each given column to its widest cell, measuring every cell once.
+
+        Textual re-measures a whole column only inside
+        ``DataTable._update_column_widths``, once for every cell that got
+        narrower, which is quadratic when a refresh shifts every row. This
+        does it once per column. It relies on Textual 8.2.8 internals (pinned
+        in pyproject.toml): ``DataTable._data``, ``DataTable._clear_caches``,
+        ``DataTable._require_update_dimensions``, ``Column.content_width``
+        and ``default_cell_formatter``.
+
+        Args:
+            column_keys: The columns to re-measure
+        """
+        console = self.app.console
+        for column_key in column_keys:
+            column = self.columns[column_key]
+            widths = [
+                measure(
+                    console,
+                    default_cell_formatter(row_cells[column_key], wrap=False, height=1),
+                    1,
+                )
+                for row_cells in self._data.values()
+            ]
+            column.content_width = max([measure(console, column.label, 1), *widths])
+        self._clear_caches()
+        self._require_update_dimensions = True
+        self.check_idle()
+        self.refresh(layout=True)
+
+    def _set_cell_target(
+        self, cell_key: tuple[int, int], value: Any, update_width: bool
+    ) -> None:
+        """Start a cell flapping toward a new value, staggered after the cells before it."""
+        col_idx = cell_key[1]
         if cell_key not in self.animated_cells:
             flap_chars = self.column_flap_chars.get(col_idx, self.default_flap_chars)
             self.animated_cells[cell_key] = AnimatedCell(
                 str(value), flap_chars=flap_chars
             )
 
-        # Track if this cell needs width update
-        if update_width:
-            self.cells_need_width_update[cell_key] = True
+        self._fit_column(col_idx, value, update_width)
 
         # Set new target value with staggered delay
         # Cap delay to prevent excessive wait times for large tables
@@ -700,18 +780,41 @@ class SplitFlapDataTable(DataTable):
         """Perform one animation step for animating cells only"""
         # Fast path: nothing to animate
         if not self._animating_cells:
-            if self._animation_timer is not None:
-                self._animation_timer.stop()
-                self._animation_timer = None
+            self._stop_animation_timer()
             return
 
         # Use cached keys (rebuilt only when invalidated)
         self._rebuild_cache()
-        row_keys = self._cached_row_keys
-        col_keys = self._cached_col_keys
-        num_rows = len(row_keys)
-        num_cols = len(col_keys)
+        cells_to_update, cells_completed = self._step_animating_cells()
 
+        # Remove completed cells from tracking set
+        for cell_key in cells_completed:
+            self._animating_cells.discard(cell_key)
+        self._resolve_blank_waiters()
+
+        # Stop timer if no more cells are animating
+        if not self._animating_cells:
+            self._stop_animation_timer()
+
+        self._apply_cell_updates(cells_to_update)
+        if not self._animating_cells:
+            self._settle_column_widths()
+
+    def _stop_animation_timer(self) -> None:
+        """Stop the animation timer if it runs."""
+        if self._animation_timer is not None:
+            self._animation_timer.stop()
+            self._animation_timer = None
+
+    def _step_animating_cells(
+        self,
+    ) -> tuple[list[tuple[int, int, str]], list[tuple[int, int]]]:
+        """
+        Advance every animating cell one frame; off-screen cells jump to their target.
+
+        Returns:
+            The (row, column, text) updates to show, and the cells that finished
+        """
         # Get visible row range using accurate calculation
         first_visible_row, last_visible_row = self._get_visible_row_range()
 
@@ -731,9 +834,7 @@ class SplitFlapDataTable(DataTable):
                 continue
 
             # Check if row is in visible viewport (or buffer zone)
-            is_visible = first_visible_row <= row_idx < last_visible_row
-
-            if is_visible:
+            if first_visible_row <= row_idx < last_visible_row:
                 # Animate visible cells normally
                 is_animating, display_value = cell.animate_step()
 
@@ -747,40 +848,28 @@ class SplitFlapDataTable(DataTable):
             else:
                 # Instantly complete off-screen animations to save CPU
                 if cell.animating:
-                    cell.current_value = cell.target_value
-                    cell.animating = False
-                    cells_to_update.append((row_idx, col_idx, cell.target_value))
+                    cells_to_update.append((row_idx, col_idx, cell.finish()))
                 cells_completed.append(cell_key)
+        return cells_to_update, cells_completed
 
-        # Remove completed cells from tracking set
-        for cell_key in cells_completed:
-            self._animating_cells.discard(cell_key)
-
-        # Stop timer if no more cells are animating
-        if not self._animating_cells and self._animation_timer is not None:
-            self._animation_timer.stop()
-            self._animation_timer = None
-
-        # Apply all updates in batch
+    def _apply_cell_updates(self, cells_to_update: list[tuple[int, int, str]]) -> None:
+        """Write one frame's cell texts into the table, aligned per column."""
+        row_keys = self._cached_row_keys
+        col_keys = self._cached_col_keys
+        num_rows = len(row_keys)
+        num_cols = len(col_keys)
         for row_idx, col_idx, display_value in cells_to_update:
             try:
                 if row_idx < num_rows and col_idx < num_cols:
-                    # Check if this cell needs width update
-                    cell_key = (row_idx, col_idx)
-                    needs_width_update = self.cells_need_width_update.pop(
-                        cell_key, False
-                    )
-
-                    # Apply alignment if specified for this column
+                    # Apply alignment if specified for this column; widths are
+                    # fitted per update, never per frame
                     cell_value = self._apply_alignment(display_value, col_idx)
-                    self.update_cell(
-                        row_keys[row_idx],
-                        col_keys[col_idx],
-                        cell_value,
-                        update_width=needs_width_update,
-                    )
-            except (KeyError, IndexError):
-                pass  # Cell might not exist anymore (removed during animation)
+                    self.update_cell(row_keys[row_idx], col_keys[col_idx], cell_value)
+            except (KeyError, IndexError) as exc:
+                # The cell can go while it animates (its row was removed)
+                debug(
+                    f"Skipped a frame for the cell at row {row_idx}, column {col_idx}: {exc!r}"
+                )
 
     def _normalize_for_display(self, value: Any, col_idx: int) -> str:
         """
@@ -947,9 +1036,11 @@ class SplitFlapDataTable(DataTable):
         """
         result = super().clear(columns=columns)
         self.animated_cells.clear()
-        self.cells_need_width_update.clear()
+        self._columns_to_settle.clear()
         self._empty_rows.clear()
-        self._empty_row_widths.clear()
+        for _cells, blanked in self._blank_waiters:
+            blanked.cancel()
+        self._blank_waiters.clear()
         self._animating_cells.clear()
         self._invalidate_cache()
         if columns:

@@ -683,6 +683,9 @@ The application features split-flap display animations (like airport departure b
 - Different character sets for different columns (ETAs count down, codes flip alphabetically)
 - Staggered delays create a wave effect
 - Performance optimized (skips off-screen rows)
+- A refresh updates the tables in place: rows keep their slots and only changed cells flap, new rows flap in at the bottom, and rows past the new count flap to blank and then disappear (immediately with `--disable-animations`)
+- The cursor and scroll stay on the same airport or grouping after a refresh
+- Columns widen when an update brings a wider value and shrink back once the flaps finish or rows are removed
 
 **Disable animations:**
 ```bash
