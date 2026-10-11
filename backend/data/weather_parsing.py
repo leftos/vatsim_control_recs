@@ -616,6 +616,10 @@ def parse_weather_phenomena(metar: str) -> list[str]:
     """
     Parse weather phenomena from METAR string.
 
+    The walk ends at the remarks section ("RMK") and at a trend group
+    ("TEMPO", "BECMG", "NOSIG"): everything after a trend group describes a
+    forecast change, not the current weather.
+
     Args:
         metar: Raw METAR string
 
@@ -637,6 +641,10 @@ def parse_weather_phenomena(metar: str) -> list[str]:
     for part in parts:
         # Stop at remarks section
         if re.match(r"^RMK", part):
+            break
+
+        # Stop at a trend group: its weather, and everything after it, is a forecast.
+        if part in ("TEMPO", "BECMG", "NOSIG"):
             break
 
         # Skip non-weather METAR components (timestamp, wind, visibility, clouds, etc.)

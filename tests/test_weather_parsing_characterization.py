@@ -164,6 +164,26 @@ def test_get_flight_category(metar: str, expected: str) -> None:
             "KSFO 101251Z 27005KT 10SM VCSH SCT040 15/05 A2992 RMK AO2 SH DSNT W",
             ["Vicinity Showers"],
         ),
+        # A trend group ends the walk: the "SH" after TEMPO is a forecast, not current weather.
+        (
+            "EGLL 101250Z 25010KT 9999 -SHRA FEW020 BKN035 15/10 Q1012 TEMPO SH",
+            ["Light Showers Rain"],
+        ),
+        # BECMG ends the walk too, so the "-RA" after it is not current weather.
+        (
+            "EGLL 101250Z 25010KT 9999 NSC 15/10 Q1012 BECMG -RA",
+            [],
+        ),
+        # NOSIG ends the walk, after the current "-DZ" and "BR" are already collected.
+        (
+            "EGLL 101250Z 25010KT 9999 -DZ BR 15/10 Q1012 NOSIG",
+            ["Light Drizzle", "Mist"],
+        ),
+        # A TEMPO inside the remarks lies after the RMK that already ended the walk.
+        (
+            "KSFO 101251Z 27005KT 10SM VCSH SCT040 15/05 A2992 RMK TEMPO SH",
+            ["Vicinity Showers"],
+        ),
     ],
 )
 def test_parse_weather_phenomena(metar: str, expected: list[str]) -> None:
