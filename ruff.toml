@@ -88,7 +88,6 @@ max-complexity = 8
 "ui/modals/route_weather.py" = ["C901"]
 "ui/modals/tracked_airports.py" = ["C901"]
 "ui/modals/vfr_alternatives.py" = ["C901"]
-"ui/modals/weather_briefing.py" = ["C901"]
 "ui/utils.py" = ["C901"]
 
 [format]
