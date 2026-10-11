@@ -1,0 +1,137 @@
+<title>Enroute Conditions Lines</title>
+<style>
+/* Layout: a stack of terminal panes, one per option, each with a caption above it. */
+:root {
+  --bg: #eef1f4;
+  --fg: #1d2530;
+  --muted: #5b6676;
+  --pane: #0f141a;
+  --pane-fg: #d7dde5;
+  --pane-dim: #7f8a99;
+  --rule: #c9d1db;
+  --vfr: #00ff00;
+  --mvfr: #5599ff;
+  --ifr: #ff4040;
+  --lifr: #ff40ff;
+  --accent: #2f6fd6;
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161b22; --fg: #e3e8ee; --muted: #9aa5b4; --pane: #0b0f14; --rule: #2c3540; --accent: #79a8ff; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161b22; --fg: #e3e8ee; --muted: #9aa5b4; --pane: #0b0f14; --rule: #2c3540; --accent: #79a8ff; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); line-height: 1.5; }
+main { max-width: 860px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 48px; display: grid; gap: 28px; }
+h1 { font-size: 1.45rem; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lead { color: var(--muted); }
+section { display: grid; gap: 8px; min-width: 0; }
+h2 { font-size: 1rem; margin: 0; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.tag { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.04em; border: 1px solid var(--rule); border-radius: 4px; padding: 0 6px; color: var(--muted); }
+.tag.rec { border-color: var(--accent); color: var(--accent); }
+.note { color: var(--muted); font-size: 0.92rem; }
+.pane { background: var(--pane); color: var(--pane-fg); font-family: var(--font-mono); font-size: 13px; line-height: 1.55; padding: 14px 16px; border-radius: 6px; overflow-x: auto; white-space: pre; font-variant-numeric: tabular-nums; }
+.dim { color: var(--pane-dim); }
+.hdr { color: #e8c547; font-weight: 600; }
+.vfr { color: var(--vfr); } .mvfr { color: var(--mvfr); } .ifr { color: var(--ifr); } .lifr { color: var(--lifr); }
+.bad { color: var(--pane-dim); text-decoration: underline wavy #ff6b6b; text-underline-offset: 3px; }
+.legend { display: grid; gap: 4px; font-size: 0.9rem; color: var(--muted); }
+.legend code { font-family: var(--font-mono); color: var(--fg); }
+</style>
+<main>
+  <header style="display:grid;gap:8px">
+    <h1>Flight briefing: enroute conditions line</h1>
+    <p class="lead">Each enroute airport gets a dim line under its header. Today it formats a missing wind or ceiling as the word <code>None</code>. The same five stations are shown in every pane below, and the HTML export gets the same text as the screen.</p>
+  </header>
+
+  <div class="legend">
+    <div><code>KMMM</code> 00000KT 4SM BKN020 · <code>KNNN</code> 27010KT 10SM CLR · <code>KPPP</code> no wind group, 6SM BKN025 · <code>KRRR</code> 18005KT 2SM OVC008 · <code>KSSS</code> 22004KT 0SM FG OVC001</div>
+    <div>For reference, the DEP/ARR/ALT lines today read like <code>27008KT 10.0SM</code> (no ceiling text for a CLR station) and <code>18005KT 2.0SM OVC008</code>.</div>
+  </div>
+
+  <section>
+    <h2>Today <span class="tag">current</span></h2>
+    <div class="pane"><span class="hdr">ENROUTE</span>
+ENR KMMM (  80nm  +0:16) ...................... <span class="mvfr">MVFR</span>
+    <span class="dim">00000KT BKN020</span>
+ENR KNNN ( 160nm  +0:32) ...................... <span class="vfr">VFR</span>
+    <span class="bad">27010KT None</span>
+ENR KPPP ( 200nm  +0:40) ...................... <span class="mvfr">MVFR</span>
+    <span class="bad">None BKN025</span>
+ENR KRRR ( 240nm  +0:48) ...................... <span class="ifr">IFR</span>
+    <span class="dim">18005KT OVC008</span>
+ENR KSSS ( 280nm  +0:56) ...................... <span class="lifr">LIFR</span>
+    <span class="dim">22004KT OVC001</span></div>
+  </section>
+
+  <section>
+    <h2>A · Drop the missing part, wind and ceiling only</h2>
+    <p class="note">Smallest change. A clear station shows its wind alone, as the DEP line does today. Enroute lines stay compact; no visibility.</p>
+    <div class="pane"><span class="hdr">ENROUTE</span>
+ENR KMMM (  80nm  +0:16) ...................... <span class="mvfr">MVFR</span>
+    <span class="dim">00000KT BKN020</span>
+ENR KNNN ( 160nm  +0:32) ...................... <span class="vfr">VFR</span>
+    <span class="dim">27010KT</span>
+ENR KPPP ( 200nm  +0:40) ...................... <span class="mvfr">MVFR</span>
+    <span class="dim">BKN025</span>
+ENR KRRR ( 240nm  +0:48) ...................... <span class="ifr">IFR</span>
+    <span class="dim">18005KT OVC008</span>
+ENR KSSS ( 280nm  +0:56) ...................... <span class="lifr">LIFR</span>
+    <span class="dim">22004KT OVC001</span></div>
+  </section>
+
+  <section>
+    <h2>B · Say CLR when there is no ceiling, wind and ceiling only</h2>
+    <p class="note">Matches the weather briefing and route weather screens, which print "Ceiling: CLR". "CLR" is also printed for FEW or SCT layers, which are not a ceiling but are not clear either.</p>
+    <div class="pane"><span class="hdr">ENROUTE</span>
+ENR KMMM (  80nm  +0:16) ...................... <span class="mvfr">MVFR</span>
+    <span class="dim">00000KT BKN020</span>
+ENR KNNN ( 160nm  +0:32) ...................... <span class="vfr">VFR</span>
+    <span class="dim">27010KT CLR</span>
+ENR KPPP ( 200nm  +0:40) ...................... <span class="mvfr">MVFR</span>
+    <span class="dim">BKN025</span>
+ENR KRRR ( 240nm  +0:48) ...................... <span class="ifr">IFR</span>
+    <span class="dim">18005KT OVC008</span>
+ENR KSSS ( 280nm  +0:56) ...................... <span class="lifr">LIFR</span>
+    <span class="dim">22004KT OVC001</span></div>
+  </section>
+
+  <section>
+    <h2>C · Same line as DEP/ARR: wind, visibility, ceiling <span class="tag rec">recommended</span></h2>
+    <p class="note">Enroute goes through the same builder as the DEP/ARR/ALT lines, so all five sections read alike and a low-visibility station shows why it is LIFR.</p>
+    <div class="pane"><span class="hdr">ENROUTE</span>
+ENR KMMM (  80nm  +0:16) ...................... <span class="mvfr">MVFR</span>
+    <span class="dim">00000KT 4.0SM BKN020</span>
+ENR KNNN ( 160nm  +0:32) ...................... <span class="vfr">VFR</span>
+    <span class="dim">27010KT 10.0SM</span>
+ENR KPPP ( 200nm  +0:40) ...................... <span class="mvfr">MVFR</span>
+    <span class="dim">6.0SM BKN025</span>
+ENR KRRR ( 240nm  +0:48) ...................... <span class="ifr">IFR</span>
+    <span class="dim">18005KT 2.0SM OVC008</span>
+ENR KSSS ( 280nm  +0:56) ...................... <span class="lifr">LIFR</span>
+    <span class="dim">22004KT 0.0SM OVC001</span></div>
+  </section>
+
+  <section>
+    <h2>D · Wind, visibility, ceiling, and CLR when there is no ceiling</h2>
+    <p class="note">C plus B. DEP/ARR/ALT would gain "CLR" too, so all sections stay alike.</p>
+    <div class="pane"><span class="hdr">ENROUTE</span>
+ENR KMMM (  80nm  +0:16) ...................... <span class="mvfr">MVFR</span>
+    <span class="dim">00000KT 4.0SM BKN020</span>
+ENR KNNN ( 160nm  +0:32) ...................... <span class="vfr">VFR</span>
+    <span class="dim">27010KT 10.0SM CLR</span>
+ENR KPPP ( 200nm  +0:40) ...................... <span class="mvfr">MVFR</span>
+    <span class="dim">6.0SM BKN025</span>
+ENR KRRR ( 240nm  +0:48) ...................... <span class="ifr">IFR</span>
+    <span class="dim">18005KT 2.0SM OVC008</span>
+ENR KSSS ( 280nm  +0:56) ...................... <span class="lifr">LIFR</span>
+    <span class="dim">22004KT 0.0SM OVC001</span></div>
+  </section>
+
+  <p class="note">In every option, visibility 0 on the DEP/ARR/ALT lines starts showing as <code>0.0SM</code> (today it is dropped), and the export's leading space before a ceiling with no wind goes away.</p>
+</main>
