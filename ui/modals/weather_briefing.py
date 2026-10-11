@@ -685,6 +685,35 @@ class WeatherBriefingScreen(ModalScreen):
         }
         return self._create_area_groups(non_primary_weather)
 
+    def _area_groups(self) -> list[dict[str, Any]]:
+        """The grouping view's area groups; a flight route has none."""
+        if self.is_flight_route:
+            return []
+        return self._non_primary_area_groups()
+
+    def _with_weather(self, icaos: list[str]) -> list[str]:
+        """The given airports that have a weather entry, in the given order."""
+        return [icao for icao in icaos if self.weather_data.get(icao, {})]
+
+    def _carded_weather(self, areas: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Weather of the airports that get a card, by ICAO.
+
+        Args:
+            areas: The area groups the cards are built from.
+
+        Returns:
+            The route's airports for a flight route; otherwise the requested
+            airports, then every airport of an area.
+        """
+        if self.is_flight_route:
+            icaos = self._with_weather(self.airports)
+        else:
+            icaos = self._with_weather(self.primary_airports)
+        carded = {icao: self.weather_data[icao] for icao in icaos}
+        for area in areas:
+            carded.update((icao, data) for icao, data, _size in area["airports"])
+        return carded
+
     def _route_cards(self) -> list[str]:
         """Cards of the route's airports with weather, in route order."""
         return [
@@ -693,16 +722,14 @@ class WeatherBriefingScreen(ModalScreen):
                 self.weather_data[icao],
                 is_primary=icao in self.primary_airports,
             )
-            for icao in self.airports
-            if self.weather_data.get(icao, {})
+            for icao in self._with_weather(self.airports)
         ]
 
     def _primary_cards(self) -> list[str]:
         """Cards of the requested airports with weather."""
         return [
             self._build_airport_card(icao, self.weather_data[icao], is_primary=True)
-            for icao in self.primary_airports
-            if self.weather_data.get(icao, {})
+            for icao in self._with_weather(self.primary_airports)
         ]
 
     def _area_section_lines(self, area: dict[str, Any]) -> list[str]:
@@ -713,7 +740,7 @@ class WeatherBriefingScreen(ModalScreen):
         ]
         return _area_lines(area, cards)
 
-    def _grouping_sections(self) -> list[str]:
+    def _grouping_sections(self, areas: list[dict[str, Any]]) -> list[str]:
         """The requested airports' section, then one section per area."""
         sections = []
         primary_cards = self._primary_cards()
@@ -721,14 +748,15 @@ class WeatherBriefingScreen(ModalScreen):
             sections.append("\n".join([_REQUESTED_HEADER, *primary_cards]))
         sections.extend(
             "\n".join(self._area_section_lines(area))
-            for area in self._non_primary_area_groups()
+            for area in areas
             if area["airports"]
         )
         return sections
 
     def _update_display(self) -> None:
         """Update the display with weather data"""
-        summary_parts = _category_summary_parts(self.weather_data)
+        areas = self._area_groups()
+        summary_parts = _category_summary_parts(self._carded_weather(areas))
 
         now = datetime.now(UTC)
         zulu_str = now.strftime("%H%MZ")
@@ -742,7 +770,7 @@ class WeatherBriefingScreen(ModalScreen):
         if self.is_flight_route:
             sections = self._route_cards()
         else:
-            sections = self._grouping_sections()
+            sections = self._grouping_sections(areas)
 
         content_widget = self.query_one("#briefing-content", Static)
         content_widget.update(
@@ -775,7 +803,7 @@ class WeatherBriefingScreen(ModalScreen):
             console.print(card)
             console.print()
 
-    def _print_grouping(self, console: Console) -> None:
+    def _print_grouping(self, console: Console, areas: list[dict[str, Any]]) -> None:
         """Print the requested airports, then each area with its summary."""
         if self.primary_airports:
             console.print(_REQUESTED_HEADER)
@@ -783,7 +811,7 @@ class WeatherBriefingScreen(ModalScreen):
                 console.print(card)
             console.print()
 
-        for area in self._non_primary_area_groups():
+        for area in areas:
             if not area["airports"]:
                 continue
             for line in self._area_section_lines(area):
@@ -836,7 +864,8 @@ class WeatherBriefingScreen(ModalScreen):
         console.print(f"[bold]Weather Briefing: {self.grouping_name}[/bold]")
         console.print(f"Generated: {zulu_str}\n")
 
-        summary_parts = _category_summary_parts(self.weather_data)
+        areas = self._area_groups()
+        summary_parts = _category_summary_parts(self._carded_weather(areas))
         if summary_parts:
             console.print(" | ".join(summary_parts))
         console.print()
@@ -844,6 +873,6 @@ class WeatherBriefingScreen(ModalScreen):
         if self.is_flight_route:
             self._print_route(console)
         else:
-            self._print_grouping(console)
+            self._print_grouping(console, areas)
 
         self._open_in_browser(_printable_html(console.export_html(inline_styles=True)))

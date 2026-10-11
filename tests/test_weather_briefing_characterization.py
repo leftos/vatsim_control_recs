@@ -1034,6 +1034,17 @@ def test_display_without_airport_data_shows_only_requested(
     ]
 
 
+def test_header_counts_only_airports_with_a_card() -> None:
+    weather = {"KSFO": FETCHED["KSFO"], "KNOP": NOPOS_VFR_FETCHED}
+
+    briefing = display(weather, airports=["KSFO", "KNOP"])
+
+    assert briefing.summary.updates == [f"{TIMESTAMP} | [#5599ff]1 MVFR[/#5599ff]"]
+    (content,) = briefing.content.updates
+    assert "KSFO - San Francisco Intl // [#5599ff bold]MVFR[/#5599ff bold]" in content
+    assert "KNOP" not in content
+
+
 class FakeClusterer:
     """An area clusterer whose areas are set by the test."""
 
@@ -1241,6 +1252,17 @@ def test_print_unknown_categories_only(world: World) -> None:
     assert page_lines(page) == UNKNOWN_ONLY_PAGE
 
 
+def test_print_header_counts_only_airports_with_a_card(world: World) -> None:
+    weather = {"KSFO": FETCHED["KSFO"], "KNOP": NOPOS_VFR_FETCHED}
+
+    page = run_print(world, Briefing(["KSFO", "KNOP"]), weather)
+
+    lines = page_lines(page)
+    assert lines[3] == "1 MVFR"
+    assert "KSFO - San Francisco Intl // MVFR" in lines
+    assert not [line for line in lines if "KNOP" in line]
+
+
 def test_print_areas_skip_empty_ones(
     world: World, fake_clusterer: type[FakeClusterer]
 ) -> None:
@@ -1419,6 +1441,10 @@ NO_METAR_FETCHED: dict[str, Any] = {
     "taf_changes": [],
     "is_speci": False,
 }
+NOPOS_VFR_FETCHED: dict[str, Any] = {
+    **FETCHED["KOAK"],
+    "metar": "KNOP 101153Z 00000KT 10SM CLR 14/09 A3002",
+}
 GROUPING_SUMMARY = "[magenta]1 LIFR[/magenta] | [red]1 IFR[/red] | [#5599ff]2 MVFR[/#5599ff] | [#00ff00]1 VFR[/#00ff00]"
 GROUPING_CONTENT = text(
     "[bold cyan]━━━ REQUESTED ━━━[/bold cyan]",
@@ -1475,7 +1501,7 @@ AREAS_ONLY_CONTENT = text(
     "  [green bold]▲[/green bold] TAF FM 101600 [dim](in  4h)[/dim]: [#00ff00 bold]VFR[/#00ff00 bold] - P6SM",
 )
 ROUTE_SUMMARY = (
-    "[magenta]1 LIFR[/magenta] | [red]1 IFR[/red] | [#5599ff]2 MVFR[/#5599ff]"
+    "[magenta]1 LIFR[/magenta] | [red]1 IFR[/red] | [#5599ff]1 MVFR[/#5599ff]"
 )
 ROUTE_CONTENT = text(
     "[bold]KLAX[/bold] - Los Angeles Intl // [magenta bold]LIFR[/magenta bold]",
@@ -1737,7 +1763,7 @@ ROUTE_PAGE = [
     "Weather Briefing: Bay Area",
     "Generated: 2026-10-10 1200Z",
     "",
-    "1 LIFR | 1 IFR | 2 MVFR",
+    "1 LIFR | 1 IFR | 1 MVFR",
     "",
     "KLAX - Los Angeles Intl // LIFR",
     "  Ceiling: VV002 | Vis: 1/2SM | Wind: 25008KT",
@@ -1796,7 +1822,7 @@ FAKE_AREAS_PAGE = [
     "Weather Briefing: Bay Area",
     "Generated: 2026-10-10 1200Z",
     "",
-    "1 LIFR | 1 IFR | 2 MVFR | 1 VFR",
+    "1 LIFR | 1 IFR | 1 MVFR | 1 VFR",
     "",
     "━━━ REQUESTED ━━━",
     "KSFO - San Francisco Intl // MVFR",
