@@ -64,6 +64,10 @@ CONUS_ARTCCS = {
 FAR139_MAJOR = {"I E", "I D"}  # ~49 airports
 FAR139_REGIONAL = {"I C"}  # ~92 airports
 
+# Max distance squared for weather region interpolation (~0.7 degrees, about 40-50nm)
+# Cells farther than this from any airport won't be colored (avoids ocean fill)
+_REGION_MAX_DIST_SQ = 0.5  # 0.7^2 ≈ 0.5
+
 # Weather category to marker color mapping
 MARKER_COLORS = {
     "VFR": "#00cc00",  # Green
@@ -99,86 +103,117 @@ def build_airport_markers(
     if not unified_airport_data:
         return []
 
-    # Collect all airport weather points from all groupings
-    all_airports: dict[str, dict[str, Any]] = {}  # icao -> weather data
-
-    for groupings in artcc_groupings.values():
-        for g in groupings:
-            # Try airport_weather_points first (has weather category)
-            weather_points = g.get("airport_weather_points", [])
-            for point in weather_points:
-                icao = point.get("icao")
-                if icao and icao not in all_airports:
-                    all_airports[icao] = point
-
-    # If we have no weather points, build markers directly from unified_airport_data
-    # for airports that match FAR139 criteria
+    all_airports = _collect_weather_points(artcc_groupings)
     if not all_airports:
-        for icao, info in unified_airport_data.items():
-            far139 = info.get("far139", "") or info.get("FAR_139_TYPE_CODE", "")
-            if far139 in FAR139_MAJOR or far139 in FAR139_REGIONAL:
-                lat = info.get("latitude") or info.get("lat")
-                lon = info.get("longitude") or info.get("lon")
-                if lat and lon:
-                    all_airports[icao] = {
-                        "icao": icao,
-                        "lat": lat,
-                        "lon": lon,
-                        "category": "UNK",  # No weather data available
-                    }
+        all_airports = _far139_airports_without_weather(unified_airport_data)
 
-    # Filter and classify airports by FAR139
     markers = []
     for icao, point in all_airports.items():
         airport_info = unified_airport_data.get(icao, {})
-        far139 = airport_info.get("far139", "") or airport_info.get(
-            "FAR_139_TYPE_CODE", ""
-        )
-
-        # Determine tier based on FAR139 classification
-        if far139 in FAR139_MAJOR:
-            tier = "major"
-        elif far139 in FAR139_REGIONAL:
-            tier = "regional"
-        else:
-            # Skip airports without FAR139 major/regional classification
+        tier = _marker_tier(_far139_code(airport_info))
+        if tier is None:
             continue
-
-        category = point.get("category", "UNK")
-        color = MARKER_COLORS.get(category, MARKER_COLORS["UNK"])
-
-        lat = point.get("lat")
-        lon = point.get("lon")
-
-        # Skip if no coordinates
-        if not lat or not lon:
-            continue
-
-        # Get pretty name from unified data
-        name = airport_info.get("name", "")
-        if name:
-            # Title case the name (e.g., "SAN FRANCISCO INTL" -> "San Francisco Intl")
-            name = name.title()
-
-        markers.append(
-            {
-                "icao": icao,
-                "name": name,
-                "lat": lat,
-                "lon": lon,
-                "category": category,
-                "color": color,
-                "tier": tier,
-                # Weather details for tooltip
-                "visibility": point.get("visibility"),
-                "ceiling": point.get("ceiling"),
-                "wind": point.get("wind"),
-                "phenomena": point.get("phenomena", []),
-                "taf_changes": point.get("taf_changes", []),
-            }
-        )
+        marker = _airport_marker(icao, point, airport_info, tier)
+        if marker is not None:
+            markers.append(marker)
 
     return markers
+
+
+def _far139_code(airport_info: dict[str, Any]) -> str:
+    return airport_info.get("far139", "") or airport_info.get("FAR_139_TYPE_CODE", "")
+
+
+def _marker_tier(far139: str) -> str | None:
+    """The marker tier for a FAR139 code: 'major', 'regional', or None to skip it."""
+    if far139 in FAR139_MAJOR:
+        return "major"
+    if far139 in FAR139_REGIONAL:
+        return "regional"
+    return None
+
+
+def _collect_weather_points(
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+) -> dict[str, dict[str, Any]]:
+    """Map each ICAO to its first weather point across every grouping."""
+    all_airports: dict[str, dict[str, Any]] = {}
+    for groupings in artcc_groupings.values():
+        for g in groupings:
+            for point in g.get("airport_weather_points", []):
+                icao = point.get("icao")
+                if icao and icao not in all_airports:
+                    all_airports[icao] = point
+    return all_airports
+
+
+def _far139_airports_without_weather(
+    unified_airport_data: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Build UNK weather points for the major and regional FAR139 airports with coordinates.
+
+    Args:
+        unified_airport_data: Airport data keyed by ICAO.
+
+    Returns:
+        ICAO to a point dict with ``icao``, ``lat``, ``lon`` and category ``UNK``.
+    """
+    all_airports: dict[str, dict[str, Any]] = {}
+    for icao, info in unified_airport_data.items():
+        if _marker_tier(_far139_code(info)) is None:
+            continue
+        lat = info.get("latitude") or info.get("lat")
+        lon = info.get("longitude") or info.get("lon")
+        if lat and lon:
+            all_airports[icao] = {
+                "icao": icao,
+                "lat": lat,
+                "lon": lon,
+                "category": "UNK",
+            }
+    return all_airports
+
+
+def _airport_marker(
+    icao: str, point: dict[str, Any], airport_info: dict[str, Any], tier: str
+) -> dict[str, Any] | None:
+    """Build one map marker from a weather point, or None when it has no coordinates.
+
+    Args:
+        icao: The airport's ICAO code.
+        point: Its weather point (category, coordinates and tooltip details).
+        airport_info: Its unified airport data, for the display name.
+        tier: 'major' or 'regional'.
+
+    Returns:
+        The marker dict, or None when the point lacks a latitude or longitude.
+    """
+    category = point.get("category", "UNK")
+    color = MARKER_COLORS.get(category, MARKER_COLORS["UNK"])
+
+    lat = point.get("lat")
+    lon = point.get("lon")
+    if not lat or not lon:
+        return None
+
+    name = airport_info.get("name", "")
+    if name:
+        name = name.title()
+
+    return {
+        "icao": icao,
+        "name": name,
+        "lat": lat,
+        "lon": lon,
+        "category": category,
+        "color": color,
+        "tier": tier,
+        "visibility": point.get("visibility"),
+        "ceiling": point.get("ceiling"),
+        "wind": point.get("wind"),
+        "phenomena": point.get("phenomena", []),
+        "taf_changes": point.get("taf_changes", []),
+    }
 
 
 def compute_convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -274,44 +309,11 @@ def generate_weather_regions(
     if not airport_points or not artcc_boundary:
         return []
 
-    # Get bounding box of ARTCC
-    lats = [p[0] for p in artcc_boundary]
-    lons = [p[1] for p in artcc_boundary]
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Create grid and assign each cell to nearest airport
-    # Max distance squared for interpolation (~0.7 degrees, about 40-50nm)
-    # Cells farther than this from any airport won't be colored (avoids ocean fill)
-    max_dist_sq = 0.5  # 0.7^2 ≈ 0.5
-
-    grid_cells = []  # [(center_lat, center_lon, nearest_airport_idx)]
-
-    lat = min_lat + grid_resolution / 2
-    while lat < max_lat:
-        lon = min_lon + grid_resolution / 2
-        while lon < max_lon:
-            # Check if cell center is inside ARTCC
-            if point_in_polygon((lat, lon), artcc_boundary):
-                # Find nearest airport
-                min_dist = float("inf")
-                nearest_idx = 0
-                for idx, ap in enumerate(airport_points):
-                    dist = (lat - ap["lat"]) ** 2 + (lon - ap["lon"]) ** 2
-                    if dist < min_dist:
-                        min_dist = dist
-                        nearest_idx = idx
-                # Only include cell if it's close enough to an airport
-                if min_dist <= max_dist_sq:
-                    grid_cells.append((lat, lon, nearest_idx))
-            lon += grid_resolution
-        lat += grid_resolution
-
+    grid_cells = _weather_grid_cells(artcc_boundary, airport_points, grid_resolution)
     if not grid_cells:
         return []
 
-    # Group cells by airport and create region polygons
-    # For simplicity, output individual cell polygons (they'll merge visually)
+    # Output individual cell polygons (they'll merge visually)
     half_res = grid_resolution / 2
     regions = []
 
@@ -333,6 +335,57 @@ def generate_weather_regions(
         )
 
     return regions
+
+
+def _weather_grid_cells(
+    artcc_boundary: list[tuple[float, float]],
+    airport_points: list[dict],
+    grid_resolution: float,
+) -> list[tuple[float, float, int]]:
+    """Grid the boundary's bounding box and keep each inside cell near an airport.
+
+    Args:
+        artcc_boundary: List of (lat, lon) tuples forming the ARTCC polygon.
+        airport_points: List of {icao, lat, lon, category} dicts.
+        grid_resolution: Size of grid cells in degrees.
+
+    Returns:
+        (center_lat, center_lon, nearest_airport_idx) for every cell whose center
+        is inside the boundary and within ``_REGION_MAX_DIST_SQ`` of an airport.
+    """
+    lats = [p[0] for p in artcc_boundary]
+    lons = [p[1] for p in artcc_boundary]
+    min_lat, max_lat = min(lats), max(lats)
+    min_lon, max_lon = min(lons), max(lons)
+
+    grid_cells = []
+
+    lat = min_lat + grid_resolution / 2
+    while lat < max_lat:
+        lon = min_lon + grid_resolution / 2
+        while lon < max_lon:
+            if point_in_polygon((lat, lon), artcc_boundary):
+                min_dist, nearest_idx = _nearest_airport(lat, lon, airport_points)
+                if min_dist <= _REGION_MAX_DIST_SQ:
+                    grid_cells.append((lat, lon, nearest_idx))
+            lon += grid_resolution
+        lat += grid_resolution
+
+    return grid_cells
+
+
+def _nearest_airport(
+    lat: float, lon: float, airport_points: list[dict]
+) -> tuple[float, int]:
+    """The squared degree distance to the nearest airport and that airport's index."""
+    min_dist = float("inf")
+    nearest_idx = 0
+    for idx, ap in enumerate(airport_points):
+        dist = (lat - ap["lat"]) ** 2 + (lon - ap["lon"]) ** 2
+        if dist < min_dist:
+            min_dist = dist
+            nearest_idx = idx
+    return min_dist, nearest_idx
 
 
 def add_buffer_to_polygon(
@@ -537,26 +590,31 @@ def get_artcc_color(stats: dict[str, int]) -> str:
     return "#888888"  # Gray for no data
 
 
-def generate_html(
+def _geojson_ring(poly: list[tuple] | list[list]) -> list[list]:
+    """Convert a (lat, lon) polygon to a closed GeoJSON [lon, lat] ring."""
+    coords = [[p[1], p[0]] for p in poly]
+    if coords and coords[0] != coords[-1]:
+        coords.append(coords[0])
+    return coords
+
+
+def _artcc_geojson(
     boundaries: dict[str, list[list[tuple]]],
     artcc_groupings: dict[str, list[dict[str, Any]]],
     artcc_stats: dict[str, dict[str, int]],
-    timestamp: str,
-    tile_version: int = 0,
-    unified_airport_data: dict[str, Any] | None = None,
-    use_tile_layer: bool = True,
-    simaware_cache_dir: Path | None = None,
-    airport_markers: list[dict[str, Any]] | None = None,
-    *,
-    basemap_url: str,
-) -> str:
-    """Generate the complete HTML content."""
+) -> dict[str, Any]:
+    """Convert the CONUS ARTCC boundaries to a GeoJSON FeatureCollection for Leaflet.
 
-    # Convert boundaries to GeoJSON for Leaflet (CONUS only)
-    # Now using neutral styling - borders only
+    Args:
+        boundaries: ARTCC code to its (lat, lon) polygons.
+        artcc_groupings: ARTCC code to its groupings, counted per feature.
+        artcc_stats: ARTCC code to its category counts.
+
+    Returns:
+        A FeatureCollection with one Polygon feature per CONUS ARTCC polygon.
+    """
     geojson_features = []
     for artcc, polys in boundaries.items():
-        # Skip non-CONUS ARTCCs (oceanic, Alaska, Hawaii, etc.)
         if artcc not in CONUS_ARTCCS:
             continue
         stats = artcc_stats.get(artcc, {})
@@ -564,81 +622,106 @@ def generate_html(
         grouping_count = len(artcc_groupings.get(artcc, []))
 
         for poly in polys:
-            # GeoJSON uses [lon, lat] order
-            coords = [[p[1], p[0]] for p in poly]
-            # Close the polygon if not already closed
-            if coords and coords[0] != coords[-1]:
-                coords.append(coords[0])
+            coords = _geojson_ring(poly)
+            geojson_features.append(
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "artcc": artcc,
+                        "name": display_name,
+                        "groupings": grouping_count,
+                        "lifr": stats.get("LIFR", 0),
+                        "ifr": stats.get("IFR", 0),
+                        "mvfr": stats.get("MVFR", 0),
+                        "vfr": stats.get("VFR", 0),
+                    },
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [coords],
+                    },
+                }
+            )
 
-            feature = {
-                "type": "Feature",
-                "properties": {
-                    "artcc": artcc,
-                    "name": display_name,
-                    "groupings": grouping_count,
-                    "lifr": stats.get("LIFR", 0),
-                    "ifr": stats.get("IFR", 0),
-                    "mvfr": stats.get("MVFR", 0),
-                    "vfr": stats.get("VFR", 0),
-                },
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [coords],
-                },
-            }
-            geojson_features.append(feature)
-
-    geojson = {
+    return {
         "type": "FeatureCollection",
         "features": geojson_features,
     }
 
-    # Build ARTCC-level airport data for focus feature
+
+def _is_focus_point(point: dict[str, Any]) -> bool:
+    return bool(
+        point.get("category") != "UNK" and point.get("lat") and point.get("lon")
+    )
+
+
+def _focus_airport(
+    point: dict[str, Any], unified_airport_data: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Build the focus feature's entry for one weather point.
+
+    Args:
+        point: The airport's weather point.
+        unified_airport_data: Airport data keyed by ICAO, for the display name.
+
+    Returns:
+        The point's ICAO, title-cased name, coordinates, category, marker color
+        and tooltip weather details.
+    """
+    icao = point.get("icao")
+    airport_name = ""
+    if unified_airport_data and icao in unified_airport_data:
+        airport_name = unified_airport_data[icao].get("name", "")
+        if airport_name:
+            airport_name = airport_name.title()
+    return {
+        "icao": icao,
+        "name": airport_name,
+        "lat": point.get("lat"),
+        "lon": point.get("lon"),
+        "category": point.get("category"),
+        "color": MARKER_COLORS.get(point.get("category"), MARKER_COLORS["UNK"]),
+        "visibility": point.get("visibility"),
+        "ceiling": point.get("ceiling"),
+        "wind": point.get("wind"),
+        "phenomena": point.get("phenomena", []),
+        "taf_changes": point.get("taf_changes", []),
+    }
+
+
+def _unique_focus_airports(
+    groupings: list[dict[str, Any]], unified_airport_data: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """The focus entries for an ARTCC's airports, each ICAO once, first point wins."""
+    seen_icaos = set()
+    airports_list = []
+    for g in groupings:
+        for point in g.get("airport_weather_points", []):
+            icao = point.get("icao")
+            if icao and icao not in seen_icaos and _is_focus_point(point):
+                seen_icaos.add(icao)
+                airports_list.append(_focus_airport(point, unified_airport_data))
+    return airports_list
+
+
+def _artcc_airport_data(
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+    unified_airport_data: dict[str, Any] | None,
+) -> dict[str, list[dict[str, Any]]]:
+    """ARTCC code to the focus entries of its airports, for ARTCCs that have any."""
     artcc_airport_data = {}
     for artcc, groupings in artcc_groupings.items():
         if artcc == "custom":
             continue
-        # Collect all unique airports across all groupings in this ARTCC
-        seen_icaos = set()
-        airports_list = []
-        for g in groupings:
-            for point in g.get("airport_weather_points", []):
-                icao = point.get("icao")
-                if (
-                    icao
-                    and icao not in seen_icaos
-                    and point.get("category") != "UNK"
-                    and point.get("lat")
-                    and point.get("lon")
-                ):
-                    seen_icaos.add(icao)
-                    # Get pretty name from unified airport data
-                    airport_name = ""
-                    if unified_airport_data and icao in unified_airport_data:
-                        airport_name = unified_airport_data[icao].get("name", "")
-                        if airport_name:
-                            airport_name = airport_name.title()
-                    airports_list.append(
-                        {
-                            "icao": icao,
-                            "name": airport_name,
-                            "lat": point.get("lat"),
-                            "lon": point.get("lon"),
-                            "category": point.get("category"),
-                            "color": MARKER_COLORS.get(
-                                point.get("category"), MARKER_COLORS["UNK"]
-                            ),
-                            "visibility": point.get("visibility"),
-                            "ceiling": point.get("ceiling"),
-                            "wind": point.get("wind"),
-                            "phenomena": point.get("phenomena", []),
-                            "taf_changes": point.get("taf_changes", []),
-                        }
-                    )
+        airports_list = _unique_focus_airports(groupings, unified_airport_data)
         if airports_list:
             artcc_airport_data[artcc] = airports_list
+    return artcc_airport_data
 
-    # Build ARTCC bounds for zoom reference (CONUS only)
+
+def _artcc_bounds(
+    boundaries: dict[str, list[list[tuple]]],
+) -> dict[str, dict[str, float]]:
+    """The bounding box of each CONUS ARTCC with coordinates, for zoom reference."""
     artcc_bounds = {}
     for artcc, polys in boundaries.items():
         if artcc not in CONUS_ARTCCS:
@@ -655,181 +738,162 @@ def generate_html(
                 "west": min(lons),
                 "east": max(lons),
             }
+    return artcc_bounds
 
-    # Build grouping polygons data for hover effect
-    # Use same iteration order as sidebar builder (sorted ARTCCs, then custom)
-    grouping_polygons = {}
-    grouping_id = 0
 
-    sorted_artccs = sorted(
+def _sorted_artccs(artcc_groupings: dict[str, list[dict[str, Any]]]) -> list[str]:
+    """The ARTCC codes sorted by display name, without the custom section."""
+    return sorted(
         [a for a in artcc_groupings if a != "custom"],
         key=lambda x: ARTCC_NAMES.get(x, x),
     )
 
-    # Collect all grouping names to fetch SimAware boundaries in batch
+
+def _fetch_grouping_boundaries(
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+    sorted_artccs: list[str],
+    unified_airport_data: dict[str, Any] | None,
+    simaware_cache_dir: Path | None,
+) -> dict[str, list[list[tuple[float, float]]]]:
+    """Fetch the SimAware TRACON boundaries of every grouping in one batch.
+
+    Args:
+        artcc_groupings: ARTCC code to its groupings.
+        sorted_artccs: The ARTCC codes in sidebar order.
+        unified_airport_data: Airport data passed through to the lookup.
+        simaware_cache_dir: The boundary cache; without one nothing is fetched.
+
+    Returns:
+        Grouping name to its (lat, lon) polygons, empty without a cache dir.
+    """
     all_grouping_names = []
     for artcc in sorted_artccs:
         all_grouping_names.extend(g["name"] for g in artcc_groupings[artcc])
     if "custom" in artcc_groupings:
         all_grouping_names.extend(g["name"] for g in artcc_groupings["custom"])
 
-    # Fetch SimAware TRACON boundaries for all groupings (when cache dir is available)
-    simaware_boundaries = {}
-    if simaware_cache_dir:
-        print("    Fetching SimAware TRACON boundaries for groupings...")
-        simaware_boundaries = get_all_grouping_boundaries(
-            all_grouping_names,
-            unified_airport_data=unified_airport_data,
-        )
+    if not simaware_cache_dir:
+        return {}
+    print("    Fetching SimAware TRACON boundaries for groupings...")
+    return get_all_grouping_boundaries(
+        all_grouping_names,
+        unified_airport_data=unified_airport_data,
+    )
 
-    for artcc in sorted_artccs:
-        groupings = artcc_groupings[artcc]
-        # Filter out groupings with no METARs, sort with International last
+
+def _grouping_polygon_coords(
+    grouping: dict[str, Any],
+    simaware_boundaries: dict[str, list[list[tuple[float, float]]]],
+) -> list[list[list]]:
+    """The grouping's GeoJSON rings: its SimAware boundary, else a buffered hull of its airports."""
+    grouping_name = grouping["name"]
+    if grouping_name in simaware_boundaries:
+        return [_geojson_ring(poly) for poly in simaware_boundaries[grouping_name]]
+
+    coords = grouping.get("airport_coords", [])
+    if not coords:
+        return []
+    coord_tuples = [(c[0], c[1]) for c in coords]
+    hull = compute_convex_hull(coord_tuples)
+    buffered = add_buffer_to_polygon(hull, buffer_nm=15)
+    return [_geojson_ring(buffered)]
+
+
+def _grouping_polygon(
+    grouping: dict[str, Any],
+    artcc: str | None,
+    simaware_boundaries: dict[str, list[list[tuple[float, float]]]],
+    unified_airport_data: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Build a grouping's hover polygon entry, or None when it has no polygon.
+
+    Args:
+        grouping: The grouping, with its name, airport coordinates and weather points.
+        artcc: The ARTCC it is listed under, or None for an unmapped custom grouping.
+        simaware_boundaries: Grouping name to its SimAware (lat, lon) polygons.
+        unified_airport_data: Airport data keyed by ICAO, for display names.
+
+    Returns:
+        The entry's name, ARTCC, list of polygons and focus airports.
+    """
+    all_polygon_coords = _grouping_polygon_coords(grouping, simaware_boundaries)
+    if not all_polygon_coords:
+        return None
+    airports_for_focus = [
+        _focus_airport(point, unified_airport_data)
+        for point in grouping.get("airport_weather_points", [])
+        if _is_focus_point(point)
+    ]
+    return {
+        "name": grouping["name"],
+        "artcc": artcc,
+        "coords": all_polygon_coords,
+        "airports": airports_for_focus,
+    }
+
+
+def _grouping_polygons(
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+    unified_airport_data: dict[str, Any] | None,
+    simaware_cache_dir: Path | None,
+) -> dict[str, dict[str, Any]]:
+    """Build the hover polygons keyed by grouping ID, numbered as the sidebar numbers them.
+
+    Args:
+        artcc_groupings: ARTCC code to its groupings, with "custom" for unmapped ones.
+        unified_airport_data: Airport data keyed by ICAO.
+        simaware_cache_dir: The SimAware boundary cache; without one every polygon
+            is a buffered hull of the grouping's airports.
+
+    Returns:
+        Grouping ID (as a string) to its polygon entry.
+    """
+    sorted_artccs = _sorted_artccs(artcc_groupings)
+    simaware_boundaries = _fetch_grouping_boundaries(
+        artcc_groupings, sorted_artccs, unified_airport_data, simaware_cache_dir
+    )
+
+    sections: list[tuple[str | None, list[dict[str, Any]]]] = [
+        (artcc, artcc_groupings[artcc]) for artcc in sorted_artccs
+    ]
+    if "custom" in artcc_groupings:
+        sections.append((None, artcc_groupings["custom"]))
+
+    grouping_polygons = {}
+    grouping_id = 0
+    for artcc, groupings in sections:
         filtered_groupings = [g for g in groupings if grouping_has_metars(g)]
         for g in sorted(filtered_groupings, key=grouping_sort_key):
-            grouping_name = g["name"]
-
-            # Check if we have a SimAware boundary for this grouping
-            if grouping_name in simaware_boundaries:
-                # Use SimAware TRACON boundary (already in (lat, lon) format)
-                # simaware_boundaries[name] is now a list of polygons (may be >1 if not neighbors)
-                simaware_polys = simaware_boundaries[grouping_name]
-                all_polygon_coords = []
-                for poly in simaware_polys:
-                    # Convert to GeoJSON format [lon, lat]
-                    polygon_coords = [[p[1], p[0]] for p in poly]
-                    # Close the polygon if not already closed
-                    if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
-                        polygon_coords.append(polygon_coords[0])
-                    all_polygon_coords.append(polygon_coords)
-            else:
-                # Fall back to convex hull of airport coordinates
-                coords = g.get("airport_coords", [])
-                all_polygon_coords = []
-                if coords:
-                    # Convert to tuples for convex hull
-                    coord_tuples = [(c[0], c[1]) for c in coords]
-                    # Compute convex hull and add buffer
-                    hull = compute_convex_hull(coord_tuples)
-                    buffered = add_buffer_to_polygon(hull, buffer_nm=15)
-                    # Convert to GeoJSON format [lon, lat]
-                    polygon_coords = [[p[1], p[0]] for p in buffered]
-                    # Close the polygon
-                    if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
-                        polygon_coords.append(polygon_coords[0])
-                    all_polygon_coords.append(polygon_coords)
-
-            if all_polygon_coords:
-                # Include airport weather points for focus feature (filter out UNK)
-                airports_for_focus = []
-                for point in g.get("airport_weather_points", []):
-                    if (
-                        point.get("category") != "UNK"
-                        and point.get("lat")
-                        and point.get("lon")
-                    ):
-                        icao = point.get("icao")
-                        # Get pretty name from unified airport data
-                        airport_name = ""
-                        if unified_airport_data and icao in unified_airport_data:
-                            airport_name = unified_airport_data[icao].get("name", "")
-                            if airport_name:
-                                airport_name = airport_name.title()
-                        airports_for_focus.append(
-                            {
-                                "icao": icao,
-                                "name": airport_name,
-                                "lat": point.get("lat"),
-                                "lon": point.get("lon"),
-                                "category": point.get("category"),
-                                "color": MARKER_COLORS.get(
-                                    point.get("category"), MARKER_COLORS["UNK"]
-                                ),
-                                "visibility": point.get("visibility"),
-                                "ceiling": point.get("ceiling"),
-                                "wind": point.get("wind"),
-                                "phenomena": point.get("phenomena", []),
-                                "taf_changes": point.get("taf_changes", []),
-                            }
-                        )
-                grouping_polygons[str(grouping_id)] = {
-                    "name": grouping_name,
-                    "artcc": artcc,
-                    "coords": all_polygon_coords,  # Now a list of polygons
-                    "airports": airports_for_focus,
-                }
+            polygon = _grouping_polygon(
+                g, artcc, simaware_boundaries, unified_airport_data
+            )
+            if polygon is not None:
+                grouping_polygons[str(grouping_id)] = polygon
             grouping_id += 1
+    return grouping_polygons
 
-    # Add custom groupings at the end
-    if "custom" in artcc_groupings:
-        # Filter out groupings with no METARs, sort with International last
-        filtered_custom = [
-            g for g in artcc_groupings["custom"] if grouping_has_metars(g)
-        ]
-        for g in sorted(filtered_custom, key=grouping_sort_key):
-            grouping_name = g["name"]
 
-            # Check if we have a SimAware boundary for this grouping
-            if grouping_name in simaware_boundaries:
-                simaware_polys = simaware_boundaries[grouping_name]
-                all_polygon_coords = []
-                for poly in simaware_polys:
-                    polygon_coords = [[p[1], p[0]] for p in poly]
-                    if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
-                        polygon_coords.append(polygon_coords[0])
-                    all_polygon_coords.append(polygon_coords)
-            else:
-                coords = g.get("airport_coords", [])
-                all_polygon_coords = []
-                if coords:
-                    coord_tuples = [(c[0], c[1]) for c in coords]
-                    hull = compute_convex_hull(coord_tuples)
-                    buffered = add_buffer_to_polygon(hull, buffer_nm=15)
-                    polygon_coords = [[p[1], p[0]] for p in buffered]
-                    if polygon_coords and polygon_coords[0] != polygon_coords[-1]:
-                        polygon_coords.append(polygon_coords[0])
-                    all_polygon_coords.append(polygon_coords)
+def generate_html(
+    boundaries: dict[str, list[list[tuple]]],
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+    artcc_stats: dict[str, dict[str, int]],
+    timestamp: str,
+    tile_version: int = 0,
+    unified_airport_data: dict[str, Any] | None = None,
+    use_tile_layer: bool = True,
+    simaware_cache_dir: Path | None = None,
+    airport_markers: list[dict[str, Any]] | None = None,
+    *,
+    basemap_url: str,
+) -> str:
+    """Generate the complete HTML content."""
 
-            if all_polygon_coords:
-                # Include airport weather points for focus feature (filter out UNK)
-                airports_for_focus = []
-                for point in g.get("airport_weather_points", []):
-                    if (
-                        point.get("category") != "UNK"
-                        and point.get("lat")
-                        and point.get("lon")
-                    ):
-                        icao = point.get("icao")
-                        # Get pretty name from unified airport data
-                        airport_name = ""
-                        if unified_airport_data and icao in unified_airport_data:
-                            airport_name = unified_airport_data[icao].get("name", "")
-                            if airport_name:
-                                airport_name = airport_name.title()
-                        airports_for_focus.append(
-                            {
-                                "icao": icao,
-                                "name": airport_name,
-                                "lat": point.get("lat"),
-                                "lon": point.get("lon"),
-                                "category": point.get("category"),
-                                "color": MARKER_COLORS.get(
-                                    point.get("category"), MARKER_COLORS["UNK"]
-                                ),
-                                "visibility": point.get("visibility"),
-                                "ceiling": point.get("ceiling"),
-                                "wind": point.get("wind"),
-                                "phenomena": point.get("phenomena", []),
-                                "taf_changes": point.get("taf_changes", []),
-                            }
-                        )
-                grouping_polygons[str(grouping_id)] = {
-                    "name": grouping_name,
-                    "artcc": None,  # No ARTCC for unmapped custom groupings
-                    "coords": all_polygon_coords,  # Now a list of polygons
-                    "airports": airports_for_focus,
-                }
-            grouping_id += 1
+    geojson = _artcc_geojson(boundaries, artcc_groupings, artcc_stats)
+    artcc_airport_data = _artcc_airport_data(artcc_groupings, unified_airport_data)
+    artcc_bounds = _artcc_bounds(boundaries)
+    grouping_polygons = _grouping_polygons(
+        artcc_groupings, unified_airport_data, simaware_cache_dir
+    )
 
     # Build groupings sidebar data
     sidebar_html = build_sidebar_html(artcc_groupings, artcc_stats)
@@ -2512,80 +2576,104 @@ def grouping_sort_key(grouping: dict[str, Any]) -> tuple[int, str]:
     return (1 if is_international else 0, name)
 
 
-def build_sidebar_html(
-    artcc_groupings: dict[str, list[dict[str, Any]]],
-    artcc_stats: dict[str, dict[str, int]],
-) -> str:
-    """Build the sidebar HTML with ARTCC sections and grouping links."""
-    html_parts = []
+_STAT_BADGES = (
+    ("LIFR", "stat-lifr"),
+    ("IFR", "stat-ifr"),
+    ("MVFR", "stat-mvfr"),
+    ("VFR", "stat-vfr"),
+)
 
-    # Sort ARTCCs alphabetically, but put "custom" at the end
-    sorted_artccs = sorted(
-        [a for a in artcc_groupings if a != "custom"],
-        key=lambda x: ARTCC_NAMES.get(x, x),
-    )
 
-    # Track grouping ID for hover polygon mapping
-    grouping_id = 0
+def _stats_badges_html(stats: dict[str, int]) -> str:
+    """The category count badges of a sidebar section header, worst category first."""
+    stats_html = ""
+    for category, css_class in _STAT_BADGES:
+        if stats.get(category, 0) > 0:
+            stats_html += f'<span class="stat {css_class}">{stats[category]}</span>'
+    return stats_html
 
-    for artcc in sorted_artccs:
-        groupings = artcc_groupings[artcc]
-        stats = artcc_stats.get(artcc, {})
-        display_name = ARTCC_NAMES.get(artcc, artcc)
 
-        # Build stats badges
-        stats_html = ""
-        if stats.get("LIFR", 0) > 0:
-            stats_html += f'<span class="stat stat-lifr">{stats["LIFR"]}</span>'
-        if stats.get("IFR", 0) > 0:
-            stats_html += f'<span class="stat stat-ifr">{stats["IFR"]}</span>'
-        if stats.get("MVFR", 0) > 0:
-            stats_html += f'<span class="stat stat-mvfr">{stats["MVFR"]}</span>'
-        if stats.get("VFR", 0) > 0:
-            stats_html += f'<span class="stat stat-vfr">{stats["VFR"]}</span>'
+def _awc_briefing_html(artcc: str) -> str:
+    """The link to the ARTCC's real-world FAA/NWS aviation weather briefing.
 
-        # Link to FAA/NWS real-world aviation weather briefing
-        # Non-CONUS ARTCCs need special handling - they don't have CWSU pages
-        if artcc == "ZHN":
-            awc_url = "https://www.weather.gov/hfo/aviation"
-            awc_name = "NWS Weather Briefing"
-        elif artcc == "ZAN":
-            awc_url = "https://www.weather.gov/aawu"
-            awc_name = "NWS Weather Briefing"
-        else:
-            awc_url = f"https://aviationweather.gov/pdwb/?cwsu={artcc.lower()}"
-            awc_name = "FAA Weather Briefing"
-        awc_briefing_html = f"""
+    Non-CONUS ARTCCs have no CWSU page, so ZHN and ZAN link to their NWS offices.
+    """
+    if artcc == "ZHN":
+        awc_url = "https://www.weather.gov/hfo/aviation"
+        awc_name = "NWS Weather Briefing"
+    elif artcc == "ZAN":
+        awc_url = "https://www.weather.gov/aawu"
+        awc_name = "NWS Weather Briefing"
+    else:
+        awc_url = f"https://aviationweather.gov/pdwb/?cwsu={artcc.lower()}"
+        awc_name = "FAA Weather Briefing"
+    return f"""
                 <a href="{awc_url}" target="_blank" class="awc-briefing-link">
                     <span class="awc-briefing-name">{awc_name}</span>
                     <span class="icon">🌐</span>
                 </a>"""
 
-        # ARTCC-wide briefing link at the top
-        artcc_briefing_html = f'''
+
+def _artcc_groupings_html(
+    artcc: str, groupings: list[dict[str, Any]], grouping_id: int
+) -> tuple[str, int]:
+    """The links of an ARTCC's groupings that have METARs, International last.
+
+    Args:
+        artcc: The ARTCC code, the default path prefix of each link.
+        groupings: The ARTCC's groupings.
+        grouping_id: The hover polygon ID of the first link.
+
+    Returns:
+        The links' HTML and the ID after the last link.
+    """
+    groupings_html = ""
+    filtered_groupings = [g for g in groupings if grouping_has_metars(g)]
+    for g in sorted(filtered_groupings, key=grouping_sort_key):
+        airport_count = g.get("airport_count", 0)
+        # Use path_prefix for custom groupings that were assigned to an ARTCC
+        path_prefix = g.get("path_prefix", artcc)
+        is_custom = g.get("is_custom", False)
+        custom_marker = ' <span class="custom-marker">★</span>' if is_custom else ""
+        groupings_html += f'''
+                <a href="{path_prefix}/{g["filename"]}" class="grouping-link" data-grouping-id="{grouping_id}">
+                    <span class="grouping-name">{g["name"]}{custom_marker}<span class="focus-indicator">🎯</span></span>
+                    <span class="grouping-airports">{airport_count} airports</span>
+                </a>'''
+        grouping_id += 1
+    return groupings_html, grouping_id
+
+
+def _artcc_section_html(
+    artcc: str,
+    groupings: list[dict[str, Any]],
+    stats: dict[str, int],
+    grouping_id: int,
+) -> tuple[str, int]:
+    """One ARTCC's sidebar section: header, briefing links and grouping links.
+
+    Args:
+        artcc: The ARTCC code.
+        groupings: The ARTCC's groupings.
+        stats: The ARTCC's category counts.
+        grouping_id: The hover polygon ID of the section's first grouping link.
+
+    Returns:
+        The section's HTML and the ID after its last grouping link.
+    """
+    display_name = ARTCC_NAMES.get(artcc, artcc)
+    stats_html = _stats_badges_html(stats)
+    awc_briefing_html = _awc_briefing_html(artcc)
+
+    artcc_briefing_html = f'''
                 <a href="{artcc}/_all.html" class="artcc-briefing-link" data-artcc="{artcc}">
                     <span class="artcc-briefing-name">All {display_name} Airports<span class="focus-indicator">🎯</span></span>
                     <span class="icon">📋</span>
                 </a>'''
 
-        # Build grouping links
-        # Filter out groupings with no METARs, sort with International last
-        groupings_html = ""
-        filtered_groupings = [g for g in groupings if grouping_has_metars(g)]
-        for g in sorted(filtered_groupings, key=grouping_sort_key):
-            airport_count = g.get("airport_count", 0)
-            # Use path_prefix for custom groupings that were assigned to an ARTCC
-            path_prefix = g.get("path_prefix", artcc)
-            is_custom = g.get("is_custom", False)
-            custom_marker = ' <span class="custom-marker">★</span>' if is_custom else ""
-            groupings_html += f'''
-                <a href="{path_prefix}/{g["filename"]}" class="grouping-link" data-grouping-id="{grouping_id}">
-                    <span class="grouping-name">{g["name"]}{custom_marker}<span class="focus-indicator">🎯</span></span>
-                    <span class="grouping-airports">{airport_count} airports</span>
-                </a>'''
-            grouping_id += 1
+    groupings_html, grouping_id = _artcc_groupings_html(artcc, groupings, grouping_id)
 
-        html_parts.append(f'''
+    section_html = f'''
             <div class="artcc-section" data-artcc="{artcc}">
                 <div class="artcc-header">
                     <div>
@@ -2599,38 +2687,39 @@ def build_sidebar_html(
                     {artcc_briefing_html}
                     {groupings_html}
                 </div>
-            </div>''')
+            </div>'''
+    return section_html, grouping_id
 
-    # Add custom groupings section if present (only for truly unmapped groupings)
-    if "custom" in artcc_groupings:
-        custom_groupings = artcc_groupings["custom"]
-        stats = artcc_stats.get("custom", {})
 
-        stats_html = ""
-        if stats.get("LIFR", 0) > 0:
-            stats_html += f'<span class="stat stat-lifr">{stats["LIFR"]}</span>'
-        if stats.get("IFR", 0) > 0:
-            stats_html += f'<span class="stat stat-ifr">{stats["IFR"]}</span>'
-        if stats.get("MVFR", 0) > 0:
-            stats_html += f'<span class="stat stat-mvfr">{stats["MVFR"]}</span>'
-        if stats.get("VFR", 0) > 0:
-            stats_html += f'<span class="stat stat-vfr">{stats["VFR"]}</span>'
+def _custom_section_html(
+    custom_groupings: list[dict[str, Any]], stats: dict[str, int], grouping_id: int
+) -> str | None:
+    """The sidebar section of unmapped custom groupings, or None when none has METARs.
 
-        # Filter out groupings with no METARs, sort with International last
-        groupings_html = ""
-        filtered_custom = [g for g in custom_groupings if grouping_has_metars(g)]
-        for g in sorted(filtered_custom, key=grouping_sort_key):
-            airport_count = g.get("airport_count", 0)
-            groupings_html += f'''
+    Args:
+        custom_groupings: The groupings mapped to no ARTCC.
+        stats: Their category counts.
+        grouping_id: The hover polygon ID of the first grouping link.
+
+    Returns:
+        The section's HTML, or None when no grouping has METARs.
+    """
+    stats_html = _stats_badges_html(stats)
+
+    groupings_html = ""
+    filtered_custom = [g for g in custom_groupings if grouping_has_metars(g)]
+    for g in sorted(filtered_custom, key=grouping_sort_key):
+        airport_count = g.get("airport_count", 0)
+        groupings_html += f'''
                 <a href="custom/{g["filename"]}" class="grouping-link" data-grouping-id="{grouping_id}">
                     <span class="grouping-name">{g["name"]}<span class="focus-indicator">🎯</span></span>
                     <span class="grouping-airports">{airport_count} airports</span>
                 </a>'''
-            grouping_id += 1
+        grouping_id += 1
 
-        # Only show custom section if there are groupings with METARs
-        if filtered_custom:
-            html_parts.append(f"""
+    if not filtered_custom:
+        return None
+    return f"""
             <div class="artcc-section custom-section" data-artcc="custom">
                 <div class="artcc-header">
                     <div>
@@ -2641,6 +2730,30 @@ def build_sidebar_html(
                 <div class="groupings-list">
                     {groupings_html}
                 </div>
-            </div>""")
+            </div>"""
+
+
+def build_sidebar_html(
+    artcc_groupings: dict[str, list[dict[str, Any]]],
+    artcc_stats: dict[str, dict[str, int]],
+) -> str:
+    """Build the sidebar HTML with ARTCC sections and grouping links."""
+    html_parts = []
+
+    # Track grouping ID for hover polygon mapping
+    grouping_id = 0
+    for artcc in _sorted_artccs(artcc_groupings):
+        section_html, grouping_id = _artcc_section_html(
+            artcc, artcc_groupings[artcc], artcc_stats.get(artcc, {}), grouping_id
+        )
+        html_parts.append(section_html)
+
+    # Add custom groupings section if present (only for truly unmapped groupings)
+    if "custom" in artcc_groupings:
+        custom_html = _custom_section_html(
+            artcc_groupings["custom"], artcc_stats.get("custom", {}), grouping_id
+        )
+        if custom_html is not None:
+            html_parts.append(custom_html)
 
     return "\n".join(html_parts)
