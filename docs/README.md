@@ -50,5 +50,4 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **stage**: one generation step of a weather daemon run: `weather`, `briefings`, `tiles` or `index`.
 - **tile version**: the run start time of the last completed tile set, stored in `tiles/version.txt` and used as the index page's tile `?v=`.
 - **traffic columns**: the airports table's departure, arrival and ETA columns, as opposed to the WIND and ALT columns.
-- **wave**: a refresh in which most weather boxes have expired, so several box requests go out and the refresh lasts as long as the slowest.
 - **weather pass**: the background fetch (`fetch_weather_for_airports`, on the "weather-pass" thread) that fills WIND and ALT box by box after each traffic update; one runs at a time.
