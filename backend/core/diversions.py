@@ -89,6 +89,92 @@ def find_nearby_airports(
     return results
 
 
+@dataclass(frozen=True)
+class _SearchContext:
+    """Inputs shared by every airport evaluated in one diversion search."""
+
+    airports_data: dict[str, dict[str, Any]]
+    filters: DiversionFilters
+    required_runway_ft: int | None
+    weather_data: dict[str, tuple[str, str]] | None
+    controller_data: dict[str, list[str]] | None
+
+
+def _diversion_option(
+    icao: str,
+    distance: float,
+    bearing: float,
+    context: _SearchContext,
+) -> DiversionOption | None:
+    """Build the diversion option for one airport, or None when a filter rejects it.
+
+    Args:
+        icao: Airport ICAO code
+        distance: Distance from the search center in nautical miles
+        bearing: Bearing from the search center in degrees
+        context: The airport data, filters and runway, weather and controller data
+
+    Returns:
+        A DiversionOption, or None when an enabled filter excludes the airport
+    """
+    filters = context.filters
+    airport_data = context.airports_data.get(icao, {})
+    name = airport_data.get("name", icao)
+
+    longest_runway = get_longest_runway(icao)
+    runway_summary = get_runway_summary(icao)
+
+    if (
+        filters.require_runway_capability
+        and context.required_runway_ft
+        and (longest_runway is None or longest_runway < context.required_runway_ft)
+    ):
+        return None
+
+    approaches = get_approach_list_for_airport(icao)
+    has_approaches = len(approaches) > 0
+
+    if filters.require_approaches and not has_approaches:
+        return None
+
+    weather_category: str | None = None
+    weather_details: str | None = None
+    if context.weather_data and icao in context.weather_data:
+        weather_category, weather_details = context.weather_data[icao]
+
+    if (
+        filters.require_good_weather
+        and weather_category
+        and weather_category not in ("VFR", "MVFR")
+    ):
+        return None
+
+    staffed_positions: list[str] = []
+    is_staffed = False
+    if context.controller_data and icao in context.controller_data:
+        staffed_positions = context.controller_data[icao]
+        is_staffed = len(staffed_positions) > 0
+
+    if filters.require_staffed and not is_staffed:
+        return None
+
+    return DiversionOption(
+        icao=icao,
+        name=name,
+        distance_nm=round(distance, 1),
+        bearing_deg=bearing,
+        bearing_compass=bearing_to_compass(bearing),
+        longest_runway_ft=longest_runway,
+        runway_summary=runway_summary,
+        approaches=approaches,
+        has_approaches=has_approaches,
+        weather_category=weather_category,
+        weather_details=weather_details,
+        staffed_positions=staffed_positions,
+        is_staffed=is_staffed,
+    )
+
+
 def find_suitable_diversions(
     lat: float,
     lon: float,
@@ -119,83 +205,28 @@ def find_suitable_diversions(
     if filters is None:
         filters = DiversionFilters()
 
-    # Get required runway length for this aircraft
     required_runway = (
         get_required_runway_length(aircraft_type) if aircraft_type else None
     )
 
-    # Find nearby airports
     nearby = find_nearby_airports(lat, lon, airports_data, radius_nm, max_results=500)
+
+    context = _SearchContext(
+        airports_data=airports_data,
+        filters=filters,
+        required_runway_ft=required_runway,
+        weather_data=weather_data,
+        controller_data=controller_data,
+    )
 
     diversions: list[DiversionOption] = []
 
     for icao, distance, bearing in nearby:
-        airport_data = airports_data.get(icao, {})
-        name = airport_data.get("name", icao)
-
-        # Get runway information
-        longest_runway = get_longest_runway(icao)
-        runway_summary = get_runway_summary(icao)
-
-        # Check runway capability filter
-        if (
-            filters.require_runway_capability
-            and required_runway
-            and (longest_runway is None or longest_runway < required_runway)
-        ):
+        option = _diversion_option(icao, distance, bearing, context)
+        if option is None:
             continue
 
-        # Get approach information
-        approaches = get_approach_list_for_airport(icao)
-        has_approaches_flag = len(approaches) > 0
-
-        # Check approaches filter
-        if filters.require_approaches and not has_approaches_flag:
-            continue
-
-        # Get weather information
-        weather_category = None
-        weather_details = None
-        if weather_data and icao in weather_data:
-            weather_category, weather_details = weather_data[icao]
-
-        # Check weather filter
-        if (
-            filters.require_good_weather
-            and weather_category
-            and weather_category not in ("VFR", "MVFR")
-        ):
-            continue
-
-        # Get controller information
-        staffed_positions: list[str] = []
-        is_staffed = False
-        if controller_data and icao in controller_data:
-            staffed_positions = controller_data[icao]
-            is_staffed = len(staffed_positions) > 0
-
-        # Check staffing filter
-        if filters.require_staffed and not is_staffed:
-            continue
-
-        # Create diversion option
-        diversion = DiversionOption(
-            icao=icao,
-            name=name,
-            distance_nm=round(distance, 1),
-            bearing_deg=bearing,
-            bearing_compass=bearing_to_compass(bearing),
-            longest_runway_ft=longest_runway,
-            runway_summary=runway_summary,
-            approaches=approaches,
-            has_approaches=has_approaches_flag,
-            weather_category=weather_category,
-            weather_details=weather_details,
-            staffed_positions=staffed_positions,
-            is_staffed=is_staffed,
-        )
-
-        diversions.append(diversion)
+        diversions.append(option)
 
         if len(diversions) >= max_results:
             break

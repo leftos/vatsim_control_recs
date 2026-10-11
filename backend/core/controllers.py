@@ -56,6 +56,106 @@ def _get_valid_icao_from_callsign(
     return None
 
 
+def _split_callsign(callsign: str) -> tuple[str, str] | None:
+    """
+    Split a VATSIM callsign into its ICAO prefix and position suffix.
+
+    Args:
+        callsign: Controller or ATIS callsign such as "KJFK_APP" or "SFO_TWR"
+
+    Returns:
+        (prefix, suffix) when the prefix could be an ICAO code, else None. The
+        suffix is empty for a callsign with no underscore.
+    """
+    parts = callsign.split("_")
+    prefix = parts[0]
+    if not 2 <= len(prefix) <= 5:
+        return None
+    suffix = parts[-1] if len(parts) > 1 else ""
+    return prefix, suffix
+
+
+def _collect_controller_positions(
+    data: dict[str, Any],
+    airports_data: dict[str, dict[str, Any]],
+    excluded_frequency: str,
+) -> dict[str, set[str]]:
+    """
+    Collect the non-ATIS positions each airport has a controller online for.
+
+    Args:
+        data: VATSIM data dictionary containing a 'controllers' list
+        airports_data: Dictionary of airport data
+        excluded_frequency: Frequency whose controllers are ignored
+
+    Returns:
+        Dictionary mapping airport ICAO codes to the sets of positions found
+    """
+    positions: defaultdict[str, set[str]] = defaultdict(set)
+    for controller in data.get("controllers", []):
+        if controller.get("frequency", "") == excluded_frequency:
+            continue
+        parsed = _split_callsign(controller.get("callsign", ""))
+        if parsed is None:
+            continue
+        prefix, suffix = parsed
+        if suffix not in CONTROL_POSITION_ORDER:
+            continue
+        valid_icao = _get_valid_icao_from_callsign(prefix, airports_data)
+        if valid_icao:
+            positions[valid_icao].add(suffix)
+    return positions
+
+
+def _collect_atis_positions(
+    data: dict[str, Any], airports_data: dict[str, dict[str, Any]]
+) -> dict[str, set[str]]:
+    """
+    Collect the airports that have an ATIS station online.
+
+    Args:
+        data: VATSIM data dictionary containing an 'atis' list
+        airports_data: Dictionary of airport data
+
+    Returns:
+        Dictionary mapping airport ICAO codes to a set holding "ATIS"
+    """
+    positions: defaultdict[str, set[str]] = defaultdict(set)
+    for atis_station in data.get("atis", []):
+        parsed = _split_callsign(atis_station.get("callsign", ""))
+        if parsed is None:
+            continue
+        prefix, suffix = parsed
+        if suffix != "ATIS":
+            continue
+        valid_icao = _get_valid_icao_from_callsign(prefix, airports_data)
+        if valid_icao:
+            positions[valid_icao].add("ATIS")
+    return positions
+
+
+def _order_positions(positions: dict[str, set[str]]) -> dict[str, list[str]]:
+    """
+    Order each airport's positions for display.
+
+    Non-ATIS positions follow CONTROL_POSITION_ORDER; ATIS is handled separately
+    in the display logic for TOP-DOWN and is always appended last when present.
+
+    Args:
+        positions: Dictionary mapping airport ICAO codes to the sets of positions found
+
+    Returns:
+        Dictionary mapping airport ICAO codes to ordered position suffixes
+    """
+    ordered: dict[str, list[str]] = {}
+    for icao, found in positions.items():
+        sorted_positions = [pos for pos in CONTROL_POSITION_ORDER if pos in found]
+        if "ATIS" in found:
+            sorted_positions.append("ATIS")
+        ordered[icao] = sorted_positions
+    return ordered
+
+
 def get_staffed_positions(
     data: dict[str, Any],
     airports_data: dict[str, dict[str, Any]],
@@ -74,74 +174,7 @@ def get_staffed_positions(
         Dictionary mapping airport ICAO codes to lists of staffed position suffixes
         (e.g., {'KJFK': ['APP', 'TWR', 'GND']})
     """
-    staffed_positions = defaultdict(set)
-    controllers = data.get("controllers", [])
-    for controller in controllers:
-        callsign = controller.get("callsign", "")
-        frequency = controller.get("frequency", "")
-
-        # Exclude specific frequency
-        if frequency == excluded_frequency:
-            continue
-
-        parts = callsign.split("_")
-        # Validate we have non-empty parts (split always returns at least [''])
-        if not parts or not parts[0]:
-            continue  # Skip empty or invalid callsigns
-
-        icao_candidate_prefix = parts[0]
-
-        # Validate ICAO prefix has reasonable length (ICAO codes are 3-4 chars)
-        if len(icao_candidate_prefix) < 2 or len(icao_candidate_prefix) > 5:
-            continue  # Not a valid ICAO prefix
-
-        position_suffix = parts[-1] if len(parts) > 1 else ""
-
-        # Only consider non-ATIS positions for the 'controllers' array
-        allowed_positions = CONTROL_POSITION_ORDER.copy()
-
-        if position_suffix in allowed_positions:
-            valid_icao = _get_valid_icao_from_callsign(
-                icao_candidate_prefix, airports_data
-            )
-
-            if valid_icao:
-                staffed_positions[valid_icao].add(position_suffix)
-
-    # Process ATIS
-    atis_list = data.get("atis", [])
-    for atis_station in atis_list:
-        callsign = atis_station.get("callsign", "")
-
-        parts = callsign.split("_")
-        # Validate we have non-empty parts
-        if not parts or not parts[0]:
-            continue  # Skip empty or invalid callsigns
-
-        icao_candidate_prefix = parts[0]
-
-        # Validate ICAO prefix has reasonable length
-        if len(icao_candidate_prefix) < 2 or len(icao_candidate_prefix) > 5:
-            continue  # Not a valid ICAO prefix
-
-        # The position suffix for ATIS is generally "ATIS"
-        position_suffix = parts[-1] if len(parts) > 1 else ""
-
-        if position_suffix == "ATIS":
-            valid_icao = _get_valid_icao_from_callsign(
-                icao_candidate_prefix, airports_data
-            )
-
-            if valid_icao:
-                staffed_positions[valid_icao].add("ATIS")
-
-    # Sort non-ATIS positions based on CONTROL_POSITION_ORDER for consistent display.
-    # ATIS is handled separately in the display logic for TOP-DOWN.
-    ordered_staffed_positions = {}
-    for icao, positions in staffed_positions.items():
-        sorted_positions = [pos for pos in CONTROL_POSITION_ORDER if pos in positions]
-        if "ATIS" in positions:
-            sorted_positions.append("ATIS")  # Always append ATIS at the end if present
-        ordered_staffed_positions[icao] = sorted_positions
-
-    return ordered_staffed_positions
+    positions = _collect_controller_positions(data, airports_data, excluded_frequency)
+    for icao, atis in _collect_atis_positions(data, airports_data).items():
+        positions.setdefault(icao, set()).update(atis)
+    return _order_positions(positions)

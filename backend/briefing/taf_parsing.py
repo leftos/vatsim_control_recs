@@ -232,12 +232,81 @@ def parse_taf_changes(
     return changes
 
 
+def _shift_month_by_one(target: datetime, now: datetime) -> datetime:
+    """
+    Move a parsed TAF time one month forward or back when it is over 15 days away.
+
+    A TAF day-of-month code carries no month, so a target more than 15 days in the
+    past belongs to the next month and one more than 15 days ahead to the previous
+    month.
+
+    Args:
+        target: Parsed time read as a day of ``now``'s month
+        now: Reference time
+
+    Returns:
+        The parsed time, moved one month when it falls outside the 15-day window
+    """
+    if target < now - timedelta(days=15):
+        if now.month == 12:
+            return target.replace(year=now.year + 1, month=1)
+        return target.replace(month=now.month + 1)
+    if target > now + timedelta(days=15):
+        if now.month == 1:
+            return target.replace(year=now.year - 1, month=12)
+        return target.replace(month=now.month - 1)
+    return target
+
+
+def _parse_fm_time(time_str: str, now: datetime) -> datetime:
+    """Parse an FM group's ``DDHHMM`` code into a time near ``now``."""
+    target = now.replace(
+        day=int(time_str[:2]),
+        hour=int(time_str[2:4]),
+        minute=int(time_str[4:6]),
+        second=0,
+        microsecond=0,
+    )
+    return _shift_month_by_one(target, now)
+
+
+def _parse_period_start(time_str: str, now: datetime) -> datetime | None:
+    """Parse the start of a TEMPO/BECMG ``DDHH/DDHH`` code, or None if malformed."""
+    start_str = time_str.split("/")[0]
+    if len(start_str) != 4 or not start_str.isdigit():
+        return None
+    target = now.replace(
+        day=int(start_str[:2]),
+        hour=int(start_str[2:4]),
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    return _shift_month_by_one(target, now)
+
+
+def _format_time_label(diff_seconds: float) -> str:
+    """Format a signed second offset as ``(in ...)`` or ``(... ago)``."""
+    abs_hours = abs(diff_seconds) / 3600
+
+    if abs_hours < 1:
+        time_label = f"{int(abs(diff_seconds) / 60):2d}m"
+    elif abs_hours < 24:
+        time_label = f"{int(abs_hours):2d}h"
+    else:
+        time_label = f"{int(abs_hours / 24):2d}d"
+
+    if diff_seconds > 0:
+        return f"(in {time_label})"
+    return f"({time_label} ago)"
+
+
 def format_taf_relative_time(time_str: str) -> str:
     """
     Format a TAF time string with relative duration.
 
     Args:
-        time_str: TAF time string, either "DDHHMM" (FM format) or "HHMM/HHMM" (TEMPO/BECMG)
+        time_str: TAF time string, either "DDHHMM" (FM format) or "DDHH/DDHH" (TEMPO/BECMG)
 
     Returns:
         Relative time string like "(in 2h)" or "(1h ago)" or empty string if can't parse
@@ -245,72 +314,16 @@ def format_taf_relative_time(time_str: str) -> str:
     now = datetime.now(UTC)
 
     try:
-        # FM format: DDHHMM (e.g., "251800" = 25th day at 18:00Z)
         if len(time_str) == 6 and time_str.isdigit():
-            day = int(time_str[:2])
-            hour = int(time_str[2:4])
-            minute = int(time_str[4:6])
-
-            target = now.replace(
-                day=day, hour=hour, minute=minute, second=0, microsecond=0
-            )
-
-            # Handle month rollover
-            if target < now - timedelta(days=15):
-                if now.month == 12:
-                    target = target.replace(year=now.year + 1, month=1)
-                else:
-                    target = target.replace(month=now.month + 1)
-            elif target > now + timedelta(days=15):
-                if now.month == 1:
-                    target = target.replace(year=now.year - 1, month=12)
-                else:
-                    target = target.replace(month=now.month - 1)
-
-        # TEMPO/BECMG format: DDHH/DDHH (e.g., "2515/2518")
+            target = _parse_fm_time(time_str, now)
         elif "/" in time_str:
-            start_str = time_str.split("/")[0]
-            if len(start_str) == 4 and start_str.isdigit():
-                day = int(start_str[:2])
-                hour = int(start_str[2:4])
-
-                target = now.replace(
-                    day=day, hour=hour, minute=0, second=0, microsecond=0
-                )
-
-                if target < now - timedelta(days=15):
-                    if now.month == 12:
-                        target = target.replace(year=now.year + 1, month=1)
-                    else:
-                        target = target.replace(month=now.month + 1)
-                elif target > now + timedelta(days=15):
-                    if now.month == 1:
-                        target = target.replace(year=now.year - 1, month=12)
-                    else:
-                        target = target.replace(month=now.month - 1)
-            else:
+            target = _parse_period_start(time_str, now)
+            if target is None:
                 return ""
         else:
             return ""
 
-        # Calculate relative time
-        diff_seconds = (target - now).total_seconds()
-        abs_hours = abs(diff_seconds) / 3600
-
-        if abs_hours < 1:
-            mins = int(abs(diff_seconds) / 60)
-            time_label = f"{mins:2d}m"
-        elif abs_hours < 24:
-            hours = int(abs_hours)
-            time_label = f"{hours:2d}h"
-        else:
-            days = int(abs_hours / 24)
-            time_label = f"{days:2d}d"
-
-        if diff_seconds > 0:
-            return f"(in {time_label})"
-        else:
-            return f"({time_label} ago)"
+        return _format_time_label((target - now).total_seconds())
 
     except (ValueError, AttributeError):
         return ""
