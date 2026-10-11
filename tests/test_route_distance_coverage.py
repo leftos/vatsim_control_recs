@@ -12,7 +12,8 @@ import pytest
 
 from backend.core import route_distance
 from backend.core.calculations import calculate_eta, haversine_distance_nm
-from backend.data import navaids
+from backend.data import cifp, navaids
+from tests.test_cifp_index import record
 
 # The WIA357 shape: TNCM to TKPK, 44 nm out, route "VECTORXZPATA/10 PJM A517 SKB".
 WIA357_ROUTE = "VECTORXZPATA/10 PJM A517 SKB"
@@ -203,6 +204,52 @@ def test_us_route_long_excess_under_ratio_keeps_route(
     empty = _flight("", lat=30.0, lon=-100.0, dep="KLAX", arr="KSFO")
 
     assert _eta_hours(with_route, airports) > _eta_hours(empty, airports)
+
+
+# The HAL70 shape: a PHNL SID whose single fix, MKK, is what lengthens the filed
+# route past the great circle, so the route distance becomes acceptable. CODDY is
+# the track point the SID hands the aircraft to, and the aircraft sits on MKK.
+PHNL = (21.1522, -157.1667)
+KLGB = (33.8177, -118.1516)
+HAL70_POSITIONS = {"MKK": PHNL, "CODDY": (24.0, -145.0)}
+HAL70_ROUTE = "MKK5 CODDY"
+
+
+def _install_mkk5_sid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the CIFP and NASR lookups at a PHNL MKK5 SID and its track point."""
+    cifp_path = tmp_path / "FAACIFP18-2610"
+    cifp_path.write_text(
+        record("PHNL", "D", "MKK5", "ALL", 10, "MKK", area="SPACP", region="PH") + "\n",
+        encoding="latin-1",
+    )
+    monkeypatch.setattr(cifp, "get_cifp_cache_path", lambda: cifp_path)
+    monkeypatch.setattr(navaids, "ensure_nasr_data", lambda quiet=False: tmp_path)
+    monkeypatch.setattr(navaids, "get_waypoint_coordinates", HAL70_POSITIONS.get)
+    cifp.clear_cifp_cache()
+    navaids.clear_navaid_cache()
+    route_distance.clear_route_cache()
+
+
+def test_short_sid_expansion_makes_a_us_route_distance_accepted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Expanded, HAL70's PHNL-KLGB route beats the great circle and its ETA lengthens."""
+    _install_mkk5_sid(tmp_path, monkeypatch)
+    airports = _airports({"PHNL": PHNL, "KLGB": KLGB})
+    try:
+        with_route = _eta_hours(
+            _flight(HAL70_ROUTE, lat=PHNL[0], lon=PHNL[1], dep="PHNL", arr="KLGB"),
+            airports,
+        )
+        empty = _eta_hours(
+            _flight("", lat=PHNL[0], lon=PHNL[1], dep="PHNL", arr="KLGB"), airports
+        )
+    finally:
+        cifp.clear_cifp_cache()
+        navaids.clear_navaid_cache()
+        route_distance.clear_route_cache()
+
+    assert with_route > empty
 
 
 @pytest.mark.parametrize(

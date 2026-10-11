@@ -327,6 +327,21 @@ def test_neither_endpoint_on_airway_is_skipped_silently() -> None:
     )
 
 
+def test_mea_entry_skips_a_short_sid() -> None:
+    """MKK5 is a SID name, not the fix before V12: V12 has no entry fix and nothing is reported."""
+    assert navaids.get_max_mea_for_route("MKK5 V12 ACH") == navaids.MeaCheck(
+        max_mea=None, violations=[], skipped=[]
+    )
+
+
+def test_mea_check_reaches_past_a_short_sid_to_the_airways_entry_fix() -> None:
+    """ABQ is the fix before V12, so MKK5 earlier in the route leaves the check as it was."""
+    assert _segments("MKK5 ABQ V12 ACH") == {
+        ("ABQ", "OTO"): 12000,
+        ("OTO", "ACH"): 10000,
+    }
+
+
 def test_cross_border_route_checks_the_us_portion() -> None:
     """DAFLU is off J70 in Canada: J70 is checked from the US end to its border point, both ways."""
     eastbound = navaids.get_max_mea_for_route("SVM J70 DAFLU")

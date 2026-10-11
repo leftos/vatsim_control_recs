@@ -1118,18 +1118,21 @@ def _expand_sid_star(
     arrival: str | None,
     waypoints: list[Waypoint],
     seen_identifiers: set,
-) -> None:
+) -> bool:
     """Try to expand a SID/STAR name into waypoints via CIFP lookup.
 
     Modifies waypoints and seen_identifiers in-place.
     If at the start of route, tries as SID using departure airport.
     If at the end of route, tries as STAR using arrival airport.
     Falls back to trying both if position is ambiguous.
+
+    Returns:
+        True when CIFP holds the name as a procedure, False when it holds none
     """
     try:
         from backend.data.cifp import get_dp_data, get_star_data
     except ImportError:
-        return
+        return False
 
     procedure_waypoints: list[str] = []
 
@@ -1172,6 +1175,37 @@ def _expand_sid_star(
             )
             seen_identifiers.add(wp_name)
 
+    return bool(procedure_waypoints)
+
+
+def _consume_sid_star(
+    part: str,
+    position: int,
+    *,
+    total_parts: int,
+    departure: str | None,
+    arrival: str | None,
+    airports: dict[str, tuple[float, float]],
+    waypoints: list[Waypoint],
+    seen_identifiers: set,
+) -> bool:
+    """Expand a route token as a SID/STAR name, when CIFP holds it as one.
+
+    A long name is consumed wherever CIFP holds it, and dropped when it holds
+    none; a short name CIFP knows nothing of is left to the caller's own fix
+    lookup.
+
+    Returns:
+        True when the token was consumed as a procedure name
+    """
+    if not _is_procedure_name(part, airports):
+        return False
+
+    found = _expand_sid_star(
+        part, position, total_parts, departure, arrival, waypoints, seen_identifiers
+    )
+    return found or len(part) > 5
+
 
 def _airway_run_ahead(
     parts: list[str], start: int, airports: dict[str, tuple[float, float]]
@@ -1190,7 +1224,7 @@ def _airway_run_ahead(
         token, _ = _split_route_token(parts[index])
         if _AIRWAY_RE.match(token):
             run.append((index, token))
-        elif _is_route_endpoint(token):
+        elif _is_route_endpoint(token, airports):
             return run, _get_fix_identifier(token, airports)
     return run, None
 
@@ -1319,16 +1353,16 @@ def parse_route_string(
             continue
 
         # Expand SID/STAR names via CIFP if airport context is available
-        if re.match(r"^[A-Z]+\d+[A-Z]*$", part) and len(part) > 5:
-            _expand_sid_star(
-                part,
-                i,
-                len(parts),
-                departure,
-                arrival,
-                waypoints,
-                seen_identifiers,
-            )
+        if _consume_sid_star(
+            part,
+            i,
+            total_parts=len(parts),
+            departure=departure,
+            arrival=arrival,
+            airports=airports,
+            waypoints=waypoints,
+            seen_identifiers=seen_identifiers,
+        ):
             i += 1
             continue
 
@@ -1417,6 +1451,9 @@ class MeaCheck:
 
 _AIRWAY_RE = re.compile(r"^[VJTQ]\d+$")
 _PROCEDURE_RE = re.compile(r"^[A-Z]+\d+[A-Z]*$")
+# Every SID/STAR id of five characters or fewer is three or four letters and one
+# digit ("MKK5", "TURN8"), which tells it from a fix such as "KH03M"
+_SHORT_PROCEDURE_RE = re.compile(r"^[A-Z]{3,4}\d$")
 # An Item 15 speed (N or K and four digits, M and three) followed by a level
 # (F or A and three digits in hundreds of feet, S or M and four in tens of metres)
 _SPEED_LEVEL_RE = re.compile(r"^[NKM]\d{3,4}(?P<level>[FA]\d{3}|[SM]\d{4})$")
@@ -1448,23 +1485,61 @@ def _split_route_token(token: str) -> tuple[str, int | None]:
     return fix, _level_feet(match.group("level"))
 
 
-def _is_route_endpoint(token: str) -> bool:
+def _is_procedure_name(
+    token: str, airports: dict[str, tuple[float, float]] | None
+) -> bool:
+    """Whether a route token is a SID/STAR name rather than a fix.
+
+    CIFP procedure ids are letters followed by a digit, so the shape alone
+    cannot tell a short procedure such as "MKK5" from a fix such as "KH03M".
+    A short name is a procedure only when no fix, navaid or airport ident
+    carries it, so a name that is a fix stays a fix.
+
+    Args:
+        token: Route token as the parser split it
+        airports: The airports of the route being parsed, None when the caller
+            has none to offer
+
+    Returns:
+        True for a procedure name, False for a fix, navaid, airway or airport
+    """
+    if not _PROCEDURE_RE.match(token):
+        return False
+    if len(token) > 5:
+        return True
+    if not _SHORT_PROCEDURE_RE.match(token):
+        return False
+    return (
+        token not in load_fixes()
+        and token not in load_navaids()
+        and token not in (airports or {})
+    )
+
+
+def _is_route_endpoint(
+    token: str, airports: dict[str, tuple[float, float]] | None
+) -> bool:
     """Whether a route token can be an airway's entry or exit fix.
 
     Empty tokens (speed/level groups), DCT, airways and SID/STAR names cannot.
     """
-    is_procedure = bool(_PROCEDURE_RE.match(token)) and len(token) > 5
     return (
         bool(token)
         and token != "DCT"
         and not _AIRWAY_RE.match(token)
-        and not is_procedure
+        and not _is_procedure_name(token, airports)
     )
 
 
 def _find_endpoint(fixes: list[str], indices: range) -> int | None:
-    """The first index in indices whose route token can be an airway endpoint."""
-    return next((index for index in indices if _is_route_endpoint(fixes[index])), None)
+    """The first index in indices whose route token can be an airway endpoint.
+
+    The MEA check has no airports of its own, so a short procedure name is
+    decided by the fix and navaid lists alone.
+    """
+    return next(
+        (index for index in indices if _is_route_endpoint(fixes[index], None)), None
+    )
 
 
 def _level_at(levels: list[int | None], index: int) -> int | None:
