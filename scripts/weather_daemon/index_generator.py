@@ -35,7 +35,7 @@ CARTO_KEY_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 # ARTCCs drawn on the map, given zoom bounds and covered by the weather tiles: the
 # CONUS ARTCCs plus two that are not CONUS, Anchorage (ZAN) and Honolulu (ZHN).
 # Guam (ZUA) is left out: its positive longitude (+145E) breaks the tile bounding box calculation.
-CONUS_ARTCCS = {
+MAPPED_ARTCCS = {
     "ZAB",
     "ZAN",
     "ZAU",
@@ -470,7 +470,7 @@ def _artcc_geojson(
     artcc_groupings: dict[str, list[dict[str, Any]]],
     artcc_stats: dict[str, dict[str, int]],
 ) -> dict[str, Any]:
-    """Convert the CONUS ARTCC boundaries to a GeoJSON FeatureCollection for Leaflet.
+    """Convert the mapped ARTCC boundaries (CONUS plus ZAN and ZHN) to a GeoJSON FeatureCollection for Leaflet.
 
     Args:
         boundaries: ARTCC code to its (lat, lon) polygons.
@@ -478,11 +478,11 @@ def _artcc_geojson(
         artcc_stats: ARTCC code to its category counts.
 
     Returns:
-        A FeatureCollection with one Polygon feature per CONUS ARTCC polygon.
+        A FeatureCollection with one Polygon feature per mapped ARTCC polygon.
     """
     geojson_features = []
     for artcc, polys in boundaries.items():
-        if artcc not in CONUS_ARTCCS:
+        if artcc not in MAPPED_ARTCCS:
             continue
         stats = artcc_stats.get(artcc, {})
         display_name = ARTCC_NAMES.get(artcc, artcc)
@@ -588,10 +588,10 @@ def _artcc_airport_data(
 def _artcc_bounds(
     boundaries: dict[str, list[list[tuple]]],
 ) -> dict[str, dict[str, float]]:
-    """The bounding box of each CONUS ARTCC with coordinates, for zoom reference."""
+    """The bounding box of each mapped ARTCC with coordinates, for zoom reference."""
     artcc_bounds = {}
     for artcc, polys in boundaries.items():
-        if artcc not in CONUS_ARTCCS:
+        if artcc not in MAPPED_ARTCCS:
             continue
         all_coords = []
         for poly in polys:

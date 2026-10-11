@@ -1944,15 +1944,15 @@ def _generate_tiles(
         f"Collected {valid_weather_count} airports with valid weather (of {len(all_airport_weather)} total)"
     )
 
-    from .index_generator import CONUS_ARTCCS
+    from .index_generator import MAPPED_ARTCCS
 
     artcc_boundaries = get_artcc_boundaries(config.artcc_cache_dir)
 
     print(
-        f"    Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS"
+        f"    Found {len(artcc_boundaries)} ARTCC boundaries, {len(MAPPED_ARTCCS)} mapped"
     )
     logger.info(
-        f"Found {len(artcc_boundaries)} ARTCC boundaries, {len(CONUS_ARTCCS)} in CONUS"
+        f"Found {len(artcc_boundaries)} ARTCC boundaries, {len(MAPPED_ARTCCS)} mapped"
     )
 
     if not all_airport_weather:
@@ -1968,7 +1968,7 @@ def _generate_tiles(
         artcc_boundaries=artcc_boundaries,
         airport_weather=all_airport_weather,
         output_dir=tiles_dir,
-        conus_artccs=CONUS_ARTCCS,
+        conus_artccs=MAPPED_ARTCCS,
         zoom_levels=(4, 5, 6, 7),
         max_workers=config.tile_max_workers,
     )
@@ -2084,12 +2084,6 @@ def generate(config: DaemonConfig) -> dict[str, str]:
         f"Generation complete: {len(generated_files)} files in {total_time:.1f}s"
     )
     return generated_files
-
-
-# Legacy aliases for backwards compatibility
-def generate_all_briefings(config: DaemonConfig) -> dict[str, str]:
-    """Legacy alias for generate(). Use generate() instead."""
-    return generate(config)
 
 
 if __name__ == "__main__":

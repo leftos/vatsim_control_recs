@@ -985,11 +985,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZLA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 6 files in 0.0s", False],
         ],
-        "stdout": "sha256:b34a89daddf1",
+        "stdout": "sha256:2427da0c8b75",
     },
     "briefings_only_fresh_cache": {
         "result": [
@@ -1111,11 +1111,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 9 files in 0.0s", False],
         ],
-        "stdout": "sha256:06b38821c56a",
+        "stdout": "sha256:2b1bda8a9604",
     },
     "cached_weather_missing": {
         "result": [
@@ -1179,7 +1179,7 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 0 airports with valid weather (of 0 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             [
                 "WARNING",
                 "No airport weather data collected - skipping tile generation",
@@ -1187,7 +1187,7 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ],
             ["INFO", "Generation complete: 9 files in 0.0s", False],
         ],
-        "stdout": "sha256:5913ddf08cab",
+        "stdout": "sha256:eb0988163ff1",
     },
     "custom_groupings_empty": {
         "result": [
@@ -1243,11 +1243,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 7 files in 0.0s", False],
         ],
-        "stdout": "sha256:6df8c38b466d",
+        "stdout": "sha256:919948e1f935",
     },
     "custom_groupings_off": {
         "result": [
@@ -1302,11 +1302,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 7 files in 0.0s", False],
         ],
-        "stdout": "sha256:6df8c38b466d",
+        "stdout": "sha256:919948e1f935",
     },
     "custom_groupings_without_artcc": {
         "result": [
@@ -1345,11 +1345,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["INFO", "Briefing generation: completed 2 items in 0.0s", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 3 files in 0.0s", False],
         ],
-        "stdout": "sha256:54bf0e0e8b8c",
+        "stdout": "sha256:372ca072fd43",
     },
     "failing_briefing": {
         "result": [
@@ -1413,11 +1413,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 7 files in 0.0s", False],
         ],
-        "stdout": "sha256:90b5338c335c",
+        "stdout": "sha256:6ef18160da5b",
     },
     "fresh_cache_key_differs": {
         "result": [
@@ -1481,11 +1481,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 9 files in 0.0s", False],
         ],
-        "stdout": "sha256:01e1c8353d2f",
+        "stdout": "sha256:2ac8cc45b89d",
     },
     "fresh_cache_key_matches": {
         "result": [
@@ -1611,11 +1611,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 9 files in 0.0s", False],
         ],
-        "stdout": "sha256:01e1c8353d2f",
+        "stdout": "sha256:2ac8cc45b89d",
     },
     "fresh_cache_no_stored_key": {
         "result": [
@@ -1679,11 +1679,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 9 files in 0.0s", False],
         ],
-        "stdout": "sha256:01e1c8353d2f",
+        "stdout": "sha256:2ac8cc45b89d",
     },
     "index_returns_none": {
         "result": [
@@ -1745,11 +1745,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 8 files in 0.0s", False],
         ],
-        "stdout": "sha256:b3010d1afca2",
+        "stdout": "sha256:1cfebeb6ae98",
     },
     "network_bbox_covers_every_airport": {
         "result": [
@@ -1802,11 +1802,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 3 airports with valid weather (of 3 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 3 files in 0.0s", False],
         ],
-        "stdout": "sha256:b96e68d5c8af",
+        "stdout": "sha256:d3dad709b9c7",
     },
     "network_fetch": {
         "result": [
@@ -1902,11 +1902,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 8 airports with valid weather (of 8 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 9 files in 0.0s", False],
         ],
-        "stdout": "sha256:81ca663fab44",
+        "stdout": "sha256:4431b4202717",
     },
     "network_fetch_stale_cache": {
         "result": [
@@ -2001,11 +2001,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 7 airports with valid weather (of 7 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 9 files in 0.0s", False],
         ],
-        "stdout": "sha256:70e7eaae21a3",
+        "stdout": "sha256:405e85eca62b",
     },
     "network_only_unlikely_airports": {
         "result": [
@@ -2058,7 +2058,7 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["INFO", "Briefing generation: completed 1 items in 0.0s", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 0 airports with valid weather (of 0 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             [
                 "WARNING",
                 "No airport weather data collected - skipping tile generation",
@@ -2066,7 +2066,7 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ],
             ["INFO", "Generation complete: 2 files in 0.0s", False],
         ],
-        "stdout": "sha256:6be6b7ebe6ef",
+        "stdout": "sha256:ef1cfb4954ac",
     },
     "network_returns_no_weather": {
         "result": [
@@ -2162,7 +2162,7 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 0 airports with valid weather (of 0 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             [
                 "WARNING",
                 "No airport weather data collected - skipping tile generation",
@@ -2170,7 +2170,7 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ],
             ["INFO", "Generation complete: 9 files in 0.0s", False],
         ],
-        "stdout": "sha256:d3b89c619e8e",
+        "stdout": "sha256:f94baf63f7b9",
     },
     "network_without_artcc_bboxes": {
         "result": [
@@ -2263,11 +2263,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 8 airports with valid weather (of 8 total)", False],
-            ["INFO", "Found 0 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 0 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 9 files in 0.0s", False],
         ],
-        "stdout": "sha256:fa190c060322",
+        "stdout": "sha256:b7ff4e777179",
     },
     "no_groupings": {
         "result": [["<root>/out/index.html", "Index"]],
@@ -2295,11 +2295,11 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["INFO", "Generating 0 briefings", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 1 files in 0.0s", False],
         ],
-        "stdout": "sha256:58066e1a6e82",
+        "stdout": "sha256:c3ee17365d3b",
     },
     "real_briefing_html": {
         "result": [
@@ -2346,43 +2346,43 @@ GENERATE_GOLDEN: dict[str, Any] = {
             ["DEBUG", "Generated ARTCC briefing: <root>/out/ZOA/_all.html", False],
             ["INFO", "Generating weather overlay tiles", False],
             ["INFO", "Collected 5 airports with valid weather (of 5 total)", False],
-            ["INFO", "Found 3 ARTCC boundaries, 22 in CONUS", False],
+            ["INFO", "Found 3 ARTCC boundaries, 22 mapped", False],
             ["INFO", "Generated 10 weather tiles across 2 zoom levels", False],
             ["INFO", "Generation complete: 5 files in 0.0s", False],
         ],
-        "stdout": "sha256:8ed0c74d1723",
+        "stdout": "sha256:e5ae158748a4",
     },
 }
 
 STAGE_MATRIX_GOLDEN: dict[str, Any] = {
     "briefings,index|fresh": "sha256:c7a32913c6a6",
     "briefings,index|none": "sha256:55d6e1ae361c",
-    "briefings,tiles,index|fresh": "sha256:c439ea24de57",
-    "briefings,tiles,index|none": "sha256:db4ecfd52d0d",
-    "briefings,tiles|fresh": "sha256:7879d39e0bfa",
-    "briefings,tiles|none": "sha256:54fbb7fc8f2a",
+    "briefings,tiles,index|fresh": "sha256:a6cf08d405b7",
+    "briefings,tiles,index|none": "sha256:90cb03a2cb55",
+    "briefings,tiles|fresh": "sha256:0dab2581532f",
+    "briefings,tiles|none": "sha256:44f54e79bc66",
     "briefings|fresh": "sha256:9d2549e6932b",
     "briefings|none": "sha256:295e0dba3bb9",
     "index|fresh": "sha256:a2efd39a8323",
     "index|none": "sha256:2ea4fadbb7c6",
-    "tiles,index|fresh": "sha256:84acf06e230c",
-    "tiles,index|none": "sha256:9704d8570230",
-    "tiles|fresh": "sha256:f1e4db195579",
-    "tiles|none": "sha256:e541cd1f497b",
+    "tiles,index|fresh": "sha256:72541ffc83e8",
+    "tiles,index|none": "sha256:4366ba25220d",
+    "tiles|fresh": "sha256:da2689b49907",
+    "tiles|none": "sha256:1cb0a6ba717b",
     "weather,briefings,index|fresh": "sha256:c7a32913c6a6",
     "weather,briefings,index|none": "sha256:40a4a89a744d",
     "weather,briefings,tiles,index|fresh": "sha256:9a4cdcdae5a7",
-    "weather,briefings,tiles,index|none": "sha256:62611fe28f4d",
+    "weather,briefings,tiles,index|none": "sha256:1f3443eb881d",
     "weather,briefings,tiles|fresh": "sha256:fd2ea7138fd1",
-    "weather,briefings,tiles|none": "sha256:eed1f682713b",
+    "weather,briefings,tiles|none": "sha256:a4040121f703",
     "weather,briefings|fresh": "sha256:9d2549e6932b",
     "weather,briefings|none": "sha256:594e52e0f651",
     "weather,index|fresh": "sha256:a2efd39a8323",
     "weather,index|none": "sha256:5d27e8d07315",
     "weather,tiles,index|fresh": "sha256:b2844f108399",
-    "weather,tiles,index|none": "sha256:7197ed9892a1",
+    "weather,tiles,index|none": "sha256:149d4dc3a142",
     "weather,tiles|fresh": "sha256:84995b6e7907",
-    "weather,tiles|none": "sha256:4e30c320ca31",
+    "weather,tiles|none": "sha256:4e01d6b27e25",
     "weather|fresh": "sha256:2d668fa8c1be",
     "weather|none": "sha256:60847a12b708",
 }
