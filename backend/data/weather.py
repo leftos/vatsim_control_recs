@@ -8,7 +8,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Container
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, NamedTuple
@@ -173,75 +173,21 @@ def get_wind_info_minute(airport_icao: str) -> str:
     Returns:
         Formatted wind string like "27005G12KT" or "27005KT" or empty string if unavailable
     """
-    wind_data_cache, wind_blacklist = get_wind_cache()
-    wind_lock = get_wind_cache_lock()
-
-    # Check if airport is blacklisted (doesn't have weather data available)
-    with wind_lock:
-        if airport_icao in wind_blacklist:
-            return ""
-
-        # Check if we have valid cached data
-        current_time = datetime.now(timezone.utc)
-        if airport_icao in wind_data_cache:
-            cache_entry = wind_data_cache[airport_icao]
-            time_since_cache = (current_time - cache_entry["timestamp"]).total_seconds()
-            if time_since_cache < WIND_CACHE_DURATION:
-                return cache_entry["wind_info"]
+    cached = _cached_minute_wind(airport_icao)
+    if cached is not None:
+        return cached
 
     # Cache miss or expired - fetch new data (outside lock to avoid blocking)
     try:
-        # First, try the latest observation
-        url = f"https://api.weather.gov/stations/{airport_icao}/observations/latest"
-        req = urllib.request.Request(url)
-        req.add_header("User-Agent", "VATSIM-Control-Recs/1.0")
-
-        with urllib.request.urlopen(req, timeout=3) as response:
-            data = json.loads(response.read().decode())
-
-        properties = data.get("properties", {})
-        has_data, wind_str = _parse_wind_from_observation(properties)
-
-        # If latest observation doesn't have wind data, try the last 15 observations
-        if not has_data:
-            url = (
-                f"https://api.weather.gov/stations/{airport_icao}/observations?limit=30"
-            )
-            req = urllib.request.Request(url)
-            req.add_header("User-Agent", "VATSIM-Control-Recs/1.0")
-
-            with urllib.request.urlopen(req, timeout=3) as response:
-                data = json.loads(response.read().decode())
-
-            # Iterate through observations to find the first one with wind data
-            features = data.get("features", [])
-            for feature in features:
-                properties = feature.get("properties", {})
-                has_data, wind_str = _parse_wind_from_observation(properties)
-                if has_data:
-                    break
-
-        # Cache the result (even if empty) - with lock
-        current_time = datetime.now(timezone.utc)
-        with wind_lock:
-            wind_data_cache[airport_icao] = {
-                "wind_info": wind_str,
-                "timestamp": current_time,
-            }
-
-        return wind_str
-
+        wind_str = _fetch_minute_wind(airport_icao)
     except urllib.error.HTTPError as e:
         if e.code == 404:
             # Station doesn't exist - blacklist it permanently
-            with wind_lock:
+            _wind_data_cache, wind_blacklist = get_wind_cache()
+            with get_wind_cache_lock():
                 wind_blacklist[airport_icao] = True
             return ""
-        # For other HTTP errors, return cached data if available
-        with wind_lock:
-            if airport_icao in wind_data_cache:
-                return wind_data_cache[airport_icao]["wind_info"]
-        return ""
+        return _last_minute_wind(airport_icao)
     except (
         urllib.error.URLError,
         json.JSONDecodeError,
@@ -249,11 +195,87 @@ def get_wind_info_minute(airport_icao: str) -> str:
         ValueError,
         TimeoutError,
     ):
-        # On other errors, return cached data if available (even if expired), otherwise empty string
-        with wind_lock:
-            if airport_icao in wind_data_cache:
-                return wind_data_cache[airport_icao]["wind_info"]
-        return ""
+        return _last_minute_wind(airport_icao)
+
+    # Cache the result (even if empty)
+    wind_data_cache, _wind_blacklist = get_wind_cache()
+    current_time = datetime.now(timezone.utc)
+    with get_wind_cache_lock():
+        wind_data_cache[airport_icao] = {
+            "wind_info": wind_str,
+            "timestamp": current_time,
+        }
+
+    return wind_str
+
+
+def _cached_minute_wind(airport_icao: str) -> str | None:
+    """
+    Answer get_wind_info_minute from the wind caches when they can.
+
+    Returns:
+        "" for a blacklisted airport, the cached wind when younger than
+        WIND_CACHE_DURATION, or None when the wind must be fetched.
+    """
+    wind_data_cache, wind_blacklist = get_wind_cache()
+    with get_wind_cache_lock():
+        if airport_icao in wind_blacklist:
+            return ""
+
+        current_time = datetime.now(timezone.utc)
+        cache_entry = wind_data_cache.get(airport_icao)
+        if cache_entry is None:
+            return None
+        time_since_cache = (current_time - cache_entry["timestamp"]).total_seconds()
+        if time_since_cache < WIND_CACHE_DURATION:
+            return cache_entry["wind_info"]
+        return None
+
+
+def _last_minute_wind(airport_icao: str) -> str:
+    """The airport's cached minute wind even if expired, or "" without one."""
+    wind_data_cache, _wind_blacklist = get_wind_cache()
+    with get_wind_cache_lock():
+        if airport_icao in wind_data_cache:
+            return wind_data_cache[airport_icao]["wind_info"]
+    return ""
+
+
+def _read_weather_gov_json(url: str) -> dict:
+    """GET a weather.gov API URL and decode its JSON body."""
+    req = urllib.request.Request(url)
+    req.add_header("User-Agent", "VATSIM-Control-Recs/1.0")
+
+    with urllib.request.urlopen(req, timeout=3) as response:
+        return json.loads(response.read().decode())
+
+
+def _fetch_minute_wind(airport_icao: str) -> str:
+    """
+    Fetch the airport's current wind from weather.gov observations.
+
+    Tries the latest observation first; when it has no wind, the last 30
+    observations, taking the first one with wind.
+
+    Returns:
+        Formatted wind string, or "" when no observation has wind
+
+    Raises:
+        urllib.error.URLError, json.JSONDecodeError, KeyError, ValueError or
+        TimeoutError when a request or its parsing fails
+    """
+    stations_url = f"https://api.weather.gov/stations/{airport_icao}/observations"
+    data = _read_weather_gov_json(f"{stations_url}/latest")
+    has_data, wind_str = _parse_wind_from_observation(data.get("properties", {}))
+    if has_data:
+        return wind_str
+
+    data = _read_weather_gov_json(f"{stations_url}?limit=30")
+    for feature in data.get("features", []):
+        has_data, wind_str = _parse_wind_from_observation(feature.get("properties", {}))
+        if has_data:
+            return wind_str
+    return ""
 
 
 def _fetch_metar_from_aviationweather(airport_icao: str) -> tuple[str | None, bool]:
@@ -490,75 +512,15 @@ def get_taf(airport_icao: str) -> str:
     Returns:
         Full TAF string or empty string if unavailable
     """
-    taf_data_cache, taf_blacklist = get_taf_cache()
-    taf_lock = get_taf_cache_lock()
-
-    # Check if airport is blacklisted (doesn't have TAF data available)
-    with taf_lock:
-        if airport_icao in taf_blacklist:
-            return ""
-
-        # Check if we have valid cached data
-        current_time = datetime.now(timezone.utc)
-        if airport_icao in taf_data_cache:
-            cache_entry = taf_data_cache[airport_icao]
-            time_since_cache = (current_time - cache_entry["timestamp"]).total_seconds()
-            if (
-                time_since_cache < METAR_CACHE_DURATION
-            ):  # Use same cache duration as METAR
-                return cache_entry["taf"]
+    cached = _cached_taf(airport_icao)
+    if cached is not None:
+        return cached
 
     # Cache miss or expired - fetch new data (outside lock to avoid blocking)
     try:
-        # Wait for backoff if rate limiting is active
-        _wait_for_backoff()
-
-        url = f"https://aviationweather.gov/api/data/taf?ids={airport_icao}&format=raw"
-        req = urllib.request.Request(url)
-        req.add_header("User-Agent", "VATSIM-Control-Recs/1.0")
-
-        with urllib.request.urlopen(req, timeout=5) as response:
-            taf_text = response.read().decode("utf-8").strip()
-
-        # Record successful request (may reset backoff after recovery period)
-        _record_successful_request()
-
-        # Check if we got valid data (not empty and not an error message)
-        if not taf_text:
-            # Empty response (e.g., HTTP 204 No Content) - temporary, don't blacklist
-            return ""
-
-        if taf_text.startswith(("No TAF", "Error")):
-            # Explicit error message - station likely doesn't report TAF, blacklist it
-            with taf_lock:
-                taf_blacklist[airport_icao] = True
-            return ""
-
-        # Cache the result
-        current_time = datetime.now(timezone.utc)
-        with taf_lock:
-            taf_data_cache[airport_icao] = {"taf": taf_text, "timestamp": current_time}
-
-        return taf_text
-
+        taf_text = _fetch_taf_text(airport_icao)
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            # Station doesn't exist - blacklist it permanently
-            with taf_lock:
-                taf_blacklist[airport_icao] = True
-            return ""
-        if _check_rate_limit_error(e.code):
-            backoff = _record_rate_limit_error()
-
-            debug_logger.debug(
-                f"Rate limit detected (HTTP {e.code}) for TAF {airport_icao}, backoff: {backoff:.1f}s"
-            )
-        # For other HTTP errors - temporary, don't blacklist
-        # Return cached data if available
-        with taf_lock:
-            if airport_icao in taf_data_cache:
-                return taf_data_cache[airport_icao]["taf"]
-        return ""
+        return _taf_after_http_error(airport_icao, e)
     except (
         urllib.error.URLError,
         json.JSONDecodeError,
@@ -567,27 +529,110 @@ def get_taf(airport_icao: str) -> str:
         TimeoutError,
     ) as e:
         # Expected network/parsing errors - temporary, don't blacklist
-        from common import logger as debug_logger
-
         debug_logger.debug(
             f"Expected error fetching TAF for {airport_icao}: {type(e).__name__}: {e}"
         )
-        with taf_lock:
-            if airport_icao in taf_data_cache:
-                return taf_data_cache[airport_icao]["taf"]
-        return ""
+        return _last_taf(airport_icao)
     except Exception as e:
-        # Unexpected errors - log with traceback for debugging
-        from common import logger as debug_logger
-
         debug_logger.error(
             f"Unexpected error fetching TAF for {airport_icao}: {type(e).__name__}: {e}",
             exc_info=True,
         )
-        with taf_lock:
-            if airport_icao in taf_data_cache:
-                return taf_data_cache[airport_icao]["taf"]
+        return _last_taf(airport_icao)
+
+    return _settle_taf(airport_icao, taf_text)
+
+
+def _cached_taf(airport_icao: str) -> str | None:
+    """
+    Answer get_taf from the TAF caches when they can.
+
+    Returns:
+        "" for a blacklisted airport, the cached TAF when younger than
+        METAR_CACHE_DURATION, or None when the TAF must be fetched.
+    """
+    taf_data_cache, taf_blacklist = get_taf_cache()
+    with get_taf_cache_lock():
+        if airport_icao in taf_blacklist:
+            return ""
+
+        current_time = datetime.now(timezone.utc)
+        cache_entry = taf_data_cache.get(airport_icao)
+        if cache_entry is None:
+            return None
+        time_since_cache = (current_time - cache_entry["timestamp"]).total_seconds()
+        if time_since_cache < METAR_CACHE_DURATION:
+            return cache_entry["taf"]
+        return None
+
+
+def _last_taf(airport_icao: str) -> str:
+    """The airport's cached TAF even if expired, or "" without one."""
+    taf_data_cache, _taf_blacklist = get_taf_cache()
+    with get_taf_cache_lock():
+        if airport_icao in taf_data_cache:
+            return taf_data_cache[airport_icao]["taf"]
+    return ""
+
+
+def _fetch_taf_text(airport_icao: str) -> str:
+    """Request the airport's raw TAF from aviationweather.gov, after any rate-limit backoff."""
+    _wait_for_backoff()
+
+    url = f"https://aviationweather.gov/api/data/taf?ids={airport_icao}&format=raw"
+    req = urllib.request.Request(url)
+    req.add_header("User-Agent", "VATSIM-Control-Recs/1.0")
+
+    with urllib.request.urlopen(req, timeout=5) as response:
+        taf_text = response.read().decode("utf-8").strip()
+
+    # Record successful request (may reset backoff after recovery period)
+    _record_successful_request()
+    return taf_text
+
+
+def _taf_after_http_error(airport_icao: str, error: urllib.error.HTTPError) -> str:
+    """
+    Settle a TAF request that failed with an HTTP error.
+
+    A 404 blacklists the airport; a rate-limit status records the error and
+    raises the backoff. Any status but 404 answers the cached TAF, even if expired.
+    """
+    if error.code == 404:
+        # Station doesn't exist - blacklist it permanently
+        _taf_data_cache, taf_blacklist = get_taf_cache()
+        with get_taf_cache_lock():
+            taf_blacklist[airport_icao] = True
         return ""
+    if _check_rate_limit_error(error.code):
+        backoff = _record_rate_limit_error()
+
+        debug_logger.debug(
+            f"Rate limit detected (HTTP {error.code}) for TAF {airport_icao}, backoff: {backoff:.1f}s"
+        )
+    return _last_taf(airport_icao)
+
+
+def _settle_taf(airport_icao: str, taf_text: str) -> str:
+    """
+    Settle a TAF answer: cache a TAF, blacklist an explicit "No TAF"/"Error"
+    reply, and leave an empty reply (e.g. HTTP 204) uncached.
+    """
+    if not taf_text:
+        return ""
+
+    taf_data_cache, taf_blacklist = get_taf_cache()
+    if taf_text.startswith(("No TAF", "Error")):
+        # Explicit error message - station likely doesn't report TAF, blacklist it
+        with get_taf_cache_lock():
+            taf_blacklist[airport_icao] = True
+        return ""
+
+    current_time = datetime.now(timezone.utc)
+    with get_taf_cache_lock():
+        taf_data_cache[airport_icao] = {"taf": taf_text, "timestamp": current_time}
+
+    return taf_text
 
 
 def _parse_wind_from_metar(metar: str) -> str:
@@ -603,54 +648,48 @@ def _parse_wind_from_metar(metar: str) -> str:
     if not metar:
         return ""
 
-    # Parse wind from METAR
-    # Wind format in METAR: DDDSSGggKT or DDDSSKMHor DDDSSKPH (Direction Speed Gust)
-    # Also handle VRB for variable, and 00000KT for calm
+    match = re.search(_METAR_WIND_PATTERN, metar)
+    if not match:
+        return ""
 
-    # Look for wind pattern: direction (3 digits or VRB), speed (2-3 digits), optional gust (G + 2-3 digits), units (KT/KMH/KPH/MPS)
-    wind_pattern = r"\b(\d{3}|VRB)(\d{2,3})(G\d{2,3})?(KT|KMH|KPH|MPS)\b"
-    match = re.search(wind_pattern, metar)
+    direction, speed, gust, units = match.groups()
+    if direction != "VRB" and int(speed) == 0:
+        return "00000KT"
 
-    if match:
-        direction = match.group(1)
-        speed = match.group(2)
-        gust = match.group(3)  # Includes 'G' prefix if present
-        units = match.group(4)
+    units_per_knot = _WIND_UNITS_PER_KNOT.get(units)
+    if units_per_knot is None:
+        return f"{direction}{speed}{gust or ''}KT"
+    return _wind_in_knots(direction, speed, gust, units_per_knot)
 
-        # Check for calm winds
-        if direction != "VRB" and int(speed) == 0:
-            return "00000KT"
 
-        # Build wind string (always convert to KT for consistency)
-        wind_str = f"{direction}{speed}"
-        if gust:
-            wind_str += gust
+# Direction (3 digits or VRB), speed (2-3 digits), optional gust (G + 2-3 digits), units
+_METAR_WIND_PATTERN = r"\b(\d{3}|VRB)(\d{2,3})(G\d{2,3})?(KT|KMH|KPH|MPS)\b"
 
-        # Add KT suffix (convert if needed, but METAR is usually in KT)
-        if units == "KT":
-            wind_str += "KT"
-        elif units in ["KMH", "KPH"]:
-            # Convert km/h to knots (1 knot = 1.852 km/h)
-            speed_kt = round(int(speed) / 1.852)
-            wind_str = f"{direction}{speed_kt:02d}"
-            if gust:
-                gust_kt = round(int(gust[1:]) / 1.852)
-                wind_str += f"G{gust_kt:02d}"
-            wind_str += "KT"
-        elif units == "MPS":
-            # Convert m/s to knots (1 knot = 0.514444 m/s)
-            speed_kt = round(int(speed) / 0.514444)
-            wind_str = f"{direction}{speed_kt:02d}"
-            if gust:
-                gust_kt = round(int(gust[1:]) / 0.514444)
-                wind_str += f"G{gust_kt:02d}"
-            wind_str += "KT"
-        else:
-            wind_str += "KT"
+# How many of each non-knot METAR wind unit make one knot
+_WIND_UNITS_PER_KNOT = {"KMH": 1.852, "KPH": 1.852, "MPS": 0.514444}
 
-        return wind_str
 
-    return ""
+def _wind_in_knots(
+    direction: str, speed: str, gust: str | None, units_per_knot: float
+) -> str:
+    """
+    Format a METAR wind group given in another unit as knots.
+
+    Args:
+        direction: Three-digit direction or "VRB"
+        speed: Speed digits in the original unit
+        gust: Gust group with its "G" prefix, or None
+        units_per_knot: How many of the original unit make one knot
+
+    Returns:
+        Wind string like "27011G22KT"
+    """
+    speed_kt = round(int(speed) / units_per_knot)
+    wind_str = f"{direction}{speed_kt:02d}"
+    if gust:
+        gust_kt = round(int(gust[1:]) / units_per_knot)
+        wind_str += f"G{gust_kt:02d}"
+    return wind_str + "KT"
 
 
 def get_wind_from_metar(airport_icao: str, *, as_of: datetime | None = None) -> str:
@@ -1224,75 +1263,78 @@ def _build_metar_airport_spatial_index(
     persisted_cache = _load_persisted_spatial_cache()
 
     if persisted_cache and "spatial_grid" in persisted_cache:
-        # Use persisted spatial grid, but filter by runtime blacklist and METAR whitelist
-        persisted_grid = persisted_cache["spatial_grid"]
-
-        valid_airports = []
-        spatial_grid = {}
-
-        for cell_key_str, airports in persisted_grid.items():
-            # Convert string key back to tuple
-            parts = cell_key_str.split(",")
-            cell_key = (int(parts[0]), int(parts[1]))
-
-            for airport in airports:
-                icao = airport["icao"]
-
-                # Skip if blacklisted at runtime (404 errors)
-                if icao in metar_blacklist:
-                    continue
-
-                # If we have a whitelist, only include known METAR stations
-                if _KNOWN_METAR_STATIONS and icao not in _KNOWN_METAR_STATIONS:
-                    continue
-
-                valid_airports.append(airport)
-
-                if cell_key not in spatial_grid:
-                    spatial_grid[cell_key] = []
-                spatial_grid[cell_key].append(airport)
-
-        return {
-            "grid": spatial_grid,
-            "airports": valid_airports,
-            "cell_size": 1.0,  # degrees
-        }
-
-    # No persisted cache - build from scratch
-    valid_airports = []
-    for icao, data in airports_data.items():
-        # Skip if blacklisted or missing coordinates
-        if (
-            icao in metar_blacklist
-            or data.get("latitude") is None
-            or data.get("longitude") is None
-        ):
-            continue
-
-        # If we have a whitelist, only include known METAR stations
-        if _KNOWN_METAR_STATIONS and icao not in _KNOWN_METAR_STATIONS:
-            continue
-
-        valid_airports.append(
-            {"icao": icao, "lat": data["latitude"], "lon": data["longitude"]}
+        valid_airports, spatial_grid = _metar_grid_from_persisted(
+            persisted_cache["spatial_grid"], metar_blacklist
         )
-
-    # Build spatial grid (1-degree cells)
-    spatial_grid = {}
-    for airport in valid_airports:
-        lat_cell = int(airport["lat"])
-        lon_cell = int(airport["lon"])
-        cell_key = (lat_cell, lon_cell)
-
-        if cell_key not in spatial_grid:
-            spatial_grid[cell_key] = []
-        spatial_grid[cell_key].append(airport)
+    else:
+        valid_airports = _metar_airports_from_data(airports_data, metar_blacklist)
+        spatial_grid = _one_degree_grid(valid_airports)
 
     return {
         "grid": spatial_grid,
         "airports": valid_airports,
         "cell_size": 1.0,  # degrees
     }
+
+
+def _may_have_metar(icao: str, metar_blacklist: Container[str]) -> bool:
+    """Whether the airport is neither blacklisted at runtime nor outside a known-METAR whitelist."""
+    if icao in metar_blacklist:
+        return False
+    return not (_KNOWN_METAR_STATIONS and icao not in _KNOWN_METAR_STATIONS)
+
+
+def _metar_grid_from_persisted(
+    persisted_grid: dict[str, list[dict[str, Any]]], metar_blacklist: Container[str]
+) -> tuple[list[dict[str, Any]], dict[tuple[int, int], list[dict[str, Any]]]]:
+    """
+    Filter a persisted spatial grid ("lat,lon" cell keys) to the airports that may have a METAR.
+
+    Returns:
+        (airports, grid): the kept airports in grid order, and the grid keyed by
+        (lat_cell, lon_cell) holding only cells with a kept airport
+    """
+    valid_airports = []
+    spatial_grid: dict[tuple[int, int], list[dict[str, Any]]] = {}
+
+    for cell_key_str, airports in persisted_grid.items():
+        parts = cell_key_str.split(",")
+        cell_key = (int(parts[0]), int(parts[1]))
+
+        for airport in airports:
+            if not _may_have_metar(airport["icao"], metar_blacklist):
+                continue
+            valid_airports.append(airport)
+            spatial_grid.setdefault(cell_key, []).append(airport)
+
+    return valid_airports, spatial_grid
+
+
+def _metar_airports_from_data(
+    airports_data: dict[str, dict[str, Any]], metar_blacklist: Container[str]
+) -> list[dict[str, Any]]:
+    """The airports with coordinates that may have a METAR, as {"icao", "lat", "lon"} dicts."""
+    valid_airports = []
+    for icao, data in airports_data.items():
+        if data.get("latitude") is None or data.get("longitude") is None:
+            continue
+        if not _may_have_metar(icao, metar_blacklist):
+            continue
+        valid_airports.append(
+            {"icao": icao, "lat": data["latitude"], "lon": data["longitude"]}
+        )
+    return valid_airports
+
+
+def _one_degree_grid(
+    airports: list[dict[str, Any]],
+) -> dict[tuple[int, int], list[dict[str, Any]]]:
+    """Group airports into 1-degree cells keyed by (int(lat), int(lon))."""
+    spatial_grid: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    for airport in airports:
+        cell_key = (int(airport["lat"]), int(airport["lon"]))
+        spatial_grid.setdefault(cell_key, []).append(airport)
+    return spatial_grid
 
 
 def find_airports_near_position(
@@ -1410,128 +1452,27 @@ def find_nearest_airport_with_metar(
         Tuple of (icao_code, altimeter_setting, distance_nm) or None if no airport found
         Distance is in nautical miles
     """
-    global _METAR_AIRPORT_SPATIAL_INDEX, _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP
-
     current_time = datetime.now(timezone.utc)
-
-    # Round position to grid for cache lookup (~6nm grid)
-    rounded_lat = (
-        round(latitude / _NEAREST_METAR_POSITION_GRID_SIZE)
-        * _NEAREST_METAR_POSITION_GRID_SIZE
-    )
-    rounded_lon = (
-        round(longitude / _NEAREST_METAR_POSITION_GRID_SIZE)
-        * _NEAREST_METAR_POSITION_GRID_SIZE
-    )
-    cache_key = (rounded_lat, rounded_lon)
+    cache_key = _nearest_metar_cache_key(latitude, longitude)
 
     # Check result cache first (fast path)
-    with _NEAREST_METAR_RESULT_CACHE_LOCK:
-        if cache_key in _NEAREST_METAR_RESULT_CACHE:
-            cache_entry = _NEAREST_METAR_RESULT_CACHE[cache_key]
-            time_since_cache = (current_time - cache_entry["timestamp"]).total_seconds()
-            if time_since_cache < _NEAREST_METAR_RESULT_CACHE_DURATION:
-                return cache_entry["result"]
+    found, cached_result = _cached_nearest_metar(cache_key, current_time)
+    if found:
+        return cached_result
 
-    # Check if we need to build or rebuild the spatial index (double-checked locking)
-    needs_rebuild = (
-        _METAR_AIRPORT_SPATIAL_INDEX is None
-        or _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None
-        or (current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds()
-        > _METAR_SPATIAL_INDEX_DURATION
-    )
+    grid = _current_metar_spatial_index(airports_data, current_time)["grid"]
 
-    if needs_rebuild:
-        with _METAR_SPATIAL_INDEX_LOCK:
-            # Re-check inside lock (another thread may have rebuilt)
-            current_time = datetime.now(timezone.utc)
-            if (
-                _METAR_AIRPORT_SPATIAL_INDEX is None
-                or _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None
-                or (
-                    current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP
-                ).total_seconds()
-                > _METAR_SPATIAL_INDEX_DURATION
-            ):
-                _METAR_AIRPORT_SPATIAL_INDEX = _build_metar_airport_spatial_index(
-                    airports_data
-                )
-                _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
-
-    spatial_index = _METAR_AIRPORT_SPATIAL_INDEX
-    assert spatial_index is not None, "Spatial index should have been built"
-    grid = spatial_index["grid"]
-
-    # Determine which cells to search
-    # 1 degree of latitude ≈ 60nm, so we need to search enough cells to cover max_distance_nm
-    # At mid-latitudes, 1 degree of longitude ≈ 45nm, so use conservative estimate
-    # Add 1 to ensure we cover the edges
-    cell_radius = int(max_distance_nm / 45) + 1
-
-    lat_cell = int(latitude)
-    lon_cell = int(longitude)
-
-    # Build list of cells to search based on max_distance_nm
-    search_cells = set()
-    for dlat in range(-cell_radius, cell_radius + 1):
-        for dlon in range(-cell_radius, cell_radius + 1):
-            search_cells.add((lat_cell + dlat, lon_cell + dlon))
-
-    # Determine if we should apply heading bias
-    # Only apply if in flight (groundspeed > 40kt) and heading is provided
+    # Only apply heading bias if in flight (groundspeed > 40kt) and heading is provided
     use_heading_bias = aircraft_heading is not None and (
         aircraft_groundspeed is None or aircraft_groundspeed > 40
     )
-
-    # Find all airports within search radius, scored by distance and heading
-    candidates = []
-    tried_icaos = set()
-
-    for cell_key in search_cells:
-        if cell_key not in grid:
-            continue
-
-        for airport in grid[cell_key]:
-            if airport["icao"] in tried_icaos:
-                continue
-            tried_icaos.add(airport["icao"])
-
-            distance = haversine_distance_nm(
-                latitude, longitude, airport["lat"], airport["lon"]
-            )
-
-            if distance <= max_distance_nm:
-                # Calculate score with optional heading bias
-                if use_heading_bias and distance > 0 and aircraft_heading is not None:
-                    # Calculate bearing from aircraft to airport
-                    bearing_to_airport = calculate_bearing(
-                        latitude, longitude, airport["lat"], airport["lon"]
-                    )
-                    # Calculate angular difference (0-180 degrees)
-                    heading_diff = abs(bearing_to_airport - aircraft_heading)
-                    if heading_diff > 180:
-                        heading_diff = 360 - heading_diff
-                    # Calculate penalty: 0.7 (ahead) to 1.5 (behind)
-                    # Formula: 0.7 + 0.8 * (heading_diff / 180)
-                    heading_penalty = 0.7 + 0.8 * (heading_diff / 180.0)
-                    score = distance * heading_penalty
-                else:
-                    score = distance
-
-                candidates.append((score, distance, airport["icao"]))
-
-    # Sort by score (lowest first - closest/most ahead)
-    candidates.sort(key=lambda x: x[0])
-
-    # Try airports in order of score until we find one with METAR
-    MAX_ATTEMPTS = 20  # Limit attempts to prevent excessive API calls
-    result = None
-
-    for _score, distance, icao in candidates[:MAX_ATTEMPTS]:
-        altimeter = get_altimeter_setting(icao)
-        if altimeter:
-            result = (icao, altimeter, distance)
-            break
+    candidates = _nearest_metar_candidates(
+        (latitude, longitude),
+        grid,
+        max_distance_nm,
+        aircraft_heading if use_heading_bias else None,
+    )
+    result = _first_with_altimeter(candidates)
 
     # Cache the result (even if None) for this position
     with _NEAREST_METAR_RESULT_CACHE_LOCK:
@@ -1541,6 +1482,166 @@ def find_nearest_airport_with_metar(
         }
 
     return result
+
+
+# Limit on airports tried for a METAR per nearest-airport search, to bound API calls
+_NEAREST_METAR_MAX_ATTEMPTS = 20
+
+
+def _nearest_metar_cache_key(latitude: float, longitude: float) -> tuple[float, float]:
+    """The position rounded to the ~6nm result-cache grid."""
+    rounded_lat = (
+        round(latitude / _NEAREST_METAR_POSITION_GRID_SIZE)
+        * _NEAREST_METAR_POSITION_GRID_SIZE
+    )
+    rounded_lon = (
+        round(longitude / _NEAREST_METAR_POSITION_GRID_SIZE)
+        * _NEAREST_METAR_POSITION_GRID_SIZE
+    )
+    return (rounded_lat, rounded_lon)
+
+
+def _cached_nearest_metar(
+    cache_key: tuple[float, float], now: datetime
+) -> tuple[bool, tuple[str, str, float] | None]:
+    """
+    Look up a nearest-METAR result younger than its cache duration.
+
+    Returns:
+        (found, result): found is False on a miss; result may be None on a hit,
+        a cached "no airport found"
+    """
+    with _NEAREST_METAR_RESULT_CACHE_LOCK:
+        cache_entry = _NEAREST_METAR_RESULT_CACHE.get(cache_key)
+        if cache_entry is None:
+            return False, None
+        time_since_cache = (now - cache_entry["timestamp"]).total_seconds()
+        if time_since_cache < _NEAREST_METAR_RESULT_CACHE_DURATION:
+            return True, cache_entry["result"]
+    return False, None
+
+
+def _metar_spatial_index_expired(now: datetime) -> bool:
+    """Whether the METAR airport spatial index is missing or older than its duration."""
+    return (
+        _METAR_AIRPORT_SPATIAL_INDEX is None
+        or _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None
+        or (now - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds()
+        > _METAR_SPATIAL_INDEX_DURATION
+    )
+
+
+def _current_metar_spatial_index(
+    airports_data: dict[str, dict[str, Any]], now: datetime
+) -> dict[str, Any]:
+    """The METAR airport spatial index, rebuilt first when expired (double-checked locking)."""
+    global _METAR_AIRPORT_SPATIAL_INDEX, _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP
+
+    if _metar_spatial_index_expired(now):
+        with _METAR_SPATIAL_INDEX_LOCK:
+            # Re-check inside lock (another thread may have rebuilt)
+            current_time = datetime.now(timezone.utc)
+            if _metar_spatial_index_expired(current_time):
+                _METAR_AIRPORT_SPATIAL_INDEX = _build_metar_airport_spatial_index(
+                    airports_data
+                )
+                _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
+
+    spatial_index = _METAR_AIRPORT_SPATIAL_INDEX
+    assert spatial_index is not None, "Spatial index should have been built"
+    return spatial_index
+
+
+def _nearest_metar_search_cells(
+    latitude: float, longitude: float, max_distance_nm: float
+) -> set[tuple[int, int]]:
+    """
+    The 1-degree cells around a position that can hold an airport within max_distance_nm.
+
+    1 degree of latitude is about 60nm and, at mid-latitudes, 1 degree of longitude
+    about 45nm, so the radius in cells uses the conservative 45nm plus one cell.
+    """
+    cell_radius = int(max_distance_nm / 45) + 1
+
+    lat_cell = int(latitude)
+    lon_cell = int(longitude)
+
+    search_cells = set()
+    for dlat in range(-cell_radius, cell_radius + 1):
+        for dlon in range(-cell_radius, cell_radius + 1):
+            search_cells.add((lat_cell + dlat, lon_cell + dlon))
+    return search_cells
+
+
+def _heading_biased_score(
+    position: tuple[float, float],
+    airport: dict[str, Any],
+    distance: float,
+    bias_heading: float | None,
+) -> float:
+    """
+    The airport's distance, scaled by a heading penalty when bias_heading is given.
+
+    The penalty runs from 0.7 for an airport dead ahead to 1.5 for one dead behind:
+    0.7 + 0.8 * (heading_diff / 180). An airport at distance 0 is never penalised.
+    """
+    if bias_heading is None or distance <= 0:
+        return distance
+
+    latitude, longitude = position
+    bearing_to_airport = calculate_bearing(
+        latitude, longitude, airport["lat"], airport["lon"]
+    )
+    heading_diff = abs(bearing_to_airport - bias_heading)
+    if heading_diff > 180:
+        heading_diff = 360 - heading_diff
+    heading_penalty = 0.7 + 0.8 * (heading_diff / 180.0)
+    return distance * heading_penalty
+
+
+def _nearest_metar_candidates(
+    position: tuple[float, float],
+    grid: dict[tuple[int, int], list[dict[str, Any]]],
+    max_distance_nm: float,
+    bias_heading: float | None,
+) -> list[tuple[float, float, str]]:
+    """
+    The grid's airports within max_distance_nm of the position, best score first.
+
+    Returns:
+        (score, distance_nm, icao) tuples sorted by score, lowest (closest or
+        most ahead) first
+    """
+    latitude, longitude = position
+    candidates = []
+    tried_icaos = set()
+
+    for cell_key in _nearest_metar_search_cells(latitude, longitude, max_distance_nm):
+        for airport in grid.get(cell_key, ()):
+            if airport["icao"] in tried_icaos:
+                continue
+            tried_icaos.add(airport["icao"])
+
+            distance = haversine_distance_nm(
+                latitude, longitude, airport["lat"], airport["lon"]
+            )
+            if distance <= max_distance_nm:
+                score = _heading_biased_score(position, airport, distance, bias_heading)
+                candidates.append((score, distance, airport["icao"]))
+
+    candidates.sort(key=lambda x: x[0])
+    return candidates
+
+
+def _first_with_altimeter(
+    candidates: list[tuple[float, float, str]],
+) -> tuple[str, str, float] | None:
+    """The first of the leading candidates with an altimeter setting, as (icao, altimeter, distance_nm)."""
+    for _score, distance, icao in candidates[:_NEAREST_METAR_MAX_ATTEMPTS]:
+        altimeter = get_altimeter_setting(icao)
+        if altimeter:
+            return (icao, altimeter, distance)
+    return None
 
 
 def clear_weather_caches() -> None:
@@ -1981,155 +2082,35 @@ def get_weather_smart(
     airports_with_coords = [a for a in airports if a in airport_coords]
     airports_without_coords = [a for a in airports if a not in airport_coords]
 
-    # Cluster airports geographically using simple greedy clustering
-    clusters: list[list[str]] = []
-    unclustered = set(airports_with_coords)
-
-    while unclustered:
-        # Start a new cluster with an arbitrary airport
-        seed = next(iter(unclustered))
-        seed_lat, seed_lon = airport_coords[seed]
-        cluster = [seed]
-        unclustered.remove(seed)
-
-        # Add nearby airports to this cluster
-        to_check = list(unclustered)
-        for icao in to_check:
-            lat, lon = airport_coords[icao]
-            dist = haversine_distance_nm(seed_lat, seed_lon, lat, lon)
-            if dist <= cluster_radius_nm:
-                cluster.append(icao)
-                unclustered.remove(icao)
-
-        clusters.append(cluster)
-
-    # Decide bbox vs individual for each cluster
-    bbox_clusters: list[tuple[tuple[float, float, float, float], list[str]]] = []
-    individual_airports: list[str] = list(airports_without_coords)
-
-    for cluster in clusters:
-        if len(cluster) < min_airports_for_bbox:
-            # Too few airports - use individual queries
-            individual_airports.extend(cluster)
-            continue
-
-        # Calculate bounding box for cluster
-        lats = [airport_coords[a][0] for a in cluster]
-        lons = [airport_coords[a][1] for a in cluster]
-        min_lat, max_lat = min(lats), max(lats)
-        min_lon, max_lon = min(lons), max(lons)
-
-        # Add padding (0.5 degrees ~30nm)
-        padding = 0.5
-        min_lat -= padding
-        max_lat += padding
-        min_lon -= padding
-        max_lon += padding
-
-        # Calculate bbox area (rough approximation in square degrees)
-        bbox_area = (max_lat - min_lat) * (max_lon - min_lon)
-        area_per_airport = bbox_area / len(cluster)
-
-        if area_per_airport > max_bbox_area_per_airport:
-            # Airports too spread out - use individual queries
-            individual_airports.extend(cluster)
-        else:
-            # Dense cluster - use bbox query
-            bbox = (min_lat, min_lon, max_lat, max_lon)
-            bbox_clusters.append((bbox, cluster))
-
-    # Track airports that need fallback fetching after bbox failures
-    fallback_airports: list[str] = []
-
-    all_metars: dict[str, str] = {}
-    all_tafs: dict[str, str] = {}
+    clusters = _cluster_airports(
+        airports_with_coords, airport_coords, cluster_radius_nm
+    )
+    bbox_clusters, sparse_airports = _split_clusters_by_density(
+        clusters, airport_coords, min_airports_for_bbox, max_bbox_area_per_airport
+    )
 
     # Progress tracking: count airports processed, not work units
-    total_airports = len(airports)
-    airports_processed = 0
+    progress = _AirportProgress(len(airports), progress_callback)
 
-    def update_progress():
-        if progress_callback:
-            progress_callback(airports_processed, total_airports)
+    all_metars, all_tafs, fallback_airports = _fetch_cluster_bboxes(
+        bbox_clusters, include_taf, max_workers, progress
+    )
 
-    # Fetch bbox clusters in parallel
-    if bbox_clusters:
-        with ThreadPoolExecutor(
-            max_workers=min(max_workers, len(bbox_clusters))
-        ) as executor:
-            future_to_cluster = {
-                executor.submit(fetch_weather_bbox, bbox, include_taf): (
-                    bbox,
-                    airports_in_cluster,
-                )
-                for bbox, airports_in_cluster in bbox_clusters
-            }
+    # Individual airports, then any fallback airports from failed bbox queries
+    all_individual = airports_without_coords + sparse_airports + fallback_airports
 
-            for future in as_completed(future_to_cluster):
-                bbox, airports_in_cluster = future_to_cluster[future]
-                try:
-                    metars, tafs = future.result()
-                    # Filter to only the airports we want from this bbox
-                    cluster_set = {a.upper() for a in airports_in_cluster}
-                    all_metars.update(
-                        {
-                            icao: metar
-                            for icao, metar in metars.items()
-                            if icao.upper() in cluster_set
-                        }
-                    )
-                    all_tafs.update(
-                        {
-                            icao: taf
-                            for icao, taf in tafs.items()
-                            if icao.upper() in cluster_set
-                        }
-                    )
-                    # Update progress for airports in this cluster
-                    airports_processed += len(airports_in_cluster)
-                    update_progress()
-                except Exception:
-                    # Bbox failed - fall back to individual for these airports
-                    fallback_airports.extend(airports_in_cluster)
-
-    # Combine individual airports with any fallback airports from failed bbox queries
-    all_individual = individual_airports + fallback_airports
-
-    # Fetch individual airports in parallel
     if all_individual:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Fetch METARs
-            future_to_icao = {
-                executor.submit(get_metar, icao): icao for icao in all_individual
-            }
-
-            for future in as_completed(future_to_icao):
-                icao = future_to_icao[future]
-                try:
-                    metar = future.result()
-                    if metar:
-                        all_metars[icao] = metar
-                except Exception as e:
-                    debug_logger.debug(f"METAR fetch failed for {icao}: {e}")
-
-                airports_processed += 1
-                update_progress()
+        all_metars.update(
+            _fetch_each_airport(
+                all_individual, get_metar, max_workers, "METAR", progress.advance_one
+            )
+        )
 
         # Fetch TAFs separately if requested (no progress update - already counted)
         if include_taf:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_icao = {
-                    executor.submit(get_taf, icao): icao for icao in all_individual
-                }
-
-                for future in as_completed(future_to_icao):
-                    icao = future_to_icao[future]
-                    try:
-                        taf = future.result()
-                        if taf:
-                            all_tafs[icao] = taf
-                    except Exception as e:
-                        debug_logger.debug(f"TAF fetch failed for {icao}: {e}")
+            all_tafs.update(
+                _fetch_each_airport(all_individual, get_taf, max_workers, "TAF", None)
+            )
 
     # Ensure all requested airports have an entry
     result_metars = {icao: all_metars.get(icao, "") for icao in airports}
@@ -2138,3 +2119,189 @@ def get_weather_smart(
     )
 
     return (result_metars, result_tafs)
+
+
+class _AirportProgress:
+    """Counts airports processed and reports (processed, total) to an optional callback."""
+
+    def __init__(self, total: int, callback: Callable[[int, int], None] | None) -> None:
+        self.total = total
+        self.processed = 0
+        self.callback = callback
+
+    def advance(self, count: int) -> None:
+        self.processed += count
+        if self.callback:
+            self.callback(self.processed, self.total)
+
+    def advance_one(self) -> None:
+        self.advance(1)
+
+
+_BboxCluster = tuple[tuple[float, float, float, float], list[str]]
+
+# Padding around a cluster's airports in its bbox (0.5 degrees ~30nm)
+_CLUSTER_BBOX_PADDING_DEGREES = 0.5
+
+
+def _cluster_airports(
+    icaos: list[str],
+    airport_coords: dict[str, tuple[float, float]],
+    cluster_radius_nm: float,
+) -> list[list[str]]:
+    """
+    Cluster airports greedily: each cluster starts from an arbitrary unclustered
+    airport and takes every unclustered airport within cluster_radius_nm of it.
+    """
+    clusters: list[list[str]] = []
+    unclustered = set(icaos)
+
+    while unclustered:
+        seed = next(iter(unclustered))
+        seed_lat, seed_lon = airport_coords[seed]
+        cluster = [seed]
+        unclustered.remove(seed)
+
+        for icao in list(unclustered):
+            lat, lon = airport_coords[icao]
+            dist = haversine_distance_nm(seed_lat, seed_lon, lat, lon)
+            if dist <= cluster_radius_nm:
+                cluster.append(icao)
+                unclustered.remove(icao)
+
+        clusters.append(cluster)
+
+    return clusters
+
+
+def _padded_cluster_bbox(
+    cluster: list[str], airport_coords: dict[str, tuple[float, float]]
+) -> tuple[float, float, float, float]:
+    """The cluster's (min_lat, min_lon, max_lat, max_lon), grown by the cluster padding."""
+    lats = [airport_coords[a][0] for a in cluster]
+    lons = [airport_coords[a][1] for a in cluster]
+    padding = _CLUSTER_BBOX_PADDING_DEGREES
+    return (
+        min(lats) - padding,
+        min(lons) - padding,
+        max(lats) + padding,
+        max(lons) + padding,
+    )
+
+
+def _split_clusters_by_density(
+    clusters: list[list[str]],
+    airport_coords: dict[str, tuple[float, float]],
+    min_airports_for_bbox: int,
+    max_bbox_area_per_airport: float,
+) -> tuple[list[_BboxCluster], list[str]]:
+    """
+    Decide bbox or individual queries per cluster.
+
+    A cluster is fetched by bbox when it has at least min_airports_for_bbox
+    airports and its padded bbox area (square degrees) per airport is at most
+    max_bbox_area_per_airport.
+
+    Returns:
+        (bbox_clusters, individual_airports): (bbox, airports) per dense cluster,
+        and the airports of every other cluster in cluster order
+    """
+    bbox_clusters: list[_BboxCluster] = []
+    individual_airports: list[str] = []
+
+    for cluster in clusters:
+        if len(cluster) < min_airports_for_bbox:
+            individual_airports.extend(cluster)
+            continue
+
+        bbox = _padded_cluster_bbox(cluster, airport_coords)
+        min_lat, min_lon, max_lat, max_lon = bbox
+        bbox_area = (max_lat - min_lat) * (max_lon - min_lon)
+        area_per_airport = bbox_area / len(cluster)
+
+        if area_per_airport > max_bbox_area_per_airport:
+            individual_airports.extend(cluster)
+        else:
+            bbox_clusters.append((bbox, cluster))
+
+    return bbox_clusters, individual_airports
+
+
+def _only_airports(values: dict[str, str], wanted: set[str]) -> dict[str, str]:
+    """The entries whose upper-cased ICAO is in the wanted set."""
+    return {icao: value for icao, value in values.items() if icao.upper() in wanted}
+
+
+def _fetch_cluster_bboxes(
+    bbox_clusters: list[_BboxCluster],
+    include_taf: bool,
+    max_workers: int,
+    progress: _AirportProgress,
+) -> tuple[dict[str, str], dict[str, str], list[str]]:
+    """
+    Fetch each dense cluster's bbox in parallel, keeping only the cluster's airports.
+
+    A cluster's airports count as processed when its bbox returns. A bbox request
+    that raises sends its cluster's airports to the individual fallback instead.
+
+    Returns:
+        (metars, tafs, fallback_airports)
+    """
+    metars: dict[str, str] = {}
+    tafs: dict[str, str] = {}
+    fallback_airports: list[str] = []
+    if not bbox_clusters:
+        return metars, tafs, fallback_airports
+
+    with ThreadPoolExecutor(
+        max_workers=min(max_workers, len(bbox_clusters))
+    ) as executor:
+        future_to_cluster = {
+            executor.submit(fetch_weather_bbox, bbox, include_taf): airports_in_cluster
+            for bbox, airports_in_cluster in bbox_clusters
+        }
+
+        for future in as_completed(future_to_cluster):
+            airports_in_cluster = future_to_cluster[future]
+            try:
+                bbox_metars, bbox_tafs = future.result()
+                cluster_set = {a.upper() for a in airports_in_cluster}
+                metars.update(_only_airports(bbox_metars, cluster_set))
+                tafs.update(_only_airports(bbox_tafs, cluster_set))
+                progress.advance(len(airports_in_cluster))
+            except Exception:
+                fallback_airports.extend(airports_in_cluster)
+
+    return metars, tafs, fallback_airports
+
+
+def _fetch_each_airport(
+    icaos: list[str],
+    fetch: Callable[[str], str],
+    max_workers: int,
+    kind: str,
+    on_done: Callable[[], None] | None,
+) -> dict[str, str]:
+    """
+    Fetch one value per airport in parallel, keeping the non-empty ones.
+
+    A fetch that raises is logged at debug level as "<kind> fetch failed for <icao>".
+    on_done, when given, runs on the calling thread after each airport, failed or not.
+    """
+    results: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_icao = {executor.submit(fetch, icao): icao for icao in icaos}
+
+        for future in as_completed(future_to_icao):
+            icao = future_to_icao[future]
+            try:
+                value = future.result()
+                if value:
+                    results[icao] = value
+            except Exception as e:
+                debug_logger.debug(f"{kind} fetch failed for {icao}: {e}")
+
+            if on_done:
+                on_done()
+
+    return results
