@@ -679,7 +679,6 @@ def generate_html(
         print("    Fetching SimAware TRACON boundaries for groupings...")
         simaware_boundaries = get_all_grouping_boundaries(
             all_grouping_names,
-            simaware_cache_dir,
             unified_airport_data=unified_airport_data,
         )
 

@@ -982,26 +982,6 @@ class FlightInfoScreen(ModalScreen):
 
         return None
 
-    def _format_time(self, time_str: str) -> str:
-        """Format departure time (HHMM format)"""
-        if not time_str or time_str == "----":
-            return "----"
-        # Format as HH:MM
-        if len(time_str) == 4:
-            return f"{time_str[:2]}:{time_str[2:]}Z"
-        return time_str
-
-    def _format_duration(self, duration_str: str) -> str:
-        """Format duration (HHMM format)"""
-        if not duration_str or duration_str == "----":
-            return "----"
-        # Format as HH:MM
-        if len(duration_str) == 4:
-            hours = duration_str[:2]
-            minutes = duration_str[2:]
-            return f"{hours}h {minutes}m"
-        return duration_str
-
     def _get_altimeter_info_sync(self) -> str:
         """Get nearest airport altimeter setting for the flight's current position (synchronous version for executor)"""
         # Check if we have position data

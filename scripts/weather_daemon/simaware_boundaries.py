@@ -197,7 +197,6 @@ def find_boundary_for_prefix(
 
 
 def map_grouping_to_boundaries(
-    grouping_name: str,
     grouping_data: dict[str, Any] | None,
     boundaries_data: dict[str, dict[str, Any]],
 ) -> list[list[list[float]]]:
@@ -205,7 +204,6 @@ def map_grouping_to_boundaries(
     Map a grouping to one or more SimAware boundary polygons.
 
     Args:
-        grouping_name: Name of the grouping (e.g., 'NCT D', 'SCT Burbank')
         grouping_data: Full grouping data including position_prefixes
         boundaries_data: All loaded SimAware boundary data
 
@@ -521,10 +519,8 @@ def _merge_group(
 
 def get_all_grouping_boundaries(
     grouping_names: list[str],
-    cache_dir: Path | None = None,  # Kept for API compatibility, not used
     preset_dir: Path | None = None,
     boundaries_dir: Path | None = None,
-    max_workers: int = 8,  # Kept for API compatibility, not used
     unified_airport_data: dict[str, Any] | None = None,  # For Tower circle generation
 ) -> dict[str, list[list[tuple[float, float]]]]:
     """
@@ -535,10 +531,9 @@ def get_all_grouping_boundaries(
 
     Args:
         grouping_names: List of grouping names
-        cache_dir: Deprecated, kept for API compatibility
         preset_dir: Optional path to preset groupings directory
         boundaries_dir: Optional path to SimAware boundaries directory
-        max_workers: Deprecated, kept for API compatibility
+        unified_airport_data: Airport data used to draw a circle for a Tower grouping
 
     Returns:
         Dict mapping grouping names to list of boundary polygons.
@@ -614,16 +609,12 @@ def _grouping_polygons(
     """Return a grouping's SimAware polygons, collecting every component of a '+' name."""
     expanded_names = expand_plus_pattern(name, all_grouping_data)
     if len(expanded_names) == 1:
-        return map_grouping_to_boundaries(
-            name, all_grouping_data.get(name), boundaries_data
-        )
+        return map_grouping_to_boundaries(all_grouping_data.get(name), boundaries_data)
 
     all_polygons: list[list[list[float]]] = []
     for exp_name in expanded_names:
         all_polygons.extend(
-            map_grouping_to_boundaries(
-                exp_name, all_grouping_data.get(exp_name), boundaries_data
-            )
+            map_grouping_to_boundaries(all_grouping_data.get(exp_name), boundaries_data)
         )
     return all_polygons
 

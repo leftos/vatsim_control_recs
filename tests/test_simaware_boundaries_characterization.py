@@ -247,7 +247,7 @@ def _grouping(
 def test_map_grouping_to_boundaries(
     grouping_data: dict[str, Any] | None, expected: list[list[list[float]]]
 ) -> None:
-    assert sb.map_grouping_to_boundaries("Name", grouping_data, BOUNDARIES) == expected
+    assert sb.map_grouping_to_boundaries(grouping_data, BOUNDARIES) == expected
 
 
 # expand_plus_pattern
@@ -479,10 +479,8 @@ def test_get_all_maps_every_kind_of_grouping(
 
     result = sb.get_all_grouping_boundaries(
         names,
-        cache_dir=Path("ignored"),
         preset_dir=preset_dir,
         boundaries_dir=boundaries_dir,
-        max_workers=1,
         unified_airport_data=UNIFIED,
     )
 
