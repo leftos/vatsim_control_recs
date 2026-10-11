@@ -1,7 +1,7 @@
 """Flight Board Modal Screen"""
 
 import asyncio
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -49,6 +49,84 @@ DIRECTION_LABELS = {
     "arr": "ARRIVALS ONLY",
     "both": "DEP + ARR",
 }
+
+RunwayPair = tuple[frozenset[str], frozenset[str]]
+
+
+def _combine_atis_info(
+    atis_list: list[dict[str, Any]],
+) -> tuple[frozenset[str], frozenset[str], dict[str, frozenset[str]]]:
+    """Merge the runways and approach types of every ATIS entry of one airport.
+
+    An airport with dual ATIS (departure and arrival) has one entry per broadcast;
+    entries without text contribute nothing.
+
+    Args:
+        atis_list: The airport's ATIS entries, each with an optional ``text_atis``.
+
+    Returns:
+        Landing runways, departing runways, and each runway's approach types.
+    """
+    landing: set[str] = set()
+    departing: set[str] = set()
+    approaches: dict[str, set[str]] = {}
+    for atis in atis_list:
+        atis_text = atis.get("text_atis", "")
+        if not atis_text:
+            continue
+        info = parse_approach_info(atis_text)
+        landing.update(info["landing"])
+        departing.update(info["departing"])
+        for rwy, approach_types in info["approaches"].items():
+            approaches.setdefault(rwy, set()).update(approach_types)
+    return (
+        frozenset(landing),
+        frozenset(departing),
+        {rwy: frozenset(types) for rwy, types in approaches.items()},
+    )
+
+
+def _runways_changed(old: RunwayPair, new: RunwayPair) -> bool:
+    """Whether the runways in use changed, judged only when both sides name runways.
+
+    A side naming only landing runways uses them for departures too, so
+    ``L/D:17L,17R`` and ``L:17L,17R`` are the same assignment.
+
+    Args:
+        old: The baseline's landing and departing runways.
+        new: The fresh parse's landing and departing runways.
+
+    Returns:
+        True when both sides have runways and they differ after that normalization.
+    """
+    old_landing, old_departing = old
+    new_landing, new_departing = new
+    if not (old_landing or old_departing) or not (new_landing or new_departing):
+        return False
+    return new_landing != old_landing or (new_departing or new_landing) != (
+        old_departing or old_landing
+    )
+
+
+def _airports_near_pilot(pilot: dict[str, Any]) -> list[str]:
+    """The three airports closest to a pilot within 75 nm, or none without a position."""
+    lat = pilot.get("latitude")
+    lon = pilot.get("longitude")
+    if lat is None or lon is None:
+        return []
+    return find_airports_near_position(
+        lat, lon, config.UNIFIED_AIRPORT_DATA, radius_nm=75, max_results=3
+    )
+
+
+def _pilot_with_callsign(
+    pilots: list[dict[str, Any]], callsign: str
+) -> dict[str, Any] | None:
+    """The first pilot whose callsign, stripped of spaces, is the one given."""
+    for pilot in pilots:
+        if pilot.get("callsign", "").strip() == callsign:
+            return pilot
+    return None
 
 
 class FlightBoardScreen(ModalScreen):
@@ -199,7 +277,7 @@ class FlightBoardScreen(ModalScreen):
         # Weather and runway change tracking
         self._previous_weather: dict[str, str] = {}  # ICAO -> flight category
         self._previous_runways: dict[
-            str, tuple[frozenset, frozenset]
+            str, RunwayPair
         ] = {}  # ICAO -> (landing, departing)
         self._previous_approaches: dict[
             str, dict[str, frozenset]
@@ -447,43 +525,40 @@ class FlightBoardScreen(ModalScreen):
         if not self.vatsim_data or not config.UNIFIED_AIRPORT_DATA:
             return
 
-        airports_to_cache = set()
-        pilots_by_callsign = {
-            p.get("callsign"): p for p in self.vatsim_data.get("pilots", [])
-        }
-
-        # For departures on the ground, use their departure airport
+        airports_to_cache: set[str] = set()
         for dep in self.departures_data:
             if dep.departure:
                 airports_to_cache.add(dep.departure.icao_code)
-            # Also add destination in case they need it
             airports_to_cache.add(dep.destination.icao_code)
+        airports_to_cache.update(
+            self._arrival_airports_to_cache(self.vatsim_data.get("pilots", []))
+        )
 
-        # For arrivals (in-flight or on ground), find airports near their current position
+        if airports_to_cache:
+            get_metar_batch(list(airports_to_cache), max_workers=10)
+
+    def _arrival_airports_to_cache(self, pilots: list[dict[str, Any]]) -> set[str]:
+        """Airports whose METARs the board's arrivals may need.
+
+        Each arrival contributes its origin, its arrival airport when known, and
+        the airports near its current position when the feed has its pilot.
+
+        Args:
+            pilots: The VATSIM feed's pilot records.
+
+        Returns:
+            The ICAO codes to warm the METAR cache for.
+        """
+        pilots_by_callsign = {p.get("callsign"): p for p in pilots}
+        airports: set[str] = set()
         for arr in self.arrivals_data:
             pilot = pilots_by_callsign.get(arr.callsign)
             if pilot:
-                lat = pilot.get("latitude")
-                lon = pilot.get("longitude")
-                if lat is not None and lon is not None:
-                    # Find airports near this flight's position
-                    nearby = find_airports_near_position(
-                        lat,
-                        lon,
-                        config.UNIFIED_AIRPORT_DATA,
-                        radius_nm=75,  # Search within 75nm
-                        max_results=3,  # Get closest 3 airports
-                    )
-                    airports_to_cache.update(nearby)
-
-            # Also add origin airport
-            airports_to_cache.add(arr.origin.icao_code)
+                airports.update(_airports_near_pilot(pilot))
+            airports.add(arr.origin.icao_code)
             if arr.arrival:
-                airports_to_cache.add(arr.arrival.icao_code)
-
-        # Batch fetch METARs to warm the cache
-        if airports_to_cache:
-            get_metar_batch(list(airports_to_cache), max_workers=10)
+                airports.add(arr.arrival.icao_code)
+        return airports
 
     async def _refresh_altimeter_cache(self) -> None:
         """Periodically refresh the altimeter cache for displayed flights.
@@ -741,53 +816,93 @@ class FlightBoardScreen(ModalScreen):
         if not self.vatsim_data:
             return
 
-        # Determine which table has focus
-        departures_table = self.query_one("#departures-table", SplitFlapDataTable)
-        arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
-
-        # Get the focused table, ignoring a panel the direction mode has hidden -
-        # its cursor row is left over from before the mode changed.
-        show_departures, show_arrivals = self._visible_sections()
-        focused_table = None
-        if show_departures and departures_table.has_focus:
-            focused_table = departures_table
-        elif show_arrivals and arrivals_table.has_focus:
-            focused_table = arrivals_table
-        elif show_departures and departures_table.cursor_row >= 0:
-            focused_table = departures_table
-        elif show_arrivals and arrivals_table.cursor_row >= 0:
-            focused_table = arrivals_table
-
-        if not focused_table or focused_table.cursor_row < 0:
+        callsign = self._selected_callsign()
+        if callsign is None:
             return
 
-        # Get the row data from the selected row (always first column is callsign)
-        try:
-            row_data = focused_table.get_row_at(focused_table.cursor_row)
-        except RowDoesNotExist:
-            return
-        if not row_data or len(row_data) == 0:
-            return
-
-        # Extract callsign from first column and clean it
-        callsign = str(row_data[0]).strip()
-
-        # Find the flight in vatsim_data
-        flight_data = None
-        pilots_list = self.vatsim_data.get("pilots", [])
-        for pilot in pilots_list:
-            if pilot.get("callsign", "").strip() == callsign:
-                flight_data = pilot
-                break
-
+        flight_data = _pilot_with_callsign(self.vatsim_data.get("pilots", []), callsign)
         if not flight_data:
-            # Debug: log that flight was not found
             return
 
-        # Open the flight info modal
         self.app.push_screen(FlightInfoScreen(flight_data))
 
+    def _selected_table(self) -> SplitFlapDataTable | None:
+        """The visible table the user picked a flight in.
+
+        A focused table wins, then one with a cursor row, departures before
+        arrivals in each case. A panel the direction mode hides is ignored: its
+        cursor row is left over from before the mode changed.
+
+        Returns:
+            The table, or None when no visible table is focused or has a cursor row.
+        """
+        departures_table = self.query_one("#departures-table", SplitFlapDataTable)
+        arrivals_table = self.query_one("#arrivals-table", SplitFlapDataTable)
+        show_departures, show_arrivals = self._visible_sections()
+        visible = [
+            table
+            for table, shown in (
+                (departures_table, show_departures),
+                (arrivals_table, show_arrivals),
+            )
+            if shown
+        ]
+        for table in visible:
+            if table.has_focus:
+                return table
+        for table in visible:
+            if table.cursor_row >= 0:
+                return table
+        return None
+
+    def _selected_callsign(self) -> str | None:
+        """The callsign in the first column of the selected row, stripped of spaces.
+
+        Returns:
+            The callsign, or None when no row is selected or the row is gone or empty.
+        """
+        table = self._selected_table()
+        if not table or table.cursor_row < 0:
+            return None
+        try:
+            row_data = table.get_row_at(table.cursor_row)
+        except RowDoesNotExist:
+            return None
+        if not row_data:
+            return None
+        return str(row_data[0]).strip()
+
     # --- Weather and runway change notification methods ---
+
+    async def _fetch_conditions(
+        self, airports: list[str]
+    ) -> tuple[dict[str, str], dict[str, list[dict[str, Any]]]]:
+        """Fetch the airports' METARs and ATIS for change detection.
+
+        METARs and the VATSIM feed are fetched in parallel. VATSIM ATIS is
+        preferred; airports without it are asked of the real-world D-ATIS.
+
+        Args:
+            airports: ICAO codes of the board's airports.
+
+        Returns:
+            METARs by ICAO, and the ATIS entries of each airport that has any.
+        """
+        loop = asyncio.get_event_loop()
+        metar_task = loop.run_in_executor(None, get_metar_batch, airports)
+        vatsim_task = loop.run_in_executor(None, download_vatsim_data)
+        metars, vatsim_data = await asyncio.gather(metar_task, vatsim_task)
+
+        atis_data: dict[str, list[dict[str, Any]]] = {}
+        if vatsim_data:
+            atis_data = get_atis_for_airports(vatsim_data, airports)
+
+        airports_without_vatsim_atis = [
+            icao for icao in airports if icao not in atis_data
+        ]
+        if airports_without_vatsim_atis:
+            atis_data.update(get_datis_for_airports(airports_without_vatsim_atis))
+        return metars, atis_data
 
     async def _initialize_change_baseline(self) -> None:
         """Fetch initial weather/runway conditions to establish baseline for change detection."""
@@ -795,63 +910,21 @@ class FlightBoardScreen(ModalScreen):
             return
 
         airports = self.airport_icao_or_list
-        loop = asyncio.get_event_loop()
+        metars, atis_data = await self._fetch_conditions(airports)
 
-        # Fetch METARs and VATSIM data in parallel
-        metar_task = loop.run_in_executor(None, get_metar_batch, airports)
-        vatsim_task = loop.run_in_executor(None, download_vatsim_data)
-
-        metars, vatsim_data = await asyncio.gather(metar_task, vatsim_task)
-
-        # Get ATIS info for runway extraction - prefer VATSIM, fall back to RW D-ATIS
-        atis_data = {}
-        if vatsim_data:
-            atis_data = get_atis_for_airports(vatsim_data, airports)
-
-        # Fetch RW D-ATIS for airports without VATSIM ATIS
-        airports_without_vatsim_atis = [
-            icao for icao in airports if icao not in atis_data
-        ]
-        if airports_without_vatsim_atis:
-            rw_atis_data = get_datis_for_airports(airports_without_vatsim_atis)
-            atis_data.update(rw_atis_data)
-
-        # Build baseline weather state
         for icao in airports:
             metar = metars.get(icao, "")
             if metar:
-                category = get_flight_category(metar)
-                self._previous_weather[icao] = category
+                self._previous_weather[icao] = get_flight_category(metar)
 
-        # Build baseline runway state and approach types from ATIS
-        # Supports dual ATIS - combine info from all ATIS entries (dep/arr)
         for icao in airports:
             atis_list = atis_data.get(icao, [])
-            if atis_list:
-                # Combine runway/approach info from all ATIS entries
-                combined_landing: set = set()
-                combined_departing: set = set()
-                combined_approaches: dict = {}
-                for atis in atis_list:
-                    atis_text = atis.get("text_atis", "")
-                    if atis_text:
-                        info = parse_approach_info(atis_text)
-                        combined_landing.update(info["landing"])
-                        combined_departing.update(info["departing"])
-                        for rwy, approaches in info["approaches"].items():
-                            if rwy not in combined_approaches:
-                                combined_approaches[rwy] = set()
-                            combined_approaches[rwy].update(approaches)
-                if combined_landing or combined_departing:
-                    self._previous_runways[icao] = (
-                        frozenset(combined_landing),
-                        frozenset(combined_departing),
-                    )
-                    # Store approach types: {runway: frozenset of approach types}
-                    self._previous_approaches[icao] = {
-                        rwy: frozenset(approaches)
-                        for rwy, approaches in combined_approaches.items()
-                    }
+            if not atis_list:
+                continue
+            landing, departing, approaches = _combine_atis_info(atis_list)
+            if landing or departing:
+                self._previous_runways[icao] = (landing, departing)
+                self._previous_approaches[icao] = approaches
 
     async def _check_for_changes(self) -> None:
         """Check for weather/runway condition changes and show notifications."""
@@ -859,121 +932,77 @@ class FlightBoardScreen(ModalScreen):
             return
 
         airports = self.airport_icao_or_list
-        loop = asyncio.get_event_loop()
+        metars, atis_data = await self._fetch_conditions(airports)
 
-        # Fetch fresh METARs and VATSIM data in parallel
-        metar_task = loop.run_in_executor(None, get_metar_batch, airports)
-        vatsim_task = loop.run_in_executor(None, download_vatsim_data)
-
-        metars, vatsim_data = await asyncio.gather(metar_task, vatsim_task)
-
-        # Get ATIS info for airports - prefer VATSIM, fall back to RW D-ATIS
-        atis_data = {}
-        if vatsim_data:
-            atis_data = get_atis_for_airports(vatsim_data, airports)
-
-        # Fetch RW D-ATIS for airports without VATSIM ATIS
-        airports_without_vatsim_atis = [
-            icao for icao in airports if icao not in atis_data
-        ]
-        if airports_without_vatsim_atis:
-            rw_atis_data = get_datis_for_airports(airports_without_vatsim_atis)
-            atis_data.update(rw_atis_data)
-
-        # Check for weather changes
         for icao in airports:
             metar = metars.get(icao, "")
-            if not metar:
-                continue
-
-            new_category = get_flight_category(metar)
-            old_category = self._previous_weather.get(icao)
-
-            # If we have a previous category and it changed, show notification
-            if old_category and new_category != old_category:
-                has_atis = icao in atis_data
-                self._show_weather_notification(
-                    icao, new_category, old_category, has_atis
+            if metar:
+                self._check_weather_change(
+                    icao, get_flight_category(metar), icao in atis_data
                 )
 
-            # Update baseline
-            self._previous_weather[icao] = new_category
-
-        # Check for runway and approach type changes
-        # Supports dual ATIS - combine info from all ATIS entries (dep/arr)
         for icao in airports:
             atis_list = atis_data.get(icao, [])
-            if not atis_list:
-                continue
+            if atis_list:
+                self._check_runway_changes(icao, *_combine_atis_info(atis_list))
 
-            # Combine runway/approach info from all ATIS entries
-            combined_landing: set = set()
-            combined_departing: set = set()
-            combined_approaches: dict = {}
-            for atis in atis_list:
-                atis_text = atis.get("text_atis", "")
-                if atis_text:
-                    info = parse_approach_info(atis_text)
-                    combined_landing.update(info["landing"])
-                    combined_departing.update(info["departing"])
-                    for rwy, approaches in info["approaches"].items():
-                        if rwy not in combined_approaches:
-                            combined_approaches[rwy] = set()
-                        combined_approaches[rwy].update(approaches)
+    def _check_weather_change(
+        self, icao: str, new_category: str, has_atis: bool
+    ) -> None:
+        """Toast a flight category change against the baseline, then make it the baseline."""
+        old_category = self._previous_weather.get(icao)
+        if old_category and new_category != old_category:
+            self._show_weather_notification(icao, new_category, old_category, has_atis)
+        self._previous_weather[icao] = new_category
 
-            new_landing = frozenset(combined_landing)
-            new_departing = frozenset(combined_departing)
-            new_approaches = {
-                rwy: frozenset(approaches)
-                for rwy, approaches in combined_approaches.items()
-            }
+    def _check_runway_changes(
+        self,
+        icao: str,
+        new_landing: frozenset[str],
+        new_departing: frozenset[str],
+        new_approaches: dict[str, frozenset[str]],
+    ) -> None:
+        """Toast runway and approach changes against the baseline, then update it.
 
-            old_runways = self._previous_runways.get(icao)
-            old_approaches = self._previous_approaches.get(icao, {})
+        The baseline is overwritten only by a parse that found runways (or
+        approaches), so a transient parsing gap neither notifies nor erases it.
 
-            # Check runway changes
-            # Only notify when BOTH old and new have actual runway data to avoid
-            # flip-flop notifications caused by intermittent parsing failures or
-            # transient ATIS data gaps
-            if old_runways:
-                old_landing, old_departing = old_runways
-                old_has_runways = old_landing or old_departing
-                new_has_runways = new_landing or new_departing
+        Args:
+            icao: The airport.
+            new_landing: Landing runways in the fresh parse.
+            new_departing: Departing runways in the fresh parse.
+            new_approaches: Approach types per runway in the fresh parse.
+        """
+        old_runways = self._previous_runways.get(icao)
+        if old_runways and _runways_changed(old_runways, (new_landing, new_departing)):
+            old_landing, old_departing = old_runways
+            self._show_runway_notification(
+                icao, new_landing, new_departing, old_landing, old_departing
+            )
 
-                if old_has_runways and new_has_runways:
-                    # Normalize for comparison: when only landing runways are listed,
-                    # the implication is the same runways are used for departing.
-                    # So L/D:17L,17R and L:17L,17R should be treated as equivalent.
-                    old_landing_norm = old_landing
-                    old_departing_norm = old_departing if old_departing else old_landing
-                    new_landing_norm = new_landing
-                    new_departing_norm = new_departing if new_departing else new_landing
+        self._notify_approach_changes(
+            icao, self._previous_approaches.get(icao, {}), new_approaches
+        )
 
-                    if (
-                        new_landing_norm != old_landing_norm
-                        or new_departing_norm != old_departing_norm
-                    ):
-                        self._show_runway_notification(
-                            icao, new_landing, new_departing, old_landing, old_departing
-                        )
+        if new_landing or new_departing:
+            self._previous_runways[icao] = (new_landing, new_departing)
+        if new_approaches:
+            self._previous_approaches[icao] = new_approaches
 
-            # Check approach type changes (only for runways that still exist)
-            if old_approaches and new_approaches:
-                for rwy in new_approaches:
-                    if rwy in old_approaches:
-                        old_app = old_approaches[rwy]
-                        new_app = new_approaches[rwy]
-                        if old_app != new_app:
-                            self._show_approach_notification(
-                                icao, rwy, new_app, old_app
-                            )
-
-            # Update baseline only if we have runway data (avoid overwriting
-            # good data with empty sets from transient parsing failures)
-            if new_landing or new_departing:
-                self._previous_runways[icao] = (new_landing, new_departing)
-            if new_approaches:
-                self._previous_approaches[icao] = new_approaches
+    def _notify_approach_changes(
+        self,
+        icao: str,
+        old_approaches: dict[str, frozenset[str]],
+        new_approaches: dict[str, frozenset[str]],
+    ) -> None:
+        """Toast each runway whose approach types changed, for runways on both sides."""
+        if not old_approaches or not new_approaches:
+            return
+        for rwy, new_app in new_approaches.items():
+            if rwy in old_approaches and old_approaches[rwy] != new_app:
+                self._show_approach_notification(
+                    icao, rwy, new_app, old_approaches[rwy]
+                )
 
     def _show_weather_notification(
         self, icao: str, new_category: str, old_category: str, has_atis: bool = False
