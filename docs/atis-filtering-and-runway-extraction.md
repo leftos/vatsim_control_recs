@@ -74,12 +74,15 @@ For non-US or non-standard ATIS formats, the text is returned with only minimal 
 
 1. Finding the altimeter + spoken form pattern (e.g., `A3013 (THREE ZERO ONE THREE)`)
 2. Optionally skipping an `RMK` (remarks) section after the altimeter
-3. Looking for a period followed by an operational keyword
+3. Looking for a period followed by an operational keyword, searching from the `RMK` section when there is one and from the altimeter otherwise
+4. Failing that, looking for the first period followed by an operational keyword anywhere in the text
+
+It returns the index where the operational portion begins, or 0 when no boundary is found. In that case `filter_atis_text()` applies the removal patterns to the whole text.
 
 **Operational keywords** that mark the boundary:
 ```
 APPROACH, APCH, ARR, DEP, SIMUL, ILS, RNAV, VISUAL,
-LDG, LANDING, RWY, RUNWAY, NOTAM, TAXIWAY, CAUTION, CONTACT, ...
+LDG, LANDING, RWY, RUNWAY, INST, NOTAM, TWY, TAXIWAY, ATTN, CAUTION, FLOW, CTC, CONTACT, ...
 ```
 
 ### Removal Patterns
@@ -98,7 +101,7 @@ The patterns that get stripped from the METAR portion are defined in `METAR_REMO
 | **TDZ winds** | `WIND RWY 28 TDZ`, `TDZ 27005KT` |
 | **Trends** | `TREND TEMPO...`, `TREND BECMG...` |
 
-After pattern removal, a final cleanup pass normalizes whitespace, removes empty parentheses, collapses multiple periods, and cleans up orphaned punctuation.
+After pattern removal, a final cleanup pass normalizes whitespace, removes empty parentheses, collapses multiple periods, and cleans up orphaned punctuation. The pass runs for every format, including the non-US text that skips the removal patterns.
 
 ---
 
@@ -116,12 +119,14 @@ The parser extracts three things from the ATIS text:
 ```python
 RWY_NUM_PATTERN  # Matches: "17R", "17 R", "17R AND LEFT", "10L OR 10R"
 APPROACH_TYPES  # ILS, RNAV, VISUAL, VIS, VA, LOC, VOR, NDB, GPS, LDA, SDF, RNP
-RWY_PREFIX  # RWY, RWYS, RUNWAY, RUNWAYS
+APPROACH_SUFFIX  # APCH, APCHS, APPROACH, APPROACHES, APP, APPS
+RWY_PREFIX  # RWY, RWYS, RUNWAY, RUNWAYS, RY
 LANDING_KW  # LANDING, LDG, LNDG, ARRIVING, ARR
-DEPARTING_KW  # DEPARTING, DEPARTURES, DEPTG, DEPG, DEP
+DEPARTING_KW  # DEPARTING, DEPARTURE(S), DEPT, DEPTG, DEPG, DEP
+RWY_CHARS  # Loose runway-list characters for the LDG/DEP patterns
 ```
 
-### Detection Patterns (7 patterns)
+### Detection Patterns (8 patterns)
 
 | # | Pattern | Example Input | Extracted |
 |---|---|---|---|
@@ -129,9 +134,12 @@ DEPARTING_KW  # DEPARTING, DEPARTURES, DEPTG, DEPG, DEP
 | 2 | **Landing runways** | `"LDG RWY 16L"`, `"ARR RWY 35"` | Landing only |
 | 3 | **Departing runways** | `"DEP RWY 16R"`, `"DEPTG RWYS 26L, 27R"` | Departing only |
 | 4 | **Approach type + runway** | `"ILS RWY 22R"`, `"RNAV-Y RWY 35"`, `"VISUAL APPROACH RWY 26"` | Landing + approach type |
+| 4b | **Approaches in use, then landing** | `"VISUAL APPROACHES IN USE, LNDG 35R"`, `"ILS APPROACHES IN USE. LDG RWY 17R AND LEFT"` | Landing + approach type |
 | 5 | **EXPECT approach** | `"EXPECT ILS RWY 35L"`, `"ARRIVALS EXPECT ILS APCH RWY 10L"` | Landing + approach type |
 | 6 | **RWY FOR ARR/DEP** (intl.) | `"RWY 03 FOR ARR"`, `"RWY 06 FOR DEP"` | Landing or departing |
 | 7 | **SIMUL/INSTR operations** | `"SIMUL DEPARTURES RWYS 24 AND 25"` | Landing or departing |
+
+Patterns 2 and 3 skip a match preceded by `/` or `AND` within five characters, since pattern 1 already took it.
 
 ### Runway Number Extraction
 
@@ -162,7 +170,7 @@ The filtered ATIS text is colorized with [Rich](https://github.com/Textualize/ri
 - **ATIS letter** -> `[cyan bold]` (both the phonetic word like "KILO" and standalone letter after INFORMATION/INFO/ATIS)
 - **Approach types, runways, and operational phrases** -> `[yellow]` (10+ patterns covering all approach/runway formats)
 
-Nested yellow tags are cleaned up in a loop to prevent overlapping markup.
+Nested yellow tags are flattened in one pass that keeps only the outermost pair. Last, every run of backslashes directly before an inserted tag is doubled, because Rich reads a backslash before a tag as an escape and would leave the tag unparsed (for example `LDG VISUAL\ILS\RNP-Z RWY 16R`); backslashes anywhere else are untouched.
 
 ---
 
@@ -172,13 +180,15 @@ Nested yellow tags are cleaned up in a loop to prevent overlapping markup.
 
 The flight board uses the parsed runway and approach data for **change detection**:
 
-1. On initial load (`_initialize_weather_and_runways`), it fetches ATIS for all displayed airports, parses runway assignments and approach types, and stores them as a baseline.
+1. On initial load (`_initialize_change_baseline`), it fetches ATIS for all displayed airports, parses runway assignments and approach types, and stores them as a baseline.
 2. On each refresh (`_check_for_changes`), it re-fetches and re-parses, then compares against the baseline using frozensets.
 3. If landing/departing runways or approach types have changed, it fires a notification to the user.
 
 Dual ATIS (separate departure + arrival) is handled by combining data from both entries.
 
 Normalization rule: if only landing runways are listed (no departing), they're assumed to be the same for departing when comparing.
+
+A runway change notifies only when both the baseline and the new parse have runway data, and an approach change only for runways present in both. The baseline is overwritten only by a parse that found runways (or approaches), so a transient parsing gap does not cause a false notification.
 
 ### METAR/ATIS Lookup (`ui/modals/metar_info.py`)
 
@@ -192,7 +202,7 @@ Batch-fetches ATIS for multiple airports and displays filtered text alongside ME
 
 ### Flight Briefing (`ui/modals/flight_briefing.py`)
 
-Shows relevant ATIS information as part of a pilot briefing for a specific flight.
+Collects ATIS for the briefing's airports with `_collect_atis()` (VATSIM first, real-world D-ATIS for the rest) and stores it in each airport's weather entry. It does not filter or colorize the text.
 
 ---
 
