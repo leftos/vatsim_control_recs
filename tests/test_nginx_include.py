@@ -24,7 +24,45 @@ sys.path.insert(0, str(SERVICE_DIR))
 
 import nginx_include  # noqa: E402  (imported after sys.path is set up)
 
-BASH = shutil.which("bash")
+_GIT_ROOT_LEVELS = 3
+
+
+def _git_bash(start: Path) -> Path | None:
+    """Return the bash.exe Git for Windows keeps under ``start``, if any."""
+    for _ in range(_GIT_ROOT_LEVELS):
+        for relative in ("bin/bash.exe", "usr/bin/bash.exe"):
+            candidate = start / relative
+            if candidate.is_file():
+                return candidate
+        start = start.parent
+    return None
+
+
+def _is_wsl_bash(bash: str) -> bool:
+    """Return True when ``bash`` is the WSL stub in the Windows ``System32``."""
+    system32 = os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32")
+    resolved = os.path.normcase(str(Path(bash).resolve()))
+    return resolved.startswith(os.path.normcase(system32))
+
+
+def _find_bash() -> str | None:
+    """Return a bash these tests can drive; WSL's rejects the MSYS paths."""
+    if os.name != "nt":
+        return shutil.which("bash")
+
+    git_exe = shutil.which("git")
+    if git_exe is not None:
+        found = _git_bash(Path(git_exe).resolve().parent)
+        if found is not None:
+            return str(found)
+
+    bash = shutil.which("bash")
+    if bash is None or _is_wsl_bash(bash):
+        return None
+    return bash
+
+
+BASH = _find_bash()
 
 INCLUDE_LINE = "    include snippets/weather.conf;"
 
@@ -337,7 +375,9 @@ def _nginx_tree(tmp_path: Path) -> tuple[Path, Path, Path]:
     return nginx_dir, nginx_dir / "snippets" / "weather.conf", tmp_path
 
 
-@pytest.mark.skipif(BASH is None, reason="bash is not on PATH")
+@pytest.mark.skipif(
+    BASH is None, reason="Git Bash (or a non-WSL bash) is not available"
+)
 def test_install_script_restores_backups_when_nginx_test_fails(tmp_path: Path):
     nginx_dir, snippet_dst, root = _nginx_tree(tmp_path)
     nginx_stub = tmp_path / "nginx-stub"
@@ -366,7 +406,9 @@ def test_install_script_restores_backups_when_nginx_test_fails(tmp_path: Path):
     assert not (root / "systemctl-calls.txt").exists()
 
 
-@pytest.mark.skipif(BASH is None, reason="bash is not on PATH")
+@pytest.mark.skipif(
+    BASH is None, reason="Git Bash (or a non-WSL bash) is not available"
+)
 def test_install_script_reloads_on_success(tmp_path: Path):
     nginx_dir, snippet_dst, root = _nginx_tree(tmp_path)
     nginx_stub = tmp_path / "nginx-stub"
@@ -404,7 +446,9 @@ def test_install_script_reloads_on_success(tmp_path: Path):
     assert root.exists()
 
 
-@pytest.mark.skipif(BASH is None, reason="bash is not on PATH")
+@pytest.mark.skipif(
+    BASH is None, reason="Git Bash (or a non-WSL bash) is not available"
+)
 def test_stale_snippet_backup_is_not_restored(tmp_path: Path):
     nginx_dir, snippet_dst, _root = _nginx_tree(tmp_path)
     _write_tree_file(
