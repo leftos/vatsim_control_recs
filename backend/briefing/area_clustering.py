@@ -5,6 +5,7 @@ This module provides shared clustering functionality used by both the
 UI weather briefing modal and the weather daemon HTML generator.
 """
 
+from collections import Counter
 from typing import Any, cast
 
 from backend.core.calculations import haversine_distance_nm
@@ -263,6 +264,44 @@ class AreaClusterer:
         else:
             return f"{city_names[0]} / {city_names[1]}+ Area"
 
+    def _naming_center_key(self, entry: AirportEntry) -> tuple[int, int, int, str]:
+        """Sort key for the airports that name an area.
+
+        ATIS first, then by size rank, then airports with an IATA code, then ICAO.
+        """
+        icao, data, size_priority, _coords = entry
+        has_iata = bool(self.unified_airport_data.get(icao, {}).get("iata"))
+        return (
+            0 if data.get("atis") else 1,
+            size_priority,
+            0 if has_iata else 1,
+            icao,
+        )
+
+    def _center_display_name(self, icao: str) -> str:
+        """The centre airport's display name, or its ICAO without a disambiguator."""
+        if self.disambiguator:
+            return self.disambiguator.get_pretty_name(icao)
+        return icao
+
+    def _rename_clashing_areas(self, area_groups: list[dict[str, Any]]) -> None:
+        """Rename areas that share a name after their centre airport.
+
+        Each area whose name another area also has becomes "<centre display name>
+        Area"; one that still clashes after that gets the centre ICAO added.
+        Areas with a unique name keep it.
+        """
+        name_counts = Counter(group["name"] for group in area_groups)
+        clashing = [group for group in area_groups if name_counts[group["name"]] > 1]
+        for group in clashing:
+            group["name"] = f"{self._center_display_name(group['center_icao'])} Area"
+
+        renamed_counts = Counter(group["name"] for group in area_groups)
+        for group in clashing:
+            if renamed_counts[group["name"]] > 1:
+                icao = group["center_icao"]
+                group["name"] = f"{self._center_display_name(icao)} ({icao}) Area"
+
     def create_fallback_area_groups(self) -> list[dict[str, Any]]:
         """
         Create area groups when no ATIS airports are present.
@@ -407,10 +446,7 @@ class AreaClusterer:
             if not cluster:
                 continue
 
-            # Find center airports for naming (ATIS first, then by size)
-            centers = sorted(
-                cluster, key=lambda x: (0 if x[1].get("atis") else 1, x[2], x[0])
-            )
+            centers = sorted(cluster, key=self._naming_center_key)
 
             area_name = self.generate_area_name(centers[:3])
 
@@ -428,6 +464,8 @@ class AreaClusterer:
                     "center_icao": centers[0][0] if centers else None,
                 }
             )
+
+        self._rename_clashing_areas(area_groups)
 
         # Sort by primary airport size
         area_groups.sort(

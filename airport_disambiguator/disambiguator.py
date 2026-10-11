@@ -178,6 +178,26 @@ class AirportDisambiguator:
         if icaos:
             self._process_location_internal(location, icaos)
 
+    def _own_airport_name(self, icao: str) -> str:
+        """The airport's own name from the airport data, or "" when it has none."""
+        details = self.data_manager.get_airport_details(icao) or {}
+        return (details.get("name") or "").strip()
+
+    def _full_name_or_fallback(self, icao: str) -> str:
+        """The computed full name, else the airport's own name, else the ICAO."""
+        if icao in self.icao_to_full_name:
+            return self.icao_to_full_name[icao]
+        return self._own_airport_name(icao) or icao
+
+    def _pretty_name_or_fallback(self, icao: str) -> str:
+        """The computed pretty name, else the airport's own name shortened, else the ICAO."""
+        if icao in self.icao_to_pretty_name:
+            return self.icao_to_pretty_name[icao]
+        own_name = self._own_airport_name(icao)
+        if not own_name:
+            return icao
+        return self.name_processor.abbreviate_long_name(own_name)
+
     def get_pretty_name(self, icao: str) -> str:
         """
         Get the pretty name for an airport.
@@ -186,7 +206,8 @@ class AirportDisambiguator:
             icao: The ICAO code of the airport
 
         Returns:
-            The pretty/disambiguated name, or the ICAO code if not found
+            The pretty/disambiguated name; for an airport with no location, its
+            own name shortened; the ICAO code when it has no name at all
         """
         # If lazy loading is enabled and this location hasn't been processed yet
         if self.lazy_load:
@@ -194,7 +215,7 @@ class AirportDisambiguator:
             if location and location not in self._processed_locations:
                 self._process_location(location)
 
-        return self.icao_to_pretty_name.get(icao, icao)
+        return self._pretty_name_or_fallback(icao)
 
     def get_pretty_names_batch(self, icaos: list[str]) -> dict[str, str]:
         """
@@ -211,7 +232,7 @@ class AirportDisambiguator:
         """
         # If not lazy loading, all names are already computed
         if not self.lazy_load:
-            return {icao: self.icao_to_pretty_name.get(icao, icao) for icao in icaos}
+            return {icao: self._pretty_name_or_fallback(icao) for icao in icaos}
 
         # For lazy loading, find all unprocessed locations
         locations_to_process = set()
@@ -225,7 +246,7 @@ class AirportDisambiguator:
             self._process_location(location)
 
         # Return the pretty names
-        return {icao: self.icao_to_pretty_name.get(icao, icao) for icao in icaos}
+        return {icao: self._pretty_name_or_fallback(icao) for icao in icaos}
 
     def get_full_name(self, icao: str) -> str:
         """
@@ -235,7 +256,8 @@ class AirportDisambiguator:
             icao: The ICAO code of the airport
 
         Returns:
-            The full disambiguated name, or the ICAO code if not found
+            The full disambiguated name; for an airport with no location, its
+            own name; the ICAO code when it has no name at all
         """
         # If lazy loading is enabled and this location hasn't been processed yet
         if self.lazy_load:
@@ -243,7 +265,7 @@ class AirportDisambiguator:
             if location and location not in self._processed_locations:
                 self._process_location(location)
 
-        return self.icao_to_full_name.get(icao, icao)
+        return self._full_name_or_fallback(icao)
 
     def get_full_names_batch(self, icaos: list[str]) -> dict[str, str]:
         """
@@ -260,7 +282,7 @@ class AirportDisambiguator:
         """
         # If not lazy loading, all names are already computed
         if not self.lazy_load:
-            return {icao: self.icao_to_full_name.get(icao, icao) for icao in icaos}
+            return {icao: self._full_name_or_fallback(icao) for icao in icaos}
 
         # For lazy loading, find all unprocessed locations
         locations_to_process = set()
@@ -274,7 +296,7 @@ class AirportDisambiguator:
             self._process_location(location)
 
         # Return the full names
-        return {icao: self.icao_to_full_name.get(icao, icao) for icao in icaos}
+        return {icao: self._full_name_or_fallback(icao) for icao in icaos}
 
     # Properties for backwards compatibility with original implementation
     @property

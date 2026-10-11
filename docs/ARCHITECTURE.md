@@ -128,6 +128,8 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_weather_index_assets.py`: the index page loads Leaflet from its own copied tree and no remote scripts or stylesheets.
 - `tests/test_weather_tile_polygon_reach.py`: a weather tile ray-casts only the boundary polygons whose box reaches it, with output unchanged.
 - `tests/test_nginx_include.py`: `nginx_include.py` removes the legacy inline weather blocks and ensures one include line in the `leftos.dev` TLS server block only, idempotently, and exits 1 unless exactly one server block matches.
+- `tests/test_disambiguator_no_location.py`: an airport with no city is named from its own airport name (full, short and batch forms), the ICAO only when it has none; `iata-icao.csv`'s `airport` and `region_name` columns load as name and state; `data/airport_names.csv` holds no row named with its own ICAO.
+- `tests/test_area_clustering_names.py`: weather-briefing areas are named by ATIS, size rank, IATA code, then ICAO, and areas that would share a name are renamed after their centre airport.
 - `tests/test_allowlist_filter.py`: the airport allowlist filter keeps only the listed airports and scales to a country list.
 - `tests/test_disambiguator_csv_names.py`: a location the names CSV fully covers never runs the NER engine; one CSV-less airport makes NER run for the whole group.
 - `tests/test_spatial_find_nearest.py`: `SpatialIndex.find_nearest` skips the full-scan fallback for a radius under one grid cell.

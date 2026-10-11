@@ -122,9 +122,9 @@ NEXT ETA is the earliest ETA among the flights the ARR column counts, so it neve
 **Unified Airport Data**: Three sources merged into `unified_airport_data`:
 - `raw/APT_BASE.csv` - FAA airport data (coordinates, tower type, ARTCC)
 - `raw/airports.json` - OurAirports.com data (names, types)
-- `raw/iata-icao.csv` - IATA/ICAO code mappings
+- `raw/iata-icao.csv` - IATA/ICAO code mappings; its `airport` and `region_name` columns give an airport's name and state (it has no city)
 
-**Airport Name Resolution**: The disambiguator checks `data/airport_names.csv` first for pre-computed display names. Airports not in the CSV fall back to on-demand NER-based disambiguation. To fix a name, edit the CSV directly. To regenerate the CSV (preserving manual edits): `python scripts/generate_airport_names.py`
+**Airport Name Resolution**: The disambiguator checks `data/airport_names.csv` first for pre-computed display names. Airports not in the CSV fall back to on-demand NER-based disambiguation, and an airport with no city (so no location to group by) falls back to its own name from the airport data, then to its ICAO. To fix a name, edit the CSV directly. To regenerate the CSV (preserving manual edits): `python scripts/generate_airport_names.py`; a row whose name equals its ICAO is a generator fallback, not a manual edit, and is regenerated.
 
 **ATIS Parsing**: The `atis_filter.py` module parses D-ATIS and VATSIM ATIS for:
 - Approach type (ILS, RNAV, Visual, SIMUL ILS highlighted)

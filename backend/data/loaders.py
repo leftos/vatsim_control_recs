@@ -58,9 +58,11 @@ def load_unified_airport_data(
                     "icao": icao,
                     "iata": row.get("iata", "").strip(),
                     "faa": icao,  # Will be updated by APT_BASE if available
-                    "name": row.get("name", "").strip(),
-                    "city": row.get("city", "").strip(),
-                    "state": row.get("state", "").strip(),
+                    # The file's columns are country_code, region_name, iata,
+                    # icao, airport, latitude, longitude: it has no city.
+                    "name": row.get("airport", "").strip(),
+                    "city": "",
+                    "state": row.get("region_name", "").strip(),
                     "country": row.get("country_code", row.get("country", "")).strip(),
                     "latitude": float(row["latitude"]) if row.get("latitude") else None,
                     "longitude": float(row["longitude"])

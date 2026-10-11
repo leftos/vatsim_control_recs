@@ -34,7 +34,11 @@ def title_case_name(name: str) -> str:
 
 
 def load_existing_csv(path: str) -> dict[str, str]:
-    """Load existing airport_names.csv, returning {icao: name}."""
+    """Load existing airport_names.csv, returning {icao: name}.
+
+    A row whose name is its ICAO (in any case) is the generator's last-resort
+    fallback, not a manual edit, so it is left out and generated again.
+    """
     if not os.path.exists(path):
         return {}
 
@@ -44,7 +48,7 @@ def load_existing_csv(path: str) -> dict[str, str]:
         for row in reader:
             icao = row.get("icao", "").strip()
             name = row.get("name", "").strip()
-            if icao and name:
+            if icao and name and name.casefold() != icao.casefold():
                 existing[icao] = name
     return existing
 
@@ -100,7 +104,7 @@ def main():
             names[icao] = existing[icao]
             preserved += 1
         else:
-            full_name = disambiguator.icao_to_full_name.get(icao, icao)
+            full_name = disambiguator.get_full_name(icao)
             names[icao] = title_case_name(full_name)
             generated += 1
 
@@ -109,7 +113,7 @@ def main():
     print(f"  Preserved: {preserved}, Generated: {generated}")
 
     with open(output_path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, lineterminator="\n")
         writer.writerow(["icao", "name"])
         for icao in sorted(names.keys()):
             writer.writerow([icao, names[icao]])
