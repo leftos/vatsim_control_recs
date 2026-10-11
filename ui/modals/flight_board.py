@@ -24,6 +24,7 @@ from backend.data.atis_filter import (
 )
 from backend.data.datis_api import get_datis_for_airports
 from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
+from common.logger import error
 from ui import config
 from ui.config import CATEGORY_COLORS
 from ui.debug_logger import debug
@@ -829,9 +830,11 @@ class FlightBoardScreen(ModalScreen):
     def _selected_table(self) -> SplitFlapDataTable | None:
         """The visible table the user picked a flight in.
 
-        A focused table wins, then one with a cursor row, departures before
-        arrivals in each case. A panel the direction mode hides is ignored: its
-        cursor row is left over from before the mode changed.
+        A focused table wins, then the first visible table with a cursor row and
+        at least one row, departures before arrivals in each case. A panel the
+        direction mode hides is ignored: its cursor row is left over from before
+        the mode changed, and a real DataTable reports cursor row 0 even when it
+        holds no rows, so the cursor fallback needs a row count too.
 
         Returns:
             The table, or None when no visible table is focused or has a cursor row.
@@ -851,7 +854,7 @@ class FlightBoardScreen(ModalScreen):
             if table.has_focus:
                 return table
         for table in visible:
-            if table.cursor_row >= 0:
+            if table.cursor_row >= 0 and table.row_count > 0:
                 return table
         return None
 
@@ -880,7 +883,8 @@ class FlightBoardScreen(ModalScreen):
         """Fetch the airports' METARs and ATIS for change detection.
 
         METARs and the VATSIM feed are fetched in parallel. VATSIM ATIS is
-        preferred; airports without it are asked of the real-world D-ATIS.
+        preferred; airports without it are asked of the real-world D-ATIS,
+        whose blocking HTTP calls run off the event loop.
 
         Args:
             airports: ICAO codes of the board's airports.
@@ -901,50 +905,67 @@ class FlightBoardScreen(ModalScreen):
             icao for icao in airports if icao not in atis_data
         ]
         if airports_without_vatsim_atis:
-            atis_data.update(get_datis_for_airports(airports_without_vatsim_atis))
+            datis = await loop.run_in_executor(
+                None, get_datis_for_airports, airports_without_vatsim_atis
+            )
+            atis_data.update(datis)
         return metars, atis_data
 
     async def _initialize_change_baseline(self) -> None:
-        """Fetch initial weather/runway conditions to establish baseline for change detection."""
+        """Fetch initial weather/runway conditions to establish baseline for change detection.
+
+        A failed fetch is logged and stores nothing; the first successful
+        change check then builds the baseline without notifying.
+        """
         if not isinstance(self.airport_icao_or_list, list):
             return
 
         airports = self.airport_icao_or_list
-        metars, atis_data = await self._fetch_conditions(airports)
+        try:
+            metars, atis_data = await self._fetch_conditions(airports)
 
-        for icao in airports:
-            metar = metars.get(icao, "")
-            if metar:
-                self._previous_weather[icao] = get_flight_category(metar)
+            for icao in airports:
+                metar = metars.get(icao, "")
+                if metar:
+                    self._previous_weather[icao] = get_flight_category(metar)
 
-        for icao in airports:
-            atis_list = atis_data.get(icao, [])
-            if not atis_list:
-                continue
-            landing, departing, approaches = _combine_atis_info(atis_list)
-            if landing or departing:
-                self._previous_runways[icao] = (landing, departing)
-                self._previous_approaches[icao] = approaches
+            for icao in airports:
+                atis_list = atis_data.get(icao, [])
+                if not atis_list:
+                    continue
+                landing, departing, approaches = _combine_atis_info(atis_list)
+                if landing or departing:
+                    self._previous_runways[icao] = (landing, departing)
+                    self._previous_approaches[icao] = approaches
+        except Exception as e:
+            error(f"flight board change baseline failed: {e}", exc_info=True)
 
     async def _check_for_changes(self) -> None:
-        """Check for weather/runway condition changes and show notifications."""
+        """Check for weather/runway condition changes and show notifications.
+
+        A failed fetch is logged and changes nothing; the next timer tick runs
+        the check again.
+        """
         if not isinstance(self.airport_icao_or_list, list):
             return
 
         airports = self.airport_icao_or_list
-        metars, atis_data = await self._fetch_conditions(airports)
+        try:
+            metars, atis_data = await self._fetch_conditions(airports)
 
-        for icao in airports:
-            metar = metars.get(icao, "")
-            if metar:
-                self._check_weather_change(
-                    icao, get_flight_category(metar), icao in atis_data
-                )
+            for icao in airports:
+                metar = metars.get(icao, "")
+                if metar:
+                    self._check_weather_change(
+                        icao, get_flight_category(metar), icao in atis_data
+                    )
 
-        for icao in airports:
-            atis_list = atis_data.get(icao, [])
-            if atis_list:
-                self._check_runway_changes(icao, *_combine_atis_info(atis_list))
+            for icao in airports:
+                atis_list = atis_data.get(icao, [])
+                if atis_list:
+                    self._check_runway_changes(icao, *_combine_atis_info(atis_list))
+        except Exception as e:
+            error(f"flight board change check failed: {e}", exc_info=True)
 
     def _check_weather_change(
         self, icao: str, new_category: str, has_atis: bool

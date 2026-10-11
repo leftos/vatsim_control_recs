@@ -12,6 +12,8 @@ and row lookups, and the app is a recorder of the screens pushed onto it.
 
 from __future__ import annotations
 
+import logging
+import threading
 from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
@@ -95,6 +97,7 @@ class Fakes:
         self.vatsim_atis_calls: list[tuple[Any, list[str]]] = []
         self.datis: dict[str, list[dict[str, str]]] = {}
         self.datis_calls: list[list[str]] = []
+        self.datis_threads: list[int] = []
         self.nearby: dict[tuple[float, float], list[str]] = {}
         self.nearby_calls: list[tuple[Any, ...]] = []
 
@@ -126,6 +129,7 @@ class Fakes:
         self, airports: list[str]
     ) -> dict[str, list[dict[str, str]]]:
         self.datis_calls.append(list(airports))
+        self.datis_threads.append(threading.get_ident())
         return {icao: self.datis[icao] for icao in airports if icao in self.datis}
 
     def find_airports_near_position(
@@ -171,6 +175,32 @@ def board(
     toasts = Toasts()
     screen._notification_manager = toasts
     return screen, toasts
+
+
+def error_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    """The error records ``common.logger.error`` wrote, in order."""
+    return [
+        record
+        for record in caplog.records
+        if record.name == "vatsim_debug" and record.levelno == logging.ERROR
+    ]
+
+
+# --- _fetch_conditions ---
+
+
+async def test_fetch_conditions_asks_datis_off_the_event_loop(fakes: Fakes) -> None:
+    """The blocking D-ATIS lookup runs in a worker thread, not on the event loop."""
+    fakes.datis = {"KBBB": atis(LDG_28R)}
+    screen, _ = board(["KAAA", "KBBB"])
+    loop_thread = threading.get_ident()
+
+    _, atis_data = await screen._fetch_conditions(["KAAA", "KBBB"])
+
+    assert fakes.datis_calls == [["KAAA", "KBBB"]]
+    assert len(fakes.datis_threads) == 1
+    assert fakes.datis_threads[0] != loop_thread
+    assert atis_data == {"KBBB": atis(LDG_28R)}
 
 
 # --- _initialize_change_baseline ---
@@ -277,37 +307,47 @@ async def test_baseline_ignores_atis_without_runways(fakes: Fakes) -> None:
     assert screen._previous_approaches == {}
 
 
-async def test_baseline_metar_fetch_error_propagates_and_stores_nothing(
-    fakes: Fakes,
+async def test_baseline_metar_fetch_error_is_logged_and_stores_nothing(
+    fakes: Fakes, caplog: pytest.LogCaptureFixture
 ) -> None:
+    caplog.set_level(logging.ERROR, logger="vatsim_debug")
     fakes.metar_error = RuntimeError("metar service down")
     fakes.vatsim_atis = {"KAAA": atis(LDG_28R)}
-    screen, _ = board(["KAAA", "KBBB"])
+    screen, toasts = board(["KAAA", "KBBB"])
 
-    with pytest.raises(RuntimeError, match="metar service down"):
-        await screen._initialize_change_baseline()
+    await screen._initialize_change_baseline()
 
     assert screen._previous_weather == {}
     assert screen._previous_runways == {}
     assert screen._previous_approaches == {}
+    assert toasts.shown == []
+    records = error_records(caplog)
+    assert [record.getMessage() for record in records] == [
+        "flight board change baseline failed: metar service down"
+    ]
+    assert records[0].exc_text
 
 
-async def test_baseline_vatsim_feed_error_propagates_and_stores_nothing(
-    fakes: Fakes,
+async def test_baseline_vatsim_feed_error_is_logged_and_stores_nothing(
+    fakes: Fakes, caplog: pytest.LogCaptureFixture
 ) -> None:
+    caplog.set_level(logging.ERROR, logger="vatsim_debug")
     fakes.vatsim_error = RuntimeError("vatsim feed down")
     fakes.metars = {"KAAA": VFR.format("KAAA")}
     fakes.datis = {"KAAA": atis(LDG_28R)}
-    screen, _ = board(["KAAA", "KBBB"])
+    screen, toasts = board(["KAAA", "KBBB"])
 
-    with pytest.raises(RuntimeError, match="vatsim feed down"):
-        await screen._initialize_change_baseline()
+    await screen._initialize_change_baseline()
 
     assert fakes.vatsim_atis_calls == []
     assert fakes.datis_calls == []
     assert screen._previous_weather == {}
     assert screen._previous_runways == {}
     assert screen._previous_approaches == {}
+    assert toasts.shown == []
+    assert [record.getMessage() for record in error_records(caplog)] == [
+        "flight board change baseline failed: vatsim feed down"
+    ]
 
 
 # --- _check_for_changes ---
@@ -607,24 +647,28 @@ async def test_check_skips_datis_when_every_airport_has_vatsim_atis(
     assert fakes.datis_calls == []
 
 
-async def test_check_metar_fetch_error_propagates_and_changes_nothing(
-    fakes: Fakes,
+async def test_check_metar_fetch_error_is_logged_and_changes_nothing(
+    fakes: Fakes, caplog: pytest.LogCaptureFixture
 ) -> None:
+    caplog.set_level(logging.ERROR, logger="vatsim_debug")
     fakes.metar_error = RuntimeError("metar service down")
     fakes.vatsim_atis = {"KAAA": atis(LDG_28L)}
     screen, toasts = board(["KAAA", "KBBB"])
     screen._previous_runways = {"KAAA": runways({"28R"}, set())}
 
-    with pytest.raises(RuntimeError, match="metar service down"):
-        await screen._check_for_changes()
+    await screen._check_for_changes()
 
     assert toasts.shown == []
     assert screen._previous_runways == {"KAAA": runways({"28R"}, set())}
+    assert [record.getMessage() for record in error_records(caplog)] == [
+        "flight board change check failed: metar service down"
+    ]
 
 
-async def test_check_vatsim_feed_error_propagates_and_changes_nothing(
-    fakes: Fakes,
+async def test_check_vatsim_feed_error_is_logged_and_changes_nothing(
+    fakes: Fakes, caplog: pytest.LogCaptureFixture
 ) -> None:
+    caplog.set_level(logging.ERROR, logger="vatsim_debug")
     fakes.vatsim_error = RuntimeError("vatsim feed down")
     fakes.metars = {"KAAA": IFR.format("KAAA")}
     fakes.datis = {"KAAA": atis(LDG_28L)}
@@ -633,14 +677,53 @@ async def test_check_vatsim_feed_error_propagates_and_changes_nothing(
     screen._previous_runways = {"KAAA": runways({"28R"}, set())}
     screen._previous_approaches = {"KAAA": {"28R": frozenset({"ILS"})}}
 
-    with pytest.raises(RuntimeError, match="vatsim feed down"):
-        await screen._check_for_changes()
+    await screen._check_for_changes()
 
     assert fakes.datis_calls == []
     assert toasts.shown == []
     assert screen._previous_weather == {"KAAA": "VFR"}
     assert screen._previous_runways == {"KAAA": runways({"28R"}, set())}
     assert screen._previous_approaches == {"KAAA": {"28R": frozenset({"ILS"})}}
+    assert [record.getMessage() for record in error_records(caplog)] == [
+        "flight board change check failed: vatsim feed down"
+    ]
+
+
+async def test_check_recovers_after_a_failed_fetch(
+    fakes: Fakes, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A logged failure keeps the baseline; the next check toasts as usual."""
+    caplog.set_level(logging.ERROR, logger="vatsim_debug")
+    fakes.metar_error = RuntimeError("metar service down")
+    screen, toasts = board(["KAAA", "KBBB"])
+    screen._previous_weather = {"KAAA": "VFR"}
+    screen._previous_runways = {"KAAA": runways({"28R"}, set())}
+
+    await screen._check_for_changes()
+
+    assert toasts.shown == []
+    assert screen._previous_weather == {"KAAA": "VFR"}
+    assert [record.getMessage() for record in error_records(caplog)] == [
+        "flight board change check failed: metar service down"
+    ]
+
+    fakes.metar_error = None
+    fakes.metars = {"KAAA": IFR.format("KAAA")}
+    fakes.vatsim_atis = {"KAAA": atis(LDG_28L)}
+
+    await screen._check_for_changes()
+
+    assert toasts.shown == [
+        (
+            "[bold]WX:[/bold] KAAA (Alpha Intl) now [red bold]IFR[/red bold] "
+            "[dim](was [#00ff00]VFR[/#00ff00])[/dim]",
+            "[dim]WX: KAAA (Alpha Intl) now IFR (was VFR)[/dim]",
+            True,
+        ),
+        rwy_toast("KAAA", "L:28L", "L:28R"),
+    ]
+    assert screen._previous_weather["KAAA"] == "IFR"
+    assert screen._previous_runways == {"KAAA": runways({"28L"}, set())}
 
 
 # --- _precache_flight_altimeters ---
@@ -753,10 +836,11 @@ def test_precache_arrivals_warm_airports_near_their_position(fakes: Fakes) -> No
 
 
 class FakeTable:
-    """A board table as the action reads it: focus, cursor row and row lookup.
+    """A board table as the action reads it: focus, cursor row, rows and lookup.
 
     A cursor row of -1 is a characterization shape for "no row selected" that the
-    action guards against; a real DataTable reports 0 even when it is empty.
+    action guards against; a real DataTable reports cursor row 0 even when it is
+    empty, and a row lookup past the end raises ``RowDoesNotExist``.
     """
 
     def __init__(
@@ -771,8 +855,13 @@ class FakeTable:
         self.has_focus = has_focus
         self.missing = missing
 
+    @property
+    def row_count(self) -> int:
+        """The number of rows, as a real DataTable reports it."""
+        return len(self.rows)
+
     def get_row_at(self, row_index: int) -> list[Any]:
-        if self.missing:
+        if self.missing or row_index >= len(self.rows):
             raise RowDoesNotExist(f"Row index {row_index!r} is not valid.")
         return self.rows[row_index]
 
@@ -898,6 +987,44 @@ def test_info_ignores_a_cursor_on_a_hidden_arrivals_table(fake_app: FakeApp) -> 
         FakeTable([["DAL1"]]),
         FakeTable([["UAL2"]], cursor_row=0),
         filters={"KAAA": "dep", "KBBB": "dep"},
+    )
+
+    screen.action_show_flight_info()
+
+    assert fake_app.pushed == []
+
+
+def test_info_opens_the_arrivals_flight_when_departures_is_empty(
+    fake_app: FakeApp,
+) -> None:
+    """An empty departures table at cursor row 0 no longer shadows an arrival."""
+    screen = info_board(
+        FakeTable([], cursor_row=0), FakeTable([["UAL2"]], cursor_row=0)
+    )
+
+    screen.action_show_flight_info()
+
+    assert pushed_flights(fake_app) == [UAL2]
+
+
+def test_info_prefers_departures_when_neither_table_is_focused(
+    fake_app: FakeApp,
+) -> None:
+    screen = info_board(
+        FakeTable([["DAL1"]], cursor_row=0),
+        FakeTable([["UAL2"]], cursor_row=0),
+    )
+
+    screen.action_show_flight_info()
+
+    assert pushed_flights(fake_app) == [DAL1]
+
+
+def test_info_opens_nothing_when_the_focused_table_is_empty(fake_app: FakeApp) -> None:
+    """The focus rule is unchanged: a focused empty table still wins."""
+    screen = info_board(
+        FakeTable([], cursor_row=0, has_focus=True),
+        FakeTable([["UAL2"]], cursor_row=0),
     )
 
     screen.action_show_flight_info()
