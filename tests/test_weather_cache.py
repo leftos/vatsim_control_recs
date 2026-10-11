@@ -11,7 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 from email.message import Message
 
 import pytest
@@ -107,7 +107,7 @@ class FakeNet:
 
 class Clock:
     def __init__(self) -> None:
-        self.now = datetime.now(timezone.utc)
+        self.now = datetime.now(UTC)
 
     def advance(self, seconds: float) -> None:
         self.now += timedelta(seconds=seconds)

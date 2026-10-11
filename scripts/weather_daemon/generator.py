@@ -13,7 +13,7 @@ import re
 import sys
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -76,7 +76,7 @@ def _check_stale_lock(lock_file: Path) -> bool:
             return False  # Process is alive, lock is valid
 
         # Process is not running - check file age as safety measure
-        file_age = datetime.now(timezone.utc).timestamp() - lock_file.stat().st_mtime
+        file_age = datetime.now(UTC).timestamp() - lock_file.stat().st_mtime
         if file_age < LOCK_STALE_TIMEOUT:
             # File is recent, maybe process just started - be conservative
             logger.debug(
@@ -101,7 +101,7 @@ if sys.platform == "win32":
     import msvcrt
 
     @contextmanager
-    def acquire_lock(lock_file: Path, timeout: int = 0) -> Generator[bool, None, None]:
+    def acquire_lock(lock_file: Path, timeout: int = 0) -> Generator[bool]:
         """
         Context manager for acquiring an exclusive lock file (Windows version).
 
@@ -129,7 +129,7 @@ if sys.platform == "win32":
                 acquired = True
                 # Write PID and timestamp to lock file for debugging
                 lock_fd.write(f"{os.getpid()}\n")
-                lock_fd.write(f"{datetime.now(timezone.utc).isoformat()}\n")
+                lock_fd.write(f"{datetime.now(UTC).isoformat()}\n")
                 lock_fd.flush()
                 logger.debug(f"Acquired lock: {lock_file}")
             except OSError:
@@ -153,7 +153,7 @@ else:
     import fcntl
 
     @contextmanager
-    def acquire_lock(lock_file: Path, timeout: int = 0) -> Generator[bool, None, None]:
+    def acquire_lock(lock_file: Path, timeout: int = 0) -> Generator[bool]:
         """
         Context manager for acquiring an exclusive lock file (Unix version).
 
@@ -192,7 +192,7 @@ else:
                 acquired = True
                 # Write PID and timestamp to lock file for debugging
                 lock_fd.write(f"{os.getpid()}\n")
-                lock_fd.write(f"{datetime.now(timezone.utc).isoformat()}\n")
+                lock_fd.write(f"{datetime.now(UTC).isoformat()}\n")
                 lock_fd.flush()
                 logger.debug(f"Acquired lock: {lock_file}")
             except OSError:
@@ -262,7 +262,7 @@ def _save_weather_cache(
     cache_file = cache_dir / "weather_cache.json"
 
     cache_data = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "metars": metars,
         "tafs": tafs,
         "atis": atis_data,
@@ -305,7 +305,7 @@ def _load_weather_cache(
                 cache_time = datetime.fromisoformat(
                     timestamp_str.replace("Z", "+00:00")
                 )
-                age = (datetime.now(timezone.utc) - cache_time).total_seconds()
+                age = (datetime.now(UTC) - cache_time).total_seconds()
                 if age > max_age_seconds:
                     logger.debug(
                         f"Cache expired ({age:.0f}s old, TTL={max_age_seconds}s)"
@@ -342,7 +342,7 @@ class ProgressTracker:
         self.completed = 0
         self.log_interval_pct = log_interval_pct
         self.last_logged_pct = -log_interval_pct  # Ensure first update logs
-        self.start_time = datetime.now(timezone.utc)
+        self.start_time = datetime.now(UTC)
 
     def update(self, completed: int | None = None, increment: int = 1) -> None:
         """Update progress and print/log if at interval."""
@@ -366,7 +366,7 @@ class ProgressTracker:
 
     def _report(self, pct: int) -> None:
         """Report progress to console and log."""
-        elapsed = (datetime.now(timezone.utc) - self.start_time).total_seconds()
+        elapsed = (datetime.now(UTC) - self.start_time).total_seconds()
 
         if self.completed == self.total:
             msg = f"    {self.operation}: {self.completed}/{self.total} (100%) - {elapsed:.1f}s"
@@ -685,9 +685,9 @@ class WeatherBriefingGenerator:
         Returns:
             The latest observation time as HHMM string, or None if no times found.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         current_day = now.day
         current_hour = now.hour
         current_minute = now.minute
@@ -936,14 +936,14 @@ class WeatherBriefingGenerator:
         # Show latest METAR observation time
         display_time = latest_obs_hhmm or common_obs_hhmm
         if display_time:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             date_str = now.strftime("%Y-%m-%d")
             console.print(
                 f"METARs current as of: [#aaaaff]{date_str} {display_time}Z[/#aaaaff]\n"
             )
         else:
             # Fallback if no observation times found
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             zulu_str = now.strftime("%Y-%m-%d %H%MZ")
             console.print(f"Generated: [#aaaaff]{zulu_str}[/#aaaaff]\n")
 
@@ -1202,7 +1202,7 @@ def generate(config: DaemonConfig) -> dict[str, str]:
     Returns:
         Dict mapping output file paths to grouping names
     """
-    start_time = datetime.now(timezone.utc)
+    start_time = datetime.now(UTC)
     timestamp = start_time.strftime("%H:%M:%SZ")
     print(f"[{timestamp}] Starting weather briefing generation...")
     logger.info("Starting weather briefing generation")
@@ -1715,8 +1715,8 @@ def generate(config: DaemonConfig) -> dict[str, str]:
         logger.info("Skipping tile generation (--no-tiles)")
 
     # Final summary
-    total_time = (datetime.now(timezone.utc) - start_time).total_seconds()
-    end_timestamp = datetime.now(timezone.utc).strftime("%H:%M:%SZ")
+    total_time = (datetime.now(UTC) - start_time).total_seconds()
+    end_timestamp = datetime.now(UTC).strftime("%H:%M:%SZ")
     print(
         f"[{end_timestamp}] Generation complete! {len(generated_files)} files in {total_time:.1f}s"
     )

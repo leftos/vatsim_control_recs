@@ -6,7 +6,7 @@ the UI weather briefing modal and the weather daemon HTML generator.
 """
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from backend.data.weather_parsing import (
@@ -242,7 +242,7 @@ def format_taf_relative_time(time_str: str) -> str:
     Returns:
         Relative time string like "(in 2h)" or "(1h ago)" or empty string if can't parse
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     try:
         # FM format: DDHHMM (e.g., "251800" = 25th day at 18:00Z)

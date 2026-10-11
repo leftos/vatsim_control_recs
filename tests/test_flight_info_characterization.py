@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Any
 
 import pytest
@@ -24,7 +24,7 @@ from ui import config
 from ui.modals import flight_info
 from ui.modals.flight_info import FlightInfoScreen
 
-NOW = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
 
 # KAAA sits 30.02 nm south of KBBB and north of KDDD, 23.98 nm west of KCCC and 60.04 nm south of KEEE
 AIRPORTS: dict[str, dict[str, Any]] = {

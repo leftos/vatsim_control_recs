@@ -14,7 +14,7 @@ Usage:
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -114,7 +114,7 @@ def main():
     # Build cache data
     cache_data = {
         "version": 1,
-        "generated": datetime.now(timezone.utc).isoformat(),
+        "generated": datetime.now(UTC).isoformat(),
         "airport_count": len(airports_data),
         "grid_cell_count": len(spatial_grid),
         "spatial_grid": spatial_grid,

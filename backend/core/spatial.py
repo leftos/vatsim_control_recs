@@ -7,7 +7,7 @@ nearest neighbor lookups instead of O(n) linear scans.
 
 import threading
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 from backend.core.calculations import haversine_distance_nm
@@ -228,7 +228,7 @@ def get_airport_spatial_index(airports_data: dict[str, dict[str, Any]]) -> Spati
         _AIRPORT_SPATIAL_INDEX_TIMESTAMP, \
         _AIRPORT_SPATIAL_INDEX_SIZE
 
-    current_time = datetime.now(timezone.utc)
+    current_time = datetime.now(UTC)
     current_size = len(airports_data) if airports_data else 0
 
     with _AIRPORT_SPATIAL_INDEX_LOCK:

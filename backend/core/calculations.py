@@ -3,7 +3,7 @@ Calculation utilities for distance and ETA computations.
 """
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 # ICAO prefixes of the airports the FAA NASR dataset covers: the US, its
@@ -295,7 +295,7 @@ def calculate_eta(
 
         eta_display = format_eta_display(eta_hours, 1, 0)
 
-        current_time_utc = datetime.now(timezone.utc)
+        current_time_utc = datetime.now(UTC)
         arrival_time_utc = current_time_utc + timedelta(hours=eta_hours)
         arrival_time_local = arrival_time_utc.astimezone()
         eta_local_time = arrival_time_local.strftime("%H:%M")

@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 import zipfile
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 
@@ -120,7 +120,7 @@ def get_current_nasr_cycle_date() -> str:
         Date string in YYYY-MM-DD format
     """
     # AIRAC cycles change on a UTC boundary, not the machine's local one
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     days_since_epoch = (today - AIRAC_EPOCH).days
     cycle_number = days_since_epoch // CYCLE_DAYS
 

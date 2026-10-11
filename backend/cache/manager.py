@@ -12,7 +12,7 @@ import csv
 import json
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from cachetools import LRUCache
 
@@ -264,7 +264,7 @@ def save_weather_cache() -> None:
     """
     _ensure_cache_dir()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     cache_data = {
         "saved_at": now.isoformat(),
         "ttl_seconds": PERSISTENT_CACHE_TTL,
@@ -320,7 +320,7 @@ def load_weather_cache() -> tuple[int, int]:
 
     metar_count = 0
     taf_count = 0
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     try:
         with open(_WEATHER_CACHE_FILE, encoding="utf-8") as f:

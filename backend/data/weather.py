@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Container
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
 from backend.cache.manager import (
@@ -55,7 +55,7 @@ def _record_rate_limit_error() -> float:
 
     with _rate_limit_lock:
         _rate_limit_errors += 1
-        _rate_limit_last_error_time = datetime.now(timezone.utc)
+        _rate_limit_last_error_time = datetime.now(UTC)
 
         if _rate_limit_backoff == 0:
             _rate_limit_backoff = RATE_LIMIT_INITIAL_BACKOFF
@@ -79,7 +79,7 @@ def _record_successful_request() -> None:
     with _rate_limit_lock:
         if _rate_limit_last_error_time is not None:
             time_since_error = (
-                datetime.now(timezone.utc) - _rate_limit_last_error_time
+                datetime.now(UTC) - _rate_limit_last_error_time
             ).total_seconds()
             if time_since_error > RATE_LIMIT_RECOVERY_TIME:
                 # Reset rate limiting state after recovery period
@@ -101,7 +101,7 @@ def _get_current_backoff() -> float:
 
         # Check if we've recovered
         time_since_error = (
-            datetime.now(timezone.utc) - _rate_limit_last_error_time
+            datetime.now(UTC) - _rate_limit_last_error_time
         ).total_seconds()
         if time_since_error > RATE_LIMIT_RECOVERY_TIME:
             return 0.0
@@ -199,7 +199,7 @@ def get_wind_info_minute(airport_icao: str) -> str:
 
     # Cache the result (even if empty)
     wind_data_cache, _wind_blacklist = get_wind_cache()
-    current_time = datetime.now(timezone.utc)
+    current_time = datetime.now(UTC)
     with get_wind_cache_lock():
         wind_data_cache[airport_icao] = {
             "wind_info": wind_str,
@@ -222,7 +222,7 @@ def _cached_minute_wind(airport_icao: str) -> str | None:
         if airport_icao in wind_blacklist:
             return ""
 
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(UTC)
         cache_entry = wind_data_cache.get(airport_icao)
         if cache_entry is None:
             return None
@@ -406,7 +406,7 @@ def get_metar(airport_icao: str, *, as_of: datetime | None = None) -> str:
         metar_text, vatsim_answered = _fetch_metar_from_vatsim(airport_icao)
         clean_empty = answered and vatsim_answered
 
-    current_time = datetime.now(timezone.utc)
+    current_time = datetime.now(UTC)
     if not metar_text:
         return _no_metar_result(airport_icao, clean_empty, current_time)
 
@@ -429,7 +429,7 @@ def _has_fresh_negative(airport_icao: str, now: datetime) -> bool:
 
 def _resolve_now(as_of: datetime | None) -> datetime:
     """The moment freshness is judged at: the given as_of, else the current time."""
-    return as_of if as_of is not None else datetime.now(timezone.utc)
+    return as_of if as_of is not None else datetime.now(UTC)
 
 
 def _usable_entry(airport_icao: str, now: datetime) -> dict[str, Any] | None:
@@ -556,7 +556,7 @@ def _cached_taf(airport_icao: str) -> str | None:
         if airport_icao in taf_blacklist:
             return ""
 
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(UTC)
         cache_entry = taf_data_cache.get(airport_icao)
         if cache_entry is None:
             return None
@@ -628,7 +628,7 @@ def _settle_taf(airport_icao: str, taf_text: str) -> str:
             taf_blacklist[airport_icao] = True
         return ""
 
-    current_time = datetime.now(timezone.utc)
+    current_time = datetime.now(UTC)
     with get_taf_cache_lock():
         taf_data_cache[airport_icao] = {"taf": taf_text, "timestamp": current_time}
 
@@ -1369,9 +1369,7 @@ def find_airports_near_position(
     Returns:
         List of airport ICAO codes sorted by distance (closest first)
     """
-    grid = _current_metar_spatial_index(airports_data, datetime.now(timezone.utc))[
-        "grid"
-    ]
+    grid = _current_metar_spatial_index(airports_data, datetime.now(UTC))["grid"]
 
     # Determine which cells to search
     lat_cell = int(latitude)
@@ -1433,7 +1431,7 @@ def find_nearest_airport_with_metar(
         Tuple of (icao_code, altimeter_setting, distance_nm) or None if no airport found
         Distance is in nautical miles
     """
-    current_time = datetime.now(timezone.utc)
+    current_time = datetime.now(UTC)
     cache_key = _nearest_metar_cache_key(latitude, longitude)
 
     # Check result cache first (fast path)
@@ -1459,7 +1457,7 @@ def find_nearest_airport_with_metar(
     with _NEAREST_METAR_RESULT_CACHE_LOCK:
         _NEAREST_METAR_RESULT_CACHE[cache_key] = {
             "result": result,
-            "timestamp": datetime.now(timezone.utc),
+            "timestamp": datetime.now(UTC),
         }
 
     return result
@@ -1521,7 +1519,7 @@ def _current_metar_spatial_index(
     if _metar_spatial_index_expired(now):
         with _METAR_SPATIAL_INDEX_LOCK:
             # Re-check inside lock (another thread may have rebuilt)
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now(UTC)
             if _metar_spatial_index_expired(current_time):
                 _METAR_AIRPORT_SPATIAL_INDEX = _build_metar_airport_spatial_index(
                     airports_data
@@ -1681,7 +1679,7 @@ def get_rate_limit_status() -> dict[str, Any]:
         # Check if we've recovered
         if _rate_limit_last_error_time is not None:
             time_since_error = (
-                datetime.now(timezone.utc) - _rate_limit_last_error_time
+                datetime.now(UTC) - _rate_limit_last_error_time
             ).total_seconds()
             if time_since_error > RATE_LIMIT_RECOVERY_TIME:
                 is_rate_limited = False
@@ -1898,9 +1896,7 @@ def get_weather_for_airports_bbox(
 
     def store(bbox_id: str, fetch: BboxFetchResult) -> None:
         with get_metar_cache_lock():
-            _store_bbox_result(
-                fetch, members[bbox_id], target_set, datetime.now(timezone.utc)
-            )
+            _store_bbox_result(fetch, members[bbox_id], target_set, datetime.now(UTC))
         if on_box is not None:
             on_box(members[bbox_id], fetch.succeeded)
 

@@ -4,7 +4,7 @@ import asyncio
 import os
 import tempfile
 import webbrowser
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from rich.console import Console
@@ -503,7 +503,7 @@ class FlightWeatherBriefingScreen(ModalScreen):
 
     def _update_display(self) -> None:
         """Update the display with the weather briefing."""
-        zulu_str = datetime.now(timezone.utc).strftime("%d%H%MZ")
+        zulu_str = datetime.now(UTC).strftime("%d%H%MZ")
         total_ete = format_ete(self.total_distance, self.groundspeed)
         sections = [
             f"[bold]Briefing valid: {zulu_str}[/bold]  |  Route: {int(self.total_distance)}nm  |  ETE: {total_ete}",
@@ -531,7 +531,7 @@ class FlightWeatherBriefingScreen(ModalScreen):
 
     def _print_lines(self) -> list[str]:
         """The briefing as the printed page shows it, one Rich markup line each."""
-        zulu_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H%MZ")
+        zulu_str = datetime.now(UTC).strftime("%Y-%m-%d %H%MZ")
         total_ete = format_ete(self.total_distance, self.groundspeed)
 
         lines = [

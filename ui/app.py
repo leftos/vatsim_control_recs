@@ -9,7 +9,7 @@ import sys
 import threading
 import traceback
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import partial
 from typing import Any, ClassVar
 
@@ -262,7 +262,7 @@ class VATSIMControlApp(App):
         self.refresh_paused = False
         self.refresh_interval = args.refresh_interval if args else 5
         self.refresh_timer = None
-        self.last_refresh_time = datetime.now(timezone.utc)
+        self.last_refresh_time = datetime.now(UTC)
         # Only one refresh runs at a time; a request during a run queues one follow-up
         self.refresh_in_progress = False
         self.refresh_pending = False
@@ -275,7 +275,7 @@ class VATSIMControlApp(App):
         # analysis retries on the interval rather than on the very next tick
         self.last_refresh_started_at = self.last_refresh_time
         self.status_update_timer = None
-        self.last_activity_time = datetime.now(timezone.utc)
+        self.last_activity_time = datetime.now(UTC)
         self.idle_timeout = 3  # seconds of idle time before auto-refresh resumes
         self.user_is_active = False
         self.airports_row_keys = []
@@ -538,7 +538,7 @@ class VATSIMControlApp(App):
 
         # Check if at least refresh_interval seconds have passed since the last start
         time_since_start = (
-            datetime.now(timezone.utc) - self.last_refresh_started_at
+            datetime.now(UTC) - self.last_refresh_started_at
         ).total_seconds()
         if time_since_start < self.refresh_interval:
             return
@@ -548,9 +548,7 @@ class VATSIMControlApp(App):
             return
 
         # Check if user has been idle long enough (not auto-paused)
-        idle_time = (
-            datetime.now(timezone.utc) - self.last_activity_time
-        ).total_seconds()
+        idle_time = (datetime.now(UTC) - self.last_activity_time).total_seconds()
         if idle_time < self.idle_timeout:
             return
 
@@ -581,7 +579,7 @@ class VATSIMControlApp(App):
         # Update clocks (UTC and local)
         try:
             clocks = self.query_one(".header-clocks", Static)
-            current_utc = datetime.now(timezone.utc)
+            current_utc = datetime.now(UTC)
             current_local = datetime.now().astimezone()
             clocks.update(
                 f"Local {current_local.strftime('%H:%M:%S')} | UTC {current_utc.strftime('%H:%M:%S')}"
@@ -598,7 +596,7 @@ class VATSIMControlApp(App):
         if not self.watch_for_user_activity or not self.initial_setup_complete:
             return
 
-        self.last_activity_time = datetime.now(timezone.utc)
+        self.last_activity_time = datetime.now(UTC)
         self.last_activity_source = source
         self.user_is_active = True
 
@@ -612,9 +610,7 @@ class VATSIMControlApp(App):
             return
 
         # Check if user has been idle long enough
-        idle_time = (
-            datetime.now(timezone.utc) - self.last_activity_time
-        ).total_seconds()
+        idle_time = (datetime.now(UTC) - self.last_activity_time).total_seconds()
         if idle_time >= self.idle_timeout:
             self.user_is_active = False
 
@@ -632,7 +628,7 @@ class VATSIMControlApp(App):
 
         # Calculate time since last refresh
         time_since_refresh = int(
-            (datetime.now(timezone.utc) - self.last_refresh_time).total_seconds()
+            (datetime.now(UTC) - self.last_refresh_time).total_seconds()
         )
         time_str = self.format_time_since(time_since_refresh)
 
@@ -690,7 +686,7 @@ class VATSIMControlApp(App):
     def _start_refresh(self) -> None:
         """Start the refresh worker. Only called when no refresh is running."""
         self.refresh_in_progress = True
-        self.last_refresh_started_at = datetime.now(timezone.utc)
+        self.last_refresh_started_at = datetime.now(UTC)
         self.update_status_bar()
 
         # Also trigger refresh on the flight board if it's open
@@ -836,7 +832,7 @@ class VATSIMControlApp(App):
             )
 
             # "Last refresh" counts from the landing, not the start of the analysis
-            self.last_refresh_time = datetime.now(timezone.utc)
+            self.last_refresh_time = datetime.now(UTC)
             self.update_status_bar()
             self._request_weather_pass()
         finally:
@@ -898,7 +894,7 @@ class VATSIMControlApp(App):
                 airports,
                 coordinates,
                 hide_wind=self.hide_wind,
-                as_of=datetime.now(timezone.utc),
+                as_of=datetime.now(UTC),
                 on_box=on_box,
                 stop=self._weather_stop,
             ),

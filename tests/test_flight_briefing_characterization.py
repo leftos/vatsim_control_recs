@@ -11,7 +11,7 @@ faked over ``flight_briefing.tempfile`` and ``flight_briefing.webbrowser``.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timezone, tzinfo
+from datetime import UTC, datetime, tzinfo
 from types import SimpleNamespace
 from typing import Any
 
@@ -25,7 +25,7 @@ from ui.config import CATEGORY_COLORS
 from ui.modals import flight_briefing
 from ui.modals.flight_briefing import FlightWeatherBriefingScreen
 
-NOW = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
 
 # KAAA, KMMM and KEEE sit on one meridian, 120 nm apart; KNOP has no position
 AIRPORTS: dict[str, dict[str, Any]] = {

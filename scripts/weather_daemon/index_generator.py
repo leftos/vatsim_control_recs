@@ -11,7 +11,7 @@ import math
 import os
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -486,7 +486,7 @@ def generate_index_page(
                 artcc_stats[artcc]["total"] += count
 
     # Generation timestamp shown on the page
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     timestamp = now.strftime("%Y-%m-%d %H:%M:%SZ")
     # The newest complete tile set; this run's tiles are written after the index
     tile_version = read_tile_version(config.output_dir / "tiles", fallback_tile_version)

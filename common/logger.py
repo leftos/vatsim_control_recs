@@ -15,7 +15,7 @@ import collections
 import logging
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Records the pre-setup buffer keeps before dropping the oldest
@@ -154,15 +154,13 @@ def cleanup_old_logs(days_to_keep: int = 10) -> None:
             return
 
         # UTC on both sides so the comparison against st_mtime is well defined
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+        cutoff_date = datetime.now(UTC) - timedelta(days=days_to_keep)
         logs_path = Path(logs_dir)
 
         for log_file in logs_path.glob("debug_*.log"):
             try:
                 # Get file modification time
-                file_mtime = datetime.fromtimestamp(
-                    log_file.stat().st_mtime, tz=timezone.utc
-                )
+                file_mtime = datetime.fromtimestamp(log_file.stat().st_mtime, tz=UTC)
                 if file_mtime < cutoff_date:
                     log_file.unlink()
             except OSError:

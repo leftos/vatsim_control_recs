@@ -5,7 +5,7 @@ import os
 import re
 import tempfile
 import webbrowser
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 from rich.console import Console
@@ -66,7 +66,7 @@ def _parse_metar_observation_time(metar: str) -> tuple | None:
     zulu_str = f"{hour:02d}{minute:02d}Z"
 
     # Convert to local time
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         obs_time = now.replace(
             day=day, hour=hour, minute=minute, second=0, microsecond=0
@@ -397,7 +397,7 @@ class WeatherBriefingScreen(ModalScreen):
             summary_parts.append(f"[#00ff00]{category_counts['VFR']} VFR[/#00ff00]")
 
         # Add timestamp (Zulu + Local)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         zulu_str = now.strftime("%H%MZ")
         local_str = now.astimezone().strftime("%H:%M LT")
         timestamp = f"[dim]{zulu_str} ({local_str})[/dim]"
@@ -700,7 +700,7 @@ class WeatherBriefingScreen(ModalScreen):
         console = Console(record=True, force_terminal=True, width=500)
 
         # Title and timestamp (Zulu only for web - local time varies by viewer)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         zulu_str = now.strftime("%Y-%m-%d %H%MZ")
         console.print(f"[bold]Weather Briefing: {self.grouping_name}[/bold]")
         console.print(f"Generated: {zulu_str}\n")

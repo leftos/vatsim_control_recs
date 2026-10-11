@@ -6,7 +6,7 @@ Caches data locally per AIRAC cycle (28 days).
 """
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -22,7 +22,7 @@ AIRAC_CYCLE_DAYS = 28
 def get_current_airac_date() -> date:
     """Get the effective date of the current AIRAC cycle."""
     # AIRAC cycles change on a UTC boundary, not the server's local one
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     days_since_epoch = (today - AIRAC_EPOCH).days
     cycles_since_epoch = days_since_epoch // AIRAC_CYCLE_DAYS
     return AIRAC_EPOCH + timedelta(days=cycles_since_epoch * AIRAC_CYCLE_DAYS)

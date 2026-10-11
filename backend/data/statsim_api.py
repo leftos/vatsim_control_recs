@@ -8,7 +8,7 @@ VATSIM flight data, useful for analyzing traffic patterns between airports.
 import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +82,7 @@ def fetch_flights_from_origin(
         days_back=30, days_offset=0  -> last 30 days (now-30 to now)
         days_back=30, days_offset=30 -> 30-60 days ago (now-60 to now-30)
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     to_date = now - timedelta(days=days_offset)
     from_date = to_date - timedelta(days=days_back)
 
@@ -139,7 +139,7 @@ def fetch_flights_to_destination(
         days_back=30, days_offset=0  -> last 30 days (now-30 to now)
         days_back=30, days_offset=30 -> 30-60 days ago (now-60 to now-30)
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     to_date = now - timedelta(days=days_offset)
     from_date = to_date - timedelta(days=days_back)
 

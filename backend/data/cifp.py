@@ -15,7 +15,7 @@ import urllib.request
 import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from common import logger as debug_logger
@@ -119,7 +119,7 @@ def get_current_airac_cycle() -> tuple[str, date, date]:
         Example: ("2512", date(2025, 11, 27), date(2025, 12, 24))
     """
     # AIRAC cycles change on a UTC boundary, not the machine's local one
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     days_since_epoch = (today - AIRAC_EPOCH).days
     cycle_number = days_since_epoch // CYCLE_DAYS  # 0-indexed from 2501
 

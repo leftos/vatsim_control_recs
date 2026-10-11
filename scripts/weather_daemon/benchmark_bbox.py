@@ -10,7 +10,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .artcc_boundaries import get_artcc_boundaries
@@ -202,7 +202,7 @@ def run_benchmark(artcc: str = "ZOA"):
     print(f"\n{'=' * 60}")
     print(f"Weather Fetching Benchmark: {artcc}")
     print(f"{'=' * 60}")
-    print(f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%SZ')}")
+    print(f"Started: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%SZ')}")
 
     # Load airports for this ARTCC
     preset_file = (

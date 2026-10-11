@@ -12,7 +12,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -616,7 +616,7 @@ def test_capped_box_defers_missing_airports_to_the_fallback(net: RegionNet) -> N
         ["KSFO", "KOAK", "KJFK"],
         UNIFIED,
         hide_wind=False,
-        as_of=datetime.now(timezone.utc),
+        as_of=datetime.now(UTC),
         on_box=on_box,
         stop=threading.Event(),
     )
@@ -646,7 +646,7 @@ def test_quit_cancels_queued_boxes(net: RegionNet) -> None:
         args=(list(spread), spread),
         kwargs={
             "hide_wind": False,
-            "as_of": datetime.now(timezone.utc),
+            "as_of": datetime.now(UTC),
             "on_box": lambda _values: None,
             "stop": stop,
         },

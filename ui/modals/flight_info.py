@@ -2,7 +2,7 @@
 
 import asyncio
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from textual.app import ComposeResult
@@ -566,7 +566,7 @@ class FlightInfoScreen(ModalScreen):
             return
 
         # Check cache first
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(UTC)
         cached = _fresh_cached_alternates(origin_icao, current_time)
         if cached is not None:
             debug(f"[VFR_ALT] Cache hit for {origin_icao}")
@@ -599,7 +599,7 @@ class FlightInfoScreen(ModalScreen):
         # Cache the final result
         _VFR_ALTERNATES_CACHE[origin_icao] = {
             "result": alternates,
-            "timestamp": datetime.now(timezone.utc),
+            "timestamp": datetime.now(UTC),
         }
 
         setattr(self, target_attr, alternates)

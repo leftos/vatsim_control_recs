@@ -2,7 +2,7 @@
 
 import asyncio
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import ClassVar
 
 from textual.app import ComposeResult
@@ -193,7 +193,7 @@ class MetarInfoScreen(ModalScreen):
                         day - days_in_month,
                         hour,
                         minute,
-                        tzinfo=timezone.utc,
+                        tzinfo=UTC,
                     )
                 else:
                     return datetime(
@@ -202,12 +202,10 @@ class MetarInfoScreen(ModalScreen):
                         day - days_in_month,
                         hour,
                         minute,
-                        tzinfo=timezone.utc,
+                        tzinfo=UTC,
                     )
 
-            return datetime(
-                current_year, current_month, day, hour, minute, tzinfo=timezone.utc
-            )
+            return datetime(current_year, current_month, day, hour, minute, tzinfo=UTC)
         except (ValueError, TypeError):
             return None
 
@@ -298,7 +296,7 @@ class MetarInfoScreen(ModalScreen):
         if not taf:
             return taf
 
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(UTC)
         current_month = current_time.month
         current_year = current_time.year
 

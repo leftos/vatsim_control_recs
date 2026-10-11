@@ -10,7 +10,7 @@ import asyncio
 import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -172,7 +172,7 @@ async def test_refresh_lands_after_a_long_analysis(
         app.action_refresh()
         await _wait_until(pilot, lambda: fetch.calls == 1, "the refresh never started")
         await asyncio.sleep(0.05)
-        blocked_at = datetime.now(timezone.utc)
+        blocked_at = datetime.now(UTC)
         assert app.airport_data == [], "the tables updated before the analysis finished"
 
         fetch.release.set()
@@ -249,7 +249,7 @@ async def test_failed_analysis_does_not_stop_refreshes(
             pilot, lambda: fetch.calls == 2, "no refresh started after the failed one"
         )
         await asyncio.sleep(0.05)
-        blocked_at = datetime.now(timezone.utc)
+        blocked_at = datetime.now(UTC)
 
         fetch.release.set()
         await app.workers.wait_for_complete()
@@ -289,7 +289,7 @@ async def test_failed_analysis_retries_only_after_the_interval(
         app.refresh_interval = 30.0
         # As after a run of failures: the last landing (and so the interval's own
         # clock as it stood before this fix) is well in the past
-        stale = datetime.now(timezone.utc) - timedelta(seconds=60)
+        stale = datetime.now(UTC) - timedelta(seconds=60)
         app.last_refresh_time = stale
         app.last_refresh_started_at = stale
 
@@ -308,7 +308,7 @@ async def test_failed_analysis_retries_only_after_the_interval(
         )
 
         # Once the interval has passed the next tick retries, exactly once
-        app.last_refresh_started_at = datetime.now(timezone.utc) - timedelta(seconds=60)
+        app.last_refresh_started_at = datetime.now(UTC) - timedelta(seconds=60)
         app.auto_refresh_callback()
         await _wait_until(
             pilot, lambda: fetch.calls == 2, "no retry after the interval passed"
