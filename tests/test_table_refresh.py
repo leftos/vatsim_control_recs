@@ -24,7 +24,9 @@ from ui.tables import (
 )
 from widgets.split_flap_datatable import SplitFlapDataTable
 
-# A fade flaps each visible cell to blank one character per 50 ms frame
+# A fade flaps each visible cell to blank one character per 50 ms frame; the
+# waits drive those frames themselves, so this is only the hang guard on waiting
+# for the removal task a fade unblocks.
 FADE_TIMEOUT = 10.0
 
 APP_ARGS = SimpleNamespace(
@@ -87,9 +89,43 @@ async def _land(manager: TableManager, pilot: Pilot, count: int) -> None:
     await pilot.pause()
 
 
+def _step_animations(table: SplitFlapDataTable) -> None:
+    """Drive the table's animating cells one frame at a time until none is flapping.
+
+    A flap always takes ``delay_frames`` plus one lap of the cell's flap set plus
+    one finishing frame, and the set grows by up to its own size mid-flap, since a
+    character it lacks is appended the first frame that reaches for it, so twice
+    ``delay_frames + len(flap_chars)`` bounds what a cell needs however slowly the
+    50 ms frame timer ticks. A table with cells to flap must have a running
+    animation timer, and stepping the last of them must stop it.
+    """
+    animating = bool(table._animating_cells)
+    if animating:
+        assert table._animation_timer is not None, "the animation timer did not start"
+    delays = [
+        table.animated_cells[key].delay_frames
+        + len(table.animated_cells[key].flap_chars)
+        for key in table._animating_cells
+        if key in table.animated_cells
+    ]
+    bound = 2 * max(delays, default=0) + 1
+    stepped = 0
+    for _ in range(bound):
+        if not table._animating_cells:
+            break
+        table._animate_cells()
+        stepped += 1
+    assert not table._animating_cells, (
+        f"cells still flapping after {stepped} frames (bound {bound})"
+    )
+    if animating:
+        assert table._animation_timer is None, "the animation timer did not stop"
+
+
 async def _wait_for_fades(manager: TableManager, pilot: Pilot) -> None:
     """Wait for every fade-out the manager has running to finish."""
-    if manager._active_tasks:
+    while manager._active_tasks:
+        _step_animations(manager.table)
         _, pending = await asyncio.wait(
             set(manager._active_tasks), timeout=FADE_TIMEOUT
         )
@@ -180,6 +216,24 @@ async def test_shrinking_table_fades_then_removes_tail_rows(
         assert _cells_at_or_below(table, 12) == []
 
 
+async def test_animation_wait_is_bounded_by_frames_not_wall_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both waits finish a full flap through a deadline far shorter than it takes."""
+    monkeypatch.setitem(globals(), "FADE_TIMEOUT", 0.5)
+    async with _TableHost(animations=True).run_test(size=(180, 50)) as pilot:
+        table, manager = await _populated_table(pilot, 25)
+        await _wait_for_animations(table, pilot)
+        assert not table._animating_cells
+
+        await _land(manager, pilot, 12)
+        await _wait_for_fades(manager, pilot)
+        await _wait_for_animations(table, pilot)
+
+        assert table.row_count == 12
+        assert not table._animating_cells
+
+
 async def test_refresh_during_fade_keeps_table_consistent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -215,11 +269,8 @@ async def test_no_animation_shrink_removes_at_once(
 
 async def _wait_for_animations(table: SplitFlapDataTable, pilot: Pilot) -> None:
     """Wait until no cell is flapping, then for the width pass that follows."""
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + FADE_TIMEOUT
-    while table._animating_cells:
-        assert loop.time() < deadline, "the cells did not stop flapping"
-        await asyncio.sleep(0.05)
+    await pilot.pause()
+    _step_animations(table)
     await pilot.pause()
     await pilot.pause()
 
