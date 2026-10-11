@@ -5,7 +5,6 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ## Current focus
 
-- [ ] Deploy the weather daemon's per-grouping briefing isolation (`scripts/weather_daemon/service/QuickDeploy.ps1`): it is on main but not on the server, which runs c82c0b0 (the ATIS escape fix that unfroze the index). Ask the owner first.
 
 ### Wave 2: Go To and groupings
 
