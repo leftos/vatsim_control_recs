@@ -88,7 +88,6 @@ max-complexity = 8
 "scripts/weather_daemon/generator.py" = ["C901"]
 "scripts/weather_daemon/index_generator.py" = ["C901"]
 "scripts/weather_daemon/service/nginx_include.py" = ["C901"]
-"scripts/weather_daemon/simaware_boundaries.py" = ["C901"]
 "tests/test_cifp_index.py" = ["C901"]
 "ui/app.py" = ["C901"]
 "ui/modals/airport_tracking.py" = ["C901"]

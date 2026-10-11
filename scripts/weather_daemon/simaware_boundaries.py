@@ -12,6 +12,7 @@ Source: https://github.com/vatsimnetwork/simaware-tracon-project
 """
 
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -58,38 +59,47 @@ def load_preset_grouping_data(
         try:
             with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
-
-            if not isinstance(data, dict):
-                continue
-
-            for key, value in data.items():
-                if not isinstance(key, str):
-                    continue
-
-                grouping_data = None
-                if isinstance(value, dict):
-                    # New format with metadata
-                    grouping_data = value
-                elif isinstance(value, list):
-                    # Old format - just airport list, no metadata
-                    grouping_data = {
-                        "airports": value,
-                        "position_prefixes": None,
-                        "position_suffixes": None,
-                        "facility_id": None,
-                    }
-
-                # Filter out single-airport groupings unless they have a facility_id
-                if grouping_data:
-                    airports = grouping_data.get("airports", [])
-                    facility_id = grouping_data.get("facility_id")
-                    if len(airports) > 1 or facility_id:
-                        all_data[key] = grouping_data
-
+            all_data.update(_groupings_from_file_data(data))
         except (OSError, ValueError) as e:
             print(f"  Warning: skipping unreadable grouping file {json_file.name}: {e}")
 
     return all_data
+
+
+def _normalize_grouping_value(value: Any) -> dict[str, Any] | None:
+    """Return a grouping's data from a dict (with metadata) or a bare airport list, else None."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list):
+        return {
+            "airports": value,
+            "position_prefixes": None,
+            "position_suffixes": None,
+            "facility_id": None,
+        }
+    return None
+
+
+def _is_kept_grouping(grouping_data: dict[str, Any]) -> bool:
+    """Whether a grouping has more than one airport or a facility_id."""
+    airports = grouping_data.get("airports", [])
+    facility_id = grouping_data.get("facility_id")
+    return bool(len(airports) > 1 or facility_id)
+
+
+def _groupings_from_file_data(data: Any) -> dict[str, dict[str, Any]]:
+    """Return the kept groupings from one preset file's parsed JSON."""
+    kept: dict[str, dict[str, Any]] = {}
+    if not isinstance(data, dict):
+        return kept
+
+    for key, value in data.items():
+        if not isinstance(key, str):
+            continue
+        grouping_data = _normalize_grouping_value(value)
+        if grouping_data and _is_kept_grouping(grouping_data):
+            kept[key] = grouping_data
+    return kept
 
 
 def load_simaware_boundaries(
@@ -210,56 +220,84 @@ def map_grouping_to_boundaries(
     position_suffixes = grouping_data.get("position_suffixes")
     facility_id = grouping_data.get("facility_id")
 
-    available_facilities = set(boundaries_data.keys())
-
-    # Skip groupings without position prefix data
+    # Groupings without position prefix data fall back to facility-level matching
     if not position_prefixes:
-        # Fall back to facility-level matching
-        if facility_id:
-            simaware_folder = resolve_simaware_folder(facility_id, available_facilities)
-            if simaware_folder:
-                facility_boundaries = boundaries_data.get(simaware_folder, {})
-                # Try facility-level boundary
-                if facility_id in facility_boundaries:
-                    coords = facility_boundaries[facility_id].get("coordinates")
-                    if coords:
-                        return [coords]
+        return _facility_level_boundary(facility_id, boundaries_data)
 
-        return []
-
-    # Get the SimAware folder from the facility_id
     if not facility_id:
         return []
 
-    simaware_folder = resolve_simaware_folder(facility_id, available_facilities)
+    simaware_folder = resolve_simaware_folder(facility_id, set(boundaries_data.keys()))
     if not simaware_folder:
         return []
 
-    # Determine the primary suffix (DEP gets special handling)
-    primary_suffix = None
-    if position_suffixes:
-        if "DEP" in position_suffixes:
-            primary_suffix = "DEP"
-        elif "APP" in position_suffixes:
-            primary_suffix = "APP"
-
-    # Find boundaries for each position prefix
     # Collect ALL matching boundaries (e.g., NCT C with OAK and MOD prefixes)
+    return _collect_prefix_boundaries(
+        position_prefixes,
+        _primary_suffix(position_suffixes),
+        simaware_folder,
+        boundaries_data,
+    )
+
+
+def _facility_level_boundary(
+    facility_id: str | None,
+    boundaries_data: dict[str, dict[str, Any]],
+) -> list[list[list[float]]]:
+    """Return the facility's own boundary (keyed by its facility_id) as a one-polygon list, else []."""
+    if not facility_id:
+        return []
+
+    simaware_folder = resolve_simaware_folder(facility_id, set(boundaries_data.keys()))
+    if not simaware_folder:
+        return []
+
+    facility_boundaries = boundaries_data.get(simaware_folder, {})
+    if facility_id not in facility_boundaries:
+        return []
+
+    coords = facility_boundaries[facility_id].get("coordinates")
+    return [coords] if coords else []
+
+
+def _primary_suffix(position_suffixes: list[str] | None) -> str | None:
+    """Return 'DEP' when the suffixes include it, else 'APP' when they include that, else None."""
+    if not position_suffixes:
+        return None
+    if "DEP" in position_suffixes:
+        return "DEP"
+    if "APP" in position_suffixes:
+        return "APP"
+    return None
+
+
+def _duplicate_key(coords: list[list[float]]) -> tuple | None:
+    """Return the first three points as a duplicate-detection key, or None under three points."""
+    if len(coords) < 3:
+        return None
+    return tuple(tuple(p) for p in coords[:3])
+
+
+def _collect_prefix_boundaries(
+    position_prefixes: list[str],
+    primary_suffix: str | None,
+    simaware_folder: str,
+    boundaries_data: dict[str, dict[str, Any]],
+) -> list[list[list[float]]]:
+    """Return each prefix's boundary in prefix order, dropping repeats and polygons under three points."""
     polygons: list[list[list[float]]] = []
-    seen_coords: set = set()  # Avoid duplicates
+    seen_coords: set = set()
 
     for prefix in position_prefixes:
         coords = find_boundary_for_prefix(
             prefix, primary_suffix, simaware_folder, boundaries_data
         )
-        if coords:
-            # Use first few points as a key to detect duplicates
-            coords_key = (
-                tuple(tuple(p) for p in coords[:3]) if len(coords) >= 3 else None
-            )
-            if coords_key and coords_key not in seen_coords:
-                polygons.append(coords)
-                seen_coords.add(coords_key)
+        if not coords:
+            continue
+        coords_key = _duplicate_key(coords)
+        if coords_key and coords_key not in seen_coords:
+            polygons.append(coords)
+            seen_coords.add(coords_key)
 
     return polygons
 
@@ -290,39 +328,30 @@ def expand_plus_pattern(
     # or a "Facility+Facility" pattern (e.g., "N90+B90")
     parts = grouping_name.split()
 
-    if len(parts) == 2:
-        # Pattern: "NCT E+R" -> facility is "NCT", sectors are "E" and "R"
-        facility = parts[0]
-        sector_part = parts[1]
-
-        if "+" in sector_part:
-            sectors = sector_part.split("+")
-            expanded = []
-            for sector in sectors:
-                candidate = f"{facility} {sector}"
-                expanded.append(candidate)
-            return expanded if expanded else [grouping_name]
+    # Pattern: "NCT E+R" -> facility is "NCT", sectors are "E" and "R"
+    if len(parts) == 2 and "+" in parts[1]:
+        facility, sector_part = parts
+        return [f"{facility} {sector}" for sector in sector_part.split("+")]
 
     # Pattern: "N90+B90" or similar
-    if "+" in grouping_name and " " not in grouping_name:
-        parts = grouping_name.split("+")
-        expanded = []
-        for part in parts:
-            # Try exact match first
-            if part in all_grouping_data:
-                expanded.append(part)
-            else:
-                # Try adding common suffix patterns
-                for suffix in ["", " Combined", f" {part}"]:
-                    candidate = f"{part}{suffix}"
-                    if candidate in all_grouping_data:
-                        expanded.append(candidate)
-                        break
-                else:
-                    expanded.append(part)  # Add anyway, will be resolved later
-        return expanded
+    if " " not in grouping_name:
+        return [
+            _resolve_plus_part(part, all_grouping_data)
+            for part in grouping_name.split("+")
+        ]
 
     return [grouping_name]
+
+
+def _resolve_plus_part(part: str, all_grouping_data: dict[str, dict[str, Any]]) -> str:
+    """Return the known grouping a '+'-separated facility name refers to, else the name unchanged."""
+    # Try exact match first, then common suffix patterns
+    for suffix in ["", " Combined", f" {part}"]:
+        candidate = f"{part}{suffix}"
+        if candidate in all_grouping_data:
+            return candidate
+    # Unknown names are kept, to be resolved later
+    return part
 
 
 def polygon_min_distance(poly1: list[list[float]], poly2: list[list[float]]) -> float:
@@ -448,49 +477,46 @@ def combine_polygons(
     # Convert all polygons to tuple format
     tuple_polygons = [[(p[0], p[1]) for p in poly] for poly in polygons]
 
-    # Use Union-Find to group neighboring polygons
-    n = len(tuple_polygons)
+    groups = _neighbor_groups(polygons, neighbor_threshold)
+    return [_merge_group(tuple_polygons, indices) for indices in groups]
+
+
+def _find_root(parent: list[int], x: int) -> int:
+    """Return the union-find root of x, compressing the path on the way."""
+    if parent[x] != x:
+        parent[x] = _find_root(parent, parent[x])
+    return parent[x]
+
+
+def _neighbor_groups(
+    polygons: list[list[list[float]]], neighbor_threshold: float
+) -> list[list[int]]:
+    """Group polygon indices into transitively neighboring clusters, in order of first index."""
+    n = len(polygons)
     parent = list(range(n))
-
-    def find(x):
-        if parent[x] != x:
-            parent[x] = find(parent[x])
-        return parent[x]
-
-    def union(x, y):
-        px, py = find(x), find(y)
-        if px != py:
-            parent[px] = py
 
     # Check all pairs for proximity
     for i in range(n):
         for j in range(i + 1, n):
-            dist = polygon_min_distance(polygons[i], polygons[j])
-            if dist <= neighbor_threshold:
-                union(i, j)
+            if polygon_min_distance(polygons[i], polygons[j]) <= neighbor_threshold:
+                root_i, root_j = _find_root(parent, i), _find_root(parent, j)
+                if root_i != root_j:
+                    parent[root_i] = root_j
 
-    # Group polygons by their root
-    from collections import defaultdict
-
-    groups = defaultdict(list)
+    groups: dict[int, list[int]] = defaultdict(list)
     for i in range(n):
-        groups[find(i)].append(i)
+        groups[_find_root(parent, i)].append(i)
+    return list(groups.values())
 
-    # Merge each group
-    result = []
-    for indices in groups.values():
-        if len(indices) == 1:
-            # Single polygon - keep as-is
-            result.append(tuple_polygons[indices[0]])
-        else:
-            # Multiple polygons - merge with convex hull
-            all_points = []
-            for idx in indices:
-                all_points.extend(tuple_polygons[idx])
-            merged = convex_hull(all_points)
-            result.append(merged)
 
-    return result
+def _merge_group(
+    tuple_polygons: list[list[tuple[float, float]]], indices: list[int]
+) -> list[tuple[float, float]]:
+    """Keep a lone polygon as-is; merge several into their convex hull."""
+    if len(indices) == 1:
+        return tuple_polygons[indices[0]]
+    all_points = [point for idx in indices for point in tuple_polygons[idx]]
+    return convex_hull(all_points)
 
 
 def get_all_grouping_boundaries(
@@ -534,46 +560,16 @@ def get_all_grouping_boundaries(
     boundaries: dict[str, list[list[tuple[float, float]]]] = {}
 
     for name in grouping_names:
-        # Check if this is a Tower grouping - use circle polygon
-        if name.endswith(" Tower") and unified_airport_data:
-            grouping_data = all_grouping_data.get(name)
-            if grouping_data:
-                airports = grouping_data.get("airports", [])
-                if airports:
-                    # Get coordinates of the first (usually only) airport
-                    airport_code = airports[0]
-                    airport_info = unified_airport_data.get(airport_code, {})
-                    lat = airport_info.get("latitude")
-                    lon = airport_info.get("longitude")
-                    if lat and lon:
-                        circle = generate_circle_polygon(lat, lon, radius_nm=5)
-                        boundaries[name] = [circle]
-                        continue  # Skip to next grouping
+        # A Tower grouping uses a circle polygon
+        circle = _tower_circle(name, all_grouping_data, unified_airport_data)
+        if circle is not None:
+            boundaries[name] = [circle]
+            continue
 
-        # Check for '+' pattern
-        expanded_names = expand_plus_pattern(name, all_grouping_data)
-
-        if len(expanded_names) > 1:
-            # Combined grouping - collect all polygons
-            all_polygons = []
-            for exp_name in expanded_names:
-                grouping_data = all_grouping_data.get(exp_name)
-                polygons = map_grouping_to_boundaries(
-                    exp_name, grouping_data, boundaries_data
-                )
-                all_polygons.extend(polygons)
-
-            if all_polygons:
-                # combine_polygons now returns list of polygons (may be >1 if there are gaps)
-                boundaries[name] = combine_polygons(all_polygons)
-        else:
-            # Single grouping
-            grouping_data = all_grouping_data.get(name)
-            polygons = map_grouping_to_boundaries(name, grouping_data, boundaries_data)
-
-            if polygons:
-                # combine_polygons handles all cases (1 or more input polygons)
-                boundaries[name] = combine_polygons(polygons)
+        polygons = _grouping_polygons(name, all_grouping_data, boundaries_data)
+        if polygons:
+            # combine_polygons returns a list of polygons (may be >1 if there are gaps)
+            boundaries[name] = combine_polygons(polygons)
 
     matched = len(boundaries)
     if matched > 0:
@@ -584,10 +580,56 @@ def get_all_grouping_boundaries(
     return boundaries
 
 
+def _tower_circle(
+    name: str,
+    all_grouping_data: dict[str, dict[str, Any]],
+    unified_airport_data: dict[str, Any] | None,
+) -> list[tuple[float, float]] | None:
+    """Return a 5 nm circle around a Tower grouping's first airport, or None when none can be built."""
+    if not (name.endswith(" Tower") and unified_airport_data):
+        return None
+
+    grouping_data = all_grouping_data.get(name)
+    if not grouping_data:
+        return None
+
+    airports = grouping_data.get("airports", [])
+    if not airports:
+        return None
+
+    # Get coordinates of the first (usually only) airport
+    airport_info = unified_airport_data.get(airports[0], {})
+    lat = airport_info.get("latitude")
+    lon = airport_info.get("longitude")
+    if not (lat and lon):
+        return None
+    return generate_circle_polygon(lat, lon, radius_nm=5)
+
+
+def _grouping_polygons(
+    name: str,
+    all_grouping_data: dict[str, dict[str, Any]],
+    boundaries_data: dict[str, dict[str, Any]],
+) -> list[list[list[float]]]:
+    """Return a grouping's SimAware polygons, collecting every component of a '+' name."""
+    expanded_names = expand_plus_pattern(name, all_grouping_data)
+    if len(expanded_names) == 1:
+        return map_grouping_to_boundaries(
+            name, all_grouping_data.get(name), boundaries_data
+        )
+
+    all_polygons: list[list[list[float]]] = []
+    for exp_name in expanded_names:
+        all_polygons.extend(
+            map_grouping_to_boundaries(
+                exp_name, all_grouping_data.get(exp_name), boundaries_data
+            )
+        )
+    return all_polygons
+
+
 if __name__ == "__main__":
     # Test the boundary loader
-    from pathlib import Path
-
     # Test groupings from preset_groupings with various ARTCCs
     test_groupings = [
         # ZOA (Oakland Center) - tests position prefix mapping
