@@ -13,6 +13,7 @@ import re
 import sys
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
@@ -1208,14 +1209,21 @@ def _write_artcc_briefing(
         logger.debug(f"Generated ARTCC briefing: {output_path}")
 
 
+@dataclass(frozen=True)
+class _BriefingSources:
+    """What a run's briefings are built from: the airport data and the weather snapshot."""
+
+    unified_airport_data: dict[str, Any]
+    disambiguator: Any
+    metars: dict[str, str]
+    tafs: dict[str, str]
+    atis_data: dict[str, Any]
+
+
 def _generate_artcc_wide_briefings(
     config: DaemonConfig,
     groupings_to_process: dict[str, tuple[list[str], str]],
-    metars: dict[str, str],
-    tafs: dict[str, str],
-    atis_data: dict[str, Any],
-    unified_airport_data: dict[str, Any],
-    disambiguator: Any,
+    sources: _BriefingSources,
     generated_files: dict[str, str],
 ) -> None:
     """
@@ -1246,11 +1254,11 @@ def _generate_artcc_wide_briefings(
         generator = WeatherBriefingGenerator(
             grouping_name=grouping_name,
             airports=list(airports),
-            unified_airport_data=unified_airport_data,
-            disambiguator=disambiguator,
+            unified_airport_data=sources.unified_airport_data,
+            disambiguator=sources.disambiguator,
         )
 
-        generator.fetch_weather_data(metars, tafs, atis_data)
+        generator.fetch_weather_data(sources.metars, sources.tafs, sources.atis_data)
 
         # A briefing that raises is logged with its traceback and skipped, so the
         # remaining ARTCC briefings, the index and the tiles still run.
@@ -1837,11 +1845,13 @@ def _run_briefing_stage(
         _generate_artcc_wide_briefings(
             config=config,
             groupings_to_process=groupings_to_process,
-            metars=metars,
-            tafs=tafs,
-            atis_data=atis_data,
-            unified_airport_data=unified_airport_data,
-            disambiguator=disambiguator,
+            sources=_BriefingSources(
+                unified_airport_data=unified_airport_data,
+                disambiguator=disambiguator,
+                metars=metars,
+                tafs=tafs,
+                atis_data=atis_data,
+            ),
             generated_files=generated_files,
         )
 
@@ -2080,31 +2090,6 @@ def generate(config: DaemonConfig) -> dict[str, str]:
 def generate_all_briefings(config: DaemonConfig) -> dict[str, str]:
     """Legacy alias for generate(). Use generate() instead."""
     return generate(config)
-
-
-def generate_index_only(config: DaemonConfig) -> dict[str, str]:
-    """Legacy: Generate only the index page. Use generate() with config.generate_index=True instead."""
-    config.fetch_fresh_weather = False
-    config.generate_briefings = False
-    config.generate_tiles = False
-    config.generate_index = True
-    return generate(config)
-
-
-def generate_with_cached_weather(config: DaemonConfig) -> dict[str, str]:
-    """Legacy: Use cached weather. Use generate() with config.fetch_fresh_weather=False instead."""
-    config.fetch_fresh_weather = False
-    return generate(config)
-
-
-# Delete old implementations - keeping only legacy wrappers above
-_REMOVED_OLD_IMPLEMENTATIONS = """
-The following functions have been consolidated into generate():
-- generate_index_only()
-- generate_with_cached_weather()
-
-Use generate() with appropriate config flags instead.
-"""
 
 
 if __name__ == "__main__":
