@@ -32,6 +32,55 @@ _WHITESPACE = " \t\r\n"
 _TOKEN_BREAKS = " \t\r\n{};\"'#"
 
 
+def _skip_comment(text: str, index: int, end: int) -> int:
+    """Return the index just past the comment that starts at ``index``."""
+    newline = text.find("\n", index)
+    return end if newline == -1 else newline + 1
+
+
+def _scan_string(text: str, index: int, end: int) -> tuple[tuple[str, int, int], int]:
+    """Return the string token opening at ``index`` and the index after it."""
+    quote = text[index]
+    cursor = index + 1
+    while cursor < end:
+        if text[cursor] == "\\":
+            cursor += 2
+        elif text[cursor] == quote:
+            cursor += 1
+            break
+        else:
+            cursor += 1
+    stop = min(cursor, end)
+    return ("string", index, stop), stop
+
+
+def _scan_word(text: str, index: int, end: int) -> tuple[tuple[str, int, int], int]:
+    """Return the word token starting at ``index`` and the index after it."""
+    cursor = index
+    while cursor < end and text[cursor] not in _TOKEN_BREAKS:
+        cursor += 1
+    return ("word", index, cursor), cursor
+
+
+def _scan_one(
+    text: str, index: int, end: int
+) -> tuple[tuple[str, int, int] | None, int]:
+    """Return the token at ``index`` and the next index, or None when it is skipped.
+
+    Whitespace is stepped over and a ``#`` runs to the end of its line.
+    """
+    char = text[index]
+    if char in _WHITESPACE:
+        return None, index + 1
+    if char == "#":
+        return None, _skip_comment(text, index, end)
+    if char in "\"'":
+        return _scan_string(text, index, end)
+    if char in "{};":
+        return (char, index, index + 1), index + 1
+    return _scan_word(text, index, end)
+
+
 def _scan(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
     """Tokenize ``text[start:end]`` into ``(kind, start, end)`` tuples.
 
@@ -42,34 +91,47 @@ def _scan(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
     tokens: list[tuple[str, int, int]] = []
     index = start
     while index < end:
-        char = text[index]
-        if char in _WHITESPACE:
-            index += 1
-        elif char == "#":
-            newline = text.find("\n", index)
-            index = end if newline == -1 else newline + 1
-        elif char in "\"'":
-            cursor = index + 1
-            while cursor < end:
-                if text[cursor] == "\\":
-                    cursor += 2
-                    continue
-                if text[cursor] == char:
-                    cursor += 1
-                    break
-                cursor += 1
-            tokens.append(("string", index, min(cursor, end)))
-            index = min(cursor, end)
-        elif char in "{};":
-            tokens.append((char, index, index + 1))
-            index += 1
-        else:
-            cursor = index
-            while cursor < end and text[cursor] not in _TOKEN_BREAKS:
-                cursor += 1
-            tokens.append(("word", index, cursor))
-            index = cursor
+        token, index = _scan_one(text, index, end)
+        if token is not None:
+            tokens.append(token)
     return tokens
+
+
+def _is_server_block_start(
+    text: str, tokens: list[tuple[str, int, int]], index: int, depth: int
+) -> bool:
+    """Return True when ``tokens[index]`` opens a top-level ``server`` block."""
+    if depth != 0:
+        return False
+    kind, start, end = tokens[index]
+    if kind != "word" or text[start:end] != "server":
+        return False
+    return index + 1 < len(tokens) and tokens[index + 1][0] == "{"
+
+
+def _server_block_span(
+    tokens: list[tuple[str, int, int]], index: int
+) -> tuple[tuple[int, int, int, int], int] | None:
+    """Return the ``server`` block opening after ``index`` and the next token index.
+
+    ``tokens[index + 1]`` must be that block's opening ``{``, which the caller
+    has already checked with ``_is_server_block_start``.  The block is
+    ``(block_start, body_start, body_end, block_end)``; None means its closing
+    ``}`` never arrived.
+    """
+    nxt = tokens[index + 1]
+    inner = 0
+    cursor = index + 1
+    while cursor < len(tokens):
+        kind, start, end = tokens[cursor]
+        if kind == "{":
+            inner += 1
+        elif kind == "}":
+            inner -= 1
+            if inner == 0:
+                return (tokens[index][1], nxt[2], start, end), cursor + 1
+        cursor += 1
+    return None
 
 
 def _find_server_blocks(
@@ -80,34 +142,67 @@ def _find_server_blocks(
     depth = 0
     index = 0
     while index < len(tokens):
-        kind, token_start, token_end = tokens[index]
+        kind = tokens[index][0]
         if kind == "{":
             depth += 1
         elif kind == "}":
             depth -= 1
-        elif kind == "word" and depth == 0 and text[token_start:token_end] == "server":
-            nxt = tokens[index + 1] if index + 1 < len(tokens) else None
-            if nxt is not None and nxt[0] == "{":
-                inner = 0
-                cursor = index + 1
-                body_end = None
-                while cursor < len(tokens):
-                    inner_kind, inner_start, inner_end = tokens[cursor]
-                    if inner_kind == "{":
-                        inner += 1
-                    elif inner_kind == "}":
-                        inner -= 1
-                        if inner == 0:
-                            body_end = inner_start
-                            blocks.append((token_start, nxt[2], body_end, inner_end))
-                            break
-                    cursor += 1
-                if body_end is None:
-                    break
-                index = cursor + 1
-                continue
+        elif _is_server_block_start(text, tokens, index, depth):
+            found = _server_block_span(tokens, index)
+            if found is None:
+                break
+            block, index = found
+            blocks.append(block)
+            continue
         index += 1
     return blocks
+
+
+def _find_terminator(
+    inner: list[tuple[str, int, int]], index: int
+) -> tuple[str, int, int, int] | None:
+    """Return ``(kind, term_start, statement_end, next_index)`` for the statement at ``index``.
+
+    ``kind`` is ``simple`` for a statement ended by ``;`` or ``block`` for one
+    whose ``{`` is closed before any ``;``; None when neither arrives.
+    """
+    block_start = None
+    inner_depth = 0
+    cursor = index + 1
+    while cursor < len(inner):
+        kind, token_start, token_end = inner[cursor]
+        if kind == "{":
+            if inner_depth == 0:
+                block_start = token_start
+            inner_depth += 1
+        elif kind == "}":
+            inner_depth -= 1
+            if inner_depth == 0 and block_start is not None:
+                return "block", block_start, token_end, cursor + 1
+        elif kind == ";" and inner_depth == 0:
+            return "simple", token_start, token_start + 1, cursor + 1
+        cursor += 1
+    return None
+
+
+def _statement_at(
+    text: str, inner: list[tuple[str, int, int]], index: int
+) -> tuple[dict[str, object], int] | None:
+    """Return the statement starting at ``index`` and the index after it, or None."""
+    terminator = _find_terminator(inner, index)
+    if terminator is None:
+        return None
+    kind, term_start, statement_end, cursor = terminator
+    return (
+        {
+            "kind": kind,
+            "name": text[inner[index][1] : inner[index][2]],
+            "start": inner[index][1],
+            "end": statement_end,
+            "args": text[inner[index][2] : term_start],
+        },
+        cursor,
+    )
 
 
 def _statements(
@@ -124,48 +219,17 @@ def _statements(
     depth = 0
     index = 0
     while index < len(inner):
-        kind, token_start, token_end = inner[index]
+        kind = inner[index][0]
         if kind == "{":
             depth += 1
         elif kind == "}":
             depth -= 1
         elif kind == "word" and depth == 0:
-            name = text[token_start:token_end]
-            cursor = index + 1
-            inner_depth = 0
-            statement_kind = None
-            term_start = None
-            statement_end = None
-            while cursor < len(inner):
-                inner_kind, inner_start, inner_end = inner[cursor]
-                if inner_kind == "{":
-                    if inner_depth == 0:
-                        statement_kind = "block"
-                        term_start = inner_start
-                    inner_depth += 1
-                elif inner_kind == "}":
-                    inner_depth -= 1
-                    if inner_depth == 0 and statement_kind == "block":
-                        statement_end = inner_end
-                        break
-                elif inner_kind == ";" and inner_depth == 0:
-                    statement_kind = "simple"
-                    term_start = inner_start
-                    statement_end = inner_start + 1
-                    break
-                cursor += 1
-            if statement_end is None:
+            found = _statement_at(text, inner, index)
+            if found is None:
                 break
-            statements.append(
-                {
-                    "kind": statement_kind,
-                    "name": name,
-                    "start": token_start,
-                    "end": statement_end,
-                    "args": text[token_end:term_start],
-                }
-            )
-            index = cursor + 1
+            statement, index = found
+            statements.append(statement)
             continue
         index += 1
     return statements
@@ -219,58 +283,40 @@ def _line_ending(text: str) -> str:
     return "\r\n" if "\r\n" in text else "\n"
 
 
-def ensure_weather_include(text: str) -> str:
-    """Return ``text`` with the weather snippet included by the leftos.dev TLS block.
+def _is_weather_location(statement: dict[str, object]) -> bool:
+    """Return True for a legacy ``location`` block serving the weather site."""
+    return (
+        statement["kind"] == "block"
+        and statement["name"] == "location"
+        and _normalize(statement["args"]) in _WEATHER_LOCATIONS
+    )
 
-    Exactly one top-level ``server`` block must have a ``server_name``
-    containing the token ``leftos.dev`` and a ``listen`` on 443; anything else
-    raises ``ValueError``.  The legacy inline weather locations in that block
-    are removed, and a single ``include snippets/weather.conf;`` line takes the
-    place of the first one.  The function is idempotent and preserves the
-    file's line endings and trailing newline.
-    """
-    tokens = _scan(text, 0, len(text))
-    blocks = _find_server_blocks(text, tokens)
 
-    matches = []
-    for block in blocks:
-        statements = _statements(text, tokens, block[1], block[2])
-        has_host = any(
-            _HOST_TOKEN in _normalize(statement["args"]).split()
-            for statement in statements
-            if statement["name"] == "server_name"
-        )
-        has_tls = any(
-            _TLS_PORT in _normalize(statement["args"])
-            for statement in statements
-            if statement["name"] == "listen"
-        )
-        if has_host and has_tls:
-            matches.append((block, statements))
+def _is_root_location(statement: dict[str, object]) -> bool:
+    """Return True for the site's ``location /`` block."""
+    return (
+        statement["kind"] == "block"
+        and statement["name"] == "location"
+        and _normalize(statement["args"]) == "/"
+    )
 
-    described = _describe_blocks(text, tokens, blocks)
-    if len(matches) != 1:
-        raise ValueError(
-            "expected exactly one server block with a server_name containing "
-            f"'{_HOST_TOKEN}' and a listen on {_TLS_PORT}, found {len(matches)} "
-            f"(of {len(blocks)} server blocks: {described or 'none'})"
-        )
 
-    (_block, statements) = matches[0]
-    body_end = matches[0][0][2]
-
-    removals = []
+def _weather_removals(
+    text: str, statements: list[dict[str, object]]
+) -> list[tuple[int, int]]:
+    """Return the ``(start, end)`` spans of the legacy weather location blocks."""
+    removals: list[tuple[int, int]] = []
     for statement in statements:
-        if (
-            statement["kind"] == "block"
-            and statement["name"] == "location"
-            and _normalize(statement["args"]) in _WEATHER_LOCATIONS
-        ):
+        if _is_weather_location(statement):
             start = _line_start(text, int(statement["start"]))
             removals.append((start, _line_end(text, int(statement["end"]))))
     removals.sort()
+    return removals
 
-    has_include = any(
+
+def _has_include(statements: list[dict[str, object]]) -> bool:
+    """Return True when the block already includes the weather snippet."""
+    return any(
         statement["kind"] == "simple"
         and statement["name"] == "include"
         # An absolute path to the same snippet counts as the include existing
@@ -278,26 +324,65 @@ def ensure_weather_include(text: str) -> str:
         for statement in statements
     )
 
-    insert_at = None
-    if not has_include:
-        if removals:
-            insert_at = removals[0][0]
-        else:
-            root = next(
-                (
-                    statement
-                    for statement in statements
-                    if statement["kind"] == "block"
-                    and statement["name"] == "location"
-                    and _normalize(statement["args"]) == "/"
-                ),
-                None,
-            )
-            anchor = int(root["start"]) if root is not None else body_end
-            insert_at = _line_start(text, anchor)
 
-    include = INCLUDE_INDENT + INCLUDE_LINE + _line_ending(text)
+def _include_anchor(statements: list[dict[str, object]], body_end: int) -> int:
+    """Return the offset of the ``location /`` block, or the end of the body."""
+    for statement in statements:
+        if _is_root_location(statement):
+            return int(statement["start"])
+    return body_end
 
+
+def _include_position(
+    text: str,
+    statements: list[dict[str, object]],
+    removals: list[tuple[int, int]],
+    body_end: int,
+) -> int | None:
+    """Return where the include line goes, or None when the block already has it."""
+    if _has_include(statements):
+        return None
+    if removals:
+        return removals[0][0]
+    return _line_start(text, _include_anchor(statements, body_end))
+
+
+def _block_has_host(statements: list[dict[str, object]]) -> bool:
+    """Return True when the block's ``server_name`` names the site host."""
+    return any(
+        _HOST_TOKEN in _normalize(statement["args"]).split()
+        for statement in statements
+        if statement["name"] == "server_name"
+    )
+
+
+def _block_has_tls(statements: list[dict[str, object]]) -> bool:
+    """Return True when the block listens on the TLS port."""
+    return any(
+        _TLS_PORT in _normalize(statement["args"])
+        for statement in statements
+        if statement["name"] == "listen"
+    )
+
+
+def _matching_blocks(
+    text: str,
+    tokens: list[tuple[str, int, int]],
+    blocks: list[tuple[int, int, int, int]],
+) -> list[tuple[tuple[int, int, int, int], list[dict[str, object]]]]:
+    """Return the blocks serving the host over TLS, with their statements."""
+    matches = []
+    for block in blocks:
+        statements = _statements(text, tokens, block[1], block[2])
+        if _block_has_host(statements) and _block_has_tls(statements):
+            matches.append((block, statements))
+    return matches
+
+
+def _splice(
+    text: str, removals: list[tuple[int, int]], insert_at: int | None, include: str
+) -> str:
+    """Return ``text`` with every removal span dropped and ``include`` placed once."""
     pieces = []
     position = 0
     for start, end in removals:
@@ -314,6 +399,35 @@ def ensure_weather_include(text: str) -> str:
         position = insert_at
     pieces.append(text[position:])
     return "".join(pieces)
+
+
+def ensure_weather_include(text: str) -> str:
+    """Return ``text`` with the weather snippet included by the leftos.dev TLS block.
+
+    Exactly one top-level ``server`` block must have a ``server_name``
+    containing the token ``leftos.dev`` and a ``listen`` on 443; anything else
+    raises ``ValueError``.  The legacy inline weather locations in that block
+    are removed, and a single ``include snippets/weather.conf;`` line takes the
+    place of the first one.  The function is idempotent and preserves the
+    file's line endings and trailing newline.
+    """
+    tokens = _scan(text, 0, len(text))
+    blocks = _find_server_blocks(text, tokens)
+    matches = _matching_blocks(text, tokens, blocks)
+
+    if len(matches) != 1:
+        described = _describe_blocks(text, tokens, blocks)
+        raise ValueError(
+            "expected exactly one server block with a server_name containing "
+            f"'{_HOST_TOKEN}' and a listen on {_TLS_PORT}, found {len(matches)} "
+            f"(of {len(blocks)} server blocks: {described or 'none'})"
+        )
+
+    block, statements = matches[0]
+    removals = _weather_removals(text, statements)
+    insert_at = _include_position(text, statements, removals, block[2])
+    include = INCLUDE_INDENT + INCLUDE_LINE + _line_ending(text)
+    return _splice(text, removals, insert_at, include)
 
 
 def _read_file(path: str) -> str:

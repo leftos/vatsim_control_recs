@@ -298,6 +298,389 @@ def test_crlf_and_trailing_newline_are_preserved():
     assert nginx_include.ensure_weather_include(SITE_ENABLED_TEXT).endswith("\n")
 
 
+# Characterization of the private scanner, block finder and statement parser.
+# Each test pins their current output over an input the public-path tests above
+# never reach, so splitting them into helpers cannot change behaviour.
+
+
+def _scan_all(text: str) -> list[tuple[str, int, int]]:
+    return nginx_include._scan(text, 0, len(text))
+
+
+def _tokens(text: str) -> list[tuple[str, str]]:
+    """Return ``(kind, text)`` for every token ``_scan`` finds in ``text``."""
+    return [(kind, text[start:end]) for kind, start, end in _scan_all(text)]
+
+
+def _server_blocks(text: str) -> list[tuple[int, int, int, int]]:
+    return nginx_include._find_server_blocks(text, _scan_all(text))
+
+
+def _statements_of(
+    text: str, start: int = 0, end: int | None = None
+) -> list[dict[str, object]]:
+    return nginx_include._statements(
+        text, _scan_all(text), start, len(text) if end is None else end
+    )
+
+
+def test_scan_skips_a_comment_holding_braces_and_semicolons():
+    assert _tokens("# { } ;\nword") == [("word", "word")]
+
+
+def test_scan_skips_an_unterminated_comment_to_the_end_of_the_text():
+    assert _tokens("word # { }") == [("word", "word")]
+
+
+def test_scan_reads_braces_inside_a_double_quoted_string():
+    text = 'a "x { } ;" b'
+
+    assert _tokens(text) == [("word", "a"), ("string", '"x { } ;"'), ("word", "b")]
+
+
+def test_scan_reads_braces_inside_a_single_quoted_string():
+    text = "a 'x { } ;' b"
+
+    assert _tokens(text) == [("word", "a"), ("string", "'x { } ;'"), ("word", "b")]
+
+
+def test_scan_keeps_a_comment_marker_inside_a_string():
+    text = 'a "#" b'
+
+    assert _tokens(text) == [("word", "a"), ("string", '"#"'), ("word", "b")]
+
+
+def test_scan_handles_escaped_quotes_and_backslashes_inside_a_string():
+    text = 'a "x \\" { }" b'
+
+    assert _tokens(text) == [("word", "a"), ("string", '"x \\" { }"'), ("word", "b")]
+
+
+def test_scan_reads_an_unterminated_double_quoted_string_to_the_end():
+    text = 'a "unterminated {'
+
+    assert _tokens(text) == [("word", "a"), ("string", '"unterminated {')]
+
+
+def test_scan_reads_an_unterminated_single_quoted_string_to_the_end():
+    text = "a 'unterminated }"
+
+    assert _tokens(text) == [("word", "a"), ("string", "'unterminated }")]
+
+
+def test_scan_stops_at_a_trailing_backslash_inside_a_string():
+    text = 'a "\\'
+
+    assert _tokens(text) == [("word", "a"), ("string", '"\\')]
+
+
+def test_scan_treats_tabs_and_carriage_returns_as_whitespace():
+    text = "a\t{\r\n}\tb"
+
+    assert _tokens(text) == [
+        ("word", "a"),
+        ("{", "{"),
+        ("}", "}"),
+        ("word", "b"),
+    ]
+
+
+def test_scan_breaks_words_at_braces_and_semicolons():
+    text = "a;b{c}"
+
+    assert _tokens(text) == [
+        ("word", "a"),
+        (";", ";"),
+        ("word", "b"),
+        ("{", "{"),
+        ("word", "c"),
+        ("}", "}"),
+    ]
+
+
+def test_scan_ends_a_word_at_a_hash_that_opens_a_comment():
+    assert _tokens("a#b") == [("word", "a")]
+
+
+def test_scan_ends_a_word_at_a_quote():
+    assert _tokens("a'b'") == [("word", "a"), ("string", "'b'")]
+
+
+def test_scan_starts_from_the_given_offset():
+    text = "skip me a;b"
+
+    found = nginx_include._scan(text, 8, len(text))
+
+    assert [(kind, text[start:end]) for kind, start, end in found] == [
+        ("word", "a"),
+        (";", ";"),
+        ("word", "b"),
+    ]
+
+
+def test_find_server_blocks_steps_over_nested_blocks():
+    text = "server {\n location / {\n  if ($x) { return 1; }\n }\n}\n"
+
+    blocks = _server_blocks(text)
+
+    assert len(blocks) == 1
+    start, body_start, body_end, block_end = blocks[0]
+    assert text[start:block_end] == (
+        "server {\n location / {\n  if ($x) { return 1; }\n }\n}"
+    )
+    assert body_start == text.index("{") + 1
+    assert text[body_end:block_end] == "}"
+
+
+def test_find_server_blocks_stops_at_an_unterminated_block():
+    assert _server_blocks("server {\n location / {\n}\n") == []
+
+
+def test_find_server_blocks_ignores_braces_in_comments_and_strings():
+    text = 'server {\n    # }\n    add_header X "{ }" always;\n}\n'
+
+    blocks = _server_blocks(text)
+
+    assert len(blocks) == 1
+    assert text[blocks[0][2] : blocks[0][3]] == "}"
+
+
+def test_find_server_blocks_ignores_a_server_word_without_a_block():
+    assert _server_blocks("server name;\n") == []
+
+
+def test_find_server_blocks_ignores_a_trailing_server_word():
+    assert _server_blocks("server") == []
+
+
+def test_find_server_blocks_finds_a_block_after_a_bare_server_word():
+    text = "server name;\nserver {\n}\n"
+
+    blocks = _server_blocks(text)
+
+    assert len(blocks) == 1
+    assert text[blocks[0][0] : blocks[0][3]] == "server {\n}"
+
+
+def test_find_server_blocks_ignores_a_stray_closing_brace():
+    assert _server_blocks("}\nserver {\n}\n") == []
+
+
+def test_statements_separate_simple_from_block_statements():
+    text = "server_name leftos.dev;\nlocation /weather/ {\n    alias /x/;\n}\n"
+
+    statements = _statements_of(text)
+
+    assert [(s["kind"], s["name"], s["args"]) for s in statements] == [
+        ("simple", "server_name", " leftos.dev"),
+        ("block", "location", " /weather/ "),
+    ]
+    assert text[statements[0]["start"] : statements[0]["end"]] == (
+        "server_name leftos.dev;"
+    )
+    assert text[statements[1]["start"] : statements[1]["end"]] == (
+        "location /weather/ {\n    alias /x/;\n}"
+    )
+
+
+def test_statements_step_over_a_nested_block():
+    text = "location /w/ {\n    if ($x) {\n        return 1;\n    }\n}\n"
+
+    statements = _statements_of(text)
+
+    assert len(statements) == 1
+    assert statements[0]["name"] == "location"
+    assert text[statements[0]["start"] : statements[0]["end"]] == (
+        "location /w/ {\n    if ($x) {\n        return 1;\n    }\n}"
+    )
+
+
+def test_statements_skip_a_word_inside_a_stray_block():
+    assert _statements_of("{ inner; }\n") == []
+
+
+def test_statements_stop_at_an_unterminated_simple_statement():
+    assert _statements_of("server_name leftos.dev\n") == []
+
+
+def test_statements_stop_at_an_unterminated_block_statement():
+    assert _statements_of("location /w/ {\n    alias /x/;\n") == []
+
+
+def test_statements_stop_when_a_block_statement_never_opens():
+    assert _statements_of("server }\n") == []
+
+
+def test_statements_are_limited_to_the_given_range():
+    text = "listen 80;\nlisten 443 ssl;\n"
+    start = text.index("listen 443")
+
+    statements = _statements_of(text, start, len(text))
+
+    assert [(s["name"], s["args"]) for s in statements] == [("listen", " 443 ssl")]
+
+
+def test_statements_of_an_empty_range_are_empty():
+    assert _statements_of("listen 80;\n", 0, 0) == []
+
+
+def test_legacy_blocks_in_the_other_order_leave_one_include_at_the_first():
+    text = TLS_TOP + TLS_LEGACY_ASSETS + TLS_LEGACY_WEATHER + TLS_TAIL
+
+    result = nginx_include.ensure_weather_include(text)
+
+    assert result.count("include snippets/weather.conf;") == 1
+    lines = result.splitlines()
+    index = next(
+        n for n, line in enumerate(lines) if "include snippets/weather.conf;" in line
+    )
+    assert lines[index] == INCLUDE_LINE
+    assert lines[index - 1].strip() == (
+        "# Vendored map assets - the path carries the version, so cache forever."
+    )
+    assert "location /weather/" not in result
+    assert "location ^~ /weather/assets/" not in result
+    assert result.count("# Weather briefings - NO CACHING") == 1
+
+
+def test_two_existing_includes_are_left_exactly_as_they_are():
+    text = TLS_TOP + INCLUDE_LINE + "\n" + INCLUDE_LINE + "\n" + TLS_TAIL
+
+    result = nginx_include.ensure_weather_include(text)
+
+    assert result == text
+    assert result.count("include snippets/weather.conf;") == 2
+
+
+def test_include_goes_at_the_end_of_a_block_with_no_location_anchor():
+    text = "server {\n    listen 443 ssl;\n    server_name leftos.dev;\n}\n"
+
+    assert nginx_include.ensure_weather_include(text) == (
+        "server {\n"
+        "    listen 443 ssl;\n"
+        "    server_name leftos.dev;\n"
+        "    include snippets/weather.conf;\n"
+        "}\n"
+    )
+
+
+def test_braces_in_a_comment_and_a_string_do_not_end_the_block_early():
+    text = (
+        "server {\n"
+        "    listen 443 ssl;\n"
+        "    server_name leftos.dev;\n"
+        '    add_header X-Note "{ not a block }" always;\n'
+        "    # a comment with { and } and ;\n"
+        "}\n"
+    )
+
+    assert nginx_include.ensure_weather_include(text) == (
+        "server {\n"
+        "    listen 443 ssl;\n"
+        "    server_name leftos.dev;\n"
+        '    add_header X-Note "{ not a block }" always;\n'
+        "    # a comment with { and } and ;\n"
+        "    include snippets/weather.conf;\n"
+        "}\n"
+    )
+
+
+def test_tab_indentation_and_a_trailing_space_leave_with_the_legacy_block():
+    text = (
+        "server {\n"
+        "\tlisten 443 ssl;\n"
+        "\tserver_name leftos.dev;\n"
+        "\tlocation /weather/ {\n"
+        "\t\talias /var/www/leftos.dev/weather/;\n"
+        "\t}\t \n"
+        "\tlocation / {\n"
+        "\t\ttry_files $uri $uri/ =404;\n"
+        "\t}\n"
+        "}\n"
+    )
+
+    assert nginx_include.ensure_weather_include(text) == (
+        "server {\n"
+        "\tlisten 443 ssl;\n"
+        "\tserver_name leftos.dev;\n"
+        "    include snippets/weather.conf;\n"
+        "\tlocation / {\n"
+        "\t\ttry_files $uri $uri/ =404;\n"
+        "\t}\n"
+        "}\n"
+    )
+
+
+def test_only_the_leftos_tls_block_among_several_is_edited():
+    text = (
+        PROJECTS_TLS
+        + "\n"
+        + PROJECTS_PORT_80
+        + "\n"
+        + TLS_BLOCK
+        + "\n"
+        + LEFTOS_PORT_80
+    )
+
+    result = nginx_include.ensure_weather_include(text)
+
+    assert result.count("include snippets/weather.conf;") == 1
+    for block in (PROJECTS_TLS, PROJECTS_PORT_80, LEFTOS_PORT_80):
+        assert result.count(block) == 1
+    assert "location /weather/" not in result
+
+
+def test_error_message_names_a_block_with_neither_name_nor_listen():
+    with pytest.raises(ValueError) as excinfo:
+        nginx_include.ensure_weather_include("server {\n}\n")
+
+    message = str(excinfo.value)
+    assert "found 0" in message
+    assert "of 1 server blocks" in message
+    assert "server_name[none] listen[none]" in message
+
+
+def test_an_absolute_include_drops_the_legacy_blocks_without_adding_a_line():
+    text = (
+        TLS_TOP
+        + "    include /etc/nginx/snippets/weather.conf;\n"
+        + TLS_LEGACY_WEATHER
+        + TLS_LEGACY_ASSETS
+        + TLS_TAIL
+    )
+
+    result = nginx_include.ensure_weather_include(text)
+
+    assert result.count("snippets/weather.conf") == 1
+    assert "include snippets/weather.conf;" not in result
+    assert "location /weather/" not in result
+    assert "location ^~ /weather/assets/" not in result
+
+
+def test_a_file_without_a_trailing_newline_stays_without_one():
+    text = "server {\n    listen 443 ssl;\n    server_name leftos.dev;\n}"
+
+    result = nginx_include.ensure_weather_include(text)
+
+    assert result == (
+        "server {\n"
+        "    listen 443 ssl;\n"
+        "    server_name leftos.dev;\n"
+        "    include snippets/weather.conf;\n"
+        "}"
+    )
+    assert not result.endswith("\n")
+
+
+def test_crlf_line_endings_without_a_legacy_block_keep_the_include_crlf():
+    text = TLS_BLOCK_WITHOUT_LEGACY.replace("\n", "\r\n")
+
+    result = nginx_include.ensure_weather_include(text)
+
+    assert INCLUDE_LINE + "\r\n" in result
+    assert "\n" not in result.replace("\r\n", "")
+
+
 def test_cli_rewrites_changed_files_only(tmp_path: Path):
     changed = tmp_path / "enabled.conf"
     changed.write_text(SITE_ENABLED_TEXT, encoding="utf-8", newline="")
