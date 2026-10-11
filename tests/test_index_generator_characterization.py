@@ -1,17 +1,15 @@
 """Characterization of the weather index page builders.
 
-Pins the current output of ``build_airport_markers``, ``generate_weather_regions``,
-``build_sidebar_html`` and ``generate_html`` over inputs that reach each of their
-branches. The marker lists are asserted exactly; the HTML and the region grids are
-pinned by the sha256 of their output plus a few anchor substrings that say what a
-changed hash broke.
+Pins the current output of ``build_airport_markers``, ``build_sidebar_html`` and
+``generate_html`` over inputs that reach each of their branches. The marker lists are
+asserted exactly; the HTML is pinned by the sha256 of its output plus a few anchor
+substrings that say what a changed hash broke.
 
 The SimAware boundary lookup is the only boundary ``generate_html`` crosses (it reads
 the boundary cache and may download); it is faked and its calls are recorded.
 """
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +20,6 @@ from scripts.weather_daemon.index_generator import (
     build_airport_markers,
     build_sidebar_html,
     generate_html,
-    generate_weather_regions,
 )
 
 
@@ -204,79 +201,6 @@ def test_markers_lifr_point_gets_magenta() -> None:
     assert build_airport_markers(groupings, UNIFIED) == [
         _marker("KBUR", "Burbank", 34.2, -118.36, "LIFR", "#ff00ff", "major"),
     ]
-
-
-# generate_weather_regions
-
-SQUARE = [(0.0, 0.0), (0.0, 2.0), (2.0, 2.0), (2.0, 0.0)]
-TRIANGLE = [(0.0, 0.0), (0.0, 2.0), (2.0, 0.0)]
-REGION_AIRPORTS = [
-    {"icao": "KAAA", "lat": 0.25, "lon": 0.25, "category": "VFR"},
-    {"icao": "KBBB", "lat": 1.75, "lon": 1.75},
-]
-
-
-@pytest.mark.parametrize(
-    ("boundary", "airports"),
-    [([], REGION_AIRPORTS), (SQUARE, []), ([], [])],
-    ids=["no-boundary", "no-airports", "neither"],
-)
-def test_regions_need_a_boundary_and_airports(
-    boundary: list[tuple[float, float]], airports: list[dict]
-) -> None:
-    assert generate_weather_regions(boundary, airports) == []
-
-
-def test_regions_skip_cells_far_from_every_airport() -> None:
-    far = [{"icao": "KFAR", "lat": 10.0, "lon": 10.0, "category": "IFR"}]
-    assert generate_weather_regions(SQUARE, far, grid_resolution=0.5) == []
-
-
-def test_regions_assign_cells_to_the_nearest_airport() -> None:
-    regions = generate_weather_regions(SQUARE, REGION_AIRPORTS, grid_resolution=0.5)
-    assert len(regions) == 8
-    assert [r["category"] for r in regions] == [
-        "VFR",
-        "VFR",
-        "VFR",
-        "VFR",
-        "UNK",
-        "UNK",
-        "UNK",
-        "UNK",
-    ]
-    assert regions[0] == {
-        "coords": [[0.0, 0.0], [0.5, 0.0], [0.5, 0.5], [0.0, 0.5], [0.0, 0.0]],
-        "category": "VFR",
-    }
-    assert _sha256(json.dumps(regions)) == REGION_HASHES["square"]
-
-
-def test_regions_skip_cells_outside_the_boundary() -> None:
-    regions = generate_weather_regions(TRIANGLE, REGION_AIRPORTS, grid_resolution=0.5)
-    assert _sha256(json.dumps(regions)) == REGION_HASHES["triangle"]
-
-
-def test_regions_default_grid_resolution() -> None:
-    regions = generate_weather_regions(SQUARE, REGION_AIRPORTS)
-    assert _sha256(json.dumps(regions)) == REGION_HASHES["default-grid"]
-
-
-def test_regions_tie_goes_to_the_first_airport() -> None:
-    tied = [
-        {"icao": "KAAA", "lat": 1.0, "lon": 1.0, "category": "VFR"},
-        {"icao": "KCCC", "lat": 1.0, "lon": 1.0, "category": "IFR"},
-    ]
-    regions = generate_weather_regions(SQUARE, tied, grid_resolution=0.5)
-    assert len(regions) == 4
-    assert {r["category"] for r in regions} == {"VFR"}
-
-
-REGION_HASHES = {
-    "square": "c223a950328da893c97e23e4524b0638c03e39a623a16cdee8a5d8795072b71a",
-    "triangle": "a95ae4a8de43bd4ddcef9caa0fd52b7ed76242ee40048852858c29186788b453",
-    "default-grid": "5be4889c7191d161626f57eee72b4fabb1352785ea04ba9bfd4091d1c69c92d3",
-}
 
 
 # build_sidebar_html
@@ -581,7 +505,6 @@ def test_html_without_simaware_cache_falls_back_to_hulls(
         HTML_STATS,
         "2026-01-01 00:00:00Z",
         unified_airport_data=None,
-        use_tile_layer=False,
         basemap_url="https://example.test/basemap.png",
     )
     assert simaware.calls == []
