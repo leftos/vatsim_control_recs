@@ -495,6 +495,27 @@ def format_runway_summary(assignments: dict[str, set[str]]) -> str:
     return " ".join(parts)
 
 
+# Square brackets the controller typed stand in as Unicode noncharacters (which
+# Unicode reserves for internal use) while the highlights go in, so the tag
+# handling below never mistakes them for markup. Like a bracket, each is a
+# non-word character, so every pattern matches as it would on the brackets.
+_OPEN_BRACKET_STAND_IN = "\ufdd0"
+_CLOSE_BRACKET_STAND_IN = "\ufdd1"
+_BRACKET_STAND_INS = str.maketrans(
+    {"[": _OPEN_BRACKET_STAND_IN, "]": _CLOSE_BRACKET_STAND_IN}
+)
+_BRACKETS_FROM_STAND_INS = str.maketrans(
+    {_OPEN_BRACKET_STAND_IN: "[", _CLOSE_BRACKET_STAND_IN: "]"}
+)
+# Rich's tag syntax (rich.markup.RE_TAGS) over the stand-ins: the backslashes
+# before an opening bracket that a lowercase letter, '#', '/' or '@' follows,
+# and that a closing bracket ends before any other opening bracket.
+_TAG_LIKE_STAND_IN = re.compile(
+    rf"(\\*){_OPEN_BRACKET_STAND_IN}"
+    rf"(?=[a-z#/@][^\[{_OPEN_BRACKET_STAND_IN}]*?{_CLOSE_BRACKET_STAND_IN})"
+)
+
+
 def colorize_atis_text(text: str, atis_code: str = "") -> str:
     """
     Colorize ATIS text with highlighted approach types, runways, and ATIS letter.
@@ -504,9 +525,10 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
         atis_code: ATIS letter (e.g., "K", "L")
 
     Returns:
-        Rich markup string with colorized elements
+        Rich markup string with colorized elements, in which every character of
+        ``text`` (square brackets and backslashes included) renders literally
     """
-    result = text
+    result = text.translate(_BRACKET_STAND_INS)
 
     # Colorize ATIS letter references (e.g., "INFORMATION KILO", "INFO K", "ATIS K")
     if atis_code:
@@ -758,4 +780,24 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
     # controller typed anywhere else is left untouched.
     result = re.sub(r"(\\+)(?=\[/?(?:yellow|cyan bold)\])", r"\1\1", result)
 
-    return result
+    return _restore_controller_brackets(result)
+
+
+def _escape_tag_like_bracket(match: re.Match[str]) -> str:
+    """Escape a stand-in opening bracket Rich would read as a tag once restored.
+
+    Rich renders ``2n + 1`` backslashes before a tag as ``n`` literal
+    backslashes and the tag as literal text.
+    """
+    backslashes = match.group(1)
+    return f"{backslashes}{backslashes}\\{_OPEN_BRACKET_STAND_IN}"
+
+
+def _restore_controller_brackets(markup: str) -> str:
+    """Turn the bracket stand-ins back into brackets that render literally.
+
+    Only an opening bracket that Rich would parse as the start of a tag needs
+    escaping; a backslash before any other bracket already renders as typed.
+    """
+    escaped = _TAG_LIKE_STAND_IN.sub(_escape_tag_like_bracket, markup)
+    return escaped.translate(_BRACKETS_FROM_STAND_INS)

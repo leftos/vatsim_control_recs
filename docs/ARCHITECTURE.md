@@ -160,7 +160,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_simaware_boundaries_characterization.py`: the weather daemon's SimAware boundary mapping pinned branch by branch: preset grouping loading and its warnings, facility and prefix boundary matching, `+` grouping expansion, neighbour merging by hull, and Tower circles.
 - `tests/test_area_clustering_characterization.py`: `AreaClusterer`'s k choice (towered counts and extent tier limits), k-means seeding, assignment and tie-breaks, area naming, the location fallback groups and `create_area_groups`, pinned branch by branch.
 - `tests/test_weather_briefing_isolation.py`: a weather-daemon grouping whose briefing raises is logged and skipped while the other briefings, the ARTCC briefing and the index are still written.
-- `tests/test_atis_colorize.py`: colorized ATIS stays valid Rich markup when the controller's text has a backslash before a highlight, rendering the original text with the highlight kept.
+- `tests/test_atis_colorize.py`: colorized ATIS stays valid Rich markup when the controller's text has a backslash before a highlight or square brackets such as `[/]`, `[bold]` or `[RWY 28L]`, rendering the original text with the highlights kept.
 - `tests/test_allowlist_filter.py`: the airport allowlist filter keeps only the listed airports and scales to a country list.
 - `tests/test_disambiguator_csv_names.py`: a location the names CSV fully covers never runs the NER engine; one CSV-less airport makes NER run for the whole group.
 - `tests/test_spatial_find_nearest.py`: `SpatialIndex.find_nearest` skips the full-scan fallback for a radius under one grid cell.

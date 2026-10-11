@@ -170,7 +170,9 @@ The filtered ATIS text is colorized with [Rich](https://github.com/Textualize/ri
 - **ATIS letter** -> `[cyan bold]` (both the phonetic word like "KILO" and standalone letter after INFORMATION/INFO/ATIS)
 - **Approach types, runways, and operational phrases** -> `[yellow]` (10+ patterns covering all approach/runway formats)
 
-Nested yellow tags are flattened in one pass that keeps only the outermost pair. Last, every run of backslashes directly before an inserted tag is doubled, because Rich reads a backslash before a tag as an escape and would leave the tag unparsed (for example `LDG VISUAL\ILS\RNP-Z RWY 16R`); backslashes anywhere else are untouched.
+Square brackets the controller typed are swapped for the Unicode noncharacters U+FDD0 and U+FDD1 before any pattern runs, so the tag handling never mistakes a typed `[/]` or `[bold]` for markup; at the end they turn back into brackets, and each one Rich would read as the start of a tag is escaped, so the controller's text renders exactly as typed.
+
+Nested yellow tags are flattened in one pass that keeps only the outermost pair. Then every run of backslashes directly before an inserted tag is doubled, because Rich reads a backslash before a tag as an escape and would leave the tag unparsed (for example `LDG VISUAL\ILS\RNP-Z RWY 16R`); backslashes anywhere else are untouched.
 
 ---
 
