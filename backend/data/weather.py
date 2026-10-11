@@ -40,8 +40,8 @@ RATE_LIMIT_RECOVERY_TIME = 60.0  # Seconds without errors before resetting backo
 
 
 def _check_rate_limit_error(status_code: int) -> bool:
-    """Check if an HTTP status code indicates rate limiting."""
-    return status_code == 429 or status_code >= 500
+    """Check if an HTTP status code indicates rate limiting (429 or 503)."""
+    return status_code in (429, 503)
 
 
 def _record_rate_limit_error() -> float:

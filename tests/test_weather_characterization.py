@@ -343,6 +343,53 @@ def test_get_taf_rate_limited_returns_cached_taf(
     assert "KQQQ" not in manager.get_taf_cache()[1]
 
 
+# rate limit backoff
+
+METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KXYZ&format=raw"
+BBOX = (39.5, -74.5, 41.5, -72.5)
+BBOX_URL = (
+    "https://aviationweather.gov/api/data/metar?bbox=39.5,-74.5,41.5,-72.5&format=json"
+)
+
+
+@pytest.mark.parametrize("code", [500, 502, 504])
+@pytest.mark.parametrize("kind", ["metar", "taf", "bbox"])
+def test_server_errors_other_than_503_do_not_back_off(
+    net: Net, monkeypatch: pytest.MonkeyPatch, kind: str, code: int
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(weather.time, "sleep", sleeps.append)
+
+    if kind == "metar":
+        net.route("metar?ids=", _raises(_http_error(METAR_URL, code)))
+        net.route("metar.vatsim.net", b"")
+        assert weather.get_metar("KXYZ") == ""
+        net.route("metar?ids=", b"KQQQ 101130Z 27010KT")
+        assert weather.get_metar("KQQQ") == "KQQQ 101130Z 27010KT"
+    elif kind == "taf":
+        net.route("taf?ids=", _raises(_http_error(TAF_URL, code)))
+        assert weather.get_taf("KXYZ") == ""
+        net.route("taf?ids=", TAF.encode())
+        assert weather.get_taf("KQQQ") == TAF
+    else:
+        net.route("bbox=", _raises(_http_error(BBOX_URL, code)))
+        assert not weather._fetch_weather_bbox_result(BBOX, False, 5).succeeded
+        net.route("bbox=", b"[]")
+        assert weather._fetch_weather_bbox_result(BBOX, False, 5).succeeded
+
+    assert weather.get_rate_limit_status()["is_rate_limited"] is False
+    assert sleeps == []
+
+
+def test_503_backs_off(net: Net) -> None:
+    net.route("bbox=", _raises(_http_error(BBOX_URL, 503)))
+
+    result = weather._fetch_weather_bbox_result(BBOX, False, 5)
+
+    assert result == weather._FAILED_BBOX_FETCH
+    assert weather.get_rate_limit_status()["is_rate_limited"] is True
+
+
 @pytest.mark.parametrize(
     ("error", "logged"),
     [

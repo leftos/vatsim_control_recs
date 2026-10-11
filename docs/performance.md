@@ -36,9 +36,9 @@ A refresh is `analyze_flights_data` in `backend/core/analysis.py` on an executor
 
   Passes often outlast the 15 s interval, so the requests do not follow a fixed cycle. The no-filter load sent 0 to about 74 box requests per refresh, averaging about 13 (12 to 14 % of the boxes), because a refresh that lands mid-pass sends nothing and the expiring METARs spread out. `--countries US` sent 0 to 6.
 
-  A 5xx from aviationweather.gov counts as rate limiting: `_check_rate_limit_error` in `backend/data/weather.py` accepts 429 and any status of 500 or more, and `_record_rate_limit_error` then doubles the shared backoff (1 s up to 30 s). Every box request in the next 60 s (`RATE_LIMIT_RECOVERY_TIME`) first sleeps that backoff in `_wait_for_backoff`, and a non-429 failure sends its airports to single-station fallback fetches.
+  Only a 429 or 503 from aviationweather.gov counts as rate limiting (`_check_rate_limit_error` in `backend/data/weather.py`): `_record_rate_limit_error` then doubles the shared backoff (1 s up to 30 s), and every box request in the next 60 s (`RATE_LIMIT_RECOVERY_TIME`) first sleeps that backoff in `_wait_for_backoff`. Any other failure, a 500, 502 or 504 included, fails its own box alone, and a non-429 failure sends that box's airports to single-station fallback fetches.
 
-  At peak, five HTTP 504 boxes made one pass last 106 s (22 boxes at 16 to 19 s each, then 34 single-station fetches), and a single 504 made another last 47 s.
+  At peak a 504 box takes about 20 s to fail, and its single-station fallbacks follow, so a pass with several of them still runs well past the 15 s interval. Backing off on every 5xx instead stretched one such pass, with five 504 boxes, to 106 s.
 
   Every refresh also makes the VATSIM feed call (cached 15 s).
 - **Few, packed boxes.** `calculate_airport_bboxes` (`backend/data/weather.py`) returns one box when the airports fit in 10 degrees on both axes, else packs them first-fit in (longitude, latitude) order through `_pack_airport_coords`, each airport joining the first box it still fits in, so the box count and the boxes do not depend on airport order.
@@ -55,7 +55,7 @@ A refresh is `analyze_flights_data` in `backend/core/analysis.py` on an executor
 
 The traffic columns update as soon as the analysis returns, and no table update waits on weather. A weather pass lasts about as long as its slowest box (`_fetch_bboxes` waits up to 30 s per box) when requests are few; single boxes of 16 to 21 s, even for a few entries, are common at peak.
 
-A big pass is longer, because only 5 workers serve its requests: the cold first pass of 77 to 87 boxes takes about 20 s although its slowest box takes 6 to 8.5 s. A pass with failed boxes lasts longer still (see the 5xx backoff above), and one pass over the 15 s interval puts passes out of step with refreshes. Until a box returns, its airports show their previous WIND and ALT, or blank when new.
+A big pass is longer, because only 5 workers serve its requests: the cold first pass of 77 to 87 boxes takes about 20 s although its slowest box takes 6 to 8.5 s. A pass with failed boxes lasts longer still (see the failures above), and one pass over the 15 s interval puts passes out of step with refreshes. Until a box returns, its airports show their previous WIND and ALT, or blank when new.
 
 Each box patch re-sorts and diffs the table on the UI thread: a median of 1.7 to 2.7 ms, p95 2.6 to 4.3 ms and a maximum of 8 to 53 ms in steady state, and up to 178 ms in a cold first pass.
 
