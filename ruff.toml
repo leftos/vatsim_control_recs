@@ -92,7 +92,6 @@ max-complexity = 8
 "ui/modals/airport_tracking.py" = ["C901"]
 "ui/modals/diversion_modal.py" = ["C901"]
 "ui/modals/flight_board.py" = ["C901"]
-"ui/modals/flight_briefing.py" = ["C901"]
 "ui/modals/historical_stats.py" = ["C901"]
 "ui/modals/metar_info.py" = ["C901"]
 "ui/modals/route_weather.py" = ["C901"]

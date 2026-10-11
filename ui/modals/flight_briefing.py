@@ -38,6 +38,129 @@ from ui import config
 from ui.config import CATEGORY_COLORS
 from ui.debug_logger import debug
 
+_INSTRUMENT_CATEGORIES = ("LIFR", "IFR")
+
+
+def _airport_info(icao: str) -> dict[str, Any]:
+    """The unified airport record for an ICAO, or {} when it or the data is missing."""
+    if not config.UNIFIED_AIRPORT_DATA:
+        return {}
+    return config.UNIFIED_AIRPORT_DATA.get(icao, {})
+
+
+def _unique_in_order(icaos: list[str]) -> list[str]:
+    """The ICAOs with repeats dropped, first occurrence kept."""
+    return list(dict.fromkeys(icaos))
+
+
+def _collect_atis(vatsim_data: Any, airports: list[str]) -> dict[str, Any]:
+    """ATIS per airport: VATSIM's where it has one, real-world D-ATIS for the rest."""
+    atis_data = get_atis_for_airports(vatsim_data, airports) if vatsim_data else {}
+    airports_without_vatsim_atis = [icao for icao in airports if icao not in atis_data]
+    if airports_without_vatsim_atis:
+        atis_data.update(get_datis_for_airports(airports_without_vatsim_atis))
+    return atis_data
+
+
+def _weather_entry(metar: str, taf: str, atis: Any) -> dict[str, Any]:
+    """The weather the briefing keeps for one airport, parsed from its METAR."""
+    category = get_flight_category(metar) if metar else "UNK"
+    return {
+        "metar": metar,
+        "taf": taf,
+        "category": category,
+        "color": CATEGORY_COLORS.get(category, "white"),
+        "visibility_sm": parse_visibility_sm(metar) if metar else None,
+        "ceiling_ft": parse_ceiling_feet(metar) if metar else None,
+        "ceiling_layer": parse_ceiling_layer(metar) if metar else None,
+        "wind": parse_wind_from_metar(metar) if metar else None,
+        "atis": atis,
+    }
+
+
+def _worst_enroute_category(categories: list[str]) -> str:
+    """The first instrument category enroute, else MVFR if any, else VFR."""
+    worst = "VFR"
+    for category in categories:
+        if (category in _INSTRUMENT_CATEGORIES and worst in ("VFR", "MVFR")) or (
+            category == "MVFR" and worst == "VFR"
+        ):
+            worst = category
+    return worst
+
+
+def _departure_phrase(category: str) -> str:
+    if category in _INSTRUMENT_CATEGORIES:
+        return f"{category} conditions at departure"
+    if category == "MVFR":
+        return "MVFR conditions at departure"
+    return "VFR departure"
+
+
+def _enroute_phrase(category: str) -> str | None:
+    """The synopsis phrase for enroute weather, or None when it is VFR."""
+    if category in _INSTRUMENT_CATEGORIES:
+        return f"{category} enroute"
+    if category == "MVFR":
+        return "MVFR enroute"
+    return None
+
+
+def _arrival_phrase(category: str) -> str:
+    if category in _INSTRUMENT_CATEGORIES:
+        return f"{category} conditions at arrival"
+    if category == "MVFR":
+        return "MVFR arrival"
+    return "VFR arrival"
+
+
+def _taf_trend_phrase(taf: str, category: str) -> str | None:
+    """The trend of the first improving or worsening change among the TAF's first two."""
+    for change in parse_taf_changes(taf, category)[:2]:
+        if change.get("is_improvement"):
+            return f"improving to {change.get('category', 'VFR')}"
+        if change.get("is_deterioration"):
+            return f"deteriorating to {change.get('category', 'IFR')}"
+    return None
+
+
+def _conditions_text(wind: Any, visibility: Any, ceiling: Any) -> str:
+    """Wind, visibility and ceiling joined by spaces, each only when present."""
+    conditions = []
+    if wind:
+        conditions.append(wind)
+    if visibility:
+        conditions.append(f"{visibility}SM")
+    if ceiling:
+        conditions.append(ceiling)
+    return " ".join(conditions)
+
+
+def _metar_display(metar: str, icao: str) -> str:
+    """The METAR without its leading "METAR " and station ICAO."""
+    if metar.startswith("METAR "):
+        metar = metar[6:]
+    if metar.startswith(icao):
+        metar = metar[len(icao) :].strip()
+    return metar
+
+
+def _taf_trend(taf: str, category: str) -> str | None:
+    """The TAF's first change as "↑ VFR (FM)", or None unless it improves or worsens."""
+    for change in parse_taf_changes(taf, category)[:1]:
+        if change.get("is_improvement") or change.get("is_deterioration"):
+            arrow = "↑" if change.get("is_improvement") else "↓"
+            return f"{arrow} {change.get('category', '')} ({change.get('type', 'FM')})"
+    return None
+
+
+def _section_header(title: str) -> str:
+    return f"[bold cyan]━━━ {title} ━━━[/bold cyan]"
+
+
+def _waypoint_line(waypoint: str) -> str:
+    return f"    [dim]  · {waypoint}[/dim]"
+
 
 class FlightWeatherBriefingScreen(ModalScreen):
     """Modal screen showing pilot-style weather briefing for a flight route."""
@@ -169,60 +292,14 @@ class FlightWeatherBriefingScreen(ModalScreen):
 
         # Parse route waypoints for display
         self.route_waypoints = parse_route_waypoints(self.route) if self.route else []
-
-        # Get coordinates for departure and arrival
-        dep_info = (
-            config.UNIFIED_AIRPORT_DATA.get(self.departure, {})
-            if config.UNIFIED_AIRPORT_DATA
-            else {}
-        )
-        arr_info = (
-            config.UNIFIED_AIRPORT_DATA.get(self.arrival, {})
-            if config.UNIFIED_AIRPORT_DATA
-            else {}
-        )
-
-        dep_lat = dep_info.get("latitude")
-        dep_lon = dep_info.get("longitude")
-        arr_lat = arr_info.get("latitude")
-        arr_lon = arr_info.get("longitude")
-
-        # Calculate total distance
-        if dep_lat and dep_lon and arr_lat and arr_lon:
-            self.total_distance = haversine_distance_nm(
-                dep_lat, dep_lon, arr_lat, arr_lon
-            )
-
-            # Sample enroute points
-            sample_points = sample_route_points(
-                dep_lat,
-                dep_lon,
-                arr_lat,
-                arr_lon,
-                interval_nm=200.0,  # Sample every ~200nm
-                min_points=1,
-                max_points=6,
-            )
-
-            # Find airports near sample points
-            if config.UNIFIED_AIRPORT_DATA:
-                self.enroute_points = find_enroute_airports(
-                    sample_points, config.UNIFIED_AIRPORT_DATA, search_radius_nm=100.0
-                )
+        self._locate_route()
 
         # Collect all airports needing weather
         airports_to_fetch = [self.departure, self.arrival]
         if self.alternate:
             airports_to_fetch.append(self.alternate)
         airports_to_fetch.extend([p["icao"] for p in self.enroute_points])
-
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_airports = []
-        for apt in airports_to_fetch:
-            if apt not in seen:
-                seen.add(apt)
-                unique_airports.append(apt)
+        unique_airports = _unique_in_order(airports_to_fetch)
 
         # Fetch weather data in parallel
         try:
@@ -233,46 +310,45 @@ class FlightWeatherBriefingScreen(ModalScreen):
             metars, tafs, vatsim_data = await asyncio.gather(
                 metar_task, taf_task, vatsim_task
             )
-
-            # Get ATIS data - prefer VATSIM, fall back to RW D-ATIS
-            atis_data = (
-                get_atis_for_airports(vatsim_data, unique_airports)
-                if vatsim_data
-                else {}
-            )
-
-            # Fetch RW D-ATIS for airports without VATSIM ATIS
-            airports_without_vatsim_atis = [
-                icao for icao in unique_airports if icao not in atis_data
-            ]
-            if airports_without_vatsim_atis:
-                rw_atis_data = get_datis_for_airports(airports_without_vatsim_atis)
-                atis_data.update(rw_atis_data)
-
+            atis_data = _collect_atis(vatsim_data, unique_airports)
         except Exception as e:
             self._update_content(f"[red]Error fetching weather: {e}[/red]")
             return
 
-        # Process weather data
         for icao in unique_airports:
-            metar = metars.get(icao, "")
-            taf = tafs.get(icao, "")
-            category = get_flight_category(metar) if metar else "UNK"
+            self.weather_data[icao] = _weather_entry(
+                metars.get(icao, ""), tafs.get(icao, ""), atis_data.get(icao)
+            )
 
-            self.weather_data[icao] = {
-                "metar": metar,
-                "taf": taf,
-                "category": category,
-                "color": CATEGORY_COLORS.get(category, "white"),
-                "visibility_sm": parse_visibility_sm(metar) if metar else None,
-                "ceiling_ft": parse_ceiling_feet(metar) if metar else None,
-                "ceiling_layer": parse_ceiling_layer(metar) if metar else None,
-                "wind": parse_wind_from_metar(metar) if metar else None,
-                "atis": atis_data.get(icao),
-            }
-
-        # Update display
         self._update_display()
+
+    def _locate_route(self) -> None:
+        """Set the route distance and enroute airports when both ends have a position."""
+        dep_info = _airport_info(self.departure)
+        arr_info = _airport_info(self.arrival)
+
+        dep_lat = dep_info.get("latitude")
+        dep_lon = dep_info.get("longitude")
+        arr_lat = arr_info.get("latitude")
+        arr_lon = arr_info.get("longitude")
+
+        if not (dep_lat and dep_lon and arr_lat and arr_lon):
+            return
+
+        self.total_distance = haversine_distance_nm(dep_lat, dep_lon, arr_lat, arr_lon)
+        sample_points = sample_route_points(
+            dep_lat,
+            dep_lon,
+            arr_lat,
+            arr_lon,
+            interval_nm=200.0,  # Sample every ~200nm
+            min_points=1,
+            max_points=6,
+        )
+        if config.UNIFIED_AIRPORT_DATA:
+            self.enroute_points = find_enroute_airports(
+                sample_points, config.UNIFIED_AIRPORT_DATA, search_radius_nm=100.0
+            )
 
     def _update_content(self, content: str) -> None:
         """Update the content widget."""
@@ -284,63 +360,28 @@ class FlightWeatherBriefingScreen(ModalScreen):
 
     def _generate_synopsis(self) -> str:
         """Generate a synopsis of weather conditions along the route."""
-        parts = []
-
-        # Check departure conditions
-        dep_data = self.weather_data.get(self.departure, {})
-        dep_cat = dep_data.get("category", "UNK")
-
-        # Check arrival conditions
+        dep_cat = self.weather_data.get(self.departure, {}).get("category", "UNK")
         arr_data = self.weather_data.get(self.arrival, {})
         arr_cat = arr_data.get("category", "UNK")
+        worst_enroute = _worst_enroute_category(
+            [
+                self.weather_data.get(p["icao"], {}).get("category", "UNK")
+                for p in self.enroute_points
+            ]
+        )
 
-        # Check for any enroute issues
-        enroute_cats = [
-            self.weather_data.get(p["icao"], {}).get("category", "UNK")
-            for p in self.enroute_points
-        ]
-        worst_enroute = "VFR"
-        for cat in enroute_cats:
-            if (cat in ["LIFR", "IFR"] and worst_enroute in ["VFR", "MVFR"]) or (
-                cat == "MVFR" and worst_enroute == "VFR"
-            ):
-                worst_enroute = cat
+        parts = [_departure_phrase(dep_cat)]
+        enroute = _enroute_phrase(worst_enroute)
+        if enroute:
+            parts.append(enroute)
+        parts.append(_arrival_phrase(arr_cat))
 
-        # Build synopsis
-        if dep_cat in ["LIFR", "IFR"]:
-            parts.append(f"{dep_cat} conditions at departure")
-        elif dep_cat == "MVFR":
-            parts.append("MVFR conditions at departure")
-        else:
-            parts.append("VFR departure")
-
-        if worst_enroute in ["LIFR", "IFR"]:
-            parts.append(f"{worst_enroute} enroute")
-        elif worst_enroute == "MVFR":
-            parts.append("MVFR enroute")
-
-        if arr_cat in ["LIFR", "IFR"]:
-            parts.append(f"{arr_cat} conditions at arrival")
-        elif arr_cat == "MVFR":
-            parts.append("MVFR arrival")
-        else:
-            parts.append("VFR arrival")
-
-        # Check TAF for trends
         arr_taf = arr_data.get("taf", "")
-        if arr_taf:
-            changes = parse_taf_changes(arr_taf, arr_cat)
-            for change in changes[:2]:  # First couple changes
-                if change.get("is_improvement"):
-                    new_cat = change.get("category", "VFR")
-                    parts.append(f"improving to {new_cat}")
-                    break
-                elif change.get("is_deterioration"):
-                    new_cat = change.get("category", "IFR")
-                    parts.append(f"deteriorating to {new_cat}")
-                    break
+        trend = _taf_trend_phrase(arr_taf, arr_cat) if arr_taf else None
+        if trend:
+            parts.append(trend)
 
-        return ". ".join(parts) + "." if parts else "Weather data unavailable."
+        return ". ".join(parts) + "."
 
     def _format_airport_line(
         self,
@@ -374,155 +415,158 @@ class FlightWeatherBriefingScreen(ModalScreen):
         """Format the weather details for an airport."""
         lines = []
 
-        # Wind and conditions
-        wind = data.get("wind", "")
-        ceiling = data.get("ceiling_layer", "")
-        visibility = data.get("visibility_sm")
-
-        conditions = []
-        if wind:
-            conditions.append(wind)
-        if visibility:
-            conditions.append(f"{visibility}SM")
-        if ceiling:
-            conditions.append(ceiling)
-
+        conditions = _conditions_text(
+            data.get("wind", ""),
+            data.get("visibility_sm"),
+            data.get("ceiling_layer", ""),
+        )
         if conditions:
-            lines.append(f"{indent}[dim]{' '.join(conditions)}[/dim]")
+            lines.append(f"{indent}[dim]{conditions}[/dim]")
 
-        # METAR (truncated)
         metar = data.get("metar", "")
         if metar:
-            # Remove METAR prefix and airport code for brevity
-            metar_display = metar
-            if metar_display.startswith("METAR "):
-                metar_display = metar_display[6:]
-            if metar_display.startswith(icao):
-                metar_display = metar_display[len(icao) :].strip()
-            lines.append(f"{indent}[dim]{metar_display[:80]}[/dim]")
+            lines.append(f"{indent}[dim]{_metar_display(metar, icao)[:80]}[/dim]")
 
-        # TAF trend if significant
         taf = data.get("taf", "")
-        if taf:
-            category = data.get("category", "UNK")
-            changes = parse_taf_changes(taf, category)
-            for change in changes[:1]:  # Just first significant change
-                if change.get("is_improvement") or change.get("is_deterioration"):
-                    trend = "↑" if change.get("is_improvement") else "↓"
-                    new_cat = change.get("category", "")
-                    change_type = change.get("type", "FM")
-                    lines.append(
-                        f"{indent}[dim]TAF: {trend} {new_cat} ({change_type})[/dim]"
-                    )
-                    break
+        trend = _taf_trend(taf, data.get("category", "UNK")) if taf else None
+        if trend:
+            lines.append(f"{indent}[dim]TAF: {trend}[/dim]")
 
+        return lines
+
+    def _airport_lines(
+        self,
+        icao: str,
+        distance_nm: float | None,
+        *,
+        label: str,
+        show_ete: bool,
+    ) -> list[str]:
+        """An airport's line and weather block, or nothing when it has no weather."""
+        data = self.weather_data.get(icao, {})
+        if not data:
+            return []
+        return [
+            self._format_airport_line(
+                icao, data, distance_nm, label, show_ete=show_ete
+            ),
+            *self._format_weather_block(icao, data),
+        ]
+
+    def _departure_lines(self) -> list[str]:
+        return self._airport_lines(self.departure, 0, label="DEP ", show_ete=False)
+
+    def _arrival_lines(self) -> list[str]:
+        return self._airport_lines(
+            self.arrival, self.total_distance, label="ARR ", show_ete=True
+        )
+
+    def _alternate_lines(self, alternate: str) -> list[str]:
+        return self._airport_lines(alternate, None, label="ALT ", show_ete=False)
+
+    def _enroute_point_lines(
+        self, point: dict[str, Any], *, strip_conditions: bool
+    ) -> list[str]:
+        """An enroute airport's line and its wind and ceiling, without the full METAR."""
+        icao = point["icao"]
+        data = self.weather_data.get(icao, {})
+        if not data:
+            return []
+        lines = [self._format_airport_line(icao, data, point["distance_nm"], "ENR ")]
+        wind = data.get("wind", "")
+        ceiling = data.get("ceiling_layer", "")
+        if wind or ceiling:
+            conditions = f"{wind} {ceiling}"
+            if strip_conditions:
+                conditions = conditions.strip()
+            lines.append(f"    [dim]{conditions}[/dim]")
+        return lines
+
+    def _enroute_lines(self, *, strip_conditions: bool) -> list[str]:
+        """Enroute weather points with the route's waypoints spread evenly between them."""
+        waypoints = self.route_waypoints
+        if not self.enroute_points:
+            return [_waypoint_line(waypoint) for waypoint in waypoints]
+
+        waypoints_per_segment = len(waypoints) // (len(self.enroute_points) + 1)
+        lines = []
+        wp_idx = 0
+        for point in self.enroute_points:
+            shown = waypoints[wp_idx : wp_idx + waypoints_per_segment]
+            lines.extend(_waypoint_line(waypoint) for waypoint in shown)
+            wp_idx += len(shown)
+            lines.extend(
+                self._enroute_point_lines(point, strip_conditions=strip_conditions)
+            )
+        lines.extend(_waypoint_line(waypoint) for waypoint in waypoints[wp_idx:])
         return lines
 
     def _update_display(self) -> None:
         """Update the display with the weather briefing."""
-        sections = []
-
-        # Header with timestamp
-        now = datetime.now(timezone.utc)
-        zulu_str = now.strftime("%d%H%MZ")
+        zulu_str = datetime.now(timezone.utc).strftime("%d%H%MZ")
         total_ete = format_ete(self.total_distance, self.groundspeed)
-        header = f"[bold]Briefing valid: {zulu_str}[/bold]  |  Route: {int(self.total_distance)}nm  |  ETE: {total_ete}"
-        sections.append(header)
+        sections = [
+            f"[bold]Briefing valid: {zulu_str}[/bold]  |  Route: {int(self.total_distance)}nm  |  ETE: {total_ete}",
+            f"\n[bold cyan]SYNOPSIS[/bold cyan]\n{self._generate_synopsis()}",
+            f"\n{_section_header('DEPARTURE')}",
+            *self._departure_lines(),
+        ]
 
-        # Synopsis
-        synopsis = self._generate_synopsis()
-        sections.append(f"\n[bold cyan]SYNOPSIS[/bold cyan]\n{synopsis}")
-
-        # Departure
-        sections.append("\n[bold cyan]━━━ DEPARTURE ━━━[/bold cyan]")
-        dep_data = self.weather_data.get(self.departure, {})
-        if dep_data:
-            sections.append(
-                self._format_airport_line(
-                    self.departure, dep_data, 0, "DEP ", show_ete=False
-                )
-            )
-            sections.extend(self._format_weather_block(self.departure, dep_data))
-
-        # Enroute section with waypoints interspersed
         if self.enroute_points or self.route_waypoints:
-            sections.append("\n[bold cyan]━━━ ENROUTE ━━━[/bold cyan]")
+            sections.append(f"\n{_section_header('ENROUTE')}")
+            sections.extend(self._enroute_lines(strip_conditions=True))
 
-            # Intersperse waypoints with enroute weather points
-            # Distribute waypoints evenly along the route
-            num_waypoints = len(self.route_waypoints)
-            num_weather = len(self.enroute_points)
+        sections.append(f"\n{_section_header('ARRIVAL')}")
+        sections.extend(self._arrival_lines())
 
-            if num_weather > 0:
-                # Show weather points with some waypoints between them
-                waypoints_per_segment = (
-                    num_waypoints // (num_weather + 1) if num_waypoints > 0 else 0
-                )
-                wp_idx = 0
-
-                for _i, point in enumerate(self.enroute_points):
-                    # Show some waypoints before this weather point
-                    for _ in range(waypoints_per_segment):
-                        if wp_idx < num_waypoints:
-                            wp = self.route_waypoints[wp_idx]
-                            sections.append(f"    [dim]  · {wp}[/dim]")
-                            wp_idx += 1
-
-                    # Show the weather point
-                    icao = point["icao"]
-                    data = self.weather_data.get(icao, {})
-                    if data:
-                        sections.append(
-                            self._format_airport_line(
-                                icao, data, point["distance_nm"], "ENR "
-                            )
-                        )
-                        # Just show conditions, not full METAR for enroute
-                        wind = data.get("wind", "")
-                        ceiling = data.get("ceiling_layer", "")
-                        if wind or ceiling:
-                            cond = f"{wind} {ceiling}".strip()
-                            sections.append(f"    [dim]{cond}[/dim]")
-
-                # Show remaining waypoints
-                while wp_idx < num_waypoints:
-                    wp = self.route_waypoints[wp_idx]
-                    sections.append(f"    [dim]  · {wp}[/dim]")
-                    wp_idx += 1
-            else:
-                # No weather points, just show waypoints
-                sections.extend(
-                    f"    [dim]  · {wp}[/dim]" for wp in self.route_waypoints
-                )
-
-        # Arrival
-        sections.append("\n[bold cyan]━━━ ARRIVAL ━━━[/bold cyan]")
-        arr_data = self.weather_data.get(self.arrival, {})
-        if arr_data:
-            sections.append(
-                self._format_airport_line(
-                    self.arrival, arr_data, self.total_distance, "ARR "
-                )
-            )
-            sections.extend(self._format_weather_block(self.arrival, arr_data))
-
-        # Alternate
         if self.alternate:
-            sections.append("\n[bold cyan]━━━ ALTERNATE ━━━[/bold cyan]")
-            alt_data = self.weather_data.get(self.alternate, {})
-            if alt_data:
-                sections.append(
-                    self._format_airport_line(
-                        self.alternate, alt_data, label="ALT ", show_ete=False
-                    )
-                )
-                sections.extend(self._format_weather_block(self.alternate, alt_data))
+            sections.append(f"\n{_section_header('ALTERNATE')}")
+            sections.extend(self._alternate_lines(self.alternate))
 
         self._update_content("\n".join(sections))
 
     def action_close(self) -> None:
         """Close the modal."""
         self.dismiss()
+
+    def _print_lines(self) -> list[str]:
+        """The briefing as the printed page shows it, one Rich markup line each."""
+        zulu_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H%MZ")
+        total_ete = format_ete(self.total_distance, self.groundspeed)
+
+        lines = [
+            f"[bold]Flight Weather Briefing: {self.callsign}[/bold]",
+            f"{self.departure} → {self.arrival}",
+        ]
+        if self.alternate:
+            lines.append(f"Alternate: {self.alternate}")
+        lines += [
+            f"Generated: {zulu_str}  |  Route: {int(self.total_distance)}nm  |  ETE: {total_ete}",
+            "",
+            "[bold cyan]SYNOPSIS[/bold cyan]",
+            self._generate_synopsis(),
+            "",
+            _section_header("DEPARTURE"),
+            *self._departure_lines(),
+            "",
+        ]
+
+        if self.enroute_points or self.route_waypoints:
+            lines += [
+                _section_header("ENROUTE"),
+                *self._enroute_lines(strip_conditions=False),
+                "",
+            ]
+
+        lines += [_section_header("ARRIVAL"), *self._arrival_lines(), ""]
+
+        if self.alternate:
+            lines += [
+                _section_header("ALTERNATE"),
+                *self._alternate_lines(self.alternate),
+            ]
+
+        return lines
 
     def action_print(self) -> None:
         """Export briefing as HTML and open in browser."""
@@ -531,106 +575,8 @@ class FlightWeatherBriefingScreen(ModalScreen):
             return
 
         console = Console(record=True, force_terminal=True, width=500)
-
-        # Rebuild content for printing
-        now = datetime.now(timezone.utc)
-        zulu_str = now.strftime("%Y-%m-%d %H%MZ")
-        total_ete = format_ete(self.total_distance, self.groundspeed)
-
-        console.print(f"[bold]Flight Weather Briefing: {self.callsign}[/bold]")
-        console.print(f"{self.departure} → {self.arrival}")
-        if self.alternate:
-            console.print(f"Alternate: {self.alternate}")
-        console.print(
-            f"Generated: {zulu_str}  |  Route: {int(self.total_distance)}nm  |  ETE: {total_ete}"
-        )
-        console.print()
-
-        # Synopsis
-        synopsis = self._generate_synopsis()
-        console.print("[bold cyan]SYNOPSIS[/bold cyan]")
-        console.print(synopsis)
-        console.print()
-
-        # Departure
-        console.print("[bold cyan]━━━ DEPARTURE ━━━[/bold cyan]")
-        dep_data = self.weather_data.get(self.departure, {})
-        if dep_data:
-            console.print(
-                self._format_airport_line(
-                    self.departure, dep_data, 0, "DEP ", show_ete=False
-                )
-            )
-            for line in self._format_weather_block(self.departure, dep_data):
-                console.print(line)
-        console.print()
-
-        # Enroute
-        if self.enroute_points or self.route_waypoints:
-            console.print("[bold cyan]━━━ ENROUTE ━━━[/bold cyan]")
-            num_waypoints = len(self.route_waypoints)
-            num_weather = len(self.enroute_points)
-
-            if num_weather > 0:
-                waypoints_per_segment = (
-                    num_waypoints // (num_weather + 1) if num_waypoints > 0 else 0
-                )
-                wp_idx = 0
-
-                for point in self.enroute_points:
-                    for _ in range(waypoints_per_segment):
-                        if wp_idx < num_waypoints:
-                            console.print(
-                                f"    [dim]  · {self.route_waypoints[wp_idx]}[/dim]"
-                            )
-                            wp_idx += 1
-
-                    icao = point["icao"]
-                    data = self.weather_data.get(icao, {})
-                    if data:
-                        console.print(
-                            self._format_airport_line(
-                                icao, data, point["distance_nm"], "ENR "
-                            )
-                        )
-                        wind = data.get("wind", "")
-                        ceiling = data.get("ceiling_layer", "")
-                        if wind or ceiling:
-                            console.print(f"    [dim]{wind} {ceiling}[/dim]")
-
-                while wp_idx < num_waypoints:
-                    console.print(f"    [dim]  · {self.route_waypoints[wp_idx]}[/dim]")
-                    wp_idx += 1
-            else:
-                for wp in self.route_waypoints:
-                    console.print(f"    [dim]  · {wp}[/dim]")
-            console.print()
-
-        # Arrival
-        console.print("[bold cyan]━━━ ARRIVAL ━━━[/bold cyan]")
-        arr_data = self.weather_data.get(self.arrival, {})
-        if arr_data:
-            console.print(
-                self._format_airport_line(
-                    self.arrival, arr_data, self.total_distance, "ARR "
-                )
-            )
-            for line in self._format_weather_block(self.arrival, arr_data):
-                console.print(line)
-        console.print()
-
-        # Alternate
-        if self.alternate:
-            console.print("[bold cyan]━━━ ALTERNATE ━━━[/bold cyan]")
-            alt_data = self.weather_data.get(self.alternate, {})
-            if alt_data:
-                console.print(
-                    self._format_airport_line(
-                        self.alternate, alt_data, label="ALT ", show_ete=False
-                    )
-                )
-                for line in self._format_weather_block(self.alternate, alt_data):
-                    console.print(line)
+        for line in self._print_lines():
+            console.print(line)
 
         # Export
         html_content = console.export_html(inline_styles=True)
