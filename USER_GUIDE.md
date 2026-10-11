@@ -476,7 +476,7 @@ Works for airports, groupings, and flights:
 - **ATIS information** from VATSIM and real-world D-ATIS (fallback)
 - **Approach type** with SIMUL ILS highlighted
 - **Runway assignments** (departure and arrival runways)
-- **Flight category summary** (counts of VFR/MVFR/IFR/LIFR)
+- **Flight category summary** (counts of VFR/MVFR/IFR/LIFR over the airports that get a card; an airport with no METAR, or one the area grouping leaves out for lacking a position, is not counted)
 - **TAF trend indicators** showing improving/worsening conditions
 
 For groupings, airports are grouped by geographic area, centered around staffed airports.
@@ -489,7 +489,7 @@ Provides a pilot-style weather briefing along the route:
 - **Arrival weather** (METAR/TAF)
 - **Alternate weather** if filed
 
-**Print to Browser:** Press `P` to export the briefing as HTML and open it in your default browser for printing or reference.
+**Print to Browser:** Press `P` to export the briefing as HTML and open it in your default browser for printing or reference. The page is written to a temporary file named after the grouping or callsign; if that file cannot be written, an error toast says why and nothing opens.
 
 #### Route Weather (from Flight Info)
 
