@@ -77,7 +77,10 @@ def find_nearby_airports(
     nearby = spatial_index.find_within_distance(lat, lon, radius_nm)
 
     results = []
-    for icao, distance in nearby[:max_results]:
+    for icao, distance in nearby:
+        if len(results) >= max_results:
+            break
+
         airport_data = airports_data.get(icao, {})
         apt_lat = airport_data.get("latitude")
         apt_lon = airport_data.get("longitude")
@@ -202,6 +205,9 @@ def find_suitable_diversions(
     Returns:
         List of DiversionOption objects, sorted by distance
     """
+    if max_results <= 0:
+        return []
+
     if filters is None:
         filters = DiversionFilters()
 

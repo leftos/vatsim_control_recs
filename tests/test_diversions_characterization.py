@@ -210,6 +210,21 @@ def test_max_results_caps_the_list(loaders: dict[str, Any]) -> None:
     assert [option.icao for option in result] == ["KJFK", "KLAX"]
 
 
+@pytest.mark.parametrize("max_results", [0, -1])
+def test_max_results_zero_or_negative_returns_nothing(
+    loaders: dict[str, Any], max_results: int
+) -> None:
+    loaders["nearby"] = [
+        ("KJFK", 10.0, 0.0),
+        ("KLAX", 20.0, 90.0),
+        ("KSFO", 30.0, 180.0),
+    ]
+    result = diversions.find_suitable_diversions(
+        40.0, -73.0, "", AIRPORTS, max_results=max_results
+    )
+    assert result == []
+
+
 def test_candidate_order_is_kept(loaders: dict[str, Any]) -> None:
     loaders["nearby"] = [
         ("KSFO", 30.0, 180.0),
@@ -269,6 +284,21 @@ def test_nearby_airports_limits_to_max_results(
     monkeypatch.setattr(diversions, "get_airport_spatial_index", lambda data: index)
     airports_data = {
         "KJFK": {"latitude": 0.0, "longitude": 1.0},
+        "KLAX": {"latitude": 0.0, "longitude": 2.0},
+        "KSFO": {"latitude": 0.0, "longitude": 3.0},
+    }
+    result = diversions.find_nearby_airports(0.0, 0.0, airports_data, max_results=2)
+    assert [icao for icao, _, _ in result] == ["KJFK", "KLAX"]
+
+
+def test_nearby_airports_limit_counts_only_airports_with_coordinates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    index = _FakeIndex([("KJFK", 5.0), ("KNOW", 6.0), ("KLAX", 7.0), ("KSFO", 8.0)])
+    monkeypatch.setattr(diversions, "get_airport_spatial_index", lambda data: index)
+    airports_data = {
+        "KJFK": {"latitude": 0.0, "longitude": 1.0},
+        "KNOW": {"latitude": None, "longitude": 0.0},
         "KLAX": {"latitude": 0.0, "longitude": 2.0},
         "KSFO": {"latitude": 0.0, "longitude": 3.0},
     }
