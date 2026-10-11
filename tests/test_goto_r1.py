@@ -211,14 +211,9 @@ async def test_f_and_space_in_the_browse_list_go_to_the_search(
 
 TOAST_CASES: list[tuple[str, list[Step], str]] = [
     (
-        "e-on-preset",
-        [("query", "Bay Area"), ("row", "grouping:Bay Area"), ("press", "e")],
-        "E edits ★ groupings only; 'Bay Area' is a preset",
-    ),
-    (
         "e-on-airport",
         [("query", "KSFO"), ("row", "airport:KSFO"), ("press", "e")],
-        "E edits ★ groupings only; KSFO is an airport",
+        "E edits ★ groupings and copies presets; KSFO is an airport",
     ),
     (
         "ctrl-d-on-preset",

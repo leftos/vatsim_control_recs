@@ -1,7 +1,8 @@
-"""Go To hands its picks and ★ rows to the grouping builder and applies its result.
+"""Go To hands its picks, ★ rows and presets to the builder and applies its result.
 
 Ctrl+S with picks opens the builder on them, E on a ★ row opens it on that
-grouping, and Ctrl+D deletes a ★ grouping after a confirm.
+grouping, E on a preset opens it on a copy of it, and Ctrl+D deletes a ★
+grouping after a confirm.
 """
 
 import pytest
@@ -10,6 +11,10 @@ from backend.core.groupings import GroupingError
 from tests.conftest import FAVORITE_NAME, BuilderHarness, GoToFactory, GoToHarness
 from ui.modals import goto_modal as goto_modal_module
 from ui.modals.confirm_modal import ChoiceModal, ConfirmModal
+
+# The one preset grouping, and the preset that nests it.
+PRESET = "Bay Area"
+NESTED_PRESET = "California"
 
 
 async def _pick_bay_area_and_ksmf(h: GoToHarness) -> None:
@@ -34,6 +39,15 @@ async def _open_builder_on_picks(h: GoToHarness) -> BuilderHarness:
 async def _edit_favorite(h: GoToHarness) -> BuilderHarness:
     await h.type_query(FAVORITE_NAME)
     await h.focus_row(f"grouping:{FAVORITE_NAME}")
+    await h.pilot.press("e")
+    await h.pilot.pause()
+    return h.builder()
+
+
+async def _copy_preset(h: GoToHarness, name: str = PRESET) -> BuilderHarness:
+    """E on a preset row opens the builder on a copy of it."""
+    await h.type_query(name)
+    await h.focus_row(f"grouping:{name}")
     await h.pilot.press("e")
     await h.pilot.pause()
     return h.builder()
@@ -65,6 +79,54 @@ async def test_ctrl_s_with_picks_opens_the_builder_with_picks_and_filters(
         assert b.screen.draft.filters == {"KSMF": "dep"}
         assert b.screen.draft.original_name is None
         assert b.name_input.value == ""
+
+
+async def test_e_on_a_preset_opens_the_builder_on_a_copy(
+    goto_modal: GoToFactory,
+) -> None:
+    async with goto_modal() as h:
+        b = await _copy_preset(h)
+
+        assert b.screen.draft.original_name is None
+        assert b.screen.draft.name == f"{PRESET} copy"
+        assert b.name_input.value == f"{PRESET} copy"
+        assert b.screen.draft.items == ["KOAK", "KSFO", "KSJC"]
+        assert b.screen.draft.filters == {}
+
+
+async def test_e_on_a_nested_preset_flattens_it_to_airports(
+    goto_modal: GoToFactory,
+) -> None:
+    async with goto_modal() as h:
+        b = await _copy_preset(h, NESTED_PRESET)
+
+        assert b.screen.draft.original_name is None
+        assert b.screen.draft.items == ["KLAX", "KOAK", "KSAN", "KSFO", "KSJC"]
+        assert b.screen.draft.filters == {}
+
+
+async def test_hint_on_a_preset_row_offers_e_copy(goto_modal: GoToFactory) -> None:
+    async with goto_modal() as h:
+        await h.type_query(PRESET)
+        await h.focus_row(f"grouping:{PRESET}")
+
+        assert h.hint == "Enter open · E copy · Tab pick several · Esc close"
+
+
+async def test_e_on_an_airport_row_warns_with_the_new_wording(
+    goto_modal: GoToFactory,
+) -> None:
+    async with goto_modal() as h:
+        await h.type_query("KSFO")
+        await h.focus_row("airport:KSFO")
+        await h.pilot.press("e")
+        await h.pilot.pause()
+
+        assert h.app.screen is h.screen
+        assert (
+            "warning",
+            "E edits ★ groupings and copies presets; KSFO is an airport",
+        ) in h.notifications()
 
 
 async def test_saving_from_the_builder_lists_the_name_under_my_groupings(

@@ -132,7 +132,7 @@ uv run main.py --airports KSFO --groupings "SoCal" --include-all-arriving
 | `Ctrl+Enter` | Open the board for the picks (pick several) |
 | `Ctrl+S` | Open the grouping builder on the picks and their filters (pick several) |
 | `Ctrl+D` | Delete the highlighted ★ grouping, after a confirm |
-| `E` | Open the grouping builder on the highlighted ★ grouping |
+| `E` | Open the grouping builder on the highlighted ★ grouping, or on a copy of a preset |
 | `F` | Cycle the dep/arr filter of a picked row |
 | `→` | Expand a picked grouping into its airports (pick several) |
 | `←` | Collapse a picked grouping's airports |
@@ -142,7 +142,7 @@ uv run main.py --airports KSFO --groupings "SoCal" --include-all-arriving
 
 ### Grouping Builder
 
-Opened from Go To (`E` on a ★ grouping, `Ctrl+S` in pick several) and from the Tracked Airports Manager (`S`).
+Opened from Go To (`E` on a ★ grouping, `E` on a preset for a copy, `Ctrl+S` in pick several) and from the Tracked Airports Manager (`S`).
 
 | Shortcut | Action |
 |----------|--------|

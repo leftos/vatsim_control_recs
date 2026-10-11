@@ -432,7 +432,7 @@ INERT_ROW_CASES = [
     pytest.param(
         _keys_on_header,
         [
-            f"E edits ★ groupings only; {HEADER_REASON}",
+            f"E edits ★ groupings and copies presets; {HEADER_REASON}",
             f"Ctrl+D deletes ★ groupings only; {HEADER_REASON}",
             f"Enter can't open this row; {HEADER_REASON}",
         ],

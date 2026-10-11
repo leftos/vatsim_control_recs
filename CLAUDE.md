@@ -263,7 +263,7 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 | `Ctrl+Enter` | Open the board for the picks (pick several) |
 | `Ctrl+S` | Open the grouping builder on the picks and their filters (pick several) |
 | `Ctrl+D` | Delete the highlighted ★ grouping after a "Delete '{name}' from my groupings?" confirm (not in picker mode) |
-| `E` | Open the grouping builder on the highlighted ★ grouping (list focused) |
+| `E` | Open the grouping builder on the highlighted ★ grouping, or on a preset row a new grouping named "{preset} copy" holding the preset's airports (list focused) |
 | `F` | Cycle the dep/arr filter of a picked airport row (pick several, list focused; both -> dep -> arr); a picked grouping's members need `→` first, then `F` works per member |
 | `→` | Expand a picked grouping's collapsed row into its member rows (pick several, list focused); the highlight lands on the first member |
 | `←` | Collapse the grouping's members (from its row or any member); the highlight returns to the grouping row |
@@ -286,7 +286,7 @@ A context hint line under the list shows only the keys that act in the current m
 
 Focus: with the list focused, a printable key moves focus to the search box and is appended to the query. In pick several, `E`, `F` and `Space` act on the list instead; in browse only `E` does; in picker (callback) mode all three are typed. The search box does not select its text on focus.
 
-A key that cannot act shows a warning toast saying why: `E` on a preset, `F` on an unpicked row, `Ctrl+D` in picker mode, `Ctrl+Enter` with no picks, `Enter` ("Enter can't open this row; …") or `Space` ("Space can't pick this row; …") on a header, the cap row or with no highlighted row, and `E`, `Ctrl+D` or `F` on a header, the cap row or a collapsed row. So do `→` on a row that is not a picked grouping ("→ expands a picked grouping's members; …") and `←` on a row outside an expanded grouping ("← collapses a picked grouping's members; …").
+A key that cannot act shows a warning toast saying why: `E` on an airport, flight or member row ("E edits ★ groupings and copies presets; …"), `F` on an unpicked row, `Ctrl+D` in picker mode, `Ctrl+Enter` with no picks, `Enter` ("Enter can't open this row; …") or `Space` ("Space can't pick this row; …") on a header, the cap row or with no highlighted row, and `E`, `Ctrl+D` or `F` on a header, the cap row or a collapsed row. So do `→` on a row that is not a picked grouping ("→ expands a picked grouping's members; …") and `←` on a row outside an expanded grouping ("← collapses a picked grouping's members; …").
 
 `→` on an already expanded grouping and `←` on a collapsed one are silent. A failed favorite delete or a failed read of the grouping for `E` shows an error toast.
 
@@ -294,7 +294,7 @@ Saving in the builder from Go To patches the modal's own groupings and rebuilds 
 
 ### Grouping Builder
 
-Opened by Go To (`E` on a ★ row, `Ctrl+S` in pick several) and by the Tracked Airports Manager (`S`); `ui/modals/grouping_builder.py` holds the screen and `ui/modals/grouping_draft.py` its model.
+Opened by Go To (`E` on a ★ row, `E` on a preset row for a copy, `Ctrl+S` in pick several) and by the Tracked Airports Manager (`S`); `ui/modals/grouping_builder.py` holds the screen and `ui/modals/grouping_draft.py` its model.
 
 | Shortcut | Action |
 |----------|--------|

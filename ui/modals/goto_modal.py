@@ -935,13 +935,18 @@ class GoToScreen(ModalScreen):
         return f"{self._row_name(item)} is {kinds.get(item[0], 'not a grouping')}"
 
     def _edit_favorite(self) -> None:
-        """E: open the grouping builder on the highlighted ★ grouping."""
+        """E: edit the highlighted ★ grouping, or copy a preset into a new one."""
         item = self._get_highlighted_item()
-        if item is None or not self._is_favorite_row(item):
-            self._warn(f"E edits ★ groupings only; {self._describe_non_favorite(item)}")
-            return
+        if item is not None and self._is_favorite_row(item):
+            self._edit_grouping(item[1])
+        elif item is not None and item[0] == "grouping":
+            self._copy_preset(item[1])
+        else:
+            described = self._describe_non_favorite(item)
+            self._warn(f"E edits ★ groupings and copies presets; {described}")
 
-        name = item[1]
+    def _edit_grouping(self, name: str) -> None:
+        """Open the builder on one of my ★ groupings."""
         try:
             grouping = get_user_grouping(name)
         except GroupingError as error:
@@ -956,6 +961,19 @@ class GoToScreen(ModalScreen):
             filters=grouping.filters,
             name=name,
             original_name=name,
+        )
+
+    def _copy_preset(self, name: str) -> None:
+        """E on a preset: the builder on its airports, as a new grouping.
+
+        Nested presets are flattened to their airports by the resolver and
+        listed in ident order, as the member rows are; the copy has no filters.
+        """
+        self._open_builder(
+            items=sorted(resolve_grouping_recursively(name, self.all_groupings)),
+            filters={},
+            name=f"{name} copy",
+            original_name=None,
         )
 
     def _open_builder(
@@ -1141,7 +1159,7 @@ class GoToScreen(ModalScreen):
 
     def _browse_hint_actions(self, item: tuple[str, str, Any] | None) -> list[str]:
         actions = ["Enter open"] if _is_result_row(item) else []
-        return [*actions, *self._favorite_hint_items(item)]
+        return [*actions, *self._row_key_hint_items(item)]
 
     def _multi_select_hint_actions(
         self, item: tuple[str, str, Any] | None
@@ -1158,14 +1176,16 @@ class GoToScreen(ModalScreen):
             actions.append("Ctrl+Enter open")
         if self.selected_items:
             actions.append("Ctrl+S save")
-        return [*actions, *self._favorite_hint_items(item)]
+        return [*actions, *self._row_key_hint_items(item)]
 
-    def _favorite_hint_items(self, item: tuple[str, str, Any] | None) -> list[str]:
-        """E (list focus only) and Ctrl+D, which act on ★ rows."""
-        if not self._is_favorite_row(item):
-            return []
+    def _row_key_hint_items(self, item: tuple[str, str, Any] | None) -> list[str]:
+        """E (list focus only) plus Ctrl+D on ★ rows, E copy on presets."""
         list_focused = self.query_one("#goto-list", OptionList).has_focus
-        return ["E edit", "Ctrl+D delete"] if list_focused else ["Ctrl+D delete"]
+        if self._is_favorite_row(item):
+            return ["E edit", "Ctrl+D delete"] if list_focused else ["Ctrl+D delete"]
+        if item is not None and item[0] == "grouping":
+            return ["E copy"] if list_focused else []
+        return []
 
     def _resolve_filters(self) -> dict[str, str]:
         """Resolve selected_filters to per-airport ICAO filters.

@@ -380,7 +380,7 @@ A hint line under the results lists only the keys that work right now, for the c
 
 `Tab` toggles pick several and, when it switches it on, moves focus to the results list. With the list focused, typing a letter or other character jumps back to the search box and adds it to your search. While picking several, `E`, `F` and `Space` keep their jobs in the list; while browsing, only `E` does. `Up` and `Down` move between the search box and the list.
 
-If a key cannot do anything (for example `E` on a preset, `F` on a row that is not picked, `Enter` or `Space` on a section header or the "showing 100 of N" row, `→` on a row that is not a picked grouping, or `Ctrl+Enter` with nothing picked), a warning message tells you why.
+If a key cannot do anything (for example `E` on an airport or flight, `F` on a row that is not picked, `Enter` or `Space` on a section header or the "showing 100 of N" row, `→` on a row that is not a picked grouping, or `Ctrl+Enter` with nothing picked), a warning message tells you why.
 
 **Multi-Select Mode ("Pick several"):**
 Press `Tab` to toggle multi-select mode, which allows selecting multiple airports/groupings to open at once:
@@ -405,7 +405,7 @@ This filtering is preserved when saving as a favorite.
 
 **Favorite Management:**
 - Favorites appear with a star prefix in the results list
-- `E` - Edit an existing favorite from the results list: opens it in the [Grouping Builder](#grouping-builder) with its name, airports and saved filters
+- `E` - Edit an existing favorite from the results list: opens it in the [Grouping Builder](#grouping-builder) with its name, airports and saved filters. On a preset grouping, `E` opens the builder on a copy instead: a new grouping named "{preset} copy" holding the preset's airports, ready to save with `Ctrl+S`
 - `Ctrl+D` - Delete a favorite; asks "Delete '{name}' from my groupings?" first
 - If a delete fails, an error message names the favorite and the cause
 - After a `Ctrl+S` save the modal leaves pick several and shows the saved name in the search box; after an `E` save it stays as it was, with your picks (a picked grouping that was renamed stays picked under its new name)
@@ -417,7 +417,7 @@ Uses a pre-built cache for instant search responsiveness.
 ### Grouping Builder
 
 The builder is where you name a ★ grouping, choose its members and set their filters. It opens from:
-- Go To: `E` on a ★ row (editing that grouping), or `Ctrl+S` in pick several (a new grouping, prefilled with your picks and their filters)
+- Go To: `E` on a ★ row (editing that grouping), `E` on a preset row (a new grouping copying the preset's airports, named "{preset} copy"), or `Ctrl+S` in pick several (a new grouping, prefilled with your picks and their filters)
 - Tracked Airports Manager: `S` (a new grouping, prefilled with the picked airports, or the whole list when none is picked)
 
 The title is "New grouping" or "Edit grouping ★ Name". From 110 columns the Add pane and the Members pane sit side by side, and `Tab` moves focus between the Name field, the Add search and the Members list. Narrower, one list shows at a time and `Tab` flips between Members and Add.
