@@ -12,7 +12,7 @@ Design in [goto-ux-review.md](./goto-ux-review.md). Shared: `ui/modals/goto_moda
 
 - [ ] One name for saved groupings (R4's wording half, [goto-ux-review.md](./goto-ux-review.md)): "my groupings" (★) everywhere instead of favorite, grouping and custom grouping, in UI text and docs (`favorites.json` and `custom_groupings.json` keep their names; the weather daemon's "custom groupings" means the data file and stays).
 
-  Settled (owner): the main tab "Custom Groupings" becomes "Groupings" (it lists presets, ARTCC groupings and ★ ones); only user-visible strings and docs change, and code identifiers keep `favorite`, bridged by a glossary line.
+  Settled (owner): the main tab "Custom Groupings" becomes "Groupings" (it lists presets, ARTCC groupings and ★ ones); only user-visible strings and docs change, and code identifiers keep `favorite`, bridged by a glossary line. It lands on main. The Tracked Airports `S` button and footer read "Save to my groupings (S)" / "Save to my groupings". The docs call `data/custom_groupings.json` the "groupings file" (heading "Groupings file (custom_groupings.json)"), with no separate noun for the groupings it defines. USER_GUIDE's `## Favorites` becomes `## My groupings` (TOC and `#favorites` links follow); the builder titles, the "★ MY GROUPINGS" header and code comments stay as they are.
 
 
 ## Backlog
