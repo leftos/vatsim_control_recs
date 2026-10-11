@@ -1,12 +1,14 @@
 """Characterization of the shared METAR parsing helpers in ``backend/data/weather_parsing.py``.
 
-Pins the exact output of ``parse_visibility_sm``, ``_parse_single_weather`` and
-``get_flight_category`` over inputs that reach every branch of each, so that splitting
-those functions cannot change behaviour without failing here.
+Pins the exact output of ``parse_visibility_sm``, ``_parse_single_weather``,
+``get_flight_category`` and ``parse_weather_phenomena`` (directly, and through
+``parse_taf_forecast_details``) over inputs that reach every branch of each, so that
+splitting those functions cannot change behaviour without failing here.
 """
 
 import pytest
 
+from backend.briefing.taf_parsing import parse_taf_forecast_details
 from backend.data import weather_parsing
 
 # parse_visibility_sm: every form it reads, plus the shapes it falls through on.
@@ -43,6 +45,14 @@ from backend.data import weather_parsing
         ("KSFO 101251Z 27005KT 3SM SLP123", 3.0),
         # The whole-mile pattern also accepts an "M" prefix; only a real "P6SM" adds a mile.
         ("KSFO 101251Z 27005KT M10SM CLR", 10.0),
+        # A zero denominator is malformed: refused, not read as its "0SM" tail.
+        ("KSFO 101251Z 27005KT 1/0SM BR", None),
+        ("KSFO 101251Z 27005KT M1/0SM BR", None),
+        ("KSFO 101251Z 27005KT 1 1/0SM BR", None),
+        # More than one zero in the denominator is equally malformed.
+        ("KSFO 101251Z 27005KT 1/00SM BR", None),
+        ("KSFO 101251Z 27005KT M1/00SM BR", None),
+        ("KSFO 101251Z 27005KT 1 1/00SM BR", None),
     ],
 )
 def test_parse_visibility_sm(metar: str, expected: float | None) -> None:
@@ -82,9 +92,12 @@ def test_parse_visibility_p6sm_returns_int() -> None:
         ("FZRA", ["Freezing Rain"]),
         ("SHRA", ["Showers Rain"]),
         ("-SHRA", ["Light Showers Rain"]),
+        # A descriptor with no phenomenon after it names itself.
+        ("SH", ["Showers"]),
+        ("-SH", ["Light Showers"]),
         # Vicinity intensity, with and without a following phenomenon.
         ("VCFG", ["Vicinity Fog"]),
-        ("VCSH", []),
+        ("VCSH", ["Vicinity Showers"]),
         # Multiple phenomena in one group, intensity and descriptor applied once.
         ("RAGR", ["Rain", "Hail"]),
         ("+TSRAGR", ["Heavy Thunderstorm", "Rain", "Hail"]),
@@ -138,3 +151,30 @@ def test_parse_single_weather(code: str, expected: list[str]) -> None:
 )
 def test_get_flight_category(metar: str, expected: str) -> None:
     assert weather_parsing.get_flight_category(metar) == expected
+
+
+# parse_weather_phenomena, and the TAF path that shares it: a bare descriptor reaches both.
+
+
+@pytest.mark.parametrize(
+    ("metar", "expected"),
+    [
+        # "VCSH" is reported by the full walk, and the remarks section ends the walk.
+        (
+            "KSFO 101251Z 27005KT 10SM VCSH SCT040 15/05 A2992 RMK AO2 SH DSNT W",
+            ["Vicinity Showers"],
+        ),
+    ],
+)
+def test_parse_weather_phenomena(metar: str, expected: list[str]) -> None:
+    assert weather_parsing.parse_weather_phenomena(metar) == expected
+
+
+@pytest.mark.parametrize(
+    ("conditions", "expected"),
+    [("P6SM VCSH SCT040", ["Vicinity Showers"])],
+)
+def test_parse_taf_forecast_details_phenomena(
+    conditions: str, expected: list[str]
+) -> None:
+    assert parse_taf_forecast_details(conditions)["phenomena"] == expected

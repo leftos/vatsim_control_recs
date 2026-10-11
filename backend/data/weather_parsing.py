@@ -249,9 +249,15 @@ def parse_visibility_sm(metar: str) -> float | None:
         metar: Raw METAR string
 
     Returns:
-        Visibility in statute miles, or None if not found
+        Visibility in statute miles, or None if not found or malformed
     """
     if not metar:
+        return None
+
+    # A denominator-zero fraction ("1/0SM") is malformed: refuse it here, so the fraction
+    # parse cannot divide by zero and the whole-mile pattern cannot read the token's
+    # "0SM" tail as 0.0.
+    if _has_zero_denominator_fraction(metar):
         return None
 
     # Handle visibility forms in order of specificity:
@@ -267,6 +273,11 @@ def parse_visibility_sm(metar: str) -> float | None:
         return visibility
 
     return _parse_meters_visibility(metar)
+
+
+def _has_zero_denominator_fraction(metar: str) -> bool:
+    """Whether ``metar`` holds a fraction visibility token with a zero denominator."""
+    return re.search(r"\bM?(?:\d+\s+)?\d+/0+SM\b", metar) is not None
 
 
 def _parse_fraction_visibility(metar: str) -> float | None:
@@ -299,8 +310,9 @@ def _parse_fraction_visibility(metar: str) -> float | None:
 
 def _parse_whole_mile_visibility(metar: str) -> float | None:
     """Whole-number visibility ("10SM", "3SM", "P6SM"), or None if absent."""
-    # Pattern for whole number like "10SM", "3SM", "P6SM" (P = plus/more than 6)
-    whole_match = re.search(r"\b[PM]?(\d+)SM\b", metar)
+    # Pattern for whole number like "10SM", "3SM", "P6SM" (P = plus/more than 6). The
+    # lookbehind keeps it off the "0SM" tail of a fraction like "1/0SM".
+    whole_match = re.search(r"\b(?<!/)[PM]?(\d+)SM\b", metar)
     if not whole_match:
         return None
 
@@ -591,6 +603,10 @@ def _parse_single_weather(code: str) -> list[str]:
         results.append(f"{intensity}Thunderstorm")
         intensity = ""  # Don't double-apply intensity
         descriptor = ""
+
+    # A descriptor with nothing after it names itself: "VCSH", "SH", "-SH".
+    if descriptor and not remainder and not results:
+        results.append(f"{intensity}{descriptor}".strip())
 
     results.extend(_parse_weather_codes(remainder, intensity, descriptor))
     return results
