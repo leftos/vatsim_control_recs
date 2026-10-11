@@ -11,7 +11,7 @@ Built with the [Textual](https://textual.textualize.io/) TUI framework.
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
 
 ```bash
-git clone https://github.com/your-repo/vatsim_control_recs.git
+git clone https://github.com/leftos/vatsim_control_recs.git
 cd vatsim_control_recs
 uv run main.py
 ```
@@ -77,13 +77,13 @@ uv run main.py --groupings "ZOA All" --include-all-arriving
 uv run main.py --countries US --include-all-staffed
 
 # Track a grouping with no animations
-uv run main.py --groupings "Bay Area" --disable-animations
+uv run main.py --groupings "NCT Combined" --disable-animations
 
 # Show arrivals up to 2 hours out with minute-by-minute wind
 uv run main.py --max-eta-hours 2.0 --wind-source minute
 
 # Combine filters
-uv run main.py --airports KSFO --groupings "SoCal" --include-all-arriving
+uv run main.py --airports KSFO --groupings O90 --include-all-arriving
 ```
 
 ## Keyboard Shortcuts
@@ -106,13 +106,14 @@ uv run main.py --airports KSFO --groupings "SoCal" --include-all-arriving
 | `Escape` | Close modals or cancel search |
 | `F1` / `?` | Help screen |
 | `F2` | Command palette |
-| `Tab` | Switch between Airports and Groupings tabs |
+| `Tab` | Move focus between the table and the tab bar (with the tab bar focused, `←` / `→` switch tabs) |
 
 ### Flight Board
 
 | Shortcut | Action |
 |----------|--------|
-| `Enter` | Open detailed flight information |
+| `Enter` / double-click | Open detailed flight information |
+| `F` | Cycle direction (departures only / arrivals only / both) |
 | `Escape` / `Q` | Close flight board |
 
 ### Flight Info
@@ -209,7 +210,7 @@ Find VFR or MVFR airports near a specified location, with flight category, dista
 
 ### Groupings file (custom_groupings.json)
 
-Organize airports into logical groups in `data/custom_groupings.json`:
+Organize airports into logical groups in `custom_groupings.json` in your user data folder (the install folder's `data/custom_groupings.json` ships a few, such as `FAT_APP`, and your entries override it by name). The names below are examples of your own file, not shipped groupings:
 
 ```json
 {

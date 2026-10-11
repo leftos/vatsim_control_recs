@@ -116,10 +116,11 @@ NEXT ETA is the earliest ETA among the flights the ARR column counts, so it neve
 - Arrival: On ground at arrival airport OR airborne (groundspeed >= 40kt) with the ETA the flight board shows (`calculate_eta`) within `max_eta_hours`, decided by `arrival_eta_in_window` in `backend/core/flights.py`; `max_eta_hours` 0 turns the window off, which is how the board lists every airborne inbound
 - Flights on ground without flight plan: Counted as departure at nearest airport
 
-**Dual Arrival Counting** (with `--include-all-arriving`):
+**Dual Arrival Counting** (whenever `--max-eta-hours` is not 0):
 - `arrivals`: Flights within `max_eta_hours` window
 - `arrivals_all`: All flights filed to the airport regardless of ETA
-- Displayed as `arr<xH / arr_all` format when counts differ
+- Displayed as `arr/arr_all` (for example `3/  7`) when the counts differ; the TOTAL column does the same with departures added (`ui/tables.py`, `backend/core/models.py`). `--max-eta-hours 0` turns the form off and the header reads `ARR (all)`
+- `--include-all-arriving` does not create this form; it only decides whether airports and groupings whose only traffic is filed arrivals are listed (`backend/core/analysis.py`)
 
 **Unified Airport Data**: Three sources merged into `unified_airport_data`:
 - `raw/APT_BASE.csv` - FAA airport data (coordinates, tower type, ARTCC)
@@ -233,7 +234,7 @@ The raw VATSIM API pilot data (accessed via `vatsim_data['pilots']`) contains:
 | `Escape` | Close modal or cancel search |
 | `F1` / `?` | Help screen |
 | `F2` | Command palette |
-| `Tab` | Switch between tabs |
+| `Tab` | Move focus between the table and the tab bar (with the tab bar focused, `←` / `→` switch tabs) |
 
 ### Flight Board
 
@@ -342,7 +343,7 @@ The builder writes through `backend/core/groupings.py` and dismisses with a `Bui
 |----------|--------|
 | `A` | Add airports |
 | `Delete` | Remove selected |
-| `Space` | Select/deselect |
+| `Space` / `Enter` | Select/deselect |
 | `S` | Save to my groupings: open the grouping builder on the picked airports (or all when none is picked) |
 | `Escape` | Close |
 

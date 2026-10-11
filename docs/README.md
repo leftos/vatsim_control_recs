@@ -20,6 +20,7 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 ## Glossary
 
 - **AIRAC**: the 28-day aeronautical data cycle; CIFP and NASR data are downloaded and cached once per cycle (`backend/data/cifp.py`).
+- **area** (weather briefing): a cluster of nearby airports in a briefing for a grouping or an airport, built around the major airports and any airport with an ATIS and named after one ("Sacramento Area"); each area has its own flight-category summary (`backend/briefing/area_clustering.py`).
 - **ARTCC**: an air route traffic control center; the app builds automatic groupings from them.
 - **`as_of`**: the one freshness time a refresh or weather pass takes, passed to every METAR cache read so a slow bbox phase cannot expire entries it skipped.
 - **bbox / box**: one weather bounding-box request to aviationweather.gov; `calculate_airport_bboxes` packs the tracked airports into as few boxes of at most 10° per axis as it can (first fit, in longitude order).
@@ -33,14 +34,21 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **CONUS**: the contiguous United States; a CONUS-sized weather box hits the API's 400-entry cap.
 - **D-ATIS**: digital ATIS, the airport information text fetched from VATSIM and real-world sources.
 - **enroute transition**: the leg of a SID or STAR that joins the common route to an enroute fix or airway; `get_dp_data` uses the first one when a SID has no common route.
+- **flight board**: the modal listing an airport's or grouping's departures and arrivals, opened with Enter or a double-click on a row of the main tables (`ui/modals/flight_board.py`).
 - **GIL**: Python's global interpreter lock; CPU-bound Python on a worker thread starves the UI thread (see `performance.md`).
+- **Go To picker mode**: Go To opened by another screen (such as the weather briefing) to choose one airport, grouping or flight and hand it back; it has no pick several, `E` or `Ctrl+D`, and its hint line reads "Enter select · Esc close" (`ui/modals/goto_modal.py`).
 - **grouping builder**: the screen that builds or edits a ★ grouping: an Add search over every airport and grouping, the member list with filters, and the save flow (`ui/modals/grouping_builder.py`).
+- **hint line**: the dim line under a Go To or grouping builder list that names only the keys that act in the current mode, focus and row, at most six.
 - **MEA**: minimum enroute altitude; the flight info screen warns when an IFR flight is below it on a segment of its filed route, comparing each segment with the level in force at its airway's entry, else the filed altitude, using the MEA for the direction flown.
 - **my groupings** (★ grouping): a grouping the user saved in `favorites.json` in the user data directory; the code calls it a favorite (`favorite`, `get_user_favorite_names`).
 - **NASR**: the FAA's National Airspace System Resources data, the source of navaids and fixes for route parsing (`backend/data/navaids.py`).
 - **NASR coverage**: the US and its territories, the airports `is_us_airport` accepts by ICAO prefix; route idents are resolved only against NASR, so a route with an end outside it uses the great circle for ETA. No free worldwide source can replace it: X-Plane's, VATSIM's and the national datasets all forbid an app like this one fetching or shipping them ([X-Plane](research/2026-10-10-xplane-navdata.md), [VATSIM and AIP sources](research/2026-10-10-vatsim-navdata.md)).
+- **NEXT ETA / ARR window**: the ARR column counts arrivals on the ground at the airport plus airborne inbound flights whose ETA is within `--max-eta-hours` (the ARR window); NEXT ETA is the earliest ETA among those flights.
 - **opposite-direction MEA**: the second MEA an AWY1 segment carries for the reverse direction; the check picks the MEA whose octant is nearest the course flown, else the higher of the two.
+- **pick several**: Go To's multi-select mode, toggled with `Tab`, where Enter or Space picks rows and `Ctrl+Enter` opens one board for all picks.
+- **Picked line**: the dim "Picked: name, name, +N" line under Go To's search box in pick several, listing the picks in pick order; hidden with no picks.
 - **ratchet**: the `C901` complexity ignores per file in `ruff.toml`; a file's entry is removed when its over-limit functions are split, so the list only shrinks.
+- **REQUESTED section**: the first section of a weather briefing for one requested airport, headed "━━━ REQUESTED ━━━", above the areas around it.
 - **runway transition**: the leg of a SID from one runway to where the routes join, coded in CIFP with a transition name starting `RW`.
 - **SCANP / SPACP / SLAMP / SUSAP**: CIFP customer areas; SUSAP is the continental US (K idents), SCANP is Alaska's, SPACP Hawaii's and the Pacific territories', SLAMP Puerto Rico's and the US Virgin Islands'.
 - **shared runway-transition tail**: the longest run of fixes every runway transition of a SID ends with; `get_dp_data` returns it for a SID with no common route and no enroute transition, since it is flown whichever runway is used.
