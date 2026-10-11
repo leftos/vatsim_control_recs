@@ -5,7 +5,7 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ## Current focus
 
-- [ ] The leftos.dev/weather index stopped updating at 2026-10-11 00:04:12Z (`Last-Modified` and the page's "Updated" line) while the briefings keep moving (`ZTL/A80_Atlanta_TRACON.html` current as of 0120Z), so the index stage is not writing on the server; reported by the leftos.dev session through the repo inbox. Read the timer's runs since 00:04Z (`scripts/weather_daemon/service/Status.ps1`, `Logs.ps1`) for a timeout or an index error, then fix and redeploy.
+- [ ] Deploy the weather daemon's per-grouping briefing isolation (`scripts/weather_daemon/service/QuickDeploy.ps1`): it is on main but not on the server, which runs c82c0b0 (the ATIS escape fix that unfroze the index). Ask the owner first.
 
 ### Wave 2: Go To and groupings
 

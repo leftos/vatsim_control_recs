@@ -279,6 +279,9 @@ Examples:
         return 130
 
     except Exception as e:
+        # The journal is where a failed run is read from, so the traceback goes
+        # there too, not only to a terminal nobody is watching.
+        logging.getLogger("weather_daemon").exception("Run failed: %s", e)
         print(f"\nError: {e}", file=sys.stderr)
         if args.verbose:
             import traceback

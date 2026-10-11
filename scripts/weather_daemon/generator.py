@@ -1093,6 +1093,53 @@ body { margin: 20px; background: #1a1a1a; color: #e0e0e0; max-width: 100%; }
         return points
 
 
+def _write_briefing_html(
+    generator: WeatherBriefingGenerator,
+    output_path: Path,
+    grouping_name: str,
+    artcc: str,
+    generated_files: dict[str, str],
+) -> bool:
+    """Generate and write a briefing, logging and skipping it when it raises.
+
+    One bad briefing must not stop the run. A briefing that raises is logged with
+    its traceback, its ARTCC and its grouping name, and left out of the run's
+    output, so the remaining groupings, the ARTCC briefings, the index and the
+    tiles still run.
+
+    Returns:
+        True when the briefing was written, False when it raised.
+    """
+    try:
+        html_content = generator.generate_html()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+    except Exception:
+        logger.exception(
+            "Skipping briefing for grouping %r in ARTCC %s", grouping_name, artcc
+        )
+        return False
+
+    generated_files[str(output_path)] = grouping_name
+    return True
+
+
+def _write_artcc_briefing(
+    config: DaemonConfig,
+    generator: WeatherBriefingGenerator,
+    grouping_name: str,
+    artcc: str,
+    generated_files: dict[str, str],
+) -> None:
+    """Generate and write one ARTCC-wide briefing, skipping it when it raises."""
+    output_path = config.output_dir / artcc / "_all.html"
+    if _write_briefing_html(
+        generator, output_path, grouping_name, artcc, generated_files
+    ):
+        logger.debug(f"Generated ARTCC briefing: {output_path}")
+
+
 def _generate_artcc_wide_briefings(
     config: DaemonConfig,
     groupings_to_process: dict[str, tuple[list[str], str]],
@@ -1136,18 +1183,10 @@ def _generate_artcc_wide_briefings(
         )
 
         generator.fetch_weather_data(metars, tafs, atis_data)
-        html_content = generator.generate_html()
 
-        # Write to ARTCC directory as _all.html
-        artcc_dir = config.output_dir / artcc
-        artcc_dir.mkdir(parents=True, exist_ok=True)
-        output_path = artcc_dir / "_all.html"
-
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
-
-        generated_files[str(output_path)] = grouping_name
-        logger.debug(f"Generated ARTCC briefing: {output_path}")
+        # A briefing that raises is logged with its traceback and skipped, so the
+        # remaining ARTCC briefings, the index and the tiles still run.
+        _write_artcc_briefing(config, generator, grouping_name, artcc, generated_files)
 
 
 def generate(config: DaemonConfig) -> dict[str, str]:
@@ -1495,25 +1534,19 @@ def generate(config: DaemonConfig) -> dict[str, str]:
         # Populate weather data from batch
         generator.fetch_weather_data(metars, tafs, atis_data)
 
-        # Generate and write HTML briefing (if enabled)
-        if config.generate_briefings:
-            html_content = generator.generate_html()
-
-            # Create ARTCC subdirectory
-            artcc_dir = config.output_dir / artcc
-            artcc_dir.mkdir(parents=True, exist_ok=True)
-
-            # Sanitize filename
-            safe_name = re.sub(r"[^\w\-_]", "_", grouping_name)
-            output_path = artcc_dir / f"{safe_name}.html"
-
-            # Write file
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(html_content)
-
-            generated_files[str(output_path)] = grouping_name
-        else:
-            safe_name = re.sub(r"[^\w\-_]", "_", grouping_name)
+        # Generate and write the HTML briefing (if enabled). A grouping whose
+        # briefing raises is logged with its traceback and skipped, so the run goes
+        # on to the remaining groupings, the ARTCC briefings, the index and the
+        # tiles.
+        safe_name = re.sub(r"[^\w\-_]", "_", grouping_name)
+        if config.generate_briefings and not _write_briefing_html(
+            generator,
+            config.output_dir / artcc / f"{safe_name}.html",
+            grouping_name,
+            artcc,
+            generated_files,
+        ):
+            continue
 
         # Track for index generation (always needed for tiles/index)
         category_summary = generator.get_category_summary()
