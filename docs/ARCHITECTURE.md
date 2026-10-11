@@ -164,6 +164,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_atis_colorize.py`: colorized ATIS stays valid Rich markup when the controller's text has a backslash before a highlight or square brackets such as `[/]`, `[bold]` or `[RWY 28L]`, rendering the original text with the highlights kept.
 - `tests/test_allowlist_filter.py`: the airport allowlist filter keeps only the listed airports and scales to a country list.
 - `tests/test_disambiguator_csv_names.py`: a location the names CSV fully covers never runs the NER engine; one CSV-less airport makes NER run for the whole group.
+- `tests/test_disambiguation_engine_characterization.py`, `tests/test_entity_extractor_characterization.py`, `tests/test_disambiguator_trace_characterization.py`: the disambiguation engine's names for airports that start with their location (proper names before generic descriptors, the combination and sequential stages, the fallback), `extract_entities` over real names through `en_core_web_sm` and stubbed entities (labels, the LRU cache, pattern locations), and the `python -m airport_disambiguator --verbose` trace output, pinned exactly.
 - `tests/test_spatial_find_nearest.py`: `SpatialIndex.find_nearest` skips the full-scan fallback for a radius under one grid cell.
 - `tests/test_env_file.py`: `read_env_value` cases (quotes, inline comments, the unreadable-file warning) and the statsim key rules (the environment wins even when empty, `.env` only when absent, nothing written to the environment).
 

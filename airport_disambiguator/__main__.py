@@ -8,6 +8,7 @@ import sys
 from backend.data.loaders import load_unified_airport_data
 from common.logger import setup_file_logging
 
+from .data_manager import AirportDataManager
 from .disambiguator import AirportDisambiguator
 
 
@@ -19,75 +20,108 @@ def verbose_trace_disambiguation(
     print(f"VERBOSE TRACE FOR: {icao}")
     print(f"{'=' * 80}")
 
-    # Step 1: Check if ICAO exists in unified data
     if icao not in unified_data:
         print(f"[STEP 1] ICAO {icao} NOT FOUND in unified_data")
         return icao
 
-    airport_info = unified_data[icao]
+    _print_unified_data_step(icao, unified_data[icao])
+
+    data_manager = disambiguator.data_manager
+    data_manager_airport = _print_data_manager_step(data_manager, icao)
+    _print_location_step(data_manager, icao)
+    if data_manager_airport:
+        _print_name_contains_location_step(data_manager_airport)
+
+    _print_cache_step_before(disambiguator, icao)
+
+    pretty_name = disambiguator.get_pretty_name(icao)
+    full_name = disambiguator.get_full_name(icao)
+    _print_final_results_step(icao, pretty_name, full_name)
+
+    _print_cache_step_after(disambiguator, icao)
+
+    print(f"{'=' * 80}\n")
+
+    return pretty_name
+
+
+def _print_unified_data_step(icao: str, airport_info: dict) -> None:
+    """Print the unified-data fields recorded for an ICAO."""
     print(f"[STEP 1] Unified data for {icao}:")
     print(f"         name:    {airport_info.get('name')!r}")
     print(f"         city:    {airport_info.get('city')!r}")
     print(f"         state:   {airport_info.get('state')!r}")
     print(f"         country: {airport_info.get('country')!r}")
 
-    # Step 2: Check what's in the disambiguator's data_manager
-    dm = disambiguator.data_manager
-    dm_airport = dm.get_airport_details(icao)
+
+def _print_data_manager_step(
+    data_manager: AirportDataManager, icao: str
+) -> dict | None:
+    """Print the data manager's record for an ICAO and return it."""
+    airport = data_manager.get_airport_details(icao)
     print("\n[STEP 2] Data manager airport details:")
-    if dm_airport:
-        print(f"         name:  {dm_airport.get('name')!r}")
-        print(f"         city:  {dm_airport.get('city')!r}")
-        print(f"         state: {dm_airport.get('state')!r}")
+    if airport:
+        print(f"         name:  {airport.get('name')!r}")
+        print(f"         city:  {airport.get('city')!r}")
+        print(f"         state: {airport.get('state')!r}")
     else:
         print("         NOT FOUND in data_manager")
+    return airport
 
-    # Step 3: Get base location
-    location = dm.get_location_for_airport(icao)
+
+def _print_location_step(data_manager: AirportDataManager, icao: str) -> None:
+    """Print the base location and the airports sharing it."""
+    location = data_manager.get_location_for_airport(icao)
     print(f"\n[STEP 3] Base location for {icao}: {location!r}")
-
-    # Step 4: Find other airports in the same location
     if location:
-        airports_in_location = dm.get_airports_in_location(location)
+        airports_in_location = data_manager.get_airports_in_location(location)
         print(f"\n[STEP 4] Airports in location {location!r}: {airports_in_location}")
         print(f"         Count: {len(airports_in_location)}")
 
-    # Step 5: Trace name_contains_location logic
-    if dm_airport:
-        airport_name = dm_airport.get("name", "")
-        city = dm_airport.get("city", "")
-        state = dm_airport.get("state", "")
 
-        print("\n[STEP 5] name_contains_location check:")
-        print(f"         airport_name: {airport_name!r}")
-        print(f"         city:         {city!r}")
-        print(f"         state:        {state!r}")
+def _print_name_contains_location_step(airport: dict) -> None:
+    """Print the name and city words compared by the matching check."""
+    airport_name = airport.get("name", "")
+    city = airport.get("city", "")
+    state = airport.get("state", "")
 
-        name_words = airport_name.split()
-        print(f"         name_words:   {name_words}")
+    print("\n[STEP 5] name_contains_location check:")
+    print(f"         airport_name: {airport_name!r}")
+    print(f"         city:         {city!r}")
+    print(f"         state:        {state!r}")
 
-        if city:
-            city_words = re.split(r"[\s\-/]+", city.lower())
-            print(f"         city_words:   {city_words}")
+    name_words = airport_name.split()
+    print(f"         name_words:   {name_words}")
 
-            # Check for matches
-            found_match = False
-            for city_word in city_words:
-                if not city_word:
-                    continue
-                for name_word in name_words:
-                    name_word_lower = name_word.lower()
-                    if name_word_lower == city_word:
-                        print(f"         MATCH: {name_word!r}.lower() == {city_word!r}")
-                        found_match = True
-                        break
-                if found_match:
-                    break
+    if not city:
+        return
 
-            if not found_match:
-                print("         NO MATCH found between name_words and city_words")
+    city_words = re.split(r"[\s\-/]+", city.lower())
+    print(f"         city_words:   {city_words}")
 
-    # Step 6: Check what's in the caches
+    match = _first_name_city_match(name_words, city_words)
+    if match is None:
+        print("         NO MATCH found between name_words and city_words")
+    else:
+        name_word, city_word = match
+        print(f"         MATCH: {name_word!r}.lower() == {city_word!r}")
+
+
+def _first_name_city_match(
+    name_words: list[str], city_words: list[str]
+) -> tuple[str, str] | None:
+    """Return the first name/city word pair that matches, or None."""
+    for city_word in city_words:
+        if not city_word:
+            continue
+        for name_word in name_words:
+            if name_word.lower() == city_word:
+                return name_word, city_word
+    return None
+
+
+def _print_cache_step_before(disambiguator: AirportDisambiguator, icao: str) -> None:
+    """Print the caches and any name already stored for the ICAO."""
     print("\n[STEP 6] Disambiguation caches (before get_pretty_name):")
     print(
         f"         icao_to_pretty_name has {icao}: {icao in disambiguator.icao_to_pretty_name}"
@@ -102,15 +136,16 @@ def verbose_trace_disambiguation(
     if icao in disambiguator.icao_to_full_name:
         print(f"         cached full_name:   {disambiguator.icao_to_full_name[icao]!r}")
 
-    # Step 7: Get the actual result
-    pretty_name = disambiguator.get_pretty_name(icao)
-    full_name = disambiguator.get_full_name(icao)
 
+def _print_final_results_step(icao: str, pretty_name: str, full_name: str) -> None:
+    """Print the disambiguator's pretty and full names for the ICAO."""
     print("\n[STEP 7] Final results:")
     print(f"         get_pretty_name({icao}): {pretty_name!r}")
     print(f"         get_full_name({icao}):   {full_name!r}")
 
-    # Step 8: Check caches after
+
+def _print_cache_step_after(disambiguator: AirportDisambiguator, icao: str) -> None:
+    """Print the cached names after the lookups have run."""
     print("\n[STEP 8] Disambiguation caches (after get_pretty_name):")
     print(
         f"         icao_to_pretty_name[{icao}]: {disambiguator.icao_to_pretty_name.get(icao)!r}"
@@ -118,10 +153,6 @@ def verbose_trace_disambiguation(
     print(
         f"         icao_to_full_name[{icao}]:   {disambiguator.icao_to_full_name.get(icao)!r}"
     )
-
-    print(f"{'=' * 80}\n")
-
-    return pretty_name
 
 
 def main():

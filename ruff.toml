@@ -54,9 +54,6 @@ max-complexity = 8
 # C901 is a ratchet: every file below still holds a function over the complexity
 # limit, all of them predating the rule. Splitting a file's offenders takes its
 # entry off this list, and docs/plans/MAIN.md tracks the rest.
-"airport_disambiguator/__main__.py" = ["C901"]
-"airport_disambiguator/disambiguation_engine.py" = ["C901"]
-"airport_disambiguator/entity_extractor.py" = ["C901"]
 "airport_disambiguator/name_processor.py" = ["C901"]
 "backend/cache/manager.py" = ["C901"]
 "backend/core/analysis.py" = ["C901"]

@@ -1,8 +1,20 @@
 """Core disambiguation logic for generating unique airport names."""
 
+from dataclasses import dataclass
+
 from .config import DisambiguatorConfig
 from .entity_extractor import EntityExtractor
 from .name_processor import NameProcessor
+
+
+@dataclass(frozen=True)
+class _LocationGroup:
+    """Airports sharing a location, with the data their uniqueness check needs."""
+
+    icaos: list[str]
+    location: str
+    location_words: set[str]
+    distinguishing_sets: dict[str, set]
 
 
 class DisambiguationEngine:
@@ -167,10 +179,10 @@ class DisambiguationEngine:
         """
         resolved_names = {}
 
-        # Pre-compute location words and distinguishing words for all airports (O(n) instead of O(n²))
+        # Pre-compute the location words and every airport's distinguishing words
+        # so the uniqueness checks stay O(n) instead of O(n²).
         location_words = self.name_processor.extract_location_words(location)
 
-        # Pre-compute distinguishing words and their lowercase set for each airport
         all_distinguishing_parts: dict[str, list[str]] = {}
         all_distinguishing_sets: dict[str, set] = {}
         for icao in icaos:
@@ -179,6 +191,8 @@ class DisambiguationEngine:
             all_distinguishing_parts[icao] = parts
             all_distinguishing_sets[icao] = {w.lower() for w in parts}
 
+        group = _LocationGroup(icaos, location, location_words, all_distinguishing_sets)
+
         for icao in icaos:
             distinguishing_parts = all_distinguishing_parts[icao]
 
@@ -186,69 +200,66 @@ class DisambiguationEngine:
                 resolved_names[icao] = location
                 continue
 
-            # Categorize words into proper names vs generic descriptors
-            # Proper names (non-high-priority) are more informative than generic terms like "Fld", "Rgnl"
-            proper_names = []
-            generic_descriptors = []
-            for word in distinguishing_parts:
-                if self.name_processor._is_high_priority_word(word):
-                    generic_descriptors.append(word)
-                else:
-                    proper_names.append(word)
+            proper_names, generic_descriptors = self._categorize_word_types(
+                distinguishing_parts
+            )
 
-            # Try to find unique name
-            found = False
-
-            # First, try proper names (more descriptive, e.g., "Daugherty" instead of "Fld")
-            for word in proper_names:
-                candidate = f"{location} {word}".strip()
-                if self._is_unique_in_group_optimized(
-                    candidate, icao, icaos, location_words, all_distinguishing_sets
-                ):
-                    resolved_names[icao] = candidate
-                    found = True
-                    break
-
-            # Then try generic descriptors if no proper name worked
-            if not found:
-                for word in generic_descriptors:
-                    candidate = f"{location} {word}".strip()
-                    if self._is_unique_in_group_optimized(
-                        candidate, icao, icaos, location_words, all_distinguishing_sets
-                    ):
-                        resolved_names[icao] = candidate
-                        found = True
-                        break
-
-            # Try combinations with high-priority words
-            if not found:
-                found = self._try_combinations_with_priority_optimized(
-                    icao,
-                    distinguishing_parts,
-                    location,
-                    icaos,
-                    location_words,
-                    all_distinguishing_sets,
-                    resolved_names,
+            candidate = self._first_unique_candidate(proper_names, icao, group)
+            if candidate is None:
+                candidate = self._first_unique_candidate(
+                    generic_descriptors, icao, group
                 )
+            if candidate is not None:
+                resolved_names[icao] = candidate
+                continue
 
-            # Last resort: try sequential combinations
+            found = self._try_combinations_with_priority_optimized(
+                icao, distinguishing_parts, group, resolved_names
+            )
+
             if not found:
                 found = self._try_sequential_combinations_optimized(
-                    icao,
-                    distinguishing_parts,
-                    location,
-                    icaos,
-                    location_words,
-                    all_distinguishing_sets,
-                    resolved_names,
+                    icao, distinguishing_parts, group, resolved_names
                 )
 
-            # Fallback if nothing works
             if not found:
                 resolved_names[icao] = airport_names[icao]
 
         return resolved_names
+
+    def _categorize_word_types(
+        self, distinguishing_parts: list[str]
+    ) -> tuple[list[str], list[str]]:
+        """
+        Split distinguishing words into proper names and generic descriptors.
+
+        Proper names are more informative than generic terms such as "Fld" or
+        "Rgnl", so they are tried for a unique candidate first.
+        """
+        proper_names = []
+        generic_descriptors = []
+        for word in distinguishing_parts:
+            if self.name_processor._is_high_priority_word(word):
+                generic_descriptors.append(word)
+            else:
+                proper_names.append(word)
+        return proper_names, generic_descriptors
+
+    def _first_unique_candidate(
+        self, words: list[str], icao: str, group: _LocationGroup
+    ) -> str | None:
+        """Return the first candidate built from ``words`` that is unique, or None."""
+        for word in words:
+            candidate = f"{group.location} {word}".strip()
+            if self._is_unique_in_group_optimized(
+                candidate,
+                icao,
+                group.icaos,
+                group.location_words,
+                group.distinguishing_sets,
+            ):
+                return candidate
+        return None
 
     def _try_combinations_with_priority(
         self,
@@ -371,10 +382,7 @@ class DisambiguationEngine:
         self,
         icao: str,
         distinguishing_parts: list[str],
-        location: str,
-        all_icaos: list[str],
-        location_words: set,
-        all_distinguishing_sets: dict[str, set],
+        group: _LocationGroup,
         resolved_names: dict[str, str],
     ) -> bool:
         """Optimized version using pre-computed data."""
@@ -391,13 +399,13 @@ class DisambiguationEngine:
                 )
 
                 if has_high_priority:
-                    candidate = f"{location} {' '.join(candidate_words)}".strip()
+                    candidate = f"{group.location} {' '.join(candidate_words)}".strip()
                     if self._is_unique_in_group_optimized(
                         candidate,
                         icao,
-                        all_icaos,
-                        location_words,
-                        all_distinguishing_sets,
+                        group.icaos,
+                        group.location_words,
+                        group.distinguishing_sets,
                     ):
                         resolved_names[icao] = candidate
                         return True
@@ -408,17 +416,18 @@ class DisambiguationEngine:
         self,
         icao: str,
         distinguishing_parts: list[str],
-        location: str,
-        all_icaos: list[str],
-        location_words: set,
-        all_distinguishing_sets: dict[str, set],
+        group: _LocationGroup,
         resolved_names: dict[str, str],
     ) -> bool:
         """Optimized version using pre-computed data."""
         for i in range(1, len(distinguishing_parts) + 1):
-            candidate = f"{location} {' '.join(distinguishing_parts[:i])}".strip()
+            candidate = f"{group.location} {' '.join(distinguishing_parts[:i])}".strip()
             if self._is_unique_in_group_optimized(
-                candidate, icao, all_icaos, location_words, all_distinguishing_sets
+                candidate,
+                icao,
+                group.icaos,
+                group.location_words,
+                group.distinguishing_sets,
             ):
                 resolved_names[icao] = candidate
                 return True

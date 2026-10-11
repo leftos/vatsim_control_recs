@@ -57,57 +57,64 @@ class EntityExtractor:
         Returns:
             Tuple of (person_entities, location_entities)
         """
-        # Check cache first (LRU: move to end if found)
         cache_key = f"{airport_name}|{city}|{state}"
         if cache_key in self._entity_cache:
-            # Move to end (most recently used)
             self._entity_cache.move_to_end(cache_key)
             return self._entity_cache[cache_key]
 
-        # Clean the airport name for better NER
         clean_name = self._clean_name_for_ner(airport_name)
-
-        # Process with spaCy
         doc = self.nlp(clean_name)
 
-        persons = []
-        locations = []
+        persons: list[str] = []
+        locations: list[str] = []
 
         for ent in doc.ents:
-            entity_text = ent.text.strip()
+            person, location = self._classified_entity(ent, city, state)
+            if person:
+                persons.append(person)
+            if location:
+                locations.append(location)
 
-            # Skip if entity is the city or state itself
-            if entity_text.lower() in [city.lower(), state.lower()]:
-                continue
-
-            # Skip if entity is just a generic descriptor
-            if entity_text in self.config.GENERIC_DESCRIPTORS:
-                continue
-
-            if ent.label_ == "PERSON":
-                # Clean person names by removing trailing generic descriptors
-                cleaned = self._clean_entity_text(entity_text)
-                if cleaned:
-                    persons.append(cleaned)
-            elif ent.label_ in ["GPE", "LOC", "FAC"]:
-                # Clean location names by removing trailing generic descriptors
-                cleaned = self._clean_entity_text(entity_text)
-                if cleaned:
-                    locations.append(cleaned)
-
-        # Also check for pattern-based location detection
         locations.extend(self._extract_pattern_locations(clean_name))
 
-        # Remove duplicates while preserving order
         persons = list(dict.fromkeys(persons))
         locations = list(dict.fromkeys(locations))
 
-        # Cache the results with LRU eviction
         self._entity_cache[cache_key] = (persons, locations)
         if len(self._entity_cache) > self.MAX_CACHE_SIZE:
-            self._entity_cache.popitem(last=False)  # Remove oldest entry
+            self._entity_cache.popitem(last=False)
 
         return persons, locations
+
+    def _classified_entity(
+        self, ent: spacy.tokens.Span, city: str, state: str
+    ) -> tuple[str | None, str | None]:
+        """
+        Classify one spaCy entity as a person or a location.
+
+        Entity text is cleaned of generic descriptors and skipped when it is the
+        city or state itself, a generic descriptor, an unhandled label, or cleans
+        down to nothing.
+
+        Returns:
+            Tuple of (person, location), each the cleaned entity text, or None
+            when the entity does not belong to that kind.
+        """
+        entity_text = ent.text.strip()
+
+        if entity_text.lower() in [city.lower(), state.lower()]:
+            return None, None
+
+        if entity_text in self.config.GENERIC_DESCRIPTORS:
+            return None, None
+
+        if ent.label_ == "PERSON":
+            return self._clean_entity_text(entity_text) or None, None
+
+        if ent.label_ in ["GPE", "LOC", "FAC"]:
+            return None, self._clean_entity_text(entity_text) or None
+
+        return None, None
 
     def _clean_name_for_ner(self, airport_name: str) -> str:
         """Clean the airport name for better NER by removing suffixes."""
