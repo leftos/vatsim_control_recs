@@ -82,7 +82,6 @@ max-complexity = 8
 "scripts/generate_airport_names.py" = ["E402"]
 "scripts/weather_daemon/artcc_boundaries.py" = ["C901"]
 "scripts/weather_daemon/cli.py" = ["C901"]
-"scripts/weather_daemon/generator.py" = ["C901"]
 "tests/test_cifp_index.py" = ["C901"]
 "ui/app.py" = ["C901"]
 "ui/modals/airport_tracking.py" = ["C901"]
