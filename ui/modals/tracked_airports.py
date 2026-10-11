@@ -49,7 +49,7 @@ class TrackedAirportsModal(ModalScreen):
     }
 
     #tracked-container {
-        width: 90;
+        width: 94;
         height: 80%;
         background: $surface;
         border: thick $primary;
@@ -101,7 +101,7 @@ class TrackedAirportsModal(ModalScreen):
         Binding("escape", "close", "Close", priority=True),
         Binding("a", "add_airports", "Add Airports", priority=True),
         Binding("delete", "remove_selected", "Remove Selected", priority=True),
-        Binding("s", "save_as_grouping", "Save as Grouping", priority=True),
+        Binding("s", "save_as_grouping", "Save to my groupings", priority=True),
         Binding("space", "toggle_selected", "Select", show=False),
     ]
 
@@ -143,7 +143,9 @@ class TrackedAirportsModal(ModalScreen):
                     classes="tracked-button",
                 )
                 yield Button(
-                    "Save as Grouping (S)", id="save-button", classes="tracked-button"
+                    "Save to my groupings (S)",
+                    id="save-button",
+                    classes="tracked-button",
                 )
                 yield Button("Close (Esc)", id="close-button", classes="tracked-button")
 

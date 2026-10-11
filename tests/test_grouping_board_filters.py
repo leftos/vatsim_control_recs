@@ -1,6 +1,6 @@
 """A grouping board carries the saved filters of the ★ grouping that opened it.
 
-The Custom Groupings tab and Go To both open a grouping board through
+The Groupings tab and Go To both open a grouping board through
 ``VATSIMControlApp.open_grouping_board``, so a ★ grouping's per-airport dep/arr
 filters follow it whichever way it is opened; a preset grouping opens unfiltered.
 """
@@ -110,7 +110,7 @@ async def _app_on_a_grouping(
 
 
 async def _open_from_groupings_tab(app: VATSIMControlApp, pilot: Pilot) -> None:
-    """Select the Custom Groupings tab's only row and open its flight board."""
+    """Select the Groupings tab's only row and open its flight board."""
     app.query_one("#tabs", TabbedContent).active = "groupings"
     await pilot.pause()
 

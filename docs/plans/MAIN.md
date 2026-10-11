@@ -5,14 +5,7 @@ The repo's single plan index. Every task is a checkbox here; detail goes into a 
 
 ## Current focus
 
-
-### Wave 2: Go To and groupings
-
-Design in [goto-ux-review.md](./goto-ux-review.md). Shared: `ui/modals/goto_modal.py`, `ui/app.py` (`_build_goto_results`, the flight-board open path, `_open_weather_briefing_callback`), `ui/modals/tracked_airports.py`, grouping file I/O. Review: `code-review` plus a UI look at each screen. Verification: Pilot tests in `tests/` are the command; the human check is screenshots of each mode from a filtered run (`--groupings O90`, the Bay TRACON preset).
-
-- [ ] One name for saved groupings (R4's wording half, [goto-ux-review.md](./goto-ux-review.md)): "my groupings" (★) everywhere instead of favorite, grouping and custom grouping, in UI text and docs (`favorites.json` and `custom_groupings.json` keep their names; the weather daemon's "custom groupings" means the data file and stays).
-
-  Settled (owner): the main tab "Custom Groupings" becomes "Groupings" (it lists presets, ARTCC groupings and ★ ones); only user-visible strings and docs change, and code identifiers keep `favorite`, bridged by a glossary line. It lands on main. The Tracked Airports `S` button and footer read "Save to my groupings (S)" / "Save to my groupings". The docs call `data/custom_groupings.json` the "groupings file" (heading "Groupings file (custom_groupings.json)"), with no separate noun for the groupings it defines. USER_GUIDE's `## Favorites` becomes `## My groupings` (TOC and `#favorites` links follow); the builder titles, the "★ MY GROUPINGS" header and code comments stay as they are.
+Nothing in focus; the next session picks from the backlog.
 
 
 ## Backlog
@@ -24,3 +17,4 @@ Items that share no files. Review: `code-review`. Verification: `uv run --group 
 - [ ] Re-measure two `docs/performance.md` figures on a headless run: the "wave" refresh definition ("5 or more bbox requests") and the "0 to 3 box requests" between waves were measured with grid-cell boxes, before d0bb731 packed them first-fit; and the per-refresh `calculate_eta` cost on the no-filter load is no longer stated since `arrival_eta_in_window` (826dc6b) skips it for flights past the window.
 - [ ] Burn down the `C901` ratchet: `ruff.toml` `[lint.per-file-ignores]` lists 44 files (94 functions) that predate the max-complexity 8 rule. Split a file's functions under 8 and take it off the list, characterization tests first (`tests/test_weather_characterization.py` is the model); `uvx ruff@0.16.1 check --select C901 --isolated --config 'lint.mccabe.max-complexity=8' <file>` lists them. Biggest: `ui/modals/flight_info.py`, `ui/modals/flight_briefing.py`, `scripts/weather_daemon/simaware_boundaries.py` and `backend/briefing/area_clustering.py` (5 each).
 - [ ] Raise ruff's `target-version` from `py310` (`ruff.toml:6`) to `py313` to match `requires-python` in `pyproject.toml`, and land the UP-rule rewrites it triggers as their own commit.
+- [ ] `tests/test_table_refresh.py::test_column_narrows_when_its_widest_row_is_removed[True]` and `::test_populate_tables_cancels_the_old_managers_updates` failed once in a full-suite run under load ("the cells did not stop flapping", an animation deadline) and passed on rerun, alone and in the full suite. Find what the deadline races against and make it hold under load.

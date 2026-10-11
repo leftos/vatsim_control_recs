@@ -20,7 +20,7 @@ uv run --group dev pytest -q
 
 Tests live under `tests/` and run in the `dev` dependency group (`pytest`, `pytest-asyncio` and `ruff`, pinned in `pyproject.toml`; lint with `uv run ruff check .` and `uv run ruff format --check .`). They are headless Textual Pilot tests on fixture data and never touch the network. CI runs them in the "Run tests" step of `.github/workflows/build-release.yml` before the PyInstaller build.
 
-Tests isolate the user data directory for the whole session: the repo-root `conftest.py` points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a temp dir before any project import (it also covers caches, favorites and any log file a test starts through `setup_file_logging()`), and blanks `STATSIM_API_KEY`, the only key the app reads from `.env` and only when the environment lacks it, so tests never read `.env` through statsim. `tests/test_isolation.py` checks it.
+Tests isolate the user data directory for the whole session: the repo-root `conftest.py` points `LOCALAPPDATA`, `XDG_DATA_HOME` and `HOME` at a temp dir before any project import (it also covers caches, my groupings and any log file a test starts through `setup_file_logging()`), and blanks `STATSIM_API_KEY`, the only key the app reads from `.env` and only when the environment lacks it, so tests never read `.env` through statsim. `tests/test_isolation.py` checks it.
 
 ### Dependencies
 
@@ -62,7 +62,7 @@ Track airports by country:
 uv run main.py --countries US DE
 ```
 
-Track custom groupings (recursively expanded to include all airports and sub-groupings):
+Track groupings (recursively expanded to include all airports and sub-groupings):
 ```bash
 uv run main.py --groupings O90 FAT
 ```
@@ -140,8 +140,8 @@ NEXT ETA is the earliest ETA among the flights the ARR column counts, so it neve
 - `data/raw/airports.json` - OurAirports.com airport database
 - `data/raw/iata-icao.csv` - IATA/ICAO code mappings
 - `data/aircraft_data.csv` - Aircraft approach speeds for ETA calculation
-- `data/custom_groupings.json` - User-defined airport groupings
-- `favorites.json` in the user data directory (`get_user_data_dir()` in `common/paths.py`, not `data/`) - User-saved favorites with per-airport dep/arr filters (auto-created)
+- `data/custom_groupings.json` - The groupings file: airport groupings defined by hand, listed with the presets
+- `favorites.json` in the user data directory (`get_user_data_dir()` in `common/paths.py`, not `data/`) - My groupings (★), the user-saved groupings, with per-airport dep/arr filters (auto-created)
 - `data/airport_spatial_cache.json` - Pre-calculated spatial index for proximity searches
 - `data/runways.csv` - Runway data cache
 - `data/runways_metadata.txt` - Runway data metadata (AIRAC cycle info)
@@ -288,7 +288,7 @@ Focus: with the list focused, a printable key moves focus to the search box and 
 
 A key that cannot act shows a warning toast saying why: `E` on an airport, flight or member row ("E edits ★ groupings and copies presets; …"), `F` on an unpicked row, `Ctrl+D` in picker mode, `Ctrl+Enter` with no picks, `Enter` ("Enter can't open this row; …") or `Space` ("Space can't pick this row; …") on a header, the cap row or with no highlighted row, and `E`, `Ctrl+D` or `F` on a header, the cap row or a collapsed row. So do `→` on a row that is not a picked grouping ("→ expands a picked grouping's members; …") and `←` on a row outside an expanded grouping ("← collapses a picked grouping's members; …").
 
-`→` on an already expanded grouping and `←` on a collapsed one are silent. A failed favorite delete or a failed read of the grouping for `E` shows an error toast.
+`→` on an already expanded grouping and `←` on a collapsed one are silent. A failed ★ grouping delete or a failed read of the grouping for `E` shows an error toast.
 
 Saving in the builder from Go To patches the modal's own groupings and rebuilds the list. A `Ctrl+S` save leaves pick several and puts the saved name in the search box; an `E` save keeps the mode and the picks, a pick of a renamed grouping following its new name.
 
@@ -343,7 +343,7 @@ The builder writes through `backend/core/groupings.py` and dismisses with a `Bui
 | `A` | Add airports |
 | `Delete` | Remove selected |
 | `Space` | Select/deselect |
-| `S` | Open the grouping builder on the picked airports (or all when none is picked) |
+| `S` | Save to my groupings: open the grouping builder on the picked airports (or all when none is picked) |
 | `Escape` | Close |
 
 ### Diversion Modal

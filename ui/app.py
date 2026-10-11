@@ -326,7 +326,7 @@ class VATSIMControlApp(App):
                 airports_table.cursor_type = "row"
                 yield airports_table
 
-            with TabPane("Custom Groupings", id="groupings"):
+            with TabPane("Groupings", id="groupings"):
                 enable_anims = not self.args.disable_animations if self.args else True
                 groupings_table = SplitFlapDataTable(
                     id="groupings-table",
@@ -1098,8 +1098,8 @@ class VATSIMControlApp(App):
         """Open the flight board for a grouping.
 
         A ★ grouping's saved per-airport dep/arr filters open with it, so they
-        follow the grouping whichever way it is opened (the Custom Groupings tab
-        or Go To). Presets and the other non-★ groupings open unfiltered.
+        follow the grouping whichever way it is opened (the Groupings tab or Go
+        To). Presets and the other non-★ groupings open unfiltered.
 
         Args:
             name: The grouping name, as the groupings loader lists it.

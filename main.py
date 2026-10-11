@@ -39,7 +39,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--groupings",
         nargs="+",
-        help="List of custom grouping names to include in analysis. Groupings are recursively expanded to include all airports and sub-groupings. (default: all)",
+        help="List of grouping names to include in analysis: presets, ARTCC groupings or your own. Groupings are recursively expanded to include all airports and sub-groupings. (default: all)",
     )
     parser.add_argument(
         "--include-all-staffed",

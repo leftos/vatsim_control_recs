@@ -46,9 +46,10 @@ options:
                         List of country codes (e.g., US DE) to include all airports
                         from those countries
   --groupings GROUPINGS [GROUPINGS ...]
-                        List of custom grouping names to include in analysis.
-                        Groupings are recursively expanded to include all airports
-                        and sub-groupings. (default: all)
+                        List of grouping names to include in analysis: presets,
+                        ARTCC groupings or your own. Groupings are recursively
+                        expanded to include all airports and sub-groupings.
+                        (default: all)
   --include-all-staffed
                         Include airports with zero planes if they are staffed
                         (default: False)
@@ -75,7 +76,7 @@ uv run main.py --groupings "ZOA All" --include-all-arriving
 # Track all US airports with staffed positions shown
 uv run main.py --countries US --include-all-staffed
 
-# Track a custom grouping with no animations
+# Track a grouping with no animations
 uv run main.py --groupings "Bay Area" --disable-animations
 
 # Show arrivals up to 2 hours out with minute-by-minute wind
@@ -163,7 +164,7 @@ The Tracked Airports Manager provides a comprehensive view of all airports being
 - **Select/Deselect Airports**: Use arrow keys to navigate and Space or Enter to pick airports
 - **Remove Selected**: Press Delete or click the "Remove Selected" button to stop tracking selected airports
 - **Quick Add/Remove**: Press 'A' or click "Add Airports" to open the quick add/remove dialog
-- **Save as Grouping**: Press 'S' to open the grouping builder on the picked airports (or the whole tracked set when none is picked)
+- **Save to my groupings**: Press 'S' to open the grouping builder on the picked airports (or the whole tracked set when none is picked)
 
 **Quick Add/Remove Dialog:**
 Within the Tracked Airports Manager, you can press 'A' to open a quick dialog for adding or removing airports:
@@ -206,7 +207,7 @@ From flight info (press `D`), find suitable diversion airports near the aircraft
 
 Find VFR or MVFR airports near a specified location, with flight category, distance, and direction.
 
-### Custom Groupings
+### Groupings file (custom_groupings.json)
 
 Organize airports into logical groups in `data/custom_groupings.json`:
 

@@ -22,8 +22,8 @@ A comprehensive guide for installing and using the VATSIM Control Recommendation
   - [Historical Flight Statistics](#historical-flight-statistics)
   - [Tracked Airports Manager](#tracked-airports-manager)
   - [Command Palette](#command-palette)
-- [Custom Groupings](#custom-groupings)
-- [Favorites](#favorites)
+- [Groupings file (custom_groupings.json)](#groupings-file-custom_groupingsjson)
+- [My groupings](#my-groupings)
 - [Weather Data Sources](#weather-data-sources)
 - [Visual Features](#visual-features)
 - [Tips & Tricks](#tips--tricks)
@@ -123,7 +123,7 @@ uv run main.py --groupings "ZOA All" --include-all-arriving
 uv run main.py --countries US CA
 ```
 
-### Track Custom Groupings
+### Track Groupings
 
 ```bash
 uv run main.py --groupings "Bay Area" "SoCal"
@@ -143,7 +143,7 @@ uv run main.py --airports KSFO --groupings "SoCal" --include-all-staffed
 |--------|---------|-------------|
 | `--airports ICAO [ICAO ...]` | (all) | Track specific airports by ICAO code |
 | `--countries CODE [CODE ...]` | (none) | Track all airports in specified countries (e.g., `US`, `DE`, `CA`) |
-| `--groupings NAME [NAME ...]` | (all) | Track airports from custom or preset groupings |
+| `--groupings NAME [NAME ...]` | (all) | Track airports from groupings: presets, ARTCC groupings or your own |
 | `--max-eta-hours HOURS` | 1.0 | Maximum ETA in hours for arrival filter (flights further out are excluded) |
 | `--refresh-interval SECS` | 15 | Minimum seconds between refresh starts; a refresh never starts while one is running, so a slow analysis lengthens the period |
 | `--include-all-staffed` | false | Include airports with zero traffic if they have ATC online |
@@ -211,8 +211,8 @@ The first screen shows traffic with Wind and Altim blank; they fill in region by
 
 When `--include-all-arriving` is used, the Arr column shows `arr/arr_all` format when the counts differ (e.g., `3/  7` means 3 within the ETA window, 7 total filed). The Total column behaves similarly.
 
-#### Custom Groupings Tab
-Shows configured airport groupings with aggregated statistics. Enter opens the selected grouping's flight board; a ★ grouping opens with its saved per-airport dep/arr filters, as it does from Go To.
+#### Groupings Tab
+Shows presets, ARTCC groupings and your ★ groupings with aggregated statistics. Enter opens the selected grouping's flight board; a ★ grouping opens with its saved per-airport dep/arr filters, as it does from Go To.
 
 ### Status Bar
 
@@ -307,7 +307,7 @@ Each flight displays:
 | `Escape` or `Q` | Close flight board |
 | Double-click | Open flight information |
 
-**Direction Filtering:** `F` rotates the board between departures only, arrivals only, and both. The unused column is hidden and the remaining one expands to the full width, and the header shows the active mode. If the board was opened from a favorite with per-airport dep/arr filters, that saved configuration is the first stop in the rotation, so you can always cycle back to it. Cycling only changes the current view — the favorite itself is not modified.
+**Direction Filtering:** `F` rotates the board between departures only, arrivals only, and both. The unused column is hidden and the remaining one expands to the full width, and the header shows the active mode. If the board was opened from a ★ grouping with per-airport dep/arr filters, that saved configuration is the first stop in the rotation, so you can always cycle back to it. Cycling only changes the current view — the ★ grouping itself is not modified.
 
 For grouping flight boards, weather and runway change notifications appear as flashing toasts when conditions change at member airports.
 
@@ -401,13 +401,13 @@ In multi-select mode, press `F` in the results list on a picked airport to cycle
 - `[D>]` - Departures only
 - `[<A]` - Arrivals only
 
-This filtering is preserved when saving as a favorite.
+This filtering is preserved when saving to my groupings.
 
-**Favorite Management:**
-- Favorites appear with a star prefix in the results list
-- `E` - Edit an existing favorite from the results list: opens it in the [Grouping Builder](#grouping-builder) with its name, airports and saved filters. On a preset grouping, `E` opens the builder on a copy instead: a new grouping named "{preset} copy" holding the preset's airports, ready to save with `Ctrl+S`
-- `Ctrl+D` - Delete a favorite; asks "Delete '{name}' from my groupings?" first
-- If a delete fails, an error message names the favorite and the cause
+**My groupings management:**
+- My groupings appear with a star prefix in the results list
+- `E` - Edit a ★ grouping from the results list: opens it in the [Grouping Builder](#grouping-builder) with its name, airports and saved filters. On a preset grouping, `E` opens the builder on a copy instead: a new grouping named "{preset} copy" holding the preset's airports, ready to save with `Ctrl+S`
+- `Ctrl+D` - Delete a ★ grouping; asks "Delete '{name}' from my groupings?" first
+- If a delete fails, an error message names the ★ grouping and the cause
 - After a `Ctrl+S` save the modal leaves pick several and shows the saved name in the search box; after an `E` save it stays as it was, with your picks (a picked grouping that was renamed stays picked under its new name)
 
 Uses a pre-built cache for instant search responsiveness.
@@ -578,7 +578,7 @@ View and manage all currently tracked airports:
 | `A` | Add airports |
 | `Delete` | Remove selected airport(s) |
 | `Space` | Select/deselect multiple airports |
-| `S` | Open the [Grouping Builder](#grouping-builder) on the picked airports (or the whole list when none is picked) |
+| `S` | Save to my groupings: open the [Grouping Builder](#grouping-builder) on the picked airports (or the whole list when none is picked) |
 | `Escape` | Close manager |
 
 **Adding Airports:**
@@ -600,9 +600,9 @@ A searchable list of all available commands (similar to VS Code):
 
 ---
 
-## Custom Groupings
+## Groupings file (custom_groupings.json)
 
-Custom groupings let you organize airports into logical groups (e.g., by sector, region, or facility).
+The groupings file lets you organize airports into logical groups (e.g., by sector, region, or facility). The groupings it defines are listed with the presets, in the Groupings tab and in Go To.
 
 ### Location
 
@@ -646,15 +646,15 @@ Over 600 worldwide facility boundary groupings from SimAware data are available 
 1. Open Go To (`Ctrl+G`)
 2. Press `Tab` to enter multi-select mode
 3. Select airports and groupings
-4. Press `Ctrl+S` to open the [Grouping Builder](#grouping-builder) on your picks, then name and save it (see [Favorites](#favorites))
+4. Press `Ctrl+S` to open the [Grouping Builder](#grouping-builder) on your picks, then name and save it (see [My groupings](#my-groupings))
 
 ---
 
-## Favorites
+## My groupings
 
-Favorites are user-saved multi-airport selections that appear in the Go To modal with a star prefix. Unlike custom groupings, favorites support per-airport dep/arr filtering.
+My groupings are the groupings you save yourself: multi-airport selections that appear in the Go To modal under "★ MY GROUPINGS" and with a star prefix in search results. Unlike the groupings in the groupings file, which are plain airport lists, a ★ grouping supports per-airport dep/arr filtering.
 
-### Creating a Favorite
+### Saving a ★ Grouping
 
 1. Open Go To (`Ctrl+G`)
 2. Press `Tab` to enter multi-select mode
@@ -662,14 +662,14 @@ Favorites are user-saved multi-airport selections that appear in the Go To modal
 4. Optionally press `F` on items to set dep/arr filters
 5. Press `Ctrl+S` to open the [Grouping Builder](#grouping-builder), enter a name and press `Ctrl+S` again
 
-### Using Favorites
+### Using My Groupings
 
-Favorites appear in Go To search results with a star prefix, sorted alphabetically among the groupings. Select one and press `Enter` to open a flight board showing only the selected airports (with filters applied).
+My groupings appear in Go To search results with a star prefix, sorted alphabetically among the groupings. Select one and press `Enter` to open a flight board showing only the selected airports (with filters applied).
 
-### Managing Favorites
+### Managing My Groupings
 
-- **Edit**: Highlight a favorite in Go To and press `E` to edit it in the [Grouping Builder](#grouping-builder)
-- **Delete**: Highlight a favorite and press `Ctrl+D` to delete it, after a confirmation
+- **Edit**: Highlight a ★ grouping in Go To and press `E` to edit it in the [Grouping Builder](#grouping-builder)
+- **Delete**: Highlight a ★ grouping and press `Ctrl+D` to delete it, after a confirmation
 
 ### Per-Airport Filtering
 
@@ -678,7 +678,7 @@ In Go To's pick several, press `F` on a picked airport to cycle its filter; in t
 - Departures only (`[D>]` indicator)
 - Arrivals only (`[<A]` indicator)
 
-Favorites are stored in `favorites.json` in your user data folder: `%LOCALAPPDATA%\VATSIMControlRecs` on Windows, `~/Library/Application Support/VATSIMControlRecs` on macOS, `~/.local/share/VATSIMControlRecs` on Linux.
+My groupings are stored in `favorites.json` in your user data folder: `%LOCALAPPDATA%\VATSIMControlRecs` on Windows, `~/Library/Application Support/VATSIMControlRecs` on macOS, `~/.local/share/VATSIMControlRecs` on Linux.
 
 ---
 
@@ -748,7 +748,7 @@ Grouping flight boards show toast notifications when:
 1. **Use groupings** to organize airports by sector or facility
 2. **Enable `--include-all-staffed`** to see positions even at quiet airports
 3. **Pause auto-refresh** (`Ctrl+P`) when analyzing specific flights
-4. **Save favorites** with per-airport filters for quick access to common views
+4. **Save my groupings** with per-airport filters for quick access to common views
 
 ### Quick Navigation
 
@@ -774,7 +774,7 @@ Grouping flight boards show toast notifications when:
 
 **Sector Controller:**
 1. Start with your sector grouping: `uv run main.py --groupings "NCT"`
-2. Or save a favorite with per-airport dep/arr filtering via Go To
+2. Or save a ★ grouping with per-airport dep/arr filtering via Go To
 3. Use `Ctrl+B` for sector weather briefing
 4. Monitor flight boards for specific airports
 

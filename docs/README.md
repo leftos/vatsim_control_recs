@@ -36,7 +36,7 @@ For any code change, read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: its Task I
 - **GIL**: Python's global interpreter lock; CPU-bound Python on a worker thread starves the UI thread (see `performance.md`).
 - **grouping builder**: the screen that builds or edits a ★ grouping: an Add search over every airport and grouping, the member list with filters, and the save flow (`ui/modals/grouping_builder.py`).
 - **MEA**: minimum enroute altitude; the flight info screen warns when an IFR flight is below it on a segment of its filed route, comparing each segment with the level in force at its airway's entry, else the filed altitude, using the MEA for the direction flown.
-- **my groupings** (★ grouping): a grouping the user saved in `favorites.json`; the code calls it a favorite.
+- **my groupings** (★ grouping): a grouping the user saved in `favorites.json` in the user data directory; the code calls it a favorite (`favorite`, `get_user_favorite_names`).
 - **NASR**: the FAA's National Airspace System Resources data, the source of navaids and fixes for route parsing (`backend/data/navaids.py`).
 - **NASR coverage**: the US and its territories, the airports `is_us_airport` accepts by ICAO prefix; route idents are resolved only against NASR, so a route with an end outside it uses the great circle for ETA. No free worldwide source can replace it: X-Plane's, VATSIM's and the national datasets all forbid an app like this one fetching or shipping them ([X-Plane](research/2026-10-10-xplane-navdata.md), [VATSIM and AIP sources](research/2026-10-10-vatsim-navdata.md)).
 - **opposite-direction MEA**: the second MEA an AWY1 segment carries for the reverse direction; the check picks the MEA whose octant is nearest the course flown, else the higher of the two.
