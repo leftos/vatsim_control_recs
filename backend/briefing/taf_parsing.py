@@ -5,6 +5,7 @@ This module provides shared TAF/forecast parsing functionality used by both
 the UI weather briefing modal and the weather daemon HTML generator.
 """
 
+import calendar
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -232,13 +233,53 @@ def parse_taf_changes(
     return changes
 
 
+def _month_length(year: int, month: int) -> int:
+    """Return how many days a month has."""
+    return calendar.monthrange(year, month)[1]
+
+
+def _shifted_month(target: datetime, delta: int) -> tuple[int, int]:
+    """Return the ``(year, month)`` pair ``delta`` months from ``target``."""
+    index = target.year * 12 + (target.month - 1) + delta
+    return index // 12, index % 12 + 1
+
+
+def _reading_in_month(
+    code: tuple[int, int, int], now: datetime, year: int, month: int
+) -> datetime | None:
+    """
+    Read a TAF code as a time inside one month.
+
+    Args:
+        code: TAF ``(day, hour, minute)`` code
+        now: Reference time, whose remaining date parts the reading keeps
+        year: The month's year
+        month: The month's number
+
+    Returns:
+        The parsed time, or None when that month has no such day
+    """
+    day, hour, minute = code
+    if not 1 <= day <= _month_length(year, month):
+        return None
+    return now.replace(
+        year=year,
+        month=month,
+        day=day,
+        hour=hour,
+        minute=minute,
+        second=0,
+        microsecond=0,
+    )
+
+
 def _shift_month_by_one(target: datetime, now: datetime) -> datetime:
     """
     Move a parsed TAF time one month forward or back when it is over 15 days away.
 
     A TAF day-of-month code carries no month, so a target more than 15 days in the
     past belongs to the next month and one more than 15 days ahead to the previous
-    month.
+    month. A month lacking the target's day keeps the current reading.
 
     Args:
         target: Parsed time read as a day of ``now``'s month
@@ -248,26 +289,62 @@ def _shift_month_by_one(target: datetime, now: datetime) -> datetime:
         The parsed time, moved one month when it falls outside the 15-day window
     """
     if target < now - timedelta(days=15):
-        if now.month == 12:
-            return target.replace(year=now.year + 1, month=1)
-        return target.replace(month=now.month + 1)
-    if target > now + timedelta(days=15):
-        if now.month == 1:
-            return target.replace(year=now.year - 1, month=12)
-        return target.replace(month=now.month - 1)
-    return target
+        delta = 1
+    elif target > now + timedelta(days=15):
+        delta = -1
+    else:
+        return target
+
+    year, month = _shifted_month(target, delta)
+    if target.day > _month_length(year, month):
+        return target
+    return target.replace(year=year, month=month)
+
+
+def _parse_day_time(day: int, hour: int, minute: int, now: datetime) -> datetime:
+    """
+    Read a TAF day, hour and minute as a time near ``now``.
+
+    The code carries no month, so it is read in ``now``'s month when that month has
+    the day, moved one month toward ``now`` when the reading falls outside the
+    15-day window. When ``now``'s month has no such day, the reading comes from the
+    nearer of the previous and the next month that have it, the previous on a tie.
+
+    Args:
+        day: TAF day-of-month code
+        hour: Hour of the day
+        minute: Minute of the hour
+        now: Reference time
+
+    Returns:
+        The parsed time
+
+    Raises:
+        ValueError: When no month near ``now`` has the day, or the hour is out of range
+    """
+    code = (day, hour, minute)
+    current = _reading_in_month(code, now, now.year, now.month)
+    if current is not None:
+        return _shift_month_by_one(current, now)
+
+    previous_year, previous_month = _shifted_month(now, -1)
+    next_year, next_month = _shifted_month(now, 1)
+    previous = _reading_in_month(code, now, previous_year, previous_month)
+    following = _reading_in_month(code, now, next_year, next_month)
+    if previous is None and following is None:
+        raise ValueError(f"no month near {now:%Y-%m} has a day {day}")
+    if following is None:
+        return previous
+    if previous is None:
+        return following
+    return previous if now - previous <= following - now else following
 
 
 def _parse_fm_time(time_str: str, now: datetime) -> datetime:
     """Parse an FM group's ``DDHHMM`` code into a time near ``now``."""
-    target = now.replace(
-        day=int(time_str[:2]),
-        hour=int(time_str[2:4]),
-        minute=int(time_str[4:6]),
-        second=0,
-        microsecond=0,
+    return _parse_day_time(
+        int(time_str[:2]), int(time_str[2:4]), int(time_str[4:6]), now
     )
-    return _shift_month_by_one(target, now)
 
 
 def _parse_period_start(time_str: str, now: datetime) -> datetime | None:
@@ -275,14 +352,7 @@ def _parse_period_start(time_str: str, now: datetime) -> datetime | None:
     start_str = time_str.split("/")[0]
     if len(start_str) != 4 or not start_str.isdigit():
         return None
-    target = now.replace(
-        day=int(start_str[:2]),
-        hour=int(start_str[2:4]),
-        minute=0,
-        second=0,
-        microsecond=0,
-    )
-    return _shift_month_by_one(target, now)
+    return _parse_day_time(int(start_str[:2]), int(start_str[2:4]), 0, now)
 
 
 def _format_time_label(diff_seconds: float) -> str:

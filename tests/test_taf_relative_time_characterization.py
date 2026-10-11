@@ -1,9 +1,12 @@
 """Characterization of the TAF relative-time formatter.
 
-Pins the current output of ``format_taf_relative_time`` over FM (``DDHHMM``) and
+Pins the output of ``format_taf_relative_time`` over FM (``DDHHMM``) and
 TEMPO/BECMG (``DDHH/DDHH``) codes: past, present and future offsets across the
 minute, hour and day boundaries, month and year rollovers in both directions, and
 the malformed inputs that yield an empty string or raise.
+
+The month-turn rows pin the intended reading of a day the current month lacks,
+not the value the formatter produced before that reading was fixed.
 
 The module's ``datetime`` symbol is replaced with a frozen clock, so every
 expectation is exact.
@@ -73,7 +76,10 @@ def test_relative_time_at_frozen_now(time_str: str, expected: str) -> None:
         (datetime(2026, 12, 28, 12, tzinfo=UTC), "010000", "(in  3d)"),
         (datetime(2026, 1, 3, 12, tzinfo=UTC), "300000", "( 4d ago)"),
         (datetime(2026, 6, 28, 12, tzinfo=UTC), "0100/0103", "(in  2d)"),
-        (datetime(2026, 10, 15, 12, tzinfo=UTC), "310000", ""),
+        (datetime(2026, 10, 15, 12, tzinfo=UTC), "310000", "(in 15d)"),
+        (datetime(2026, 4, 1, 0, 30, tzinfo=UTC), "312300", "( 1h ago)"),
+        (datetime(2026, 4, 1, 0, 30, tzinfo=UTC), "3118/0124", "( 6h ago)"),
+        (datetime(2026, 3, 1, 6, tzinfo=UTC), "290000", "(in 27d)"),
     ],
 )
 def test_month_and_year_rollover(
