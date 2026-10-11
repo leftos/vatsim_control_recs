@@ -64,13 +64,11 @@ def _mean_coords(points: Sequence[Coords]) -> Coords:
     return (avg_lat, avg_lon)
 
 
-def _nearest_index(coords: Coords, centroids: Sequence[Coords | None]) -> int:
-    """Index of the centroid nearest ``coords`` (the first on a tie; None is skipped)."""
+def _nearest_index(coords: Coords, centroids: Sequence[Coords]) -> int:
+    """Index of the centroid nearest ``coords`` (the first on a tie)."""
     best_index = 0
     best_distance = float("inf")
     for i, centroid in enumerate(centroids):
-        if centroid is None:
-            continue
         dist = _distance_nm(coords, centroid)
         if dist < best_distance:
             best_distance = dist
@@ -155,9 +153,8 @@ def _attach_untowered(
     clusters: list[list[AirportEntry]], untowered: list[AirportEntry]
 ) -> None:
     """Add each located untowered airport to the cluster whose mean is nearest."""
-    centroids: list[Coords | None] = [
-        _mean_coords([a[3] for a in cluster if a[3]]) if cluster else None
-        for cluster in clusters
+    centroids: list[Coords] = [
+        _mean_coords([a[3] for a in cluster if a[3]]) for cluster in clusters
     ]
     for airport in untowered:
         coords = airport[3]
@@ -239,7 +236,7 @@ class AreaClusterer:
 
         return haversine_distance_nm(min_lat, min_lon, max_lat, max_lon)
 
-    def calculate_optimal_k(self, num_towered: int, num_total: int) -> int:
+    def calculate_optimal_k(self, num_towered: int) -> int:
         """
         Calculate optimal number of clusters (k) for k-means.
 
@@ -451,14 +448,12 @@ class AreaClusterer:
         return {
             "name": area_name,
             "airports": members,
-            "center_icao": centers[0][0] if centers else None,
+            "center_icao": centers[0][0],
         }
 
     def _area_sort_key(self, group: dict[str, Any]) -> tuple[int, str]:
         """Order areas by their centre airport's size, then by name."""
-        center_icao = group["center_icao"]
-        size = self.get_airport_size_priority(center_icao) if center_icao else 99
-        return (size, group["name"])
+        return (self.get_airport_size_priority(group["center_icao"]), group["name"])
 
     def create_area_groups(self) -> list[dict[str, Any]]:
         """
@@ -474,8 +469,7 @@ class AreaClusterer:
         if not towered_airports:
             return self.create_fallback_area_groups()
 
-        num_total = len(towered_airports) + len(non_towered_airports)
-        k = self.calculate_optimal_k(len(towered_airports), num_total)
+        k = self.calculate_optimal_k(len(towered_airports))
 
         clusters = self.kmeans_clustering(towered_airports, k)
 
@@ -484,9 +478,7 @@ class AreaClusterer:
 
         _attach_untowered(clusters, non_towered_airports)
 
-        area_groups = [
-            self._build_area_group(cluster) for cluster in clusters if cluster
-        ]
+        area_groups = [self._build_area_group(cluster) for cluster in clusters]
         self._rename_clashing_areas(area_groups)
         area_groups.sort(key=self._area_sort_key)
         return area_groups

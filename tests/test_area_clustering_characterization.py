@@ -124,7 +124,7 @@ def test_optimal_k_by_towered_count_and_extent(
 ) -> None:
     clusterer = _clusterer_with_extent(extent_nm)
 
-    assert clusterer.calculate_optimal_k(num_towered, num_towered + 5) == expected
+    assert clusterer.calculate_optimal_k(num_towered) == expected
 
 
 def test_optimal_k_uses_a_50_nm_extent_for_a_single_located_airport() -> None:
@@ -133,7 +133,7 @@ def test_optimal_k_uses_a_50_nm_extent_for_a_single_located_airport() -> None:
     clusterer = AreaClusterer(weather, unified)
 
     assert clusterer.calculate_grouping_extent() == 50.0
-    assert clusterer.calculate_optimal_k(8, 8) == 5
+    assert clusterer.calculate_optimal_k(8) == 5
 
 
 def test_optimal_k_ignores_airports_without_coordinates_in_the_extent() -> None:
@@ -144,7 +144,7 @@ def test_optimal_k_ignores_airports_without_coordinates_in_the_extent() -> None:
     }
     weather = {icao: {"category": "VFR"} for icao in unified}
 
-    assert AreaClusterer(weather, unified).calculate_optimal_k(8, 8) == 8
+    assert AreaClusterer(weather, unified).calculate_optimal_k(8) == 8
 
 
 @pytest.mark.parametrize(
@@ -167,7 +167,7 @@ def test_optimal_k_at_an_extent_limit_takes_the_next_step(
     clusterer = _bare_clusterer()
     monkeypatch.setattr(clusterer, "calculate_grouping_extent", lambda: extent_nm)
 
-    assert clusterer.calculate_optimal_k(num_towered, num_towered) == expected
+    assert clusterer.calculate_optimal_k(num_towered) == expected
 
 
 def test_optimal_k_measures_the_extent_even_for_one_towered_airport() -> None:
@@ -181,7 +181,7 @@ def test_optimal_k_measures_the_extent_even_for_one_towered_airport() -> None:
     }
 
     with pytest.raises(ValueError, match="lat2 must be between -90 and 90"):
-        AreaClusterer(weather, unified).calculate_optimal_k(1, 2)
+        AreaClusterer(weather, unified).calculate_optimal_k(1)
 
 
 # kmeans_clustering
