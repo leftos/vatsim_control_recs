@@ -25,6 +25,31 @@ else:
     _PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
 
+# Characters Windows, macOS or Linux refuse in a file name
+_FORBIDDEN_FILENAME_CHARACTERS = frozenset('/\\:*?"<>|')
+
+
+def safe_filename_part(text: str, max_length: int) -> str:
+    """Free text made safe to use as part of a file name.
+
+    Args:
+        text: The text, such as a grouping name or a callsign.
+        max_length: The most characters the result keeps.
+
+    Returns:
+        The text with each of ``/ \\ : * ? " < > |`` and every control character
+        (code point below 32) replaced by "_", cut to ``max_length`` characters;
+        spaces and every other character are kept.
+    """
+    safe = "".join(
+        "_"
+        if character in _FORBIDDEN_FILENAME_CHARACTERS or ord(character) < 32
+        else character
+        for character in text
+    )
+    return safe[:max_length]
+
+
 def get_project_root() -> Path:
     """Get the project root directory (for read-only data files).
 

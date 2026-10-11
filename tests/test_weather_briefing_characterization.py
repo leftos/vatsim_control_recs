@@ -16,8 +16,10 @@ import asyncio
 import html
 import random
 import re
+import tempfile
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, tzinfo
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar
 
@@ -173,8 +175,10 @@ class World:
         self.datis: dict[str, Any] = {"KLAX": LAX_DATIS}
         self.datis_calls: list[list[str]] = []
         self.files: list[FakeTempFile] = []
+        self.temp_error: OSError | None = None
         self.opened: list[str] = []
         self.debug: list[str] = []
+        self.errors: list[tuple[str, bool]] = []
         self.call_order: list[str] = []
 
     def get_weather_smart(
@@ -224,9 +228,14 @@ class World:
         return answer(self.datis, airports)
 
     def named_temporary_file(self, **kwargs: Any) -> FakeTempFile:
+        if self.temp_error is not None:
+            raise self.temp_error
         temp_file = FakeTempFile(kwargs)
         self.files.append(temp_file)
         return temp_file
+
+    def error(self, message: str, exc_info: bool = False) -> None:
+        self.errors.append((message, exc_info))
 
 
 def install(monkeypatch: pytest.MonkeyPatch) -> World:
@@ -244,6 +253,7 @@ def install(monkeypatch: pytest.MonkeyPatch) -> World:
     ):
         monkeypatch.setattr(weather_briefing, name, getattr(world, name))
     monkeypatch.setattr(weather_briefing, "debug", world.debug.append)
+    monkeypatch.setattr(weather_briefing, "error", world.error)
 
     class FakeDatetime(datetime):
         @classmethod
@@ -290,9 +300,10 @@ class Briefing:
         airports: list[str] | None = None,
         primary: list[str] | None = None,
         route: bool = False,
+        name: str = "Bay Area",
     ) -> None:
         self.screen = WeatherBriefingScreen(
-            "Bay Area",
+            name,
             list(GROUPING if airports is None else airports),
             primary_airports=primary,
             is_flight_route=route,
@@ -622,13 +633,13 @@ async def test_fetch_yields_after_each_progress_message(world: World) -> None:
     ]
 
 
-async def test_fetch_failure_shows_the_error_and_raises(world: World) -> None:
+async def test_fetch_failure_shows_the_error_and_logs_it(world: World) -> None:
     world.weather_error = RuntimeError("weather feed down")
     briefing = Briefing()
 
-    with pytest.raises(RuntimeError, match="weather feed down"):
-        await run_fetch(briefing)
+    await run_fetch(briefing)
 
+    assert world.errors == [("Weather briefing fetch failed: weather feed down", True)]
     assert world.call_order == ["smart", "vatsim"]
     assert briefing.content.updates == [
         "[red]Error fetching weather: weather feed down[/red]"
@@ -641,13 +652,13 @@ async def test_fetch_failure_shows_the_error_and_raises(world: World) -> None:
     assert briefing.screen.weather_data == {}
 
 
-async def test_fetch_before_the_widgets_exist_logs_and_raises(world: World) -> None:
+async def test_fetch_before_the_widgets_exist_logs_the_failure(world: World) -> None:
     briefing = Briefing(["KSFO"])
     briefing.widgets_ready = False
 
-    with pytest.raises(WidgetsNotReadyError, match="#briefing-summary"):
-        await run_fetch(briefing)
+    await run_fetch(briefing)
 
+    assert world.errors == [("Weather briefing fetch failed: #briefing-summary", True)]
     progress_logs = [m for m in world.debug if m.startswith("Could not update")]
     assert progress_logs
     assert set(progress_logs) == {
@@ -657,6 +668,68 @@ async def test_fetch_before_the_widgets_exist_logs_and_raises(world: World) -> N
         "Could not display weather fetch error: #briefing-content"
     )
     assert briefing.screen.weather_data == {"KSFO": FETCHED["KSFO"]}
+
+
+class VatsimHeldExecutor:
+    """Stands in for the loop's thread pool, holding the VATSIM fetch until released.
+
+    Every other call runs on the loop's next pass.
+    """
+
+    def __init__(self, loop: asyncio.AbstractEventLoop, world: World) -> None:
+        self.loop = loop
+        self.world = world
+        self.held: list[tuple[Callable[[], Any], asyncio.Future[Any]]] = []
+
+    def run_in_executor(
+        self, executor: Any, func: Callable[..., Any], *args: Any
+    ) -> asyncio.Future[Any]:
+        future = self.loop.create_future()
+        call = (lambda: func(*args), future)
+        if func == self.world.download_vatsim_data:
+            self.held.append(call)
+        else:
+            self.loop.call_soon(self._finish, *call)
+        return future
+
+    def release(self) -> None:
+        for call in self.held:
+            self._finish(*call)
+        self.held.clear()
+
+    @staticmethod
+    def _finish(call: Callable[[], Any], future: asyncio.Future[Any]) -> None:
+        try:
+            result = call()
+        except Exception as error:
+            future.set_exception(error)
+        else:
+            future.set_result(result)
+
+
+async def test_fetch_failure_keeps_the_error_summary_when_vatsim_finishes_later(
+    world: World,
+) -> None:
+    world.weather_error = RuntimeError("weather feed down")
+    briefing = Briefing()
+    loop = asyncio.get_running_loop()
+    executor = VatsimHeldExecutor(loop, world)
+    loop.run_in_executor = executor.run_in_executor
+    try:
+        await briefing.screen._fetch_all_weather_async()
+        executor.release()
+        current = asyncio.current_task()
+        for _ in range(10):
+            if all(t is current for t in asyncio.all_tasks()):
+                break
+            await asyncio.sleep(0)
+    finally:
+        del loop.run_in_executor
+
+    assert world.call_order == ["smart", "vatsim"]
+    assert all(t is current for t in asyncio.all_tasks())
+    assert briefing.summary.updates[-1] == "[red]Error[/red]"
+    assert world.errors == [("Weather briefing fetch failed: weather feed down", True)]
 
 
 # _build_airport_card
@@ -1019,6 +1092,26 @@ def test_display_areas_skip_empty_ones_and_unsummarised_ones_have_no_summary(
     assert briefing.content.updates == [FAKE_AREAS_CONTENT]
 
 
+class FailingClusterer(FakeClusterer):
+    """An area clusterer that fails."""
+
+    def create_area_groups(self) -> list[dict[str, Any]]:
+        raise RuntimeError("clustering failed")
+
+
+def test_display_whose_clustering_fails_keeps_every_airport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(weather_briefing, "AreaClusterer", FailingClusterer)
+    briefing = Briefing(primary=["KSFO"])
+    briefing.screen.weather_data = dict(FETCHED)
+
+    with pytest.raises(RuntimeError, match="clustering failed"):
+        briefing.screen._update_display()
+
+    assert list(briefing.screen.weather_data) == list(FETCHED)
+
+
 # action_print
 
 
@@ -1065,6 +1158,52 @@ def test_print_writes_the_page_and_opens_it(world: World) -> None:
     assert briefing.toasts == [
         ("Opened in browser: weather_briefing_Bay Area_abc123.html", {})
     ]
+
+
+SLASHED_NAME = "ABQ Albuquerque ATCT/TRACON"
+
+
+def test_print_replaces_a_slash_in_the_name_of_the_file_prefix(world: World) -> None:
+    run_print(world, Briefing(name=SLASHED_NAME), dict(FETCHED))
+
+    (temp_file,) = world.files
+    assert temp_file.kwargs["prefix"] == "weather_briefing_ABQ Albuquerque ATCT_TRACON_"
+
+
+def test_print_that_cannot_write_the_file_says_so_and_opens_nothing(
+    world: World,
+) -> None:
+    world.temp_error = OSError("disk full")
+    briefing = Briefing()
+    briefing.screen.weather_data = dict(FETCHED)
+
+    briefing.screen.action_print()
+
+    assert world.opened == []
+    assert briefing.toasts == [
+        ("Couldn't export the briefing: disk full", {"severity": "error"})
+    ]
+    assert world.errors == [("Briefing export failed: disk full", True)]
+
+
+def test_print_of_a_slashed_name_writes_a_real_temp_file(
+    world: World, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(weather_briefing, "tempfile", tempfile)
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    briefing = Briefing(name=SLASHED_NAME)
+    briefing.screen.weather_data = dict(FETCHED)
+
+    briefing.screen.action_print()
+
+    (written,) = tmp_path.iterdir()
+    assert written.name.startswith("weather_briefing_ABQ Albuquerque ATCT_TRACON_")
+    assert written.suffix == ".html"
+    assert page_lines(written.read_text(encoding="utf-8"))[0] == (
+        f"Weather Briefing: {SLASHED_NAME}"
+    )
+    assert world.opened == [f"file://{written}"]
+    assert briefing.toasts == [(f"Opened in browser: {written.name}", {})]
 
 
 def test_print_grouping_without_requested_airports(world: World) -> None:
@@ -1526,36 +1665,36 @@ body { margin: 20px; }
 </head>
 <body>
 <pre style="font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><code style="font-family:inherit"><span style="font-weight: bold">Weather Briefing: Bay Area</span>
-Generated: <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">2026</span>-<span style="color: #008080; text-decoration-color: #008080; font-weight: bold">10</span>-<span style="color: #008080; text-decoration-color: #008080; font-weight: bold">10</span> 1200Z
+Generated: 2026-10-10 1200Z
 
-<span style="color: #800080; text-decoration-color: #800080; font-weight: bold">1</span><span style="color: #800080; text-decoration-color: #800080"> LIFR</span> | <span style="color: #800000; text-decoration-color: #800000; font-weight: bold">1</span><span style="color: #800000; text-decoration-color: #800000"> IFR</span> | <span style="color: #5599ff; text-decoration-color: #5599ff; font-weight: bold">2</span><span style="color: #5599ff; text-decoration-color: #5599ff"> MVFR</span> | <span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">1</span><span style="color: #00ff00; text-decoration-color: #00ff00"> VFR</span>
+<span style="color: #800080; text-decoration-color: #800080">1 LIFR</span> | <span style="color: #800000; text-decoration-color: #800000">1 IFR</span> | <span style="color: #5599ff; text-decoration-color: #5599ff">2 MVFR</span> | <span style="color: #00ff00; text-decoration-color: #00ff00">1 VFR</span>
 
 <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">━━━ REQUESTED ━━━</span>
-<span style="font-weight: bold">KSFO</span> - San Francisco Intl <span style="color: #800080; text-decoration-color: #800080">//</span> <span style="color: #5599ff; text-decoration-color: #5599ff; font-weight: bold">MVFR</span>
+<span style="font-weight: bold">KSFO</span> - San Francisco Intl // <span style="color: #5599ff; text-decoration-color: #5599ff; font-weight: bold">MVFR</span>
   Ceiling: BKN015 | Vis: 10SM | Wind: 28012G22KT
-  <span style="color: #008000; text-decoration-color: #008000; font-weight: bold">▲</span> TAF FM <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">101800</span> <span style="color: #7f7f7f; text-decoration-color: #7f7f7f; font-weight: bold">(</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">in  6h</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f; font-weight: bold">)</span>      : <span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">VFR</span> - P6SM |        | 29015G25KT |
-  <span style="color: #800000; text-decoration-color: #800000; font-weight: bold">▼</span> TAF TEMPO <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">1020</span>/<span style="color: #008080; text-decoration-color: #008080; font-weight: bold">1024</span> <span style="color: #7f7f7f; text-decoration-color: #7f7f7f; font-weight: bold">(</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">in  8h</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f; font-weight: bold">)</span>: <span style="color: #800000; text-decoration-color: #800000; font-weight: bold">IFR</span> -  3SM | BKN008 |            | Mist
+  <span style="color: #008000; text-decoration-color: #008000; font-weight: bold">▲</span> TAF FM 101800 <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">(in  6h)</span>      : <span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">VFR</span> - P6SM |        | 29015G25KT |
+  <span style="color: #800000; text-decoration-color: #800000; font-weight: bold">▼</span> TAF TEMPO 1020/1024 <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">(in  8h)</span>: <span style="color: #800000; text-decoration-color: #800000; font-weight: bold">IFR</span> -  3SM | BKN008 |            | Mist
   <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">SFO ATIS INFO </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">A</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">. </span><span style="color: #bfbf7f; text-decoration-color: #bfbf7f">ILS RWY 28L APCH IN USE</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">. </span><span style="color: #bfbf7f; text-decoration-color: #bfbf7f">DEPG RWY 1L</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">.</span>
 
 <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">━━━ LOS ANGELES / SANTA MONICA AREA ━━━</span>
-<span style="color: #800080; text-decoration-color: #800080; font-weight: bold">1</span><span style="color: #800080; text-decoration-color: #800080"> LIFR</span> | <span style="color: #5599ff; text-decoration-color: #5599ff; font-weight: bold">1</span><span style="color: #5599ff; text-decoration-color: #5599ff"> MVFR</span>
-KLAX - Los Angeles Intl <span style="color: #800080; text-decoration-color: #800080">//</span> <span style="color: #800080; text-decoration-color: #800080; font-weight: bold">LIFR</span>
-  Ceiling: VV002 | Vis: <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">1</span>/2SM | Wind: 25008KT
+<span style="color: #800080; text-decoration-color: #800080">1 LIFR</span> | <span style="color: #5599ff; text-decoration-color: #5599ff">1 MVFR</span>
+KLAX - Los Angeles Intl // <span style="color: #800080; text-decoration-color: #800080; font-weight: bold">LIFR</span>
+  Ceiling: VV002 | Vis: 1/2SM | Wind: 25008KT
   Weather: Fog
-  <span style="color: #ffd47f; text-decoration-color: #ffd47f; font-weight: bold">(</span><span style="color: #ffd47f; text-decoration-color: #ffd47f">RW</span><span style="color: #ffd47f; text-decoration-color: #ffd47f; font-weight: bold">)</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">DEP:</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> LAX DEP INFO </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">K</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">. </span><span style="color: #bfbf7f; text-decoration-color: #bfbf7f">DEPG RWY 25R</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> 24L.</span>
-  <span style="color: #ffd47f; text-decoration-color: #ffd47f; font-weight: bold">(</span><span style="color: #ffd47f; text-decoration-color: #ffd47f">RW</span><span style="color: #ffd47f; text-decoration-color: #ffd47f; font-weight: bold">)</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">ARR:</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> LAX ARR INFO </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">L</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">. </span><span style="color: #bfbf7f; text-decoration-color: #bfbf7f">ILS RWY 24R</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> 25L APCHS IN USE.</span>
-KSMO - Santa Monica <span style="color: #800080; text-decoration-color: #800080">//</span> <span style="color: #5599ff; text-decoration-color: #5599ff; font-weight: bold">MVFR</span> <span style="color: #ff9900; text-decoration-color: #ff9900; font-weight: bold">SPECI</span>
+  <span style="color: #ffd47f; text-decoration-color: #ffd47f">(RW)</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">DEP:</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> LAX DEP INFO </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">K</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">. </span><span style="color: #bfbf7f; text-decoration-color: #bfbf7f">DEPG RWY 25R</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> 24L.</span>
+  <span style="color: #ffd47f; text-decoration-color: #ffd47f">(RW)</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">ARR:</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> LAX ARR INFO </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">L</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">. </span><span style="color: #bfbf7f; text-decoration-color: #bfbf7f">ILS RWY 24R</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> 25L APCHS IN USE.</span>
+KSMO - Santa Monica // <span style="color: #5599ff; text-decoration-color: #5599ff; font-weight: bold">MVFR</span> <span style="color: #ff9900; text-decoration-color: #ff9900; font-weight: bold">SPECI</span>
   Ceiling: CLR | Vis: 5SM | Wind: 26006KT
   Weather: Haze
 
 <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">━━━ OAKLAND / HALF MOON BAY AREA ━━━</span>
-<span style="color: #800000; text-decoration-color: #800000; font-weight: bold">1</span><span style="color: #800000; text-decoration-color: #800000"> IFR</span> | <span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">1</span><span style="color: #00ff00; text-decoration-color: #00ff00"> VFR</span>
-KOAK - Oakland Intl <span style="color: #800080; text-decoration-color: #800080">//</span> <span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">VFR</span>
+<span style="color: #800000; text-decoration-color: #800000">1 IFR</span> | <span style="color: #00ff00; text-decoration-color: #00ff00">1 VFR</span>
+KOAK - Oakland Intl // <span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">VFR</span>
   Ceiling: CLR | Vis: 10SM | Wind: 00000KT
-KHAF - Half Moon Bay <span style="color: #800080; text-decoration-color: #800080">//</span> <span style="color: #800000; text-decoration-color: #800000; font-weight: bold">IFR</span>
+KHAF - Half Moon Bay // <span style="color: #800000; text-decoration-color: #800000; font-weight: bold">IFR</span>
   Ceiling: OVC006 | Vis: 2SM
   Weather: Mist
-  <span style="color: #008000; text-decoration-color: #008000; font-weight: bold">▲</span> TAF FM <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">101600</span> <span style="color: #7f7f7f; text-decoration-color: #7f7f7f; font-weight: bold">(</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">in  4h</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f; font-weight: bold">)</span>: <span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">VFR</span> - P6SM
+  <span style="color: #008000; text-decoration-color: #008000; font-weight: bold">▲</span> TAF FM 101600 <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">(in  4h)</span>: <span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">VFR</span> - P6SM
 
 </code></pre>
 </body>

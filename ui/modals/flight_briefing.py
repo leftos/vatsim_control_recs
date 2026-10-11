@@ -33,9 +33,10 @@ from backend.data.weather_parsing import (
     parse_ceiling_layer,
     parse_visibility_sm,
 )
+from common.paths import safe_filename_part
 from ui import config
 from ui.config import CATEGORY_COLORS
-from ui.debug_logger import debug
+from ui.debug_logger import debug, error
 
 _INSTRUMENT_CATEGORIES = ("LIFR", "IFR")
 
@@ -555,7 +556,14 @@ class FlightWeatherBriefingScreen(ModalScreen):
             self.notify("No weather data to export", severity="warning")
             return
 
-        console = Console(record=True, force_terminal=True, width=500, file=StringIO())
+        # No highlighting, so the page is coloured only as the screen is
+        console = Console(
+            record=True,
+            force_terminal=True,
+            width=500,
+            file=StringIO(),
+            highlight=False,
+        )
         for line in self._print_lines():
             console.print(line)
 
@@ -568,15 +576,20 @@ body { margin: 20px; font-family: monospace; }
 </style>""",
         )
 
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".html",
-            prefix=f"flight_briefing_{self.callsign}_",
-            delete=False,
-            encoding="utf-8",
-        ) as f:
-            f.write(html_content)
-            temp_path = f.name
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".html",
+                prefix=f"flight_briefing_{safe_filename_part(self.callsign, 60)}_",
+                delete=False,
+                encoding="utf-8",
+            ) as f:
+                f.write(html_content)
+                temp_path = f.name
+        except OSError as exc:
+            self.notify(f"Couldn't export the briefing: {exc}", severity="error")
+            error(f"Briefing export failed: {exc}", exc_info=True)
+            return
 
         webbrowser.open(f"file://{temp_path}")
         self.notify(f"Opened in browser: {os.path.basename(temp_path)}")

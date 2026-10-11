@@ -39,9 +39,10 @@ from backend.data.weather_parsing import (
     parse_visibility_sm,
     parse_weather_phenomena,
 )
+from common.paths import safe_filename_part
 from ui import config
 from ui.config import CATEGORY_COLORS
-from ui.debug_logger import debug
+from ui.debug_logger import debug, error
 
 _REQUESTED_HEADER = "[bold cyan]━━━ REQUESTED ━━━[/bold cyan]"
 
@@ -85,28 +86,43 @@ def _parse_metar_observation_time(metar: str) -> tuple | None:
 
     zulu_str = f"{hour:02d}{minute:02d}Z"
 
-    # Convert to local time
-    now = datetime.now(UTC)
-    try:
-        obs_time = now.replace(
-            day=day, hour=hour, minute=minute, second=0, microsecond=0
-        )
-        # Handle month rollover (observation could be from previous month)
-        if obs_time > now + timedelta(
-            hours=2
-        ):  # More than 2h in future = likely prev month
-            if now.month == 1:
-                obs_time = obs_time.replace(year=now.year - 1, month=12)
-            else:
-                obs_time = obs_time.replace(month=now.month - 1)
-
-        # Convert to local time
-        local_time = obs_time.astimezone()
-        local_str = local_time.strftime("%H:%M LT")
-
-        return (zulu_str, local_str)
-    except (ValueError, OSError):
+    obs_time = _metar_observation_instant(datetime.now(UTC), day, hour, minute)
+    if obs_time is None:
         return (zulu_str, None)
+    try:
+        local_str = obs_time.astimezone().strftime("%H:%M LT")
+    except OSError:
+        return (zulu_str, None)
+    return (zulu_str, local_str)
+
+
+def _utc_instant(
+    year: int, month: int, day: int, hour: int, minute: int
+) -> datetime | None:
+    """The UTC instant, or None when the month has no such day or the time is invalid."""
+    try:
+        return datetime(year, month, day, hour, minute, tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+def _metar_observation_instant(
+    now: datetime, day: int, hour: int, minute: int
+) -> datetime | None:
+    """The instant a METAR's day/hour/minute names, read as a time in the past.
+
+    The day is read in now's month when that month has it and the result is no
+    more than 2 h ahead of now; otherwise in the previous month.
+
+    Returns:
+        The instant, or None when the previous month lacks the day too.
+    """
+    this_month = _utc_instant(now.year, now.month, day, hour, minute)
+    if this_month is not None and this_month <= now + timedelta(hours=2):
+        return this_month
+    if now.month == 1:
+        return _utc_instant(now.year - 1, 12, day, hour, minute)
+    return _utc_instant(now.year, now.month - 1, day, hour, minute)
 
 
 def _category_summary_parts(weather_data: dict[str, dict[str, Any]]) -> list[str]:
@@ -377,9 +393,16 @@ class _FetchProgress:
         self.report = report
         self.weather = (0, total_airports)
         self.vatsim_done = False
+        self.stopped = False
+
+    def stop(self) -> None:
+        """Report nothing more, so a fetch still running cannot overwrite the summary."""
+        self.stopped = True
 
     def show(self) -> None:
-        """Report the current state."""
+        """Report the current state, unless stopped."""
+        if self.stopped:
+            return
         weather_done, weather_total = self.weather
         weather_str = (
             "[green]Weather ✓[/green]"
@@ -506,11 +529,17 @@ class WeatherBriefingScreen(ModalScreen):
             debug(f"Could not update briefing progress, widget not ready: {e}")
 
     async def _fetch_all_weather_async(self) -> None:
-        """Fetch all weather data in parallel"""
+        """Fetch all weather data in parallel.
+
+        A failure is logged and shown as an error; the progress line is stopped
+        first, so a fetch still running cannot overwrite the error summary.
+        """
+        progress = _FetchProgress(self._update_progress, len(self.airports))
         try:
-            await self._fetch_all_weather_async_inner()
+            await self._fetch_all_weather_async_inner(progress)
         except Exception as e:
-            # Show error in the content widget
+            progress.stop()
+            error(f"Weather briefing fetch failed: {e}", exc_info=True)
             try:
                 content_widget = self.query_one("#briefing-content", Static)
                 content_widget.update(f"[red]Error fetching weather: {e}[/red]")
@@ -518,12 +547,10 @@ class WeatherBriefingScreen(ModalScreen):
                 summary_widget.update("[red]Error[/red]")
             except Exception as widget_error:
                 debug(f"Could not display weather fetch error: {widget_error}")
-            raise  # Re-raise to log the error
 
-    async def _fetch_all_weather_async_inner(self) -> None:
+    async def _fetch_all_weather_async_inner(self, progress: _FetchProgress) -> None:
         """Inner implementation of weather fetching"""
         loop = asyncio.get_event_loop()
-        progress = _FetchProgress(self._update_progress, len(self.airports))
         progress.show()
         airport_coords = self._airport_coords()
 
@@ -636,12 +663,14 @@ class WeatherBriefingScreen(ModalScreen):
                 metars.get(icao, ""), tafs.get(icao, ""), atis_data.get(icao)
             )
 
-    def _create_area_groups(self) -> list[dict[str, Any]]:
-        """Create area-based groupings using shared AreaClusterer."""
+    def _create_area_groups(
+        self, weather_data: dict[str, dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Create area-based groupings of these airports using shared AreaClusterer."""
         if not config.UNIFIED_AIRPORT_DATA:
             return []
         clusterer = AreaClusterer(
-            weather_data=self.weather_data,
+            weather_data=weather_data,
             unified_airport_data=config.UNIFIED_AIRPORT_DATA,
             disambiguator=config.DISAMBIGUATOR,
         )
@@ -649,16 +678,12 @@ class WeatherBriefingScreen(ModalScreen):
 
     def _non_primary_area_groups(self) -> list[dict[str, Any]]:
         """Area groups of the airports other than the requested ones."""
-        original_weather_data = self.weather_data
-        if self.primary_airports:
-            self.weather_data = {
-                k: v
-                for k, v in self.weather_data.items()
-                if k not in self.primary_airports
-            }
-        area_groups = self._create_area_groups()
-        self.weather_data = original_weather_data
-        return area_groups
+        non_primary_weather = {
+            icao: data
+            for icao, data in self.weather_data.items()
+            if icao not in self.primary_airports
+        }
+        return self._create_area_groups(non_primary_weather)
 
     def _route_cards(self) -> list[str]:
         """Cards of the route's airports with weather, in route order."""
@@ -766,16 +791,25 @@ class WeatherBriefingScreen(ModalScreen):
             console.print()
 
     def _open_in_browser(self, html_content: str) -> None:
-        """Write the page to a temp file, open it and say which file it is."""
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".html",
-            prefix=f"weather_briefing_{self.grouping_name}_",
-            delete=False,
-            encoding="utf-8",
-        ) as f:
-            f.write(html_content)
-            temp_path = f.name
+        """Write the page to a temp file, open it and say which file it is.
+
+        A file that cannot be created or written is reported in an error toast
+        and logged, and nothing is opened.
+        """
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".html",
+                prefix=f"weather_briefing_{safe_filename_part(self.grouping_name, 60)}_",
+                delete=False,
+                encoding="utf-8",
+            ) as f:
+                f.write(html_content)
+                temp_path = f.name
+        except OSError as exc:
+            self.notify(f"Couldn't export the briefing: {exc}", severity="error")
+            error(f"Briefing export failed: {exc}", exc_info=True)
+            return
 
         webbrowser.open(f"file://{temp_path}")
         self.notify(f"Opened in browser: {os.path.basename(temp_path)}")
@@ -786,8 +820,15 @@ class WeatherBriefingScreen(ModalScreen):
             self.notify("No weather data to export", severity="warning")
             return
 
-        # Wide enough that Rich never wraps; the page's CSS wraps instead
-        console = Console(record=True, force_terminal=True, width=500, file=StringIO())
+        # Wide enough that Rich never wraps; the page's CSS wraps instead. No
+        # highlighting, so the page is coloured only as the screen is.
+        console = Console(
+            record=True,
+            force_terminal=True,
+            width=500,
+            file=StringIO(),
+            highlight=False,
+        )
 
         # Zulu only: a reader's local time varies
         now = datetime.now(UTC)

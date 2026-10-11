@@ -101,8 +101,10 @@ class World:
         ]
         self.enroute_calls: list[tuple[Any, ...]] = []
         self.files: list[FakeTempFile] = []
+        self.temp_error: OSError | None = None
         self.opened: list[str] = []
         self.debug: list[str] = []
+        self.errors: list[tuple[str, bool]] = []
 
     def get_metar_batch(self, airports: list[str]) -> dict[str, str]:
         self.metar_calls.append(list(airports))
@@ -135,9 +137,14 @@ class World:
         return [dict(point) for point in self.enroute]
 
     def named_temporary_file(self, **kwargs: Any) -> FakeTempFile:
+        if self.temp_error is not None:
+            raise self.temp_error
         temp_file = FakeTempFile(kwargs)
         self.files.append(temp_file)
         return temp_file
+
+    def error(self, message: str, exc_info: bool = False) -> None:
+        self.errors.append((message, exc_info))
 
 
 def install(monkeypatch: pytest.MonkeyPatch) -> World:
@@ -156,6 +163,7 @@ def install(monkeypatch: pytest.MonkeyPatch) -> World:
         monkeypatch.setattr(module, name, getattr(world, name))
         monkeypatch.setattr(flight_briefing, name, getattr(world, name), raising=False)
     monkeypatch.setattr(flight_briefing, "debug", world.debug.append)
+    monkeypatch.setattr(flight_briefing, "error", world.error)
 
     class FakeDatetime(datetime):
         @classmethod
@@ -769,7 +777,7 @@ def test_update_display(
 
 def exported_html(lines: list[str]) -> str:
     """The page the export writes for these printed lines, rendered by Rich itself."""
-    console = Console(record=True, force_terminal=True, width=500)
+    console = Console(record=True, force_terminal=True, width=500, highlight=False)
     for line in lines:
         console.print(line)
     return console.export_html(inline_styles=True).replace(
@@ -814,6 +822,21 @@ def test_print_writes_the_page_and_opens_it(world: World) -> None:
     assert briefing.toasts == [
         ("Opened in browser: flight_briefing_UAL1_abc123.html", {})
     ]
+
+
+def test_print_that_cannot_write_the_file_says_so_and_opens_nothing(
+    world: World,
+) -> None:
+    world.temp_error = OSError("disk full")
+    briefing = briefing_in("full")
+
+    briefing.screen.action_print()
+
+    assert world.opened == []
+    assert briefing.toasts == [
+        ("Couldn't export the briefing: disk full", {"severity": "error"})
+    ]
+    assert world.errors == [("Briefing export failed: disk full", True)]
 
 
 TITLE = "[bold]Flight Weather Briefing: UAL1[/bold]"
@@ -976,35 +999,35 @@ body { margin: 20px; font-family: monospace; }
     <pre style="font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><code style="font-family:inherit"><span style="font-weight: bold">Flight Weather Briefing: UAL1</span>
 KAAA → KEEE
 Alternate: KALT
-Generated: <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">2026</span>-<span style="color: #008080; text-decoration-color: #008080; font-weight: bold">10</span>-<span style="color: #008080; text-decoration-color: #008080; font-weight: bold">10</span> 1200Z  |  Route: 240nm  |  ETE: +<span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">0:32</span>
+Generated: 2026-10-10 1200Z  |  Route: 240nm  |  ETE: +0:32
 
 <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">SYNOPSIS</span>
 VFR departure. MVFR enroute. IFR conditions at arrival. improving to VFR.
 
 <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">━━━ DEPARTURE ━━━</span>
-DEP KAAA <span style="font-weight: bold">(</span>   0nm       <span style="font-weight: bold">)</span> <span style="color: #808000; text-decoration-color: #808000">..............................</span>. <span style="color: #00ff00; text-decoration-color: #00ff00">VFR</span>
-    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">27010KT </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">10.</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">0SM</span>
-    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">101251Z 27010KT 10SM CLR </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">15</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">/</span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">05</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> A2992</span>
+DEP KAAA (   0nm       ) ............................... <span style="color: #00ff00; text-decoration-color: #00ff00">VFR</span>
+    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">27010KT 10.0SM</span>
+    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">101251Z 27010KT 10SM CLR 15/05 A2992</span>
 
 <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">━━━ ENROUTE ━━━</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · ALPHA</span>
-ENR KMMM <span style="font-weight: bold">(</span>  80nm  +<span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">0:10</span><span style="font-weight: bold">)</span> <span style="color: #808000; text-decoration-color: #808000">........................</span>.. <span style="color: #5599ff; text-decoration-color: #5599ff">MVFR</span>
-    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">00000KT </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">4.</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">0SM BKN020</span>
+ENR KMMM (  80nm  +0:10) .......................... <span style="color: #5599ff; text-decoration-color: #5599ff">MVFR</span>
+    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">00000KT 4.0SM BKN020</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · BRAVO</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · CHARL</span>
-ENR KNNN <span style="font-weight: bold">(</span> 160nm  +<span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">0:21</span><span style="font-weight: bold">)</span> <span style="color: #808000; text-decoration-color: #808000">........................</span>.. <span style="color: #00ff00; text-decoration-color: #00ff00">VFR</span>
+ENR KNNN ( 160nm  +0:21) .......................... <span style="color: #00ff00; text-decoration-color: #00ff00">VFR</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">27010KT</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · DELTA</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · ECHOO</span>
 
 <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">━━━ ARRIVAL ━━━</span>
-ARR KEEE <span style="font-weight: bold">(</span> 240nm  +<span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">0:32</span><span style="font-weight: bold">)</span> <span style="color: #808000; text-decoration-color: #808000">........................</span>.. <span style="color: #800000; text-decoration-color: #800000">IFR</span>
-    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">18005KT </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">2.</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">0SM OVC008</span>
-    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">101251Z 18005KT 2SM BR OVC008 </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">10</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">/</span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">10</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f"> A2992</span>
-    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">TAF: ↑ VFR </span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f; font-weight: bold">(</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">FM</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f; font-weight: bold">)</span>
+ARR KEEE ( 240nm  +0:32) .......................... <span style="color: #800000; text-decoration-color: #800000">IFR</span>
+    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">18005KT 2.0SM OVC008</span>
+    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">101251Z 18005KT 2SM BR OVC008 10/10 A2992</span>
+    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">TAF: ↑ VFR (FM)</span>
 
 <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">━━━ ALTERNATE ━━━</span>
-ALT KALT <span style="font-weight: bold">(</span>   0nm       <span style="font-weight: bold">)</span> <span style="color: #808000; text-decoration-color: #808000">..............................</span>. <span style="color: #c0c0c0; text-decoration-color: #c0c0c0">UNK</span>
+ALT KALT (   0nm       ) ............................... <span style="color: #c0c0c0; text-decoration-color: #c0c0c0">UNK</span>
 </code></pre>
 </body>
 </html>
