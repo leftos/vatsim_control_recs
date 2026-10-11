@@ -108,6 +108,7 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_flight_info_mea.py`: `format_mea_lines`: the MEA warning headers and the dim "MEA not checked" lines.
 - `tests/test_cifp_dp_runway_only.py`: `get_dp_data` on real cycle-2610 records of SIDs with no common route and no enroute transition: the shared runway-transition tail, one runway transition's whole path, None when the runway transitions end at different fixes, and None for a vectors-only SID.
 - `tests/test_route_distance_coverage.py`: ETA uses the filed route only when both ends are US airports and the route is not both over 2x the great circle and more than 100 nm longer; non-US ends, a route over both bounds, and `is_us_airport` cases fall back to the great circle.
+- `tests/test_short_procedure_names.py`: SID/STAR names of five characters or fewer (MKK5, TURN8, DPK3) expand in a filed route, are not airway endpoints, stay fixes when a fix carries the name, and are dropped when CIFP holds no such procedure.
 - `tests/test_weather_cache.py`: bbox freshness, "no METAR" negatives and the failures that are never cached.
 - `tests/test_weather_bboxes.py`: `calculate_airport_bboxes` packs a wide spread of airports into few boxes (30 US airports into 6), keeps every airport inside a box no larger than the limit plus padding, and gives the same boxes whatever the input order.
 - `tests/test_refresh_weather.py`: the weather pass: traffic columns before weather, previous WIND/ALT kept until a box returns, per-box patches, failed versus omitted airports, fresh boxes first, a mid-pass refresh queuing one rerun, two-stage startup, the capped-box fallback, quit cancelling queued boxes, and patch failures logged.
@@ -125,6 +126,9 @@ Tracking happens per airport; groupings only organize the display. Tests live in
 - `tests/test_weather_index_assets.py`: the index page loads Leaflet from its own copied tree and no remote scripts or stylesheets.
 - `tests/test_weather_tile_polygon_reach.py`: a weather tile ray-casts only the boundary polygons whose box reaches it, with output unchanged.
 - `tests/test_nginx_include.py`: `nginx_include.py` removes the legacy inline weather blocks and ensures one include line in the `leftos.dev` TLS server block only, idempotently, and exits 1 unless exactly one server block matches.
+- `tests/test_allowlist_filter.py`: the airport allowlist filter keeps only the listed airports and scales to a country list.
+- `tests/test_disambiguator_csv_names.py`: a location the names CSV fully covers never runs the NER engine; one CSV-less airport makes NER run for the whole group.
+- `tests/test_spatial_find_nearest.py`: `SpatialIndex.find_nearest` skips the full-scan fallback for a radius under one grid cell.
 - `tests/test_env_file.py`: `read_env_value` cases (quotes, inline comments, the unreadable-file warning) and the statsim key rules (the environment wins even when empty, `.env` only when absent, nothing written to the environment).
 
 CI runs the suite in the "Run tests" step of `.github/workflows/build-release.yml`, before the PyInstaller build. Outside `tests/`, behavior is checked by running `uv run main.py` against live data or `data/test-vatsim-data.json` (a sample VATSIM response), and the weather daemon by `scripts/weather_daemon/service/LocalTest.ps1`.

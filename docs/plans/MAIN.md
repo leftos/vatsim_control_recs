@@ -55,7 +55,6 @@ Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `
 Items that share no files. Review: `code-review`. Verification: `uv run --group dev pytest -q` plus `ruff check`.
 
 - [ ] Investigate display names that fall back to the ICAO code ("ETIK - Etik" in the VFR finder) and two UK weather-briefing areas both named "LONDON AREA". Not yet confirmed.
-- [ ] Docs drift found by the debuggers: Test locations miss `test_allowlist_filter.py`, `test_disambiguator_csv_names.py`, `test_spatial_find_nearest.py`; the root `README.md` Go To key table lacks the → and ← rows (`CLAUDE.md` has them).
 - [ ] Re-read `docs/performance.md` against the 6 commits on its 10 named files since beb750c (newest `backend/data/weather.py`, d0bb731's first-fit box packing); found by the doc-drift scan.
 - [ ] Burn down the `C901` ratchet: `ruff.toml` `[lint.per-file-ignores]` lists 45 files (102 functions) that predate the max-complexity 8 rule. Split a file's functions under 8 and take it off the list; `uvx ruff@0.16.1 check --select C901 <file>` with the entry removed lists them. Biggest: `backend/data/weather.py` and `backend/data/navaids.py` (6 each).
 - [ ] Raise ruff's `target-version` from `py310` (`ruff.toml:6`) to `py313` to match `requires-python` in `pyproject.toml`, and land the UP-rule rewrites it triggers as their own commit.
