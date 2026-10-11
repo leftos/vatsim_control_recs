@@ -752,4 +752,10 @@ def colorize_atis_text(text: str, atis_code: str = "") -> str:
             i += 1
     result = "".join(parts)
 
+    # A backslash immediately before a tag is an escaped literal in Rich, so the
+    # tag it precedes goes unparsed and its closer matches nothing. Double every
+    # run of backslashes sitting before a tag inserted above; a backslash run the
+    # controller typed anywhere else is left untouched.
+    result = re.sub(r"(\\+)(?=\[/?(?:yellow|cyan bold)\])", r"\1\1", result)
+
     return result
