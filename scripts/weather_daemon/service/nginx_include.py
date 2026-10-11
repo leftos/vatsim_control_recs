@@ -347,22 +347,40 @@ def _include_position(
     return _line_start(text, _include_anchor(statements, body_end))
 
 
+def _unquote(argument: str) -> str:
+    """Return ``argument`` without one pair of surrounding ``"`` or ``'`` quotes."""
+    if len(argument) >= 2 and argument[0] == argument[-1] and argument[0] in "\"'":
+        return argument[1:-1]
+    return argument
+
+
+def _is_tls_address(argument: str) -> bool:
+    """Return True for a ``listen`` address argument naming the TLS port."""
+    address = _unquote(argument)
+    return address == _TLS_PORT or address.endswith(":" + _TLS_PORT)
+
+
 def _block_has_host(statements: list[dict[str, object]]) -> bool:
     """Return True when the block's ``server_name`` names the site host."""
     return any(
-        _HOST_TOKEN in _normalize(statement["args"]).split()
+        _unquote(argument) == _HOST_TOKEN
         for statement in statements
         if statement["name"] == "server_name"
+        for argument in _normalize(statement["args"]).split()
     )
 
 
 def _block_has_tls(statements: list[dict[str, object]]) -> bool:
     """Return True when the block listens on the TLS port."""
-    return any(
-        _TLS_PORT in _normalize(statement["args"])
-        for statement in statements
-        if statement["name"] == "listen"
-    )
+    for statement in statements:
+        if statement["name"] != "listen":
+            continue
+        arguments = _normalize(statement["args"]).split()
+        # Only the address argument matters; later ones are parameters such as
+        # ``ssl``, ``http2`` and ``default_server``.
+        if arguments and _is_tls_address(arguments[0]):
+            return True
+    return False
 
 
 def _matching_blocks(
@@ -404,10 +422,10 @@ def _splice(
 def ensure_weather_include(text: str) -> str:
     """Return ``text`` with the weather snippet included by the leftos.dev TLS block.
 
-    Exactly one top-level ``server`` block must have a ``server_name``
-    containing the token ``leftos.dev`` and a ``listen`` on 443; anything else
-    raises ``ValueError``.  The legacy inline weather locations in that block
-    are removed, and a single ``include snippets/weather.conf;`` line takes the
+    Exactly one top-level ``server`` block must have a ``server_name`` naming
+    ``leftos.dev`` and a ``listen`` on 443; anything else raises ``ValueError``.
+    The legacy inline weather locations in that block are removed, and a single
+    ``include snippets/weather.conf;`` line takes the
     place of the first one.  The function is idempotent and preserves the
     file's line endings and trailing newline.
     """

@@ -298,6 +298,90 @@ def test_crlf_and_trailing_newline_are_preserved():
     assert nginx_include.ensure_weather_include(SITE_ENABLED_TEXT).endswith("\n")
 
 
+# One-block site files pinning which ``listen`` arguments count as a listen on
+# the TLS port and which ``server_name`` arguments name the site host.
+
+
+def _site_text(listen_statement: str, server_name_statement: str) -> str:
+    """Return a site file whose only server block holds the two statements."""
+    return (
+        "server {\n"
+        f"    {listen_statement}\n"
+        f"    {server_name_statement}\n"
+        "\n"
+        "    location /weather/ {\n"
+        "        alias /var/www/leftos.dev/weather/;\n"
+        "        try_files $uri $uri/ =404;\n"
+        "    }\n"
+        "}\n"
+    )
+
+
+MATCHING_BLOCKS = [
+    ("listen 443 ssl;", "server_name leftos.dev;"),
+    ("listen [::]:443 ssl ipv6only=on;", "server_name leftos.dev;"),
+    ("listen 0.0.0.0:443;", "server_name leftos.dev;"),
+    ("listen *:443;", "server_name leftos.dev;"),
+    ("listen 127.0.0.1:443;", "server_name leftos.dev;"),
+    ('listen "443" ssl;', "server_name leftos.dev;"),
+    ("listen 443 ssl;", 'server_name "leftos.dev";'),
+    ("listen 443 ssl;", "server_name 'leftos.dev' www.leftos.dev;"),
+]
+
+NON_MATCHING_BLOCKS = [
+    ("listen 8443 ssl;", "server_name leftos.dev;"),
+    ("listen 4430;", "server_name leftos.dev;"),
+    ("listen [::]:8443;", "server_name leftos.dev;"),
+    ("listen 80;", "server_name leftos.dev;"),
+    ("listen 127.0.0.1:14432;", "server_name leftos.dev;"),
+    ("listen ssl 443;", "server_name leftos.dev;"),
+    ("listen unix:/run/443.sock;", "server_name leftos.dev;"),
+    ("listen 443 ssl;", "server_name www.leftos.dev;"),
+    ("listen 443 ssl;", "server_name leftos.dev.example;"),
+    ("listen 443 ssl;", "server_name notleftos.dev;"),
+    ("listen 443 ssl;", 'server_name "leftos.dev;'),
+]
+
+
+@pytest.mark.parametrize(("listen_statement", "server_name_statement"), MATCHING_BLOCKS)
+def test_a_tls_listen_with_a_leftos_name_migrates_the_block(
+    listen_statement: str, server_name_statement: str
+):
+    result = nginx_include.ensure_weather_include(
+        _site_text(listen_statement, server_name_statement)
+    )
+
+    assert result.count("include snippets/weather.conf;") == 1
+    assert "location /weather/" not in result
+
+
+@pytest.mark.parametrize(
+    ("listen_statement", "server_name_statement"), NON_MATCHING_BLOCKS
+)
+def test_a_block_outside_the_leftos_tls_block_raises(
+    listen_statement: str, server_name_statement: str
+):
+    text = _site_text(listen_statement, server_name_statement)
+
+    with pytest.raises(ValueError) as excinfo:
+        nginx_include.ensure_weather_include(text)
+
+    assert "exactly one server block" in str(excinfo.value)
+
+
+def test_an_8443_leftos_block_beside_a_443_one_edits_only_the_443_one():
+    insecure = _site_text("listen 8443 ssl;", "server_name leftos.dev;")
+    secure = _site_text("listen 443 ssl;", "server_name leftos.dev;")
+
+    result = nginx_include.ensure_weather_include(insecure + "\n" + secure)
+
+    assert result.count("include snippets/weather.conf;") == 1
+    # The 8443 block keeps its legacy weather location, untouched.
+    assert result.count("location /weather/") == 1
+    assert result.startswith(insecure)
+    assert result.index("include snippets/weather.conf;") > len(insecure)
+
+
 # Characterization of the private scanner, block finder and statement parser.
 # Each test pins their current output over an input the public-path tests above
 # never reach, so splitting them into helpers cannot change behaviour.
