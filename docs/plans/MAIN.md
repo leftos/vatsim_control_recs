@@ -42,11 +42,6 @@ Order (from the map of this wave): R3 removes the edit mode R4's wording would r
 
   Settled (owner): the main tab "Custom Groupings" becomes "Groupings" (it lists presets, ARTCC groupings and ★ ones); only user-visible strings and docs change, and code identifiers keep `favorite`, bridged by a glossary line.
 
-### Wave 3: Flight info and route checks
-
-Shared: `backend/data/navaids.py`, `ui/modals/flight_info.py`, the ETA path in `backend/core/`. Review: `code-review` with an aviation read of each verdict. Verification: each item first reproduces on fixture or live data; a confirmed defect gets a red test before its fix.
-
-- [ ] Route weather likely expands no SID or STAR (read from the code, not yet reproduced): `ui/modals/route_weather.py:146` calls `parse_route_string` without the flight's departure and arrival, so `_consume_sid_star` (`backend/data/navaids.py`) has no airport to look a procedure up at and the procedure's fixes are missing from the weather along the route. Pass the flight plan's ends; reproduce first on a fixture route such as `MKK5 APACK` from PHNL.
 
 ## Backlog
 

@@ -26,6 +26,33 @@ from ui.modals.weather_briefing import _parse_metar_observation_time
 WAYPOINT_SEARCH_RADIUS_NM = 30.0
 
 
+def build_route_waypoints(
+    route_string: str, departure: str, arrival: str
+) -> list[Waypoint]:
+    """Parse a filed route into waypoints, expanding SIDs and STARs.
+
+    Args:
+        route_string: Filed route string (e.g., "MKK5 APACK")
+        departure: Departure airport ICAO code, "" when the plan files none
+        arrival: Arrival airport ICAO code, "" when the plan files none
+
+    Returns:
+        List of Waypoint objects with coordinates (unknown waypoints omitted)
+    """
+    # Build airport coordinates dict for route parsing
+    airport_coords = {}
+    if config.UNIFIED_AIRPORT_DATA:
+        for icao, data in config.UNIFIED_AIRPORT_DATA.items():
+            lat = data.get("latitude")
+            lon = data.get("longitude")
+            if lat is not None and lon is not None:
+                airport_coords[icao] = (lat, lon)
+
+    return parse_route_string(
+        route_string, airport_coords, departure or None, arrival or None
+    )
+
+
 class RouteWeatherScreen(ModalScreen):
     """Modal screen showing weather along a flight's filed route"""
 
@@ -132,18 +159,13 @@ class RouteWeatherScreen(ModalScreen):
         """Parse route and fetch weather for airports along the route"""
         loop = asyncio.get_event_loop()
 
-        # Build airport coordinates dict for route parsing
-        airport_coords = {}
-        if config.UNIFIED_AIRPORT_DATA:
-            for icao, data in config.UNIFIED_AIRPORT_DATA.items():
-                lat = data.get("latitude")
-                lon = data.get("longitude")
-                if lat is not None and lon is not None:
-                    airport_coords[icao] = (lat, lon)
-
         # Parse route string in executor (may involve file I/O for navaids)
         self.waypoints = await loop.run_in_executor(
-            None, parse_route_string, self.route_string, airport_coords
+            None,
+            build_route_waypoints,
+            self.route_string,
+            self.departure,
+            self.arrival,
         )
 
         # Collect airports to fetch weather for
