@@ -78,7 +78,6 @@ max-complexity = 8
 "backend/data/runways.py" = ["C901"]
 "backend/data/statsim_api.py" = ["C901"]
 "backend/data/vatsim_api.py" = ["C901"]
-"backend/data/weather_parsing.py" = ["C901"]
 # The --help check exits before the heavy project imports, so they follow it.
 "main.py" = ["E402"]
 # Standalone script: project imports have to follow the sys.path setup above them.

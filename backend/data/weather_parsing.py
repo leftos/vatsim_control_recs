@@ -254,11 +254,23 @@ def parse_visibility_sm(metar: str) -> float | None:
     if not metar:
         return None
 
-    # Handle visibility patterns in order of specificity:
+    # Handle visibility forms in order of specificity:
     # 1. Fractional visibility: "1/2SM", "1 1/2SM", "M1/4SM" (M = less than)
     # 2. Whole number visibility: "10SM", "3SM"
     # 3. Meters visibility (convert to SM): "9999" means 10+ km, "0800" = 800m
+    visibility = _parse_fraction_visibility(metar)
+    if visibility is not None:
+        return visibility
 
+    visibility = _parse_whole_mile_visibility(metar)
+    if visibility is not None:
+        return visibility
+
+    return _parse_meters_visibility(metar)
+
+
+def _parse_fraction_visibility(metar: str) -> float | None:
+    """Fractional visibility: mixed ("1 1/2SM"), less-than ("M1/4SM") and simple ("3/4SM")."""
     # Pattern for mixed fraction like "1 1/2SM" or "2 1/4SM"
     mixed_frac_match = re.search(r"\b(\d+)\s+(\d+)/(\d+)SM\b", metar)
     if mixed_frac_match:
@@ -282,30 +294,38 @@ def parse_visibility_sm(metar: str) -> float | None:
         den = int(frac_match.group(2))
         return num / den
 
+    return None
+
+
+def _parse_whole_mile_visibility(metar: str) -> float | None:
+    """Whole-number visibility ("10SM", "3SM", "P6SM"), or None if absent."""
     # Pattern for whole number like "10SM", "3SM", "P6SM" (P = plus/more than 6)
     whole_match = re.search(r"\b[PM]?(\d+)SM\b", metar)
-    if whole_match:
-        vis = int(whole_match.group(1))
-        # P6SM means greater than 6 miles - treat as good visibility
-        if "P" in metar and f"P{vis}SM" in metar:
-            return vis + 1  # Slightly more than indicated
-        return float(vis)
+    if not whole_match:
+        return None
 
-    # Pattern for meters (4-digit): "9999" = 10km+, "0800" = 800m
+    vis = int(whole_match.group(1))
+    # P6SM means greater than 6 miles - treat as good visibility
+    if "P" in metar and f"P{vis}SM" in metar:
+        return vis + 1  # Slightly more than indicated
+    return float(vis)
+
+
+def _parse_meters_visibility(metar: str) -> float | None:
+    """4-digit meters visibility ("9999" = 10km+, "0800" = 800m) as statute miles."""
     # This appears after the wind in METAR, before clouds
     meters_match = re.search(r"\b(\d{4})\b(?!\d)", metar)
-    if meters_match:
-        # Make sure it's not a time or other number
-        meters_str = meters_match.group(1)
-        meters = int(meters_str)
-        # Visibility in meters is typically 0000-9999
-        # 9999 means visibility >= 10km
-        if meters == 9999:
-            return 7.0  # Greater than 6 SM
-        # Convert meters to statute miles (1 SM = 1609.34 meters)
-        return meters / 1609.34
+    if not meters_match:
+        return None
 
-    return None
+    # Make sure it's not a time or other number
+    meters = int(meters_match.group(1))
+    # Visibility in meters is typically 0000-9999
+    # 9999 means visibility >= 10km
+    if meters == 9999:
+        return 7.0  # Greater than 6 SM
+    # Convert meters to statute miles (1 SM = 1609.34 meters)
+    return meters / 1609.34
 
 
 def parse_ceiling_feet(metar: str) -> int | None:
@@ -514,6 +534,41 @@ def format_obs_time_display(obs_time: str) -> str:
     return f"{obs_time[2:]}Z"
 
 
+def _split_weather_intensity(code: str) -> tuple[str, str]:
+    """Split a leading intensity prefix ("-", "+" or "VC") off a weather code."""
+    for prefix, label in WEATHER_INTENSITY.items():
+        if code.startswith(prefix):
+            return label + " ", code[len(prefix) :]
+    return "", code
+
+
+def _split_weather_descriptor(code: str) -> tuple[str, str]:
+    """Split a leading descriptor (e.g. "FZ", "TS", "SH") off a weather code."""
+    for desc_code, desc_name in WEATHER_DESCRIPTORS.items():
+        if code.startswith(desc_code):
+            return desc_name + " ", code[len(desc_code) :]
+    return "", code
+
+
+def _parse_weather_codes(code: str, intensity: str, descriptor: str) -> list[str]:
+    """Parse the leading 2-letter phenomena, applying intensity and descriptor once."""
+    results = []
+    while len(code) >= 2:
+        phenomenon = WEATHER_PHENOMENA.get(code[:2])
+        if phenomenon is None:
+            # Unknown code, skip
+            break
+        name, _ = phenomenon
+        full_name = f"{intensity}{descriptor}{name}".strip()
+        if full_name and full_name not in results:
+            results.append(full_name)
+        # Reset intensity/descriptor after first use
+        intensity = ""
+        descriptor = ""
+        code = code[2:]
+    return results
+
+
 def _parse_single_weather(code: str) -> list[str]:
     """
     Parse a single weather code into human-readable format.
@@ -527,51 +582,17 @@ def _parse_single_weather(code: str) -> list[str]:
     if not code:
         return []
 
+    intensity, remainder = _split_weather_intensity(code)
+    descriptor, remainder = _split_weather_descriptor(remainder)
+
     results = []
-    original = code
-    intensity = ""
-    descriptor = ""
-
-    # Check for intensity prefix
-    if code.startswith("-"):
-        intensity = "Light "
-        code = code[1:]
-    elif code.startswith("+"):
-        intensity = "Heavy "
-        code = code[1:]
-    elif code.startswith("VC"):
-        intensity = "Vicinity "
-        code = code[2:]
-
-    # Check for descriptor (2-letter codes that modify phenomena)
-    for desc_code, desc_name in WEATHER_DESCRIPTORS.items():
-        if code.startswith(desc_code):
-            descriptor = desc_name + " "
-            code = code[len(desc_code) :]
-            break
-
     # Handle thunderstorm specially - it's both descriptor and phenomenon
-    if "TS" in original and descriptor == "Thunderstorm ":
+    if "TS" in code and descriptor == "Thunderstorm ":
         results.append(f"{intensity}Thunderstorm")
         intensity = ""  # Don't double-apply intensity
         descriptor = ""
 
-    # Parse remaining phenomena (2-letter codes, can be multiple like RAGR)
-    while len(code) >= 2:
-        phenomenon_code = code[:2]
-        if phenomenon_code in WEATHER_PHENOMENA:
-            name, _ = WEATHER_PHENOMENA[phenomenon_code]
-            full_name = f"{intensity}{descriptor}{name}".strip()
-            if full_name and full_name not in results:
-                results.append(full_name)
-            # Reset intensity/descriptor after first use
-            intensity = ""
-            descriptor = ""
-            code = code[2:]
-        else:
-            # Unknown code, skip
-            break
-
+    results.extend(_parse_weather_codes(remainder, intensity, descriptor))
     return results
 
 
@@ -633,39 +654,40 @@ def get_flight_category(metar: str) -> str:
     if not metar:
         return "UNK"
 
-    visibility = parse_visibility_sm(metar)
-    ceiling = parse_ceiling_feet(metar)
-
     # Determine category based on most restrictive condition
-    # Start with VFR and downgrade based on conditions
-
-    vis_category = "VFR"
-    if visibility is not None:
-        if visibility < 1:
-            vis_category = "LIFR"
-        elif visibility < 3:
-            vis_category = "IFR"
-        elif visibility <= 5:
-            vis_category = "MVFR"
-        else:
-            vis_category = "VFR"
-
-    ceil_category = "VFR"
-    if ceiling is not None:
-        if ceiling < 500:
-            ceil_category = "LIFR"
-        elif ceiling < 1000:
-            ceil_category = "IFR"
-        elif ceiling <= 3000:
-            ceil_category = "MVFR"
-        else:
-            ceil_category = "VFR"
+    vis_category = _visibility_category(parse_visibility_sm(metar))
+    ceil_category = _ceiling_category(parse_ceiling_feet(metar))
 
     # Use the most restrictive category
     if CATEGORY_PRIORITY.get(vis_category, 3) < CATEGORY_PRIORITY.get(ceil_category, 3):
         return vis_category
-    else:
-        return ceil_category
+    return ceil_category
+
+
+def _visibility_category(visibility: float | None) -> str:
+    """Flight category for a visibility in statute miles; an unknown one is VFR."""
+    if visibility is None:
+        return "VFR"
+    if visibility < 1:
+        return "LIFR"
+    if visibility < 3:
+        return "IFR"
+    if visibility <= 5:
+        return "MVFR"
+    return "VFR"
+
+
+def _ceiling_category(ceiling: int | None) -> str:
+    """Flight category for a ceiling in feet AGL; no ceiling is VFR."""
+    if ceiling is None:
+        return "VFR"
+    if ceiling < 500:
+        return "LIFR"
+    if ceiling < 1000:
+        return "IFR"
+    if ceiling <= 3000:
+        return "MVFR"
+    return "VFR"
 
 
 # Backward-compatible aliases with underscore prefix (deprecated)
