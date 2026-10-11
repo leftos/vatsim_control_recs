@@ -9,8 +9,8 @@ From 110 columns the Add pane and the Members pane sit side by side; below that
 one pane shows at a time and Tab flips between them.
 """
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import ClassVar
 
 from textual import events
@@ -19,6 +19,9 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.content import Content
 from textual.screen import ModalScreen
+from textual.strip import Strip
+from textual.style import Style
+from textual.visual import RenderOptions, RulesMap, Visual
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option, OptionDoesNotExist
 
@@ -32,6 +35,7 @@ from ui import config
 from ui.modals.confirm_modal import Choice, ChoiceModal, ConfirmModal
 from ui.modals.grouping_draft import (
     ASK_TRACK,
+    BAD_NAME,
     DATA_NOT_LOADED,
     OVERWRITE_CONFIRM,
     RENAME_CONFIRM,
@@ -44,6 +48,7 @@ from ui.modals.grouping_draft import (
     BuilderResult,
     DraftError,
     GroupingDraft,
+    SavePlan,
     discard_message,
     track_offer_message,
 )
@@ -73,7 +78,7 @@ _WIDE_TAB_HINT = "Tab next pane"
 
 # The hint shows at most this many items, so it fits one line from 80 columns.
 # "Ctrl+S save", "Esc cancel" and the legend always stay; past the limit the
-# row keys below give way in this order, then the Tab item.
+# Tab item gives way first, then the row keys below in this order.
 _HINT_MAX_ITEMS = 6
 _HINT_DROP_ORDER = ("← collapse", "→ expand", "F dep/arr/both")
 
@@ -119,6 +124,49 @@ class _MemberRow:
     icao: str = ""
 
 
+@dataclass(frozen=True, eq=False)
+class _OneLine(Visual):
+    """A list row that never wraps: past the list's width its body is cut with "…".
+
+    The head (the mark and ident) and the tail (a filter or a tag such as
+    "member") always show; `plain` is the whole row, uncut.
+    """
+
+    head: Content
+    body: Content
+    tail: Content
+
+    @property
+    def plain(self) -> str:
+        return self._whole().plain
+
+    def with_tail(self, tag: Content) -> "_OneLine":
+        """The same row with a tag appended to its tail."""
+        return replace(self, tail=self.tail + tag)
+
+    def render_strips(
+        self, width: int, height: int | None, style: Style, options: RenderOptions
+    ) -> list[Strip]:
+        return self._fit(width).render_strips(width, height, style, options)
+
+    def get_optimal_width(self, rules: RulesMap, container_width: int) -> int:
+        return self._whole().cell_length
+
+    def get_height(self, rules: RulesMap, width: int) -> int:
+        return 1
+
+    def _whole(self) -> Content:
+        return self.head + self.body + self.tail
+
+    def _fit(self, width: int) -> Content:
+        """The row cut to `width` cells, the body losing its end first."""
+        room = width - self.head.cell_length - self.tail.cell_length
+        body = self.body
+        if body.cell_length > room:
+            body = body.truncate(max(room, 0), ellipsis=True)
+        return (self.head + body + self.tail).truncate(width)
+
+
 def _split_query(query: str) -> tuple[str | None, str]:
     """Split a leading @ or $ off a query; return its kind and the rest."""
     for prefix, kind in _QUERY_PREFIXES.items():
@@ -144,13 +192,37 @@ def _airport_name(icao: str) -> str:
     return name.strip() if isinstance(name, str) else ""
 
 
+def _display_names(raw_names: Mapping[str, str]) -> dict[str, str]:
+    """Each airport's display name, as Go To and the main table show it.
+
+    One batch call on the disambiguator covers every airport. An airport it does
+    not name (no entry, an empty name, or its own ident back) keeps its raw name,
+    as does every airport while there is no disambiguator.
+
+    Args:
+        raw_names: Each airport's ident to its name in the unified data.
+
+    Returns:
+        Each ident to the name its row shows.
+    """
+    disambiguator = config.DISAMBIGUATOR
+    if disambiguator is None or not raw_names:
+        return dict(raw_names)
+    found = disambiguator.get_full_names_batch(list(raw_names))
+    names: dict[str, str] = {}
+    for icao, raw in raw_names.items():
+        name = found.get(icao)
+        names[icao] = name if name and name != icao else raw
+    return names
+
+
 def _fit_hint(actions: list[str], fixed: list[str]) -> list[str]:
     """Fit the row keys and the Tab item (last of `actions`) beside `fixed`.
 
-    Drops the row keys in `_HINT_DROP_ORDER`, then the Tab item, until at most
+    Drops the Tab item, then the row keys in `_HINT_DROP_ORDER`, until at most
     `_HINT_MAX_ITEMS` remain.
     """
-    for drop in (*_HINT_DROP_ORDER, actions[-1]):
+    for drop in (actions[-1], *_HINT_DROP_ORDER):
         if len(actions) + len(fixed) <= _HINT_MAX_ITEMS:
             break
         actions = [action for action in actions if action != drop]
@@ -315,6 +387,8 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
         self._pane = "members"
         self._members_marked = False
         self._results_marked = False
+        # The display name of each airport a rendered row has shown
+        self._shown_names: dict[str, str] = {}
         # The last search: its box text, query, loading flag, matches and total
         self._matches: tuple[str, str, bool, list[AirportHit | str], int] | None = None
 
@@ -549,10 +623,9 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
         previous = None if highlighted is None else highlighted.id
 
         _, query, loading, found, total = self._current_matches()
-        self._results_marked = any(
-            isinstance(item, AirportHit) and not self.draft.is_tracked(item.ident)
-            for item in found[:_MAX_RESULTS]
-        )
+        hits = [item for item in found[:_MAX_RESULTS] if isinstance(item, AirportHit)]
+        self._results_marked = any(not self.draft.is_tracked(hit.ident) for hit in hits)
+        self._shown_names.update(_display_names({hit.ident: hit.name for hit in hits}))
 
         option_list.clear_options()
         option_list.add_options(self._result_options(query, loading, found, total))
@@ -633,15 +706,15 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
             ref, option_id = item, f"grouping:{item}"
             label = self._grouping_label(item)
         if ref in self.draft.items:
-            label = label + Content.styled("  member", "dim")
+            label = label.with_tail(Content.styled("  member", "dim"))
         return Option(label, id=option_id)
 
-    def _hit_label(self, hit: AirportHit) -> Content:
+    def _hit_label(self, hit: AirportHit) -> _OneLine:
         mark = _TRACKED if self.draft.is_tracked(hit.ident) else _UNTRACKED
-        text = f"{mark}{hit.ident:<5} {hit.name}"
+        body = self._shown_names.get(hit.ident, hit.name)
         if hit.city:
-            text += f" · {hit.city}"
-        return Content(text)
+            body += f" · {hit.city}"
+        return _OneLine(Content(f"{mark}{hit.ident:<5} "), Content(body), Content(""))
 
     def _add_highlighted_result(self) -> None:
         """Add the highlighted Add result to the members."""
@@ -678,6 +751,7 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
         if focus_id is None and highlighted is not None:
             focus_id = highlighted.id
 
+        self._shown_names.update(_display_names(self._shown_member_airports()))
         pairs = self._member_pairs()
         self._member_rows = [row for _, row in pairs]
         self._members_marked = any(
@@ -691,6 +765,17 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
         _highlight(option_list, old_index if index is None else index)
         self._update_members_title()
         self._update_hint()
+
+    def _shown_member_airports(self) -> dict[str, str]:
+        """Each known airport a Members row shows, to its unified-data name."""
+        icaos: list[str] = []
+        for ref in self.draft.items:
+            if ref not in self.context.groupings:
+                icaos.append(ref.strip().upper())
+            elif ref in self._expanded:
+                icaos.extend(self.draft.airports_of(ref))
+        known = self.context.airport_idents
+        return {icao: _airport_name(icao) for icao in icaos if icao in known}
 
     def _member_pairs(self) -> list[tuple[Option, _MemberRow | None]]:
         """Each Members option with what it stands for, in member order."""
@@ -710,7 +795,9 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
         if self.context.search_index is None or icao in self.context.airport_idents:
             option = Option(self._airport_label(icao), id=f"ref:{ref}")
             return option, _MemberRow("airport", ref, icao)
-        label = Content(f"{_TRACKED}{ref}") + Content.styled("  unknown", "dim")
+        label = _OneLine(
+            Content(_TRACKED), Content(ref), Content.styled("  unknown", "dim")
+        )
         return Option(label, id=f"ref:{ref}"), _MemberRow("unknown", ref)
 
     def _grouping_pairs(self, ref: str) -> list[tuple[Option, _MemberRow | None]]:
@@ -735,17 +822,22 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
             pairs.append((option, _MemberRow("sub", ref, icao)))
         return pairs
 
-    def _airport_label(self, icao: str, indent: str = "") -> Content:
+    def _airport_label(self, icao: str, indent: str = "") -> _OneLine:
         mark = _TRACKED if self.draft.is_tracked(icao) else _UNTRACKED
-        label = Content(f"{indent}{mark}{icao:<5} {_airport_name(icao)}".rstrip())
+        head = f"{indent}{mark}{icao:<5}"
+        name = self._shown_names.get(icao) or _airport_name(icao)
+        body = f" {name}" if name else ""
+        if not body:
+            head = head.rstrip()
         direction = self.draft.filters.get(icao)
-        if direction:
-            label = label + Content(f"  {direction}")
-        return label
+        tail = f"  {direction}" if direction else ""
+        return _OneLine(Content(head), Content(body), Content(tail))
 
-    def _grouping_label(self, name: str) -> Content:
+    def _grouping_label(self, name: str) -> _OneLine:
         mark = _STARRED if name in self.context.user_names else _TRACKED
-        return Content(f"{mark}{name}") + Content.styled("  grouping", "dim")
+        return _OneLine(
+            Content(mark), Content(name), Content.styled("  grouping", "dim")
+        )
 
     def _update_members_title(self) -> None:
         members = len(self.draft.items)
@@ -883,38 +975,50 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
     # --- saving --------------------------------------------------------------
 
     def _save(self) -> None:
-        """Ctrl+S: check the name, then do what the draft's save plan asks."""
+        """Ctrl+S: do what the draft's save plan asks.
+
+        The overwrite confirm comes before the track question, so answering No
+        to it never throws a tracking answer away.
+        """
         self.draft.name = self._name_input.value
         plan = self.draft.save_plan()
         if plan.kind == DATA_NOT_LOADED:
             self._warn(_DATA_LOADING_WARNING)
             return
+        if plan.kind == BAD_NAME:
+            self._refuse_name(plan.message)
+            return
         if plan.kind == SELF_NESTING:
             self._error(SELF_NESTING_MESSAGE)
             return
-        # Before the track question, so its answer is never thrown away
-        try:
-            self.draft.check_name()
-        except GroupingNameError as error:
-            self._refuse_name(str(error))
-            return
-        if plan.kind == ASK_TRACK:
-            self._ask_track(plan.untracked)
+        if plan.replaces:
+            self._confirm_overwrite(lambda: self._save_tracked(plan, overwrite=True))
         else:
-            self._write(())
+            self._save_tracked(plan, overwrite=False)
 
-    def _ask_track(self, untracked: tuple[str, ...]) -> None:
+    def _save_tracked(self, plan: SavePlan, *, overwrite: bool) -> None:
+        """Ask the track question when the plan has untracked airports, then write."""
+        if plan.kind == ASK_TRACK:
+            self._ask_track(plan.untracked, overwrite=overwrite)
+        else:
+            self._write((), overwrite=overwrite)
+
+    def _ask_track(self, untracked: tuple[str, ...], *, overwrite: bool) -> None:
         self.app.push_screen(
             ChoiceModal(track_offer_message(untracked), _TRACK_CHOICES),
-            callback=lambda choice: self._on_track_choice(choice, untracked),
+            callback=lambda choice: self._on_track_choice(
+                choice, untracked, overwrite=overwrite
+            ),
         )
 
-    def _on_track_choice(self, choice: str | None, untracked: tuple[str, ...]) -> None:
+    def _on_track_choice(
+        self, choice: str | None, untracked: tuple[str, ...], *, overwrite: bool
+    ) -> None:
         """Add and save, or save only; Cancel and Esc write nothing."""
         if choice == "add":
-            self._write(untracked)
+            self._write(untracked, overwrite=overwrite)
         elif choice == "save":
-            self._write(())
+            self._write((), overwrite=overwrite)
 
     def _write(self, track: tuple[str, ...], *, overwrite: bool = False) -> None:
         """Write the draft and close with the result, or show why it failed.
@@ -929,7 +1033,8 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
             self._refuse_name(str(error))
             return
         except GroupingExistsError:
-            self._confirm_overwrite(track)
+            # The file gained the name after the plan was made
+            self._confirm_overwrite(lambda: self._write(track, overwrite=True))
             return
         except GroupingError as error:
             self._error(str(error))
@@ -939,17 +1044,14 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
         )
         self.dismiss(result)
 
-    def _confirm_overwrite(self, track: tuple[str, ...]) -> None:
-        self.app.push_screen(
-            ConfirmModal(self._overwrite_message()),
-            callback=lambda replace: self._on_overwrite_answer(replace, track),
-        )
+    def _confirm_overwrite(self, on_replace: Callable[[], None]) -> None:
+        """Ask to replace the grouping of that name; Yes runs `on_replace`."""
 
-    def _on_overwrite_answer(
-        self, replace: bool | None, track: tuple[str, ...]
-    ) -> None:
-        if replace:
-            self._write(track, overwrite=True)
+        def answered(replace: bool | None) -> None:
+            if replace:
+                on_replace()
+
+        self.app.push_screen(ConfirmModal(self._overwrite_message()), callback=answered)
 
     def _overwrite_message(self) -> str:
         """The rename wording when editing under a new name, else the overwrite one."""
@@ -978,7 +1080,7 @@ class GroupingBuilderScreen(ModalScreen[BuilderResult | None]):
         if not self.draft.changed:
             self.dismiss(None)
             return
-        message = discard_message(self._name_input.value, self.draft.original_name)
+        message = discard_message(self.draft.original_name)
         self.app.push_screen(ConfirmModal(message), callback=self._on_discard_answer)
 
     def _on_discard_answer(self, discard: bool | None) -> None:

@@ -113,10 +113,40 @@ def test_a_faa_only_ident_is_searchable(index: AirportSearchIndex) -> None:
     assert idents(hits)[0] == "0Q5"
 
 
-def test_an_exact_ident_beats_a_tracked_prefix_match(index: AirportSearchIndex) -> None:
+def test_a_tracked_prefix_match_beats_an_untracked_exact_ident(
+    index: AirportSearchIndex,
+) -> None:
     hits = index.search("oak", frozenset({"OAKX"}), 50)
 
-    assert idents(hits)[0] == "KOAK"
+    assert idents(hits) == ["OAKX", "KOAK"]
+
+
+def test_tracked_airports_come_first_across_every_tier() -> None:
+    rows = {
+        "KSMF": {
+            "icao": "KSMF",
+            "iata": "SMF",
+            "faa": "SMF",
+            "name": "SACRAMENTO INTL",
+            "city": "SACRAMENTO",
+            "country": "US",
+        },
+        "KSAC": {
+            "icao": "KSAC",
+            "iata": "SAC",
+            "faa": "SAC",
+            "name": "SACRAMENTO EXECUTIVE",
+            "city": "SACRAMENTO",
+            "country": "US",
+        },
+        "SACO": {"icao": "SACO", "name": "Ingeniero Taravella", "city": "Cordoba"},
+        "SACA": {"icao": "SACA", "name": "Area de Material", "city": "Cordoba"},
+    }
+    index = AirportSearchIndex(rows)
+
+    hits = index.search("sac", frozenset({"KSMF"}), 50)
+
+    assert idents(hits) == ["KSMF", "KSAC", "SACA", "SACO"]
 
 
 def test_hits_carry_the_row_fields_and_the_tracked_flag(

@@ -422,7 +422,9 @@ The builder is where you name a ★ grouping, choose its members and set their f
 
 The title is "New grouping" or "Edit grouping ★ Name". From 110 columns the Add pane and the Members pane sit side by side, and `Tab` moves focus between the Name field, the Add search and the Members list. Narrower, one list shows at a time and `Tab` flips between Members and Add.
 
-**Adding:** The Add search finds any airport the app knows (not only the ones you track) and any grouping, ★ ones first. Prefix with `@` for airports only or `$` for groupings only. It shows at most 50 rows, then a dim "showing 50 of N — type to narrow" row. `Enter` adds the highlighted result; one already in the grouping is marked "member". An airport you do not track carries a `○` mark, and the hint line then shows "○ not tracked".
+**Adding:** The Add search finds any airport the app knows (not only the ones you track) and any grouping. Airports come first, the ones you track ahead of the rest, then the groupings, ★ ones first. Airport rows show the names the rest of the app uses, and a row too wide for the list is cut to one line with "…" in its name.
+
+Prefix with `@` for airports only or `$` for groupings only. It shows at most 50 rows, then a dim "showing 50 of N — type to narrow" row. `Enter` adds the highlighted result; one already in the grouping is marked "member". An airport you do not track carries a `○` mark, and the hint line then shows "○ not tracked".
 
 **Members:** The pane title counts members and the airports they resolve to ("Members · 3 → 14 airports"). A nested grouping shows as one row with a folded "▸ N airports (→ to expand)" row under it.
 - `Del` - Remove the highlighted member. On an airport of an expanded nested grouping it leaves out that airport only, replacing the grouping with its other airports
@@ -430,11 +432,11 @@ The title is "New grouping" or "Edit grouping ★ Name". From 110 columns the Ad
 - `→` - Expand a nested grouping into its airports
 - `←` - Collapse them again, from the grouping row or any of its airports
 
-**Saving:** `Ctrl+S` saves; `Esc` cancels, and when you changed anything it first asks "Discard your changes to 'Name'?".
-- A name is required. A name that is a preset grouping's, or a known airport ident, is refused with the reason shown under the Name field; so is a grouping that would contain itself
+**Saving:** `Ctrl+S` saves; `Esc` cancels, and when you changed anything it first asks "Discard this new grouping?", or when editing "Discard your changes to 'Name'?" with the saved name, whatever is typed in the Name field.
+- A name is required. A name that is a preset grouping's, or a known airport ident, is refused with the reason shown under the Name field, even when it is also a member; a grouping that would contain itself is refused too
 - If the airport data is still loading, a message asks you to try again in a moment
-- If some of the airports are not tracked, a choice appears: "N of these aren't tracked (KAAA, KBBB). Add them to your tracked airports?" with "Add and save" (`1`), "Save only" (`2`) and "Cancel" (`3`)
-- If the name is already one of your groupings you are asked "'Name' is already one of my groupings. Replace it?"; renaming onto another of your groupings asks "'New' is already one of my groupings. Replace it with this one? ('Old' is removed)"
+- If the name is already one of your groupings you are asked first "'Name' is already one of my groupings. Replace it?"; renaming onto another of your groupings asks "'New' is already one of my groupings. Replace it with this one? ('Old' is removed)". No saves nothing
+- If some of the airports are not tracked, a choice then appears: "N of these aren't tracked (KAAA, KBBB). Add them to your tracked airports?" with "Add and save" (`1`), "Save only" (`2`) and "Cancel" (`3`)
 
 ---
 

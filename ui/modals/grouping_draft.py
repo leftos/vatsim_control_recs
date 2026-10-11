@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from backend.core.airport_search import AirportSearchIndex
 from backend.core.groupings import (
+    GroupingNameError,
     UserGrouping,
     check_grouping_name,
     rename_user_grouping,
@@ -26,7 +27,7 @@ RENAME_CONFIRM = (
     "('{old}' is removed)"
 )
 DISCARD_CONFIRM = "Discard your changes to '{name}'?"
-DISCARD_BLANK_CONFIRM = "Discard your changes to this grouping?"
+DISCARD_NEW_CONFIRM = "Discard this new grouping?"
 TRACK_OFFER = (
     "{n} of these aren't tracked ({icaos}). Add them to your tracked airports?"
 )
@@ -36,6 +37,7 @@ TRACK_CANCEL_LABEL = "Cancel"
 
 # The kinds of save plan a draft reports.
 DATA_NOT_LOADED = "data-not-loaded"
+BAD_NAME = "bad-name"
 SELF_NESTING = "self-nesting"
 ASK_TRACK = "ask-track"
 WRITE = "write"
@@ -82,16 +84,22 @@ class SavePlan:
     """What the screen must do when the user saves, without doing its I/O.
 
     Attributes:
-        kind: One of `DATA_NOT_LOADED` (warn and wait), `SELF_NESTING` (refuse the
-            name and show `SELF_NESTING_MESSAGE`), `ASK_TRACK` (ask the three-way
-            tracking question with `untracked`) or `WRITE` (save now).
+        kind: One of `DATA_NOT_LOADED` (warn and wait), `BAD_NAME` (refuse the
+            name with `message`), `SELF_NESTING` (refuse the name and show
+            `SELF_NESTING_MESSAGE`), `ASK_TRACK` (ask the three-way tracking
+            question with `untracked`) or `WRITE` (save now).
         untracked: The resolved airports the tracked list lacks, for `ASK_TRACK`.
         item: The member whose name would nest the draft's own, for `SELF_NESTING`.
+        message: Why the name was refused, for `BAD_NAME`.
+        replaces: For `ASK_TRACK` and `WRITE`, whether the name is another of my
+            groupings, so the screen confirms replacing it before anything else.
     """
 
     kind: str
     untracked: tuple[str, ...] = ()
     item: str | None = None
+    message: str = ""
+    replaces: bool = False
 
 
 @dataclass(frozen=True)
@@ -110,22 +118,19 @@ class BuilderResult:
     track: tuple[str, ...]
 
 
-def discard_message(name: str, original_name: str | None = None) -> str:
+def discard_message(original_name: str | None) -> str:
     """The confirm text for discarding the draft's changes.
 
     Args:
-        name: The name in the Name field, which may be blank or padded.
-        original_name: The name being edited, used when the field is blank.
+        original_name: The saved name of the grouping being edited, or None for a
+            new grouping. The Name field's text plays no part.
 
     Returns:
-        The wording for a named grouping, the edited grouping's name when the field
-        is blank but one is being edited, or the "this grouping" wording when both
-        are blank.
+        The wording naming the saved grouping, or the new-grouping wording.
     """
-    for candidate in (name, original_name):
-        if candidate and candidate.strip():
-            return DISCARD_CONFIRM.format(name=candidate.strip())
-    return DISCARD_BLANK_CONFIRM
+    if original_name is None:
+        return DISCARD_NEW_CONFIRM
+    return DISCARD_CONFIRM.format(name=original_name)
 
 
 def track_offer_message(icaos: Sequence[str]) -> str:
@@ -341,16 +346,40 @@ class GroupingDraft:
         )
 
     def save_plan(self) -> SavePlan:
-        """What the screen must do next when the user saves."""
+        """What the screen must do next when the user saves.
+
+        The airport data is checked first, then the name rules, then whether a
+        member would nest the grouping in itself, so a name such as an airport
+        ident that is also a member is refused as a name.
+        """
         if self.context.search_index is None:
             return SavePlan(kind=DATA_NOT_LOADED)
+        try:
+            self.check_name()
+        except GroupingNameError as error:
+            return SavePlan(kind=BAD_NAME, message=str(error))
         for item in self.items:
             if self._nests_self(item):
                 return SavePlan(kind=SELF_NESTING, item=item)
+        replaces = self._replaces_another()
         untracked = self.untracked()
         if untracked:
-            return SavePlan(kind=ASK_TRACK, untracked=tuple(untracked))
-        return SavePlan(kind=WRITE)
+            return SavePlan(
+                kind=ASK_TRACK, untracked=tuple(untracked), replaces=replaces
+            )
+        return SavePlan(kind=WRITE, replaces=replaces)
+
+    def _replaces_another(self) -> bool:
+        """Whether the name is another of my groupings, matched case-insensitively.
+
+        The grouping being edited is not another: saving under its own name, in
+        any case, renames that entry.
+        """
+        name = self.name.strip().lower()
+        own = (self.original_name or "").strip().lower()
+        if not name or name == own:
+            return False
+        return any(other.lower() == name for other in self.context.user_names)
 
     def write(self, *, overwrite: bool) -> UserGrouping:
         """Write the draft through the backend and return what was written.

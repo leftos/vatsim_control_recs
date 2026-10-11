@@ -21,8 +21,8 @@ from backend.core.groupings import (
 )
 from ui.modals.grouping_draft import (
     ASK_TRACK,
+    BAD_NAME,
     DATA_NOT_LOADED,
-    DISCARD_BLANK_CONFIRM,
     OVERWRITE_CONFIRM,
     RENAME_CONFIRM,
     SELF_NESTING,
@@ -456,6 +456,56 @@ def test_save_plan_refuses_renaming_an_edited_grouping_onto_a_nested_name() -> N
     assert draft.save_plan() == SavePlan(kind=SELF_NESTING, item="Outer")
 
 
+@pytest.mark.parametrize(
+    ("name", "message"),
+    [
+        ("O90", "that name belongs to a preset"),
+        ("KSFO", "that name is an airport ident"),
+    ],
+)
+def test_save_plan_refuses_a_bad_name_before_self_nesting(
+    name: str, message: str
+) -> None:
+    draft = make_draft(
+        items=("O90", "KSFO"),
+        name=name,
+        groupings={"O90": ["KHWD", "KCCR"]},
+        preset_names={"O90"},
+    )
+
+    assert draft.save_plan() == SavePlan(kind=BAD_NAME, message=message)
+
+
+def test_save_plan_refuses_a_blank_name() -> None:
+    draft = make_draft(name="   ")
+
+    assert draft.save_plan() == SavePlan(kind=BAD_NAME, message="a name is required")
+
+
+def test_save_plan_marks_a_name_held_by_another_of_my_groupings() -> None:
+    draft = make_draft(
+        items=("KSFO", "KOAK"), name="my ops", user_names={"My Ops"}, tracked=("KSFO",)
+    )
+
+    assert draft.save_plan() == SavePlan(
+        kind=ASK_TRACK, untracked=("KOAK",), replaces=True
+    )
+
+
+def test_save_plan_marks_a_rename_onto_another_of_my_groupings() -> None:
+    draft = make_draft(
+        name="My Ops", original_name="Trip", user_names={"Trip", "My Ops"}
+    )
+
+    assert draft.save_plan() == SavePlan(kind=WRITE, replaces=True)
+
+
+def test_save_plan_does_not_mark_the_grouping_being_edited() -> None:
+    draft = make_draft(name="trip", original_name="Trip", user_names={"Trip"})
+
+    assert draft.save_plan() == SavePlan(kind=WRITE)
+
+
 # --- write -------------------------------------------------------------------
 
 
@@ -560,19 +610,12 @@ def test_the_confirm_templates_carry_the_owner_wording() -> None:
     assert SELF_NESTING_MESSAGE == "a grouping can't contain itself"
 
 
-def test_discard_message_names_the_grouping() -> None:
+def test_discard_message_names_the_saved_grouping_being_edited() -> None:
     assert discard_message("Trip") == "Discard your changes to 'Trip'?"
 
 
-def test_discard_message_falls_back_to_the_name_being_edited() -> None:
-    assert discard_message("  ", "Trip") == "Discard your changes to 'Trip'?"
-    assert discard_message("Trip", "Alpha") == "Discard your changes to 'Trip'?"
-
-
-def test_discard_message_says_this_grouping_when_there_is_no_name() -> None:
-    assert discard_message("   ") == DISCARD_BLANK_CONFIRM
-    assert discard_message("   ", None) == DISCARD_BLANK_CONFIRM
-    assert "this grouping" in DISCARD_BLANK_CONFIRM
+def test_discard_message_of_a_new_grouping_names_no_grouping() -> None:
+    assert discard_message(None) == "Discard this new grouping?"
 
 
 def test_track_offer_lists_every_icao_while_there_are_six_or_fewer() -> None:

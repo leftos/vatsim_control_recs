@@ -69,7 +69,7 @@ def _text(value: Any) -> str:
 
 
 class AirportSearchIndex:
-    """Match airports by ident, name or city, tracked ones first within a tier."""
+    """Match airports by ident, name or city, tracked ones first, then by tier."""
 
     def __init__(self, unified_data: dict[str, dict[str, Any]]) -> None:
         """Build the index from the unified airport data.
@@ -111,8 +111,9 @@ class AirportSearchIndex:
             limit: The most hits to return.
 
         Returns:
-            Up to limit hits, ordered by match tier, then tracked before
-            untracked, then ident. An empty or blank query gives no hits.
+            Up to limit hits, tracked before untracked across every match tier,
+            then by match tier, then by ident. An empty or blank query gives no
+            hits.
         """
         return self.search_with_total(query, tracked, limit)[0]
 
@@ -136,12 +137,12 @@ class AirportSearchIndex:
         if not needle:
             return [], 0
 
-        ranked: list[tuple[int, bool, str, _Row]] = []
+        ranked: list[tuple[bool, int, str, _Row]] = []
         for row in self._rows:
             tier = row.tier(needle)
             if tier is None:
                 continue
-            ranked.append((tier, row.ident not in tracked, row.ident, row))
+            ranked.append((row.ident not in tracked, tier, row.ident, row))
         best = heapq.nsmallest(
             limit, ranked, key=lambda item: (item[0], item[1], item[2])
         )

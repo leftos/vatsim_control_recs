@@ -306,20 +306,26 @@ Opened by Go To (`E` on a ★ row, `Ctrl+S` in pick several) and by the Tracked 
 | `←` | Members: collapse an expanded nested grouping (from its row or any of its airports) |
 | `Up` / `Down` | Move between the Name field, the search box and the lists |
 | `Ctrl+S` | Save |
-| `Esc` | Cancel; asks "Discard your changes to '{name}'?" first when the draft changed |
+| `Esc` | Cancel; when the draft changed, asks first "Discard this new grouping?" (new) or "Discard your changes to '{original_name}'?" (editing; the saved name, whatever is typed in Name) |
 | `@` / `$` prefix | In the Add search: airports only / groupings only |
 
-The title is "New grouping" or "Edit grouping ★ {name}". The Members pane title reads "Members · {n} → {m} airports" (members, then the airports they resolve to). The Add search covers every airport the unified data knows (not only tracked ones) and every grouping, ★ ones first; it shows at most 50 rows, then the dim row "showing 50 of N — type to narrow".
+The title is "New grouping" or "Edit grouping ★ {name}". The Members pane title reads "Members · {n} → {m} airports" (members, then the airports they resolve to). The Add search covers every airport the unified data knows (not only tracked ones) and every grouping.
 
-A result already in the draft is marked "member". An airport the tracked list lacks carries a `○` mark (never when the list is empty, which tracks everything), and the hint line then ends with the legend "○ not tracked". The hint line lists only the keys that act on the focused row, at most six items, with `Ctrl+S save` and `Esc cancel` always shown.
+Airport rows come first, tracked ones ahead of the rest across every match tier, then by tier, then by ident (`AirportSearchIndex`); grouping rows follow all airport rows, ★ ones first. It shows at most 50 rows, then the dim row "showing 50 of N — type to narrow".
 
-Save checks in this order: airport data not loaded yet warns "airport data is still loading; try again in a moment".
+Airport rows in Add and Members show the display names from the disambiguator (`_display_names`), falling back to the unified-data name; search matching still uses the raw name and city. Add and Members rows never wrap: a row wider than the list is cut to one line by `_OneLine`, with "…" ending the name/city part and the `○` mark, the ident and the trailing tag or filter kept.
 
-Then a member that would nest the grouping in itself is refused ("a grouping can't contain itself"); the name is checked (blank "a name is required", a preset's name "that name belongs to a preset", a known airport ident "that name is an airport ident"; the refusal shows under the Name field), skipped for a name matching, case-insensitively, the one being edited or another of my groupings.
+A result already in the draft is marked "member". An airport the tracked list lacks carries a `○` mark (never when the list is empty, which tracks everything), and the hint line then ends with the legend "○ not tracked". The hint line lists only the keys that act on the focused row, at most six items, with `Ctrl+S save` and `Esc cancel` always shown; past six, "Tab next pane" / "Tab Add" / "Tab Members" is dropped first, then "← collapse", "→ expand", "F dep/arr/both" (`_fit_hint`).
+
+Save checks in this order (`GroupingDraft.save_plan`): airport data not loaded yet warns "airport data is still loading; try again in a moment".
+
+Then the name is checked (blank "a name is required", a preset's name "that name belongs to a preset", a known airport ident "that name is an airport ident"; the refusal shows under the Name field), skipped for a name matching, case-insensitively, the one being edited or another of my groupings. A name that is a preset or an airport ident is refused as a name even when it is also a member.
+
+Then a member that would nest the grouping in itself is refused ("a grouping can't contain itself").
+
+A name held by another of my groupings asks next "'{name}' is already one of my groupings. Replace it?", or on a rename "'{new}' is already one of my groupings. Replace it with this one? ('{old}' is removed)". No saves nothing and asks nothing else; Yes goes on to the track question, whose answer is written with the overwrite.
 
 If resolved airports are outside the tracked list, a three-way choice follows: "{n} of these aren't tracked ({icaos}). Add them to your tracked airports?" with "Add and save", "Save only" and "Cancel" (`ChoiceModal`, keys `1`, `2`, `3`; at most six ICAOs spelled out, then ", +N").
-
-A name already held by another of my groupings asks "'{name}' is already one of my groupings. Replace it?", or on a rename "'{new}' is already one of my groupings. Replace it with this one? ('{old}' is removed)".
 
 The builder writes through `backend/core/groupings.py` and dismisses with a `BuilderResult`; the caller applies it (tracking the "Add and save" airports through `VATSIMControlApp.track_airports`, refreshing its list).
 

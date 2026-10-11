@@ -13,19 +13,20 @@ from textual.widgets import Static
 import ui.modals.grouping_draft as grouping_draft_module
 from backend.core.groupings import GroupingError, UserGrouping
 from tests.conftest import (
+    BUILDER_AIRPORTS,
     BUILDER_PRESET,
     FAVORITE_NAME,
     FAVORITES,
     BuilderFactory,
     BuilderHarness,
 )
+from ui import config as ui_config
 from ui.modals.confirm_modal import ChoiceModal, ConfirmModal
 from ui.modals.grouping_draft import (
     OVERWRITE_CONFIRM,
     RENAME_CONFIRM,
     SELF_NESTING_MESSAGE,
     BuilderResult,
-    discard_message,
     track_offer_message,
 )
 
@@ -373,6 +374,21 @@ async def test_hint_names_only_the_keys_for_the_focused_row(
         assert h.hint == ("→ expand · Tab next pane · Ctrl+S save · Esc cancel")
 
 
+@pytest.mark.parametrize("size", [(120, 40), (100, 40)])
+async def test_hint_drops_the_tab_item_before_collapse(
+    grouping_builder: BuilderFactory, size: tuple[int, int]
+) -> None:
+    async with grouping_builder(size=size, items=(BUILDER_PRESET, "KSAC")) as h:
+        await h.focus_member(f"ref:{BUILDER_PRESET}")
+        await h.press("right")
+        await h.focus_member(f"sub:{BUILDER_PRESET}:KOAK")
+
+        assert h.hint == (
+            "Del exclude · F dep/arr/both · ← collapse · Ctrl+S save · Esc cancel"
+            " · ○ not tracked"
+        )
+
+
 # --- the Add search ----------------------------------------------------------
 
 
@@ -484,6 +500,74 @@ async def test_at_and_dollar_prefixes_filter_kinds(
             f"grouping:{BUILDER_PRESET}",
         ]
         assert h.result_label(f"grouping:{FAVORITE_NAME}").startswith("★")
+
+
+async def test_a_long_row_is_cut_to_one_line_keeping_mark_ident_and_tag(
+    grouping_builder: BuilderFactory,
+) -> None:
+    name = "Very Long Regional Airport Name That Cannot Possibly Fit On One Line Here"
+    airports = {
+        **BUILDER_AIRPORTS,
+        "KLNG": {"icao": "KLNG", "name": name, "city": "Far Away", "country": "US"},
+    }
+    async with grouping_builder(
+        size=(80, 40), airports=airports, items=("KLNG",), filters={"KLNG": "dep"}
+    ) as h:
+        members = h.members_list
+        assert members.virtual_size.height == members.option_count
+        member_row = members.render_line(0).text.strip()
+        assert member_row.startswith("○ KLNG  Very Long")
+        assert member_row.endswith("…  dep")
+
+        await h.press("tab")
+        await h.type_query("klng")
+
+        results = h.results_list
+        assert results.virtual_size.height == results.option_count
+        result_row = results.render_line(0).text.strip()
+        assert result_row.startswith("○ KLNG  Very Long")
+        assert result_row.endswith("…  member")
+        assert h.result_label("airport:KLNG") == f"○ KLNG  {name} · Far Away  member"
+
+
+class _FakeDisplayNames:
+    """A disambiguator stand-in that records each batch it is asked for."""
+
+    def __init__(self, names: dict[str, str]) -> None:
+        self.names = names
+        self.calls: list[list[str]] = []
+
+    def get_full_names_batch(self, icaos: list[str]) -> dict[str, str]:
+        self.calls.append(list(icaos))
+        return {icao: self.names[icao] for icao in icaos if icao in self.names}
+
+
+async def test_airport_rows_show_the_display_names_in_one_batch(
+    grouping_builder: BuilderFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # KSAC's display name is its own ident, which the real disambiguator returns
+    # for an airport it cannot name; KSJC gets none at all
+    names = _FakeDisplayNames({"KSMF": "Sacramento International", "KSAC": "KSAC"})
+    monkeypatch.setattr(ui_config, "DISAMBIGUATOR", names)
+    async with grouping_builder(items=("KSMF", "KSAC", "KSJC")) as h:
+        assert names.calls == [["KSMF", "KSAC", "KSJC"]]
+        assert h.member_label("ref:KSMF") == "  KSMF  Sacramento International"
+        assert h.member_label("ref:KSAC") == "○ KSAC  Sacramento Executive"
+        assert h.member_label("ref:KSJC") == "  KSJC  San Jose Intl"
+
+        names.calls.clear()
+        await h.type_query("sac")
+
+        assert names.calls == [["KSMF", "KSAC"]]
+        assert h.result_label("airport:KSMF") == (
+            "  KSMF  Sacramento International · Sacramento  member"
+        )
+        assert h.result_label("airport:KSAC") == (
+            "○ KSAC  Sacramento Executive · Sacramento  member"
+        )
+
+        await h.type_query("@international")
+        assert h.result_texts() == ["no airports or groupings match"]
 
 
 async def test_search_without_index_says_loading(
@@ -603,17 +687,42 @@ async def test_save_before_data_loaded_warns(
         assert h.saved_favorites() == FAVORITES
 
 
+@pytest.mark.parametrize(
+    ("items", "name", "message"),
+    [
+        ((BUILDER_PRESET, "KSMF"), BUILDER_PRESET, "that name belongs to a preset"),
+        (("KSFO", "KOAK"), "KSFO", "that name is an airport ident"),
+    ],
+)
+async def test_a_bad_name_that_is_also_a_member_shows_the_name_error(
+    grouping_builder: BuilderFactory, items: tuple[str, ...], name: str, message: str
+) -> None:
+    async with grouping_builder(items=items, name=name) as h:
+        await h.press("ctrl+s")
+
+        assert h.name_error.display
+        assert str(h.name_error.content) == message
+        assert h.notifications() == []
+        assert h.is_open
+        assert h.saved_favorites() == FAVORITES
+
+
 async def test_self_nesting_shows_error_toast(
     grouping_builder: BuilderFactory,
 ) -> None:
-    # The ★ grouping nests the preset, so naming this one after the preset
-    # would make it contain itself
-    async with grouping_builder(items=(FAVORITE_NAME,), name=BUILDER_PRESET) as h:
+    # "Outer" nests "Trip", so naming this grouping "Trip" would make it
+    # contain itself
+    async with grouping_builder(
+        favorites={**FAVORITES, "Outer": ["Trip", "KOAK"]},
+        items=("Outer",),
+        name="Trip",
+    ) as h:
         await h.press("ctrl+s")
 
         assert h.notifications() == [("error", SELF_NESTING_MESSAGE)]
+        assert not h.name_error.display
         assert h.is_open
-        assert h.saved_favorites() == FAVORITES
+        assert h.saved_favorites() == {**FAVORITES, "Outer": ["Trip", "KOAK"]}
 
 
 async def test_track_offer_add_and_save_returns_track(
@@ -631,19 +740,36 @@ async def test_track_offer_add_and_save_returns_track(
         assert not h.is_open
 
 
-async def test_track_offer_then_overwrite_keeps_track(
+async def test_overwrite_confirm_comes_before_the_track_question(
     grouping_builder: BuilderFactory,
 ) -> None:
     async with grouping_builder(items=("KSAC",), name=FAVORITE_NAME) as h:
         await h.press("ctrl+s")
-        assert isinstance(h.app.screen, ChoiceModal)
-        await h.press("1")
         assert isinstance(h.app.screen, ConfirmModal)
+        assert h.app.screen.message == OVERWRITE_CONFIRM.format(name=FAVORITE_NAME)
 
         await h.press("y")
+        assert isinstance(h.app.screen, ChoiceModal)
+        assert h.app.screen.message == track_offer_message(["KSAC"])
+        await h.press("1")
 
         assert h.results[0].track == ("KSAC",)
         assert h.saved_favorites() == {FAVORITE_NAME: ["KSAC"]}
+        assert not h.is_open
+
+
+async def test_no_to_the_overwrite_confirm_asks_nothing_else(
+    grouping_builder: BuilderFactory,
+) -> None:
+    async with grouping_builder(items=("KSAC",), name=FAVORITE_NAME) as h:
+        await h.press("ctrl+s")
+        assert isinstance(h.app.screen, ConfirmModal)
+
+        await h.press("n")
+
+        assert h.is_open
+        assert h.results == []
+        assert h.saved_favorites() == FAVORITES
 
 
 async def test_save_with_empty_tracked_list_writes_without_asking(
@@ -739,7 +865,7 @@ async def test_esc_changed_asks_discard(grouping_builder: BuilderFactory) -> Non
 
         await h.press("escape")
         assert isinstance(h.app.screen, ConfirmModal)
-        assert h.app.screen.message == discard_message("Trips")
+        assert h.app.screen.message == "Discard this new grouping?"
         await h.press("n")
         assert h.is_open
         assert h.results == []
@@ -748,3 +874,17 @@ async def test_esc_changed_asks_discard(grouping_builder: BuilderFactory) -> Non
         await h.press("y")
         assert h.results == [None]
         assert not h.is_open
+
+
+async def test_esc_while_editing_names_the_saved_grouping(
+    grouping_builder: BuilderFactory,
+) -> None:
+    async with grouping_builder(
+        items=("KSFO",), name=FAVORITE_NAME, original_name=FAVORITE_NAME
+    ) as h:
+        await h.type_name("Renamed")
+
+        await h.press("escape")
+
+        assert isinstance(h.app.screen, ConfirmModal)
+        assert h.app.screen.message == f"Discard your changes to '{FAVORITE_NAME}'?"
