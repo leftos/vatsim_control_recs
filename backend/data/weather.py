@@ -924,15 +924,21 @@ BBOX_MAX_ENTRIES = 400
 
 
 class BboxFetchResult(NamedTuple):
-    """One bbox request's METARs and TAFs, whether it succeeded, and its raw entry count."""
+    """
+    One bbox request's METARs and TAFs, whether it succeeded, its raw entry count,
+    and whether it failed on a rate limit (HTTP 429).
+    """
 
     metars: dict[str, str]
     tafs: dict[str, str]
     succeeded: bool
     entry_count: int
+    rate_limited: bool
 
 
-_FAILED_BBOX_FETCH = BboxFetchResult({}, {}, False, 0)
+_FAILED_BBOX_FETCH = BboxFetchResult({}, {}, False, 0, False)
+# A rate limit blanks the cluster rather than falling back per airport, to stay off the API
+_RATE_LIMITED_BBOX_FETCH = BboxFetchResult({}, {}, False, 0, True)
 
 
 def _parse_bbox_entries(data: list) -> tuple[dict[str, str], dict[str, str]]:
@@ -958,7 +964,8 @@ def _fetch_weather_bbox_result(
     Fetch a bbox like fetch_weather_bbox, also reporting success and the entry count.
 
     An empty body (HTTP 204, no stations in the box) is a success with no entries;
-    an HTTP error, network error or a response that is not a JSON array is a failure.
+    an HTTP error, network error or a response that is not a JSON array is a failure,
+    flagged rate_limited when that error was an HTTP 429.
     """
     min_lat, min_lon, max_lat, max_lon = bbox
     bbox_str = f"{min_lat},{min_lon},{max_lat},{max_lon}"
@@ -981,7 +988,7 @@ def _fetch_weather_bbox_result(
         _record_successful_request()
 
         if not body:
-            return BboxFetchResult({}, {}, True, 0)
+            return BboxFetchResult({}, {}, True, 0, False)
 
         # Parse response - it's an array of METAR objects
         data = json.loads(body)
@@ -992,7 +999,7 @@ def _fetch_weather_bbox_result(
             return _FAILED_BBOX_FETCH
 
         metars, tafs = _parse_bbox_entries(data)
-        return BboxFetchResult(metars, tafs, True, len(data))
+        return BboxFetchResult(metars, tafs, True, len(data), False)
 
     except urllib.error.HTTPError as e:
         if _check_rate_limit_error(e.code):
@@ -1000,6 +1007,8 @@ def _fetch_weather_bbox_result(
         debug_logger.warning(
             f"Bbox weather fetch failed for {bbox_str} ({url}): HTTP {e.code}"
         )
+        if e.code == 429:
+            return _RATE_LIMITED_BBOX_FETCH
         return _FAILED_BBOX_FETCH
     except Exception as e:
         debug_logger.warning(f"Bbox weather fetch failed for {bbox_str} ({url}): {e}")
@@ -1360,37 +1369,9 @@ def find_airports_near_position(
     Returns:
         List of airport ICAO codes sorted by distance (closest first)
     """
-    global _METAR_AIRPORT_SPATIAL_INDEX, _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP
-
-    # Ensure spatial index is built
-    current_time = datetime.now(timezone.utc)
-
-    needs_rebuild = (
-        _METAR_AIRPORT_SPATIAL_INDEX is None
-        or _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None
-        or (current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP).total_seconds()
-        > _METAR_SPATIAL_INDEX_DURATION
-    )
-
-    if needs_rebuild:
-        with _METAR_SPATIAL_INDEX_LOCK:
-            current_time = datetime.now(timezone.utc)
-            if (
-                _METAR_AIRPORT_SPATIAL_INDEX is None
-                or _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP is None
-                or (
-                    current_time - _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP
-                ).total_seconds()
-                > _METAR_SPATIAL_INDEX_DURATION
-            ):
-                _METAR_AIRPORT_SPATIAL_INDEX = _build_metar_airport_spatial_index(
-                    airports_data
-                )
-                _METAR_AIRPORT_SPATIAL_INDEX_TIMESTAMP = current_time
-
-    spatial_index = _METAR_AIRPORT_SPATIAL_INDEX
-    assert spatial_index is not None, "Spatial index should have been built"
-    grid = spatial_index["grid"]
+    grid = _current_metar_spatial_index(airports_data, datetime.now(timezone.utc))[
+        "grid"
+    ]
 
     # Determine which cells to search
     lat_cell = int(latitude)
@@ -2241,8 +2222,10 @@ def _fetch_cluster_bboxes(
     """
     Fetch each dense cluster's bbox in parallel, keeping only the cluster's airports.
 
-    A cluster's airports count as processed when its bbox returns. A bbox request
-    that raises sends its cluster's airports to the individual fallback instead.
+    A cluster's airports count as processed when its bbox returns. A bbox that raises,
+    or that fails on anything but a rate limit, sends its cluster's airports to the
+    individual fallback instead; a rate-limited one (HTTP 429) is left blank, with no
+    per-airport requests while the API is refusing them.
 
     Returns:
         (metars, tafs, fallback_airports)
@@ -2257,20 +2240,31 @@ def _fetch_cluster_bboxes(
         max_workers=min(max_workers, len(bbox_clusters))
     ) as executor:
         future_to_cluster = {
-            executor.submit(fetch_weather_bbox, bbox, include_taf): airports_in_cluster
+            executor.submit(
+                _fetch_weather_bbox_result, bbox, include_taf, 30
+            ): airports_in_cluster
             for bbox, airports_in_cluster in bbox_clusters
         }
 
         for future in as_completed(future_to_cluster):
             airports_in_cluster = future_to_cluster[future]
             try:
-                bbox_metars, bbox_tafs = future.result()
-                cluster_set = {a.upper() for a in airports_in_cluster}
-                metars.update(_only_airports(bbox_metars, cluster_set))
-                tafs.update(_only_airports(bbox_tafs, cluster_set))
-                progress.advance(len(airports_in_cluster))
+                fetch = future.result()
             except Exception:
                 fallback_airports.extend(airports_in_cluster)
+                continue
+
+            if fetch.rate_limited:
+                progress.advance(len(airports_in_cluster))
+                continue
+            if not fetch.succeeded:
+                fallback_airports.extend(airports_in_cluster)
+                continue
+
+            cluster_set = {a.upper() for a in airports_in_cluster}
+            metars.update(_only_airports(fetch.metars, cluster_set))
+            tafs.update(_only_airports(fetch.tafs, cluster_set))
+            progress.advance(len(airports_in_cluster))
 
     return metars, tafs, fallback_airports
 

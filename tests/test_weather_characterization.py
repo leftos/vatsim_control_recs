@@ -644,6 +644,49 @@ def test_nearest_spatial_index_is_rebuilt_after_300s(
     assert result[0] == "KMOV"
 
 
+# find_airports_near_position
+
+NEAR_AIRPORTS = {
+    "KNEA": {"latitude": 40.1, "longitude": -74.0},
+    "KNEB": {"latitude": 40.3, "longitude": -74.0},
+    "KNEC": {"latitude": 40.6, "longitude": -74.0},
+    "KNED": {"latitude": 40.8, "longitude": -74.0},
+    "KNEE": {"latitude": 40.85, "longitude": -74.0},
+}
+
+
+def test_near_position_sorted_by_distance_and_capped(nearest_net: Net) -> None:
+    assert weather.find_airports_near_position(*ORIGIN, NEAR_AIRPORTS) == [
+        "KNEA",
+        "KNEB",
+        "KNEC",
+        "KNED",
+    ]
+    assert weather.find_airports_near_position(
+        *ORIGIN, NEAR_AIRPORTS, max_results=2
+    ) == ["KNEA", "KNEB"]
+
+
+def test_near_position_excludes_airports_beyond_radius(nearest_net: Net) -> None:
+    near = {"KNEA": NEAR_AIRPORTS["KNEA"], "KNEE": NEAR_AIRPORTS["KNEE"]}
+
+    assert weather.find_airports_near_position(*ORIGIN, near) == ["KNEA"]
+
+
+def test_near_position_reuses_index_then_rebuilds_after_300s(
+    nearest_net: Net, clock: Clock
+) -> None:
+    first = weather.find_airports_near_position(*ORIGIN, NEAR_AIRPORTS)
+    assert first == ["KNEA", "KNEB", "KNEC", "KNED"]
+
+    clock.advance(120)
+    moved = {"KMOV": {"latitude": 40.1, "longitude": -74.0}}
+    assert weather.find_airports_near_position(*ORIGIN, moved) == first
+
+    clock.advance(200)
+    assert weather.find_airports_near_position(*ORIGIN, moved) == ["KMOV"]
+
+
 # get_weather_smart
 
 DENSE = {
@@ -762,10 +805,10 @@ def test_smart_cluster_too_small_or_spread_goes_individual(
 def test_smart_bbox_that_raises_falls_back_to_individual(
     smart_net: Net, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def crashing_bbox(*_args: Any) -> tuple[dict[str, str], dict[str, str]]:
+    def crashing_bbox(*_args: Any) -> weather.BboxFetchResult:
         raise RuntimeError("bbox crashed")
 
-    monkeypatch.setattr(weather, "fetch_weather_bbox", crashing_bbox)
+    monkeypatch.setattr(weather, "_fetch_weather_bbox_result", crashing_bbox)
     smart_net.route(
         "metar?ids=",
         _by_station({"KS01": _metar_for("KS01"), "KD03": _metar_for("KD03")}),
@@ -779,8 +822,35 @@ def test_smart_bbox_that_raises_falls_back_to_individual(
     assert progress == [(n, 8) for n in range(1, 9)]
 
 
-def test_smart_bbox_http_error_leaves_cluster_empty(smart_net: Net) -> None:
-    smart_net.route("bbox=", _raises(_http_error("bbox", 403)))
+@pytest.mark.parametrize(
+    "bbox_body",
+    [
+        _raises(_http_error("bbox", 403)),
+        _raises(_http_error("bbox", 503)),
+        _raises(urllib.error.URLError("down")),
+        b"{}",
+    ],
+    ids=["403", "503", "network", "non-array"],
+)
+def test_smart_bbox_failure_falls_back_to_individual(
+    smart_net: Net, bbox_body: Handler
+) -> None:
+    smart_net.route("bbox=", bbox_body)
+    smart_net.route(
+        "metar?ids=",
+        _by_station({"KS01": _metar_for("KS01"), "KD03": _metar_for("KD03")}),
+    )
+
+    (metars, _tafs), progress = _smart()
+
+    assert _station_ids(smart_net, "metar?ids=") == sorted(AIRPORTS)
+    assert metars["KD03"] == _metar_for("KD03")
+    assert metars["KD01"] == ""
+    assert progress == [(n, 8) for n in range(1, 9)]
+
+
+def test_smart_bbox_rate_limited_leaves_cluster_empty(smart_net: Net) -> None:
+    smart_net.route("bbox=", _raises(_http_error("bbox", 429)))
 
     (metars, tafs), progress = _smart()
 
@@ -814,3 +884,19 @@ def test_smart_individual_failures_are_logged_and_left_empty(
         "TAF fetch failed for KS02: no KS02",
     ]
     assert progress == [(5, 8), (6, 8), (7, 8), (8, 8)]
+
+
+@pytest.mark.parametrize("code", [429, 503])
+def test_smart_individual_taf_error_returns_stale_cached_taf(
+    smart_net: Net, clock: Clock, code: int
+) -> None:
+    (_metars, tafs), _progress = _smart()
+    assert tafs["KS01"] == "TAF KS01"
+
+    clock.advance(61)
+    smart_net.route("taf?ids=", _raises(_http_error(TAF_URL, code)))
+
+    (_metars, tafs), _progress = _smart()
+
+    assert tafs["KS01"] == "TAF KS01"
+    assert "KS01" not in manager.get_taf_cache()[1]

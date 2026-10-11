@@ -23,6 +23,8 @@ aviationweather.gov caps a response at 400 entries and does so silently: a CONUS
 
 `BBOX_MAX_ENTRIES` in `backend/data/weather.py` is that cap. `_store_bbox_result` records a "no METAR" negative for the requested airports a box omitted only when the request succeeded and returned fewer than `BBOX_MAX_ENTRIES` entries; a box at the cap stores only the METARs it returned.
 
+The weather briefing (`get_weather_smart`) treats a failed box differently from the weather pass: a box that fails with an HTTP error other than 429, a network error or a non-JSON-array body sends its airports to per-airport requests, while an HTTP 429 leaves them blank so no per-airport requests go out while the API is rate-limiting.
+
 ## Cost of a refresh
 
 A refresh is `analyze_flights_data` in `backend/core/analysis.py` on an executor thread, followed by the table update on the UI thread; the analysis fetches no weather. WIND and ALT come from a separate weather pass (`fetch_weather_for_airports` in `backend/core/analysis.py`) on a daemon thread named "weather-pass", which patches the table box by box. With warm caches its main-thread CPU is a fraction of a second. The pieces that make it so:
