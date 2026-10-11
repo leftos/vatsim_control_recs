@@ -6,6 +6,7 @@ import re
 import tempfile
 import webbrowser
 from datetime import UTC, datetime, timedelta
+from io import StringIO
 from typing import Any, ClassVar
 
 from rich.console import Console
@@ -697,7 +698,7 @@ class WeatherBriefingScreen(ModalScreen):
 
         # Build the content using Rich Console for HTML export
         # Use wide width to prevent Rich from wrapping - let CSS handle wrapping instead
-        console = Console(record=True, force_terminal=True, width=500)
+        console = Console(record=True, force_terminal=True, width=500, file=StringIO())
 
         # Title and timestamp (Zulu only for web - local time varies by viewer)
         now = datetime.now(UTC)

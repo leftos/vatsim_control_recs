@@ -200,10 +200,6 @@ Fallback: VATSIM ATIS -> Real-world D-ATIS from atis.info.
 
 Batch-fetches ATIS for multiple airports and displays filtered text alongside METAR data in the briefing view.
 
-### Flight Briefing (`ui/modals/flight_briefing.py`)
-
-Collects ATIS for the briefing's airports with `_collect_atis()` (VATSIM first, real-world D-ATIS for the rest) and stores it in each airport's weather entry. It does not filter or colorize the text.
-
 ---
 
 ## 6. Data Flow Diagram

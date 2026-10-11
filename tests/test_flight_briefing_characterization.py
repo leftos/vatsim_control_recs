@@ -2,10 +2,11 @@
 
 The screen is built without an app, as the flight info characterization builds it: its
 ``_update_content`` is replaced by a recorder of the text the screen would show and its
-``notify`` by a recorder of its toasts. The METAR, TAF, VATSIM, ATIS and D-ATIS fetchers
-and the enroute airport search are faked at the module boundary; time is a fixed clock
-patched over ``flight_briefing.datetime``, and the export's temp file and browser are
-faked over ``flight_briefing.tempfile`` and ``flight_briefing.webbrowser``.
+``notify`` by a recorder of its toasts. The METAR and TAF fetchers and the enroute airport
+search are faked at the module boundary, and the VATSIM and D-ATIS fetchers as tripwires
+the briefing must never call; time is a fixed clock patched over
+``flight_briefing.datetime``, and the export's temp file and browser are faked over
+``flight_briefing.tempfile`` and ``flight_briefing.webbrowser``.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from rich.console import Console
 
 from backend.core.calculations import haversine_distance_nm
 from backend.core.route import sample_route_points
+from backend.data import datis_api, vatsim_api
 from ui import config
 from ui.config import CATEGORY_COLORS
 from ui.modals import flight_briefing
@@ -92,7 +94,6 @@ class World:
         self.vatsim_atis: dict[str, str] = {"KAAA": "VATSIM ATIS KAAA"}
         self.atis_calls: list[tuple[Any, list[str]]] = []
         self.datis: dict[str, str] = {"KEEE": "D-ATIS KEEE"}
-        self.datis_error: BaseException | None = None
         self.datis_calls: list[list[str]] = []
         self.enroute: list[dict[str, Any]] = [
             {"icao": "KMMM", "distance_nm": 120.0},
@@ -125,8 +126,6 @@ class World:
 
     def get_datis_for_airports(self, airports: list[str]) -> dict[str, str]:
         self.datis_calls.append(list(airports))
-        if self.datis_error is not None:
-            raise self.datis_error
         return {icao: self.datis[icao] for icao in airports if icao in self.datis}
 
     def find_enroute_airports(
@@ -145,15 +144,17 @@ def install(monkeypatch: pytest.MonkeyPatch) -> World:
     """Fake the module's boundary and return the fakes."""
     world = World()
     monkeypatch.setattr(config, "UNIFIED_AIRPORT_DATA", AIRPORTS)
-    for name in (
-        "get_metar_batch",
-        "get_taf_batch",
-        "download_vatsim_data",
-        "get_atis_for_airports",
-        "get_datis_for_airports",
-        "find_enroute_airports",
-    ):
+    for name in ("get_metar_batch", "get_taf_batch", "find_enroute_airports"):
         monkeypatch.setattr(flight_briefing, name, getattr(world, name))
+    # The briefing must fetch no ATIS: each fetcher is faked on the module that
+    # defines it and on the briefing module, so a call from either is recorded.
+    for module, name in (
+        (vatsim_api, "download_vatsim_data"),
+        (vatsim_api, "get_atis_for_airports"),
+        (datis_api, "get_datis_for_airports"),
+    ):
+        monkeypatch.setattr(module, name, getattr(world, name))
+        monkeypatch.setattr(flight_briefing, name, getattr(world, name), raising=False)
     monkeypatch.setattr(flight_briefing, "debug", world.debug.append)
 
     class FakeDatetime(datetime):
@@ -225,7 +226,6 @@ def wx(
         "ceiling_ft": None,
         "ceiling_layer": ceiling,
         "wind": wind,
-        "atis": None,
     }
 
 
@@ -373,7 +373,9 @@ WEATHER_BLOCK_CASES = [
     pytest.param(
         wx(visibility=10.0), None, ["    [dim]10.0SM[/dim]"], id="visibility only"
     ),
-    pytest.param(wx(visibility=0.0), None, [], id="zero visibility"),
+    pytest.param(
+        wx(visibility=0.0), None, ["    [dim]0.0SM[/dim]"], id="zero visibility"
+    ),
     pytest.param(
         wx(ceiling="OVC008"), None, ["    [dim]OVC008[/dim]"], id="ceiling only"
     ),
@@ -501,8 +503,8 @@ STATES: dict[str, dict[str, Any]] = {
         "weather_data": {
             "KAAA": KAAA_WX,
             "KMMM": wx("MVFR", ceiling="BKN020"),
-            "KQQQ": wx("VFR", wind=""),
-            "KRRR": wx("IFR", wind="", ceiling="OVC008"),
+            "KQQQ": wx("VFR"),
+            "KRRR": wx("IFR", ceiling="OVC008"),
             "KEEE": KEEE_WX,
         },
         "total_distance": 240.1,
@@ -568,10 +570,10 @@ KEEE_ARR = (
 )
 KALT_ALT = "ALT KALT (   0nm       ) ............................... [white]UNK[/white]"
 KMMM_80 = "ENR KMMM (  80nm  +0:10) .......................... [#5599ff]MVFR[/#5599ff]"
-KMMM_COND = "    [dim]00000KT BKN020[/dim]"
+KMMM_COND = "    [dim]00000KT 4.0SM BKN020[/dim]"
 KNNN_160 = "ENR KNNN ( 160nm  +0:21) .......................... [#00ff00]VFR[/#00ff00]"
 KQQQ_160 = "ENR KQQQ ( 160nm  +0:21) .......................... [#00ff00]VFR[/#00ff00]"
-WIND_AND_NONE = "    [dim]27010KT None[/dim]"
+WIND_ONLY = "    [dim]27010KT[/dim]"
 FULL_SYNOPSIS = (
     "VFR departure. MVFR enroute. IFR conditions at arrival. improving to VFR."
 )
@@ -624,7 +626,7 @@ DISPLAY_CASES = [
             wp("BRAVO"),
             wp("CHARL"),
             KNNN_160,
-            WIND_AND_NONE,
+            WIND_ONLY,
             wp("DELTA"),
             wp("ECHOO"),
             "",
@@ -655,7 +657,7 @@ DISPLAY_CASES = [
             wp("BRAVO"),
             wp("CHARL"),
             "ENR KNNN ( 160nm  +0:32) .......................... [#00ff00]VFR[/#00ff00]",
-            WIND_AND_NONE,
+            WIND_ONLY,
             wp("DELTA"),
             wp("ECHOO"),
             "",
@@ -682,7 +684,7 @@ DISPLAY_CASES = [
             "",
             H_ENR,
             KMMM_60,
-            "    [dim]None BKN020[/dim]",
+            "    [dim]BKN020[/dim]",
             KQQQ_120,
             KRRR_180,
             "    [dim]OVC008[/dim]",
@@ -840,7 +842,7 @@ PRINT_CASES = [
             wp("BRAVO"),
             wp("CHARL"),
             KNNN_160,
-            WIND_AND_NONE,
+            WIND_ONLY,
             wp("DELTA"),
             wp("ECHOO"),
             "",
@@ -867,10 +869,10 @@ PRINT_CASES = [
             "",
             H_ENR,
             KMMM_60,
-            "    [dim]None BKN020[/dim]",
+            "    [dim]BKN020[/dim]",
             KQQQ_120,
             KRRR_180,
-            "    [dim] OVC008[/dim]",
+            "    [dim]OVC008[/dim]",
             "",
             H_ARR,
             *KEEE_ARR,
@@ -987,11 +989,11 @@ DEP KAAA <span style="font-weight: bold">(</span>   0nm       <span style="font-
 <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">━━━ ENROUTE ━━━</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · ALPHA</span>
 ENR KMMM <span style="font-weight: bold">(</span>  80nm  +<span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">0:10</span><span style="font-weight: bold">)</span> <span style="color: #808000; text-decoration-color: #808000">........................</span>.. <span style="color: #5599ff; text-decoration-color: #5599ff">MVFR</span>
-    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">00000KT BKN020</span>
+    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">00000KT </span><span style="color: #7fbfbf; text-decoration-color: #7fbfbf; font-weight: bold">4.</span><span style="color: #7f7f7f; text-decoration-color: #7f7f7f">0SM BKN020</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · BRAVO</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · CHARL</span>
 ENR KNNN <span style="font-weight: bold">(</span> 160nm  +<span style="color: #00ff00; text-decoration-color: #00ff00; font-weight: bold">0:21</span><span style="font-weight: bold">)</span> <span style="color: #808000; text-decoration-color: #808000">........................</span>.. <span style="color: #00ff00; text-decoration-color: #00ff00">VFR</span>
-    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">27010KT </span><span style="color: #bf7fbf; text-decoration-color: #bf7fbf; font-style: italic">None</span>
+    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">27010KT</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · DELTA</span>
     <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">  · ECHOO</span>
 
@@ -1050,7 +1052,6 @@ KAAA_FETCHED = {
     "ceiling_ft": None,
     "ceiling_layer": None,
     "wind": "27010KT",
-    "atis": "VATSIM ATIS KAAA",
 }
 KMMM_FETCHED = {
     "metar": METARS["KMMM"],
@@ -1061,7 +1062,6 @@ KMMM_FETCHED = {
     "ceiling_ft": 2000,
     "ceiling_layer": "BKN020",
     "wind": "00000KT",
-    "atis": None,
 }
 KEEE_FETCHED = {
     "metar": METARS["KEEE"],
@@ -1072,7 +1072,6 @@ KEEE_FETCHED = {
     "ceiling_ft": 800,
     "ceiling_layer": "OVC008",
     "wind": "18005KT",
-    "atis": "D-ATIS KEEE",
 }
 NO_METAR_FETCHED = {
     "metar": "",
@@ -1083,9 +1082,7 @@ NO_METAR_FETCHED = {
     "ceiling_ft": None,
     "ceiling_layer": None,
     "wind": None,
-    "atis": None,
 }
-FEED = {"pilots": []}
 
 
 async def test_fetch_full_route(world: World) -> None:
@@ -1105,9 +1102,9 @@ async def test_fetch_full_route(world: World) -> None:
     assert calls(world) == {
         "metar": [fetched],
         "taf": [fetched],
-        "vatsim": 1,
-        "atis": [(FEED, fetched)],
-        "datis": [["KEEE", "KALT", "KMMM"]],
+        "vatsim": 0,
+        "atis": [],
+        "datis": [],
         "enroute": [(midpoint, AIRPORTS, 100.0)],
     }
     assert world.enroute_calls[0][1] is AIRPORTS
@@ -1141,7 +1138,7 @@ async def test_fetch_full_route(world: World) -> None:
             KMMM_COND,
             wp("ALPHA"),
             "ENR KAAA ( 125nm  +0:16) .......................... [#00ff00]VFR[/#00ff00]",
-            WIND_AND_NONE,
+            "    [dim]27010KT 10.0SM[/dim]",
             wp("BRAVO"),
             wp("CHARL"),
             "",
@@ -1158,23 +1155,22 @@ async def test_fetch_without_airport_data(
     world: World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(config, "UNIFIED_AIRPORT_DATA", None)
-    world.vatsim = None
 
     briefing = await run_fetch(world)
 
     assert calls(world) == {
         "metar": [["KAAA", "KEEE"]],
         "taf": [["KAAA", "KEEE"]],
-        "vatsim": 1,
+        "vatsim": 0,
         "atis": [],
-        "datis": [["KAAA", "KEEE"]],
+        "datis": [],
         "enroute": [],
     }
     assert state(briefing) == {
         "route_waypoints": [],
         "enroute_points": [],
         "total_distance": 0.0,
-        "weather_data": {"KAAA": {**KAAA_FETCHED, "atis": None}, "KEEE": KEEE_FETCHED},
+        "weather_data": {"KAAA": KAAA_FETCHED, "KEEE": KEEE_FETCHED},
     }
     assert briefing.renders == [
         text(
@@ -1203,9 +1199,9 @@ async def test_fetch_with_empty_airport_data(
     assert calls(world) == {
         "metar": [["KAAA", "KEEE"]],
         "taf": [["KAAA", "KEEE"]],
-        "vatsim": 1,
-        "atis": [(FEED, ["KAAA", "KEEE"])],
-        "datis": [["KEEE"]],
+        "vatsim": 0,
+        "atis": [],
+        "datis": [],
         "enroute": [],
     }
     assert state(briefing) == {
@@ -1217,15 +1213,13 @@ async def test_fetch_with_empty_airport_data(
 
 
 async def test_fetch_departure_without_position(world: World) -> None:
-    world.vatsim_atis = {"KNOP": "VATSIM ATIS KNOP", "KEEE": "VATSIM ATIS KEEE"}
-
     briefing = await run_fetch(world, departure="KNOP", alternate="KEEE")
 
     assert calls(world) == {
         "metar": [["KNOP", "KEEE"]],
         "taf": [["KNOP", "KEEE"]],
-        "vatsim": 1,
-        "atis": [(FEED, ["KNOP", "KEEE"])],
+        "vatsim": 0,
+        "atis": [],
         "datis": [],
         "enroute": [],
     }
@@ -1233,10 +1227,7 @@ async def test_fetch_departure_without_position(world: World) -> None:
         "route_waypoints": [],
         "enroute_points": [],
         "total_distance": 0.0,
-        "weather_data": {
-            "KNOP": {**NO_METAR_FETCHED, "atis": "VATSIM ATIS KNOP"},
-            "KEEE": {**KEEE_FETCHED, "atis": "VATSIM ATIS KEEE"},
-        },
+        "weather_data": {"KNOP": NO_METAR_FETCHED, "KEEE": KEEE_FETCHED},
     }
 
 
@@ -1246,14 +1237,4 @@ async def test_fetch_failure_shows_the_error(world: World) -> None:
     briefing = await run_fetch(world)
 
     assert briefing.renders == ["[red]Error fetching weather: metar feed down[/red]"]
-    assert briefing.screen.weather_data == {}
-
-
-async def test_fetch_datis_failure_shows_the_error(world: World) -> None:
-    world.datis_error = RuntimeError("datis down")
-
-    briefing = await run_fetch(world)
-
-    assert world.datis_calls == [["KEEE", "KMMM"]]
-    assert briefing.renders == ["[red]Error fetching weather: datis down[/red]"]
     assert briefing.screen.weather_data == {}

@@ -5,6 +5,7 @@ import os
 import tempfile
 import webbrowser
 from datetime import UTC, datetime
+from io import StringIO
 from typing import Any, ClassVar
 
 from rich.console import Console
@@ -26,8 +27,6 @@ from backend.core.route import (
     parse_route_waypoints,
     sample_route_points,
 )
-from backend.data.datis_api import get_datis_for_airports
-from backend.data.vatsim_api import download_vatsim_data, get_atis_for_airports
 from backend.data.weather_parsing import (
     get_flight_category,
     parse_ceiling_feet,
@@ -53,16 +52,7 @@ def _unique_in_order(icaos: list[str]) -> list[str]:
     return list(dict.fromkeys(icaos))
 
 
-def _collect_atis(vatsim_data: Any, airports: list[str]) -> dict[str, Any]:
-    """ATIS per airport: VATSIM's where it has one, real-world D-ATIS for the rest."""
-    atis_data = get_atis_for_airports(vatsim_data, airports) if vatsim_data else {}
-    airports_without_vatsim_atis = [icao for icao in airports if icao not in atis_data]
-    if airports_without_vatsim_atis:
-        atis_data.update(get_datis_for_airports(airports_without_vatsim_atis))
-    return atis_data
-
-
-def _weather_entry(metar: str, taf: str, atis: Any) -> dict[str, Any]:
+def _weather_entry(metar: str, taf: str) -> dict[str, Any]:
     """The weather the briefing keeps for one airport, parsed from its METAR."""
     category = get_flight_category(metar) if metar else "UNK"
     return {
@@ -74,7 +64,6 @@ def _weather_entry(metar: str, taf: str, atis: Any) -> dict[str, Any]:
         "ceiling_ft": parse_ceiling_feet(metar) if metar else None,
         "ceiling_layer": parse_ceiling_layer(metar) if metar else None,
         "wind": parse_wind_from_metar(metar) if metar else None,
-        "atis": atis,
     }
 
 
@@ -129,7 +118,7 @@ def _conditions_text(wind: Any, visibility: Any, ceiling: Any) -> str:
     conditions = []
     if wind:
         conditions.append(wind)
-    if visibility:
+    if visibility is not None:
         conditions.append(f"{visibility}SM")
     if ceiling:
         conditions.append(ceiling)
@@ -305,19 +294,15 @@ class FlightWeatherBriefingScreen(ModalScreen):
         try:
             metar_task = loop.run_in_executor(None, get_metar_batch, unique_airports)
             taf_task = loop.run_in_executor(None, get_taf_batch, unique_airports)
-            vatsim_task = loop.run_in_executor(None, download_vatsim_data)
 
-            metars, tafs, vatsim_data = await asyncio.gather(
-                metar_task, taf_task, vatsim_task
-            )
-            atis_data = _collect_atis(vatsim_data, unique_airports)
+            metars, tafs = await asyncio.gather(metar_task, taf_task)
         except Exception as e:
             self._update_content(f"[red]Error fetching weather: {e}[/red]")
             return
 
         for icao in unique_airports:
             self.weather_data[icao] = _weather_entry(
-                metars.get(icao, ""), tafs.get(icao, ""), atis_data.get(icao)
+                metars.get(icao, ""), tafs.get(icao, "")
             )
 
         self._update_display()
@@ -464,25 +449,23 @@ class FlightWeatherBriefingScreen(ModalScreen):
     def _alternate_lines(self, alternate: str) -> list[str]:
         return self._airport_lines(alternate, None, label="ALT ", show_ete=False)
 
-    def _enroute_point_lines(
-        self, point: dict[str, Any], *, strip_conditions: bool
-    ) -> list[str]:
-        """An enroute airport's line and its wind and ceiling, without the full METAR."""
+    def _enroute_point_lines(self, point: dict[str, Any]) -> list[str]:
+        """An enroute airport's line and its conditions, without the METAR."""
         icao = point["icao"]
         data = self.weather_data.get(icao, {})
         if not data:
             return []
         lines = [self._format_airport_line(icao, data, point["distance_nm"], "ENR ")]
-        wind = data.get("wind", "")
-        ceiling = data.get("ceiling_layer", "")
-        if wind or ceiling:
-            conditions = f"{wind} {ceiling}"
-            if strip_conditions:
-                conditions = conditions.strip()
+        conditions = _conditions_text(
+            data.get("wind", ""),
+            data.get("visibility_sm"),
+            data.get("ceiling_layer", ""),
+        )
+        if conditions:
             lines.append(f"    [dim]{conditions}[/dim]")
         return lines
 
-    def _enroute_lines(self, *, strip_conditions: bool) -> list[str]:
+    def _enroute_lines(self) -> list[str]:
         """Enroute weather points with the route's waypoints spread evenly between them."""
         waypoints = self.route_waypoints
         if not self.enroute_points:
@@ -495,9 +478,7 @@ class FlightWeatherBriefingScreen(ModalScreen):
             shown = waypoints[wp_idx : wp_idx + waypoints_per_segment]
             lines.extend(_waypoint_line(waypoint) for waypoint in shown)
             wp_idx += len(shown)
-            lines.extend(
-                self._enroute_point_lines(point, strip_conditions=strip_conditions)
-            )
+            lines.extend(self._enroute_point_lines(point))
         lines.extend(_waypoint_line(waypoint) for waypoint in waypoints[wp_idx:])
         return lines
 
@@ -514,7 +495,7 @@ class FlightWeatherBriefingScreen(ModalScreen):
 
         if self.enroute_points or self.route_waypoints:
             sections.append(f"\n{_section_header('ENROUTE')}")
-            sections.extend(self._enroute_lines(strip_conditions=True))
+            sections.extend(self._enroute_lines())
 
         sections.append(f"\n{_section_header('ARRIVAL')}")
         sections.extend(self._arrival_lines())
@@ -554,7 +535,7 @@ class FlightWeatherBriefingScreen(ModalScreen):
         if self.enroute_points or self.route_waypoints:
             lines += [
                 _section_header("ENROUTE"),
-                *self._enroute_lines(strip_conditions=False),
+                *self._enroute_lines(),
                 "",
             ]
 
@@ -574,7 +555,7 @@ class FlightWeatherBriefingScreen(ModalScreen):
             self.notify("No weather data to export", severity="warning")
             return
 
-        console = Console(record=True, force_terminal=True, width=500)
+        console = Console(record=True, force_terminal=True, width=500, file=StringIO())
         for line in self._print_lines():
             console.print(line)
 
