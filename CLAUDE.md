@@ -109,7 +109,7 @@ The global `backend.config.constants.WIND_SOURCE` controls which source is used.
 3. Aircraft-specific approach speed for final 5nm (from `aircraft_data.csv`)
 4. Glide slope clamping with 3-degree model below 10,000ft
 
-NEXT ETA is the earliest ETA among the flights the ARR column counts, so it never exceeds `max_eta_hours` and a flight still on the ground at its departure never feeds it. The overview and the flight board use the same `calculate_eta` (`load_airport_data` keeps airport elevation for the glide-slope clamp), so their ETAs match.
+NEXT ETA is the earliest ETA among the flights the ARR column counts, so it never exceeds `max_eta_hours` and a flight still on the ground at its departure never feeds it. The overview, the flight board and the flight info popup use the same `calculate_eta` on the whole pilot record, altitude included (`load_airport_data` keeps airport elevation for the glide-slope clamp), so their ETAs match.
 
 **Flight Categorization**:
 - Departure: On ground at departure airport (groundspeed <= 40kt)

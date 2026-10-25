@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from backend import haversine_distance_nm
+from backend import calculate_eta, haversine_distance_nm
 from backend.data.navaids import MeaCheck, MeaViolation
 from ui import config
 from ui.modals import flight_info
@@ -341,23 +341,30 @@ def test_eta_info(
 
 def test_eta_info_passes_the_flight_with_arrival_at_top_level(fakes: Fakes) -> None:
     plan = ifr_plan()
+    data = _moved(flight(plan, groundspeed=250), altitude=8000)
 
-    FlightInfoScreen(flight(plan, groundspeed=250))._get_eta_info()
+    FlightInfoScreen(data)._get_eta_info()
 
-    assert fakes.eta_calls == [
-        (
-            {
-                "arrival": "KEEE",
-                "latitude": 37.0,
-                "longitude": -122.0,
-                "groundspeed": 250,
-                "flight_plan": plan,
-            },
-            AIRPORTS,
-            {},
-        )
-    ]
+    assert fakes.eta_calls == [({**data, "arrival": "KEEE"}, AIRPORTS, {})]
     assert fakes.eta_calls[0][1] is AIRPORTS
+
+
+def test_eta_info_matches_the_flight_board_for_a_cruising_flight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The popup and the board run calculate_eta on the same record, altitude included."""
+    monkeypatch.setattr(flight_info, "calculate_eta", calculate_eta)
+    # 300 nm south of KEEE at FL360: capped at 250 kt the whole way it reads 1h12m
+    data = _moved(flight(ifr_plan(), groundspeed=480), latitude=33.0, altitude=36000)
+    board_display, _, _ = calculate_eta(
+        {**data, "arrival": "KEEE"}, AIRPORTS, config.AIRCRAFT_APPROACH_SPEEDS
+    )
+
+    eta_info = FlightInfoScreen(data)._get_eta_info()
+
+    assert board_display == "40m"
+    assert eta_info is not None
+    assert eta_info.startswith(f"ETA {board_display} (")
 
 
 def test_eta_info_without_airport_data(monkeypatch: pytest.MonkeyPatch) -> None:

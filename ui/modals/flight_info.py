@@ -964,11 +964,11 @@ class FlightInfoScreen(ModalScreen):
         self, arrival: str, flight_plan: dict, groundspeed: float
     ) -> str | None:
         """The "ETA <time> (<local> LT)" text for an airborne flight, or None without an ETA."""
-        # Prepare flight dict for calculate_eta (it expects 'arrival' at top level)
+        # The whole record, as the flight board passes it (altitude feeds the
+        # descent and below-10,000 ft phases); calculate_eta reads 'arrival' at top level
         flight_for_eta = {
+            **self.flight_data,
             "arrival": arrival,
-            "latitude": self.flight_data.get("latitude"),
-            "longitude": self.flight_data.get("longitude"),
             "groundspeed": groundspeed,
             "flight_plan": flight_plan,
         }
