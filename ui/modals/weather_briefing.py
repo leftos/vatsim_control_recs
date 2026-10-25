@@ -1,6 +1,7 @@
 """Weather Briefing Modal Screen - Consolidated weather for a grouping/sector"""
 
 import asyncio
+import contextvars
 import os
 import re
 import tempfile
@@ -594,9 +595,12 @@ class WeatherBriefingScreen(ModalScreen):
         position; otherwise the METAR and TAF batch queries.
         """
 
+        # The fetch thread has an empty context; the update must run in the app's
+        app_context = contextvars.copy_context()
+
         def weather_progress(completed: int, total: int) -> None:
             progress.weather = (completed, total)
-            loop.call_soon_threadsafe(progress.show)
+            loop.call_soon_threadsafe(progress.show, context=app_context)
 
         if len(airport_coords) >= len(self.airports) * 0.8:
             return await loop.run_in_executor(

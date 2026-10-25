@@ -4,6 +4,7 @@ Contains the VATSIMControlApp Textual application class
 """
 
 import asyncio
+import contextvars
 import os
 import sys
 import threading
@@ -880,11 +881,16 @@ class VATSIMControlApp(App):
         if not airports or not coordinates:
             return
         loop = asyncio.get_running_loop()
+        # The pass thread has an empty context; the patch must run in the app's,
+        # or a table timer it starts has no active_app and dies on its first tick
+        app_context = contextvars.copy_context()
 
         def on_box(values: dict[str, tuple[str, str]]) -> None:
             # Runs on the pass thread: hand the values to the loop without waiting
             try:
-                loop.call_soon_threadsafe(self._apply_weather_batch, values)
+                loop.call_soon_threadsafe(
+                    self._apply_weather_batch, values, context=app_context
+                )
             except RuntimeError:
                 debug("The event loop closed during a weather pass; dropping a box")
 

@@ -55,6 +55,7 @@ ARGS = SimpleNamespace(
 )
 
 HIDE_WIND_ARGS = SimpleNamespace(**{**vars(ARGS), "hide_wind": True})
+ANIMATED_ARGS = SimpleNamespace(**{**vars(ARGS), "disable_animations": False})
 
 WAIT = 10.0
 
@@ -532,6 +533,32 @@ async def test_startup_first_paint_has_traffic_without_weather(
             pilot,
             lambda: _shows_fixture_weather(app, "KSFO"),
             "the startup weather pass never filled WIND/ALT",
+        )
+
+
+async def test_box_arriving_after_the_flaps_stop_flaps_its_values_in(
+    net: RegionNet, feed: Feed
+) -> None:
+    """A box handed over from the weather thread starts the stopped animation timer in the app's context.
+
+    A timer started from the thread's own context had no ``active_app`` and died
+    on its first tick, freezing every later flap and fade in the table.
+    """
+    net.west.block()
+    async with weather_app(net, args=ANIMATED_ARGS) as (app, pilot):
+        table = app.query_one("#airports-table", SplitFlapDataTable)
+        app.action_refresh()
+        await _wait_until(
+            pilot,
+            lambda: _total(app, "KSFO") == "1" and table._animation_timer is None,
+            "the traffic columns never finished flapping in",
+        )
+
+        net.west.open()
+        await _wait_until(
+            pilot,
+            lambda: _shows_fixture_weather(app, "KSFO"),
+            "WIND/ALT from a box that arrived after the flaps stopped never flapped in",
         )
 
 
