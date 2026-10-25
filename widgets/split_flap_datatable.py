@@ -7,6 +7,7 @@ A reusable DataTable widget with split-flap animation effects
 import asyncio
 import os
 import sys
+import time
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -23,7 +24,7 @@ from textual.widgets._data_table import (
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ui.debug_logger import debug
+from ui.debug_logger import debug, error, warning
 
 # Default character sets for the split-flap effect
 DEFAULT_FLAP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :-"
@@ -238,6 +239,11 @@ class SplitFlapDataTable(DataTable):
         self._columns_to_settle: set[int] = set()
         self._settle_scheduled = False
         self._animation_timer = None
+        # Frame timer diagnostics: frames run, when the last ran, when the timer started
+        self._frames = 0
+        self._last_frame_at: float | None = None
+        self._timer_started_at = 0.0
+        self._stall_reported = False
         self._update_counter = 0  # Counter for staggering animations
         # Rows flapping to blank before their removal; the cursor skips them
         self._empty_rows: set[RowKey] = set()
@@ -279,8 +285,64 @@ class SplitFlapDataTable(DataTable):
             and self._animation_timer is None
             and self._animating_cells
         ):
-            speed = self._get_adaptive_animation_speed()
-            self._animation_timer = self.set_interval(speed, self._animate_cells)
+            self._start_animation_timer(self._get_adaptive_animation_speed())
+
+    def _start_animation_timer(self, speed: float) -> None:
+        """Start the frame timer, which runs ``_animate_cells`` every ``speed`` seconds."""
+        self._animation_timer = self.set_interval(speed, self._animation_frame)
+        self._timer_started_at = time.monotonic()
+        self._stall_reported = False
+        debug(
+            f"{self.id}: animation timer {self._animation_timer.name} started ({speed}s)"
+        )
+
+    def _animation_frame(self) -> None:
+        """One timer tick: run a frame, logging anything that escapes it (it would end the timer)."""
+        self._frames += 1
+        self._last_frame_at = time.monotonic()
+        try:
+            self._animate_cells()
+        except BaseException as exc:
+            error(
+                f"{self.id}: animation frame raised {exc!r}; the timer ends",
+                exc_info=True,
+            )
+            raise
+
+    def _timer_state(self) -> str:
+        """The frame timer's task state and how long since its last frame, for the debug log."""
+        timer = self._animation_timer
+        if timer is None:
+            return "stopped"
+        task = timer._task  # Textual 8.2.8 private: the asyncio task the timer runs in
+        if task is None:
+            task_state = "no task"
+        elif task.done():
+            task_state = (
+                "task cancelled"
+                if task.cancelled()
+                else f"task ended ({task.exception()!r})"
+            )
+        else:
+            task_state = "task alive"
+        now = time.monotonic()
+        last = (
+            "never"
+            if self._last_frame_at is None
+            else f"{now - self._last_frame_at:.1f}s ago"
+        )
+        return f"{timer.name} {task_state}, started {now - self._timer_started_at:.1f}s ago, last frame {last}"
+
+    def _check_for_stalled_timer(self) -> None:
+        """Warn once per timer when it exists but has not run a frame for two seconds."""
+        if self._animation_timer is None or self._stall_reported:
+            return
+        since = max(self._last_frame_at or 0.0, self._timer_started_at)
+        if time.monotonic() - since > 2.0:
+            self._stall_reported = True
+            warning(
+                f"{self.id}: animation timer stalled: {self._timer_state()}, {len(self._animating_cells)} cells waiting"
+            )
 
     def _rebuild_cache(self) -> None:
         """Rebuild the row/column key lookup cache."""
@@ -423,9 +485,7 @@ class SplitFlapDataTable(DataTable):
 
         # Start animation timer if not already running and we have animating cells
         if self._animation_timer is None and self._animating_cells:
-            self._animation_timer = self.set_interval(
-                self.animation_speed, self._animate_cells
-            )
+            self._start_animation_timer(self.animation_speed)
 
         return row_key
 
@@ -469,6 +529,9 @@ class SplitFlapDataTable(DataTable):
         """
         self._rebuild_cache()
         removed = self._cached_row_keys[keep:]
+        debug(
+            f"{self.id}: truncate_rows(keep={keep}) removes {len(removed)} of {len(self._cached_row_keys)} rows"
+        )
         for row_key in reversed(removed):
             self.remove_row(row_key)
             self._empty_rows.discard(row_key)
@@ -486,7 +549,10 @@ class SplitFlapDataTable(DataTable):
             key for key in self._animating_cells if key[0] < first_row
         }
         for cells, blanked in self._blank_waiters:
-            if any(row_idx >= first_row for row_idx, _ in cells):
+            if any(row_idx >= first_row for row_idx, _ in cells) and not blanked.done():
+                debug(
+                    f"{self.id}: cancelling the blank wait on rows {sorted({r for r, _ in cells})}"
+                )
                 blanked.cancel()
         self._resolve_blank_waiters()
 
@@ -499,6 +565,7 @@ class SplitFlapDataTable(DataTable):
             if cells & self._animating_cells:
                 waiting.append((cells, blanked))
             else:
+                debug(f"{self.id}: rows {sorted({r for r, _ in cells})} are blank")
                 blanked.set_result(None)
         self._blank_waiters = waiting
 
@@ -686,8 +753,9 @@ class SplitFlapDataTable(DataTable):
         # Restart animation timer if it was stopped and we have cells to animate
         if self._animation_timer is None and self._animating_cells:
             # Adaptive animation speed based on number of cells
-            speed = self._get_adaptive_animation_speed()
-            self._animation_timer = self.set_interval(speed, self._animate_cells)
+            self._start_animation_timer(self._get_adaptive_animation_speed())
+        else:
+            self._check_for_stalled_timer()
 
     def _get_row_index(self, row_label: str) -> int:
         """Get row index from row label"""
@@ -803,6 +871,9 @@ class SplitFlapDataTable(DataTable):
     def _stop_animation_timer(self) -> None:
         """Stop the animation timer if it runs."""
         if self._animation_timer is not None:
+            debug(
+                f"{self.id}: animation timer {self._animation_timer.name} stopped after frame {self._frames}"
+            )
             self._animation_timer.stop()
             self._animation_timer = None
 
@@ -1024,6 +1095,34 @@ class SplitFlapDataTable(DataTable):
             debug("Double-click detected, calling on_select_callback")
             self.on_select_callback()
 
+    def describe_state(self) -> list[str]:
+        """Lines describing the table's rows, leaving rows and animations, for the debug log."""
+        self._rebuild_cache()
+        timer = f"{self._timer_state()} frames={self._frames}"
+        lines = [
+            f"rows={len(self._cached_row_keys)} columns={len(self._cached_col_keys)} "
+            f"size={self.size} virtual_size={self.virtual_size} "
+            f"scroll_y={self.scroll_offset.y} cursor_row={self.cursor_row} "
+            f"animations={'on' if self.enable_animations else 'off'} timer={timer}",
+            f"animated_cells={len(self.animated_cells)} animating={sorted(self._animating_cells)}",
+            f"leaving rows={sorted(self._row_key_to_idx.get(k, -1) for k in self._empty_rows)} "
+            f"blank waiters={[(sorted(cells), 'done' if f.done() else 'waiting') for cells, f in self._blank_waiters]}",
+        ]
+        for row_idx, row_key in enumerate(self._cached_row_keys):
+            mark = "LEAVING " if row_key in self._empty_rows else ""
+            shown = " | ".join(str(cell) for cell in self.get_row(row_key))
+            lines.append(f"  row {row_idx} {mark}shows: {shown}")
+            for col_idx in range(len(self._cached_col_keys)):
+                cell = self.animated_cells.get((row_idx, col_idx))
+                if cell is not None and (
+                    cell.animating or cell.current_value != cell.final_value
+                ):
+                    lines.append(
+                        f"    col {col_idx} current={cell.current_value!r} target={cell.target_value!r} "
+                        f"final={cell.final_value!r} animating={cell.animating} delay={cell.delay_frames}"
+                    )
+        return lines
+
     def clear(self, columns: bool = False):
         """
         Clear the table and reset animated cells.
@@ -1034,6 +1133,10 @@ class SplitFlapDataTable(DataTable):
         Returns:
             The DataTable instance for method chaining
         """
+        debug(
+            f"{self.id}: clear(columns={columns}) with {len(self.rows)} rows, "
+            f"{len(self._blank_waiters)} blank waits"
+        )
         result = super().clear(columns=columns)
         self.animated_cells.clear()
         self._columns_to_settle.clear()

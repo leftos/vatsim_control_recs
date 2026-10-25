@@ -34,7 +34,7 @@ from backend.core.groupings import (
 )
 from widgets.split_flap_datatable import SplitFlapDataTable
 
-from .debug_logger import debug, error
+from .debug_logger import debug, error, get_log_file_path, info
 from .modals import (
     CommandPaletteScreen,
     DiversionModal,
@@ -129,6 +129,18 @@ async def _run_in_daemon_thread(func: Callable[[], None], name: str) -> None:
 
     threading.Thread(target=run, name=name, daemon=True).start()
     await done
+
+
+def _default_executor_state() -> str:
+    """The event loop's default thread pool, where Textual's Windows timer sleeps also run."""
+    executor = asyncio.get_running_loop()._default_executor  # asyncio private
+    if executor is None:
+        return "default executor: not created"
+    threads = list(executor._threads)  # ThreadPoolExecutor privates
+    return (
+        f"default executor: max_workers={executor._max_workers} threads={len(threads)} "
+        f"alive={sum(t.is_alive() for t in threads)} queued={executor._work_queue.qsize()}"
+    )
 
 
 def _log_weather_patch_failure(update: asyncio.Task) -> None:
@@ -234,6 +246,9 @@ class VATSIMControlApp(App):
             "ctrl+b", "show_weather_briefing", "Wx Brief", show=False, priority=True
         ),
         Binding("escape", "cancel_search", "Cancel", show=False),
+        Binding(
+            "f12", "dump_table_state", "Dump table state", show=False, priority=True
+        ),
     ]
 
     def __init__(
@@ -484,6 +499,10 @@ class VATSIMControlApp(App):
         airports_table = self.query_one("#airports-table", SplitFlapDataTable)
         groupings_table = self.query_one("#groupings-table", SplitFlapDataTable)
 
+        debug(
+            f"populate_tables: rebuilding the main tables with {len(self.airport_data)} airports, "
+            f"{len(self.groupings_data)} groupings"
+        )
         # The old managers share these tables and row key lists: stop their pending updates
         for old_manager in (self.airports_manager, self.groupings_manager):
             if old_manager is not None:
@@ -514,6 +533,29 @@ class VATSIMControlApp(App):
             self.groupings_manager.populate(self.groupings_data)
 
         self._enable_activity_watching()  # Re-enable user activity tracking
+
+    def action_dump_table_state(self) -> None:
+        """Write every table manager's state, and the open flight board's, to the debug log."""
+        board = self.active_flight_board
+        managers = [self.airports_manager, self.groupings_manager]
+        if board is not None:
+            managers += [board.departures_manager, board.arrivals_manager]
+        lines = [
+            f"=== table state dump: tab={self.query_one('#tabs', TabbedContent).active} "
+            f"screen={type(self.screen).__name__} stack={[type(s).__name__ for s in self.screen_stack]} "
+            f"airport_data={len(self.airport_data)} original={len(self.original_airport_data)} "
+            f"groupings_data={len(self.groupings_data)} search_active={self.search_active} "
+            f"refresh_in_progress={self.refresh_in_progress} paused={self.refresh_paused} "
+            f"weather_pass_running={self._weather_pass_running}",
+            "  airport_data: " + ", ".join(row.icao for row in self.airport_data),
+            "  " + _default_executor_state(),
+        ]
+        for manager in managers:
+            if manager is not None:
+                lines.extend(manager.describe_state())
+        lines.append("=== end of table state dump")
+        info("\n".join(lines))
+        self.notify(f"Table state written to {get_log_file_path()}", timeout=6)
 
     def check_action(self, action: str, parameters: tuple) -> bool | None:
         """Disable actions that shouldn't fire when a modal is open."""
@@ -732,6 +774,11 @@ class VATSIMControlApp(App):
                 ].name
                 saved_scroll_offset = groupings_table.scroll_offset.y
 
+        debug(
+            f"refresh start: tab={current_tab} screen={type(self.screen).__name__} "
+            f"cursor_row={saved_row_index} icao={saved_airport_icao} grouping={saved_grouping_name} "
+            f"scroll_y={saved_scroll_offset} board_open={self.flight_board_open}"
+        )
         # Start async data fetch; never cancel a run already under way
         self.run_worker(
             self.refresh_worker(
@@ -823,6 +870,11 @@ class VATSIMControlApp(App):
                 )
 
             await self._populate_tables_and_wait()
+            debug(
+                f"refresh landed: {len(self.airport_data)} airports, {len(self.groupings_data)} groupings; "
+                f"table rows {self.query_one('#airports-table', SplitFlapDataTable).row_count} / "
+                f"{self.query_one('#groupings-table', SplitFlapDataTable).row_count}"
+            )
 
             self._restore_table_position(
                 current_tab,
@@ -917,6 +969,7 @@ class VATSIMControlApp(App):
             debug("A weather box returned after the app shut down; dropping it")
             return
         try:
+            debug(f"weather box: {len(values)} airports")
             if self._set_weather_values(values) and self.airports_manager is not None:
                 update = self.airports_manager.populate(self.airport_data)
                 if update is not None:
@@ -1137,6 +1190,7 @@ class VATSIMControlApp(App):
             airport_filters=airport_filters,
         )
         self.active_flight_board = flight_board
+        debug(f"flight board open: grouping {name} ({len(airport_list)} airports)")
         self.push_screen(flight_board)
 
     def action_open_flight_board(self) -> None:
@@ -1186,6 +1240,7 @@ class VATSIMControlApp(App):
                         enable_anims,
                     )
                     self.active_flight_board = flight_board
+                    debug(f"flight board open: airport {icao}")
                     self.push_screen(flight_board)
                 except (IndexError, KeyError):
                     # Silently fail if there's an issue

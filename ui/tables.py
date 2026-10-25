@@ -19,7 +19,7 @@ from .config import (
     ColumnConfig,
     TableConfig,
 )
-from .debug_logger import debug
+from .debug_logger import debug, warning
 from .utils import airport_grouping_sort_key, eta_sort_key
 
 
@@ -48,8 +48,36 @@ class TableManager:
         task.add_done_callback(self._active_tasks.discard)
         return task
 
+    @property
+    def _name(self) -> str:
+        """The table's id, naming this manager in the debug log."""
+        return self.table.id or "table"
+
+    def describe_state(self) -> list[str]:
+        """Lines describing the manager's view of its table and the table's own state."""
+        pending = "none"
+        if self._pending_removal is not None:
+            task, keep = self._pending_removal
+            pending = (
+                f"keep={keep} task done={task.done()} cancelled={task.cancelled()}"
+            )
+        lines = [
+            f"[{self._name}] first_load={self.is_first_load} row_keys={len(self.row_keys)} "
+            f"match_table={self.row_keys == list(self.table.rows)} cached_rows={len(self._cached_data)} "
+            f"active_tasks={len(self._active_tasks)} pending_removal={pending}",
+            *(
+                f"  cached {i}: {' | '.join(map(str, row))}"
+                for i, row in enumerate(self._cached_data)
+            ),
+        ]
+        lines.extend(self.table.describe_state())
+        return lines
+
     def cancel_pending_tasks(self) -> None:
         """Cancel every pending update and tail removal; a cancelled one leaves the table alone."""
+        debug(
+            f"{self._name}: cancelling {len(self._active_tasks)} tasks, pending removal={self._pending_removal is not None}"
+        )
         for task in list(self._active_tasks):
             task.cancel()
         self._pending_removal = None
@@ -157,7 +185,8 @@ class TableManager:
         current_row_count = len(self.row_keys)
         new_rows = [self._to_tuple(row_obj) for row_obj in new_data]
         debug(
-            f"_update_efficiently: current_rows={current_row_count}, new_rows={len(new_rows)}"
+            f"_update_efficiently[{self._name}]: current_rows={current_row_count}, "
+            f"cached_rows={len(self._cached_data)}, table_rows={self.table.row_count}, new_rows={len(new_rows)}"
         )
 
         for i, row_data in enumerate(new_rows[:current_row_count]):
@@ -205,6 +234,7 @@ class TableManager:
         if not self.table.enable_animations:
             self._drop_tail_rows(keep)
             return
+        debug(f"{self._name}: fading out rows {keep}..{len(self.row_keys) - 1}")
         blanked = self.table.blank_rows(self.row_keys[keep:])
         task = self._create_tracked_task(self._drop_tail_rows_when_blank(blanked, keep))
         self._pending_removal = (task, keep)
@@ -218,12 +248,18 @@ class TableManager:
         """
         try:
             await blanked
+        except asyncio.CancelledError:
+            debug(
+                f"{self._name}: fade-out keeping {keep} rows cancelled before its removal"
+            )
+            raise
         finally:
             if (
                 self._pending_removal is not None
                 and self._pending_removal[0] is asyncio.current_task()
             ):
                 self._pending_removal = None
+        debug(f"{self._name}: fade-out done, removing rows past {keep}")
         self._drop_tail_rows(keep)
 
     def _finish_pending_removal(self) -> None:
@@ -231,6 +267,9 @@ class TableManager:
         if self._pending_removal is None:
             return
         task, keep = self._pending_removal
+        debug(
+            f"{self._name}: cutting short the fade-out keeping {keep} rows (task done={task.done()})"
+        )
         self._pending_removal = None
         task.cancel()
         self._drop_tail_rows(keep)
@@ -244,6 +283,11 @@ class TableManager:
         ]
         self.table.truncate_rows(keep, settle_columns=width_columns)
         del self.row_keys[keep:]
+        if self.row_keys != list(self.table.rows):
+            warning(
+                f"{self._name}: row_keys ({len(self.row_keys)}) no longer match the table's rows "
+                f"({self.table.row_count}) after removing rows past {keep}"
+            )
 
 
 # Table configuration constants

@@ -369,6 +369,8 @@ The builder writes through `backend/core/groupings.py` and dismisses with a `Bui
 
 Debug logs are written to `logs/` in the user data directory (`get_user_logs_dir()` in `common/paths.py`). Logs older than 10 days are cleaned when file logging starts (`cleanup_old_logs()` in `common/logger.py`). Importing a module does not start file logging: each entry point calls `setup_file_logging()` from `common.logger`, and records logged before that are buffered (newest 1000) and written in order when it runs. Use `ui.debug_logger.debug()` for UI debugging.
 
+`F12` (hidden, not in the footer or help) writes a table state dump to the log: the app's flags and thread pool, then for the airports and groupings tables (and an open flight board's) each row's shown text, the rows waiting to fade out, every cell mid-flap and the animation timer's task state (`action_dump_table_state` in `ui/app.py`, `describe_state` in `ui/tables.py` and `widgets/split_flap_datatable.py`). The log also records each fade-out's start, finish or cut-short, and warns when a table's animation timer goes 2 s without a frame.
+
 ## Weather Daemon
 
 The weather daemon generates weather briefing pages for the website at `https://leftos.dev/weather/`. It runs on a Linux server and is managed via PowerShell scripts from Windows.

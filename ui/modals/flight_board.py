@@ -773,6 +773,7 @@ class FlightBoardScreen(ModalScreen):
             self._notification_manager.dismiss()
             return  # Don't close the board yet
 
+        debug(f"flight board close: {self.title}")
         # Reset the flight board open flag and reference in the parent app
         app = self.app
         if hasattr(app, "flight_board_open"):
