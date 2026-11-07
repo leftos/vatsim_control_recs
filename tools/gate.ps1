@@ -30,7 +30,7 @@ that is neither an option nor an option's value, a -name: word split from its va
 -Cd/--cd, the command's working folder, and -Env/--env NAME=VALUE, a variable set for the command and restored after
 it, are used; a GATE_ name is refused with exit 2. There is no log, no tail, no failure markers, no slot and no
 watchdog. The launcher exits with the command's status: a program's own, 0 for a PowerShell command that succeeded and
-1 for one that failed. -StopTree and stop-tree cannot run without gate.exe: they say so and exit 1. With no command
+1 for one that failed. -StopTree, stop-tree and csharp cannot run without gate.exe: they say so and exit 1. With no command
 words the launcher prints its usage and exits 2. -Reason/--reason "<why>" is required by gate.exe with -Local/--local,
 -Slot critical/--slot critical and -Alone/--alone; the launcher passes it through and checks nothing itself.
 
@@ -73,7 +73,7 @@ $spellings = @{
     Cli = @{
         Prefix = '--'
         Joiner = '='
-        Values = @('log', 'timeout', 'slot', 'stall', 'tail', 'reason', 'builder', 'cd', 'env', 'bring-tracked', 'state-dir')
+        Values = @('log', 'timeout', 'slot', 'stall', 'tail', 'reason', 'builder', 'desktop', 'cd', 'env', 'bring-tracked', 'state-dir')
         Flags = @('no-markers', 'local', 'alone')
     }
 }
@@ -414,13 +414,17 @@ function Invoke-Direct {
     }
 }
 
-# With no gate.exe: a stop-tree refused, the usage for a call with no command, a GATE_ -Env name refused, else the
+# With no gate.exe: a stop-tree or csharp refused, the usage for a call with no command, a GATE_ -Env name refused, else the
 # command run directly in its -Cd folder with its -Env pairs, which are put back after it; exits with the status.
 function Invoke-WithoutGate {
     param([object[]]$Words)
     $target = Get-StopTreeTarget -Words $Words
     if ($null -ne $target) {
         Write-Gate "gate: no gate.exe found; cannot stop the tree of $target"
+        exit 1
+    }
+    if ($Words.Count -gt 0 -and [string]$Words[0] -eq 'csharp') {
+        Write-Gate 'gate: no gate.exe found; cannot run gate csharp'
         exit 1
     }
     $plan = Read-DirectCommand -Words $Words
