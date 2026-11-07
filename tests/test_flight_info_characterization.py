@@ -90,6 +90,9 @@ class Fakes:
         self.altimeter: tuple[str, str, float] | None = ("KAAA", "A2992", 4.04)
         self.altimeter_error: BaseException | None = None
         self.altimeter_calls: list[tuple[Any, ...]] = []
+        self.airport_altimeters: dict[str, str] = {}
+        self.airport_altimeter_errors: dict[str, BaseException] = {}
+        self.airport_altimeter_calls: list[str] = []
         self.vatsim: dict[str, Any] | BaseException | None = None
         self.vatsim_calls = 0
         self.eta: tuple[Any, Any, Any] = ("45m", "14:30", 0.75)
@@ -134,6 +137,12 @@ class Fakes:
             raise self.altimeter_error
         return self.altimeter
 
+    def get_altimeter_setting(self, icao: str) -> str | None:
+        self.airport_altimeter_calls.append(icao)
+        if icao in self.airport_altimeter_errors:
+            raise self.airport_altimeter_errors[icao]
+        return self.airport_altimeters.get(icao)
+
     def download_vatsim_data(self) -> dict[str, Any] | None:
         self.vatsim_calls += 1
         if isinstance(self.vatsim, BaseException):
@@ -162,6 +171,7 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> Iterator[Fakes]:
         "get_metar",
         "find_airports_near_position",
         "find_nearest_airport_with_metar",
+        "get_altimeter_setting",
         "download_vatsim_data",
         "calculate_eta",
         "get_nearest_airport_if_on_ground",
@@ -1004,6 +1014,141 @@ async def test_altimeter_load_cancelled(fakes: Fakes) -> None:
     assert screen.altimeter_loading is True
     assert renders == []
     assert fakes.metar_calls == []
+
+
+# _get_altimeter_info_sync: the destination altimeter
+
+ECHO_ALT = "[bold]Echo Altimeter:[/bold] A3001 (KEEE, destination)"
+
+
+@pytest.mark.parametrize(
+    ("data", "nearest", "altimeters", "expected", "looked_up"),
+    [
+        pytest.param(
+            flight(ifr_plan(), groundspeed=250),
+            ("KAAA", "A2992", 4.04),
+            {"KEEE": "A3001"},
+            text(ALT, ECHO_ALT),
+            ["KEEE"],
+            id="nearest and destination",
+        ),
+        pytest.param(
+            flight(ifr_plan(), groundspeed=250),
+            ("KAAA", "A2992", 4.04),
+            {"KEEE": "Q1013"},
+            text(ALT, "[bold]Echo QNH:[/bold] Q1013 (KEEE, destination)"),
+            ["KEEE"],
+            id="destination QNH",
+        ),
+        pytest.param(
+            flight(ifr_plan(arrival="KZZZ"), groundspeed=250),
+            ("KAAA", "A2992", 4.04),
+            {"KZZZ": "A2990"},
+            text(ALT, "[bold]KZZZ Altimeter:[/bold] A2990 (KZZZ, destination)"),
+            ["KZZZ"],
+            id="destination unknown to the airport data names its ICAO",
+        ),
+        pytest.param(
+            flight(ifr_plan(), groundspeed=250),
+            ("KAAA", "A2992", 4.04),
+            {},
+            ALT,
+            ["KEEE"],
+            id="destination without a METAR",
+        ),
+        pytest.param(
+            flight(ifr_plan(arrival="KAAA"), at="KBBB", groundspeed=250),
+            ("KAAA", "A2992", 4.04),
+            {"KAAA": "A2992"},
+            ALT,
+            [],
+            id="destination is the nearest airport",
+        ),
+        pytest.param(
+            flight(ifr_plan(), groundspeed=250),
+            None,
+            {"KEEE": "A3001"},
+            ECHO_ALT,
+            ["KEEE"],
+            id="no nearest airport with a METAR",
+        ),
+        pytest.param(
+            {
+                k: v
+                for k, v in flight(ifr_plan()).items()
+                if k not in ("latitude", "longitude")
+            },
+            ("KAAA", "A2992", 4.04),
+            {"KEEE": "A3001"},
+            ECHO_ALT,
+            ["KEEE"],
+            id="no position still shows the destination",
+        ),
+        pytest.param(
+            flight(None),
+            ("KAAA", "A2992", 4.04),
+            {"KEEE": "A3001"},
+            ALT,
+            [],
+            id="no flight plan",
+        ),
+        pytest.param(
+            flight(ifr_plan(arrival="----")),
+            ("KAAA", "A2992", 4.04),
+            {"----": "A3001"},
+            ALT,
+            [],
+            id="placeholder arrival",
+        ),
+    ],
+)
+def test_altimeter_info_adds_the_destination(
+    fakes: Fakes,
+    data: dict[str, Any],
+    nearest: tuple[str, str, float] | None,
+    altimeters: dict[str, str],
+    expected: str,
+    looked_up: list[str],
+) -> None:
+    fakes.altimeter = nearest
+    fakes.airport_altimeters = altimeters
+    screen, _renders = screen_for(data)
+
+    assert screen._get_altimeter_info_sync() == expected
+    assert fakes.airport_altimeter_calls == looked_up
+
+
+def test_altimeter_info_without_airport_data_looks_nothing_up(
+    fakes: Fakes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(config, "UNIFIED_AIRPORT_DATA", None)
+    fakes.airport_altimeters = {"KEEE": "A3001"}
+    screen, _renders = screen_for(flight(ifr_plan(), groundspeed=250))
+
+    assert screen._get_altimeter_info_sync() == ""
+    assert fakes.altimeter_calls == []
+    assert fakes.airport_altimeter_calls == []
+
+
+def test_destination_altimeter_failure_keeps_the_nearest(fakes: Fakes) -> None:
+    fakes.airport_altimeter_errors["KEEE"] = RuntimeError("metar feed down")
+    screen, _renders = screen_for(flight(ifr_plan(), groundspeed=250))
+
+    assert screen._get_altimeter_info_sync() == ALT
+    assert fakes.debug == [
+        "Destination altimeter lookup failed for KEEE: metar feed down"
+    ]
+
+
+async def test_altimeter_load_shows_both_altimeters(fakes: Fakes) -> None:
+    fakes.airport_altimeters = {"KEEE": "A3001"}
+    screen, renders = screen_for(flight(ifr_plan(), groundspeed=250))
+
+    await screen._load_altimeter_info()
+
+    assert renders == [
+        text(f"KAAA → KEEE // B738 // 8,000 // IFR // {ETA}", "", ALT, ECHO_ALT, "")
+    ]
 
 
 # _load_fresh_flight_data

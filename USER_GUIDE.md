@@ -363,7 +363,7 @@ Displays comprehensive flight details:
 
 **Summary line:** departure and arrival airport codes with an alternate if filed, aircraft type with equipment suffix, filed altitude, flight rules, assigned squawk and ETA, for example `KSFO → KLAX (Altn: KSJC) // B738/L // 35,000 // IFR // SQ: 1234 // ETA 45m (14:30 LT)`. After landing the ETA reads `LANDED`, and the squawk shows only when one is assigned.
 
-**Below it:** the full filed route (word-wrapped), any MEA lines and VFR warning described below, the nearest altimeter setting (`City Altimeter: A2992 (KSFO, 12.3nm)`, from the nearest airport with a METAR within 100 nm, biased toward the flight's heading), and the REMARKS (the first five lines, then `... (N more lines)`).
+**Below it:** the full filed route (word-wrapped), any MEA lines and VFR warning described below, the nearest altimeter setting (`City Altimeter: A2992 (KSFO, 12.3nm)`, from the nearest airport with a METAR within 100 nm, biased toward the flight's heading), the destination's altimeter on the line below it (`City Altimeter: A3001 (KLAX, destination)`, left out when the destination has no METAR or is that nearest airport), and the REMARKS (the first five lines, then `... (N more lines)`).
 
 **No flight plan:** the screen reads `NO FLIGHT PLAN`, shows `On Ground at KXXX - City` when the aircraft is stopped at an airport, and still shows the altimeter.
 

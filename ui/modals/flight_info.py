@@ -17,6 +17,7 @@ from backend import (
     calculate_eta,
     find_airports_near_position,
     find_nearest_airport_with_metar,
+    get_altimeter_setting,
     get_metar,
     haversine_distance_nm,
 )
@@ -189,6 +190,13 @@ def _alternates_line(alternates: list | None, searched: bool) -> str:
     if searched:
         return "    [dim]No VFR/MVFR alternates within 100nm[/dim]"
     return "    [dim]Searching for alternates...[/dim]"
+
+
+def _altimeter_line(icao: str, altimeter: str, where: str) -> str:
+    """One airport's altimeter line: "City Altimeter: A2992 (KXXX, <where>)", QNH for a Q setting."""
+    city_name = (config.UNIFIED_AIRPORT_DATA or {}).get(icao, {}).get("city", icao)
+    altimeter_word = {"A": "Altimeter", "Q": "QNH"}.get(altimeter[:1], "")
+    return f"[bold]{city_name} {altimeter_word}:[/bold] {altimeter} ({icao}, {where})"
 
 
 class FlightInfoScreen(ModalScreen):
@@ -826,7 +834,7 @@ class FlightInfoScreen(ModalScreen):
         return lines
 
     def _altimeter_lines(self) -> list[str]:
-        """The loading line or the nearest altimeter, each followed by a blank line, or no lines."""
+        """The loading line or the nearest and destination altimeters, followed by a blank line, or no lines."""
         if self.altimeter_loading:
             return ["[dim]Loading nearest altimeter...[/dim]", ""]
         if self.altimeter_info:
@@ -983,56 +991,61 @@ class FlightInfoScreen(ModalScreen):
         return None
 
     def _get_altimeter_info_sync(self) -> str:
-        """Get nearest airport altimeter setting for the flight's current position (synchronous version for executor)"""
-        # Check if we have position data
-        latitude = self.flight_data.get("latitude")
-        longitude = self.flight_data.get("longitude")
+        """The nearest airport's altimeter line, then the destination's when it is another airport, one per line.
 
-        if latitude is None or longitude is None:
-            return ""
-
+        Blocking: runs in an executor.
+        """
         if config.UNIFIED_AIRPORT_DATA is None:
             return ""
 
-        try:
-            # Get heading and groundspeed to bias search towards airports ahead
-            heading = self.flight_data.get("heading")
-            groundspeed = self.flight_data.get("groundspeed")
+        lines = []
+        nearest = self._nearest_altimeter()
+        if nearest:
+            icao, altimeter, distance_nm = nearest
+            lines.append(_altimeter_line(icao, altimeter, f"{distance_nm:.1f}nm"))
+        destination = self._destination_altimeter_line(nearest[0] if nearest else None)
+        if destination:
+            lines.append(destination)
+        return "\n".join(lines)
 
-            # Find nearest airport with METAR (biased towards direction of flight)
-            result = find_nearest_airport_with_metar(
+    def _destination_altimeter_line(self, nearest_icao: str | None) -> str | None:
+        """The filed destination's altimeter line, or None without a destination METAR or when it is the nearest airport."""
+        flight_plan = self.flight_data.get("flight_plan") or {}
+        arrival = flight_plan.get("arrival")
+        if not arrival or arrival == "----" or arrival == nearest_icao:
+            return None
+        try:
+            altimeter = get_altimeter_setting(arrival)
+        except Exception as e:
+            debug(f"Destination altimeter lookup failed for {arrival}: {e}")
+            return None
+        if not altimeter:
+            return None
+        return _altimeter_line(arrival, altimeter, "destination")
+
+    def _nearest_altimeter(self) -> tuple[str, str, float] | None:
+        """The (ICAO, altimeter, distance nm) of the nearest airport with a METAR, biased toward the heading, or None."""
+        latitude = self.flight_data.get("latitude")
+        longitude = self.flight_data.get("longitude")
+        if latitude is None or longitude is None:
+            return None
+
+        try:
+            return find_nearest_airport_with_metar(
                 latitude,
                 longitude,
                 config.UNIFIED_AIRPORT_DATA,
                 max_distance_nm=100.0,
-                aircraft_heading=heading,
-                aircraft_groundspeed=groundspeed,
+                aircraft_heading=self.flight_data.get("heading"),
+                aircraft_groundspeed=self.flight_data.get("groundspeed"),
             )
-
-            if result:
-                airport_icao, altimeter, distance_nm = result
-
-                # Get the city name from airport data
-                airport_data = config.UNIFIED_AIRPORT_DATA.get(airport_icao, {})
-                city_name = airport_data.get("city", airport_icao)
-
-                altimeter_word = ""
-                if altimeter.startswith("A"):
-                    altimeter_word = "Altimeter"
-                elif altimeter.startswith("Q"):
-                    altimeter_word = "QNH"
-
-                return f"[bold]{city_name} {altimeter_word}:[/bold] {altimeter} ({airport_icao}, {distance_nm:.1f}nm)"
-            else:
-                # No airport with METAR found within range
-                return ""
         except Exception as e:
             # Log the error for debugging
             import traceback
 
             print(f"Error getting altimeter info: {e}")
             traceback.print_exc()
-            return ""
+            return None
 
     def action_close(self) -> None:
         """Close the modal"""
